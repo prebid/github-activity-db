@@ -4,6 +4,7 @@ import typer
 from rich.console import Console
 
 from github_activity_db import __version__
+from github_activity_db.cli import github as github_cmd
 
 app = typer.Typer(
     name="ghactivity",
@@ -51,6 +52,10 @@ def search(query: str = typer.Argument(default="", help="Search query")) -> None
 def tags() -> None:
     """Manage custom tags on PRs."""
     console.print("[yellow]Tags command not yet implemented.[/yellow]")
+
+
+# Register github subcommand
+app.add_typer(github_cmd.app, name="github")
 
 
 if __name__ == "__main__":
