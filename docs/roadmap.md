@@ -10,60 +10,10 @@
 - [x] Configuration with pydantic-settings
 - [x] Alembic migrations (initial schema)
 - [x] CLI scaffold with typer
+- [x] Pydantic schemas (validation, GitHub API parsing, factory pattern)
+- [x] Test infrastructure (69 tests, 87% coverage)
 
 ### In Progress
-
-#### Step 7: Pydantic Schemas
-
-Create input/output validation models in `src/github_activity_db/schemas/`:
-
-```
-schemas/
-├── __init__.py          # Re-exports all schemas
-├── base.py              # Base schema class with factory pattern
-├── enums.py             # ParticipantActionType enum
-├── nested.py            # CommitBreakdown, ParticipantEntry models
-├── repository.py        # RepositoryCreate, RepositoryRead
-├── pr.py                # PRCreate, PRSync, PRMerge, PRRead
-├── tag.py               # UserTagCreate, UserTagRead
-└── github_api.py        # GitHub API response schemas
-```
-
-**Key schemas:**
-- `PRCreate` - Immutable fields (number, link, open_date, submitter)
-- `PRSync` - Synced fields for updates
-- `PRMerge` - Merge-only fields (close_date, merged_by, ai_summary)
-- `PRRead` - Full output schema with all fields
-
-**Nested models:**
-- `CommitBreakdown` - `{date: datetime, author: str}`
-- `ParticipantEntry` - `{username: str, actions: list[ParticipantActionType]}`
-
-**GitHub API schemas (for parsing API responses):**
-- `GitHubUser` - Parse user objects
-- `GitHubLabel` - Parse label objects
-- `GitHubPullRequest` - Parse full PR response
-- `GitHubCommit`, `GitHubFile`, `GitHubReview` - Parse endpoint responses
-
-**Factory pattern:**
-- `SchemaBase.from_orm(model)` - Convert SQLAlchemy → Pydantic
-- `PRCreate.from_github(gh_pr)` - Convert GitHub API → Pydantic
-
-**Validation rules:**
-- `title`: max 500 chars
-- `link`: max 500 chars, valid URL
-- `submitter`, `merged_by`: max 100 chars
-- `color`: regex `^#[0-9a-fA-F]{6}$`
-
-#### Step 11: Test Fixtures
-
-Create test infrastructure in `tests/conftest.py`:
-
-- In-memory SQLite database for fast tests
-- Factory functions for sample data
-- Async fixtures for database sessions
-- Sample Repository, PullRequest, UserTag objects
-- PRs in all states (open, merged, closed)
 
 #### Step 12: CLI Commands
 

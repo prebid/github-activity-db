@@ -41,15 +41,30 @@ github-activity-db/
 │   ├── github/                 # GitHub integration [TODO]
 │   │   ├── client.py           # githubkit wrapper
 │   │   └── sync.py             # Sync logic
-│   ├── schemas/                # Pydantic models [TODO]
-│   │   ├── pr.py               # PR schemas
-│   │   └── tag.py              # Tag schemas
+│   ├── schemas/                # Pydantic validation models
+│   │   ├── __init__.py         # Re-exports all schemas
+│   │   ├── base.py             # SchemaBase with factory pattern
+│   │   ├── enums.py            # ParticipantActionType enum
+│   │   ├── nested.py           # CommitBreakdown, ParticipantEntry
+│   │   ├── repository.py       # RepositoryCreate, RepositoryRead
+│   │   ├── pr.py               # PRCreate, PRSync, PRMerge, PRRead
+│   │   ├── tag.py              # UserTagCreate, UserTagRead
+│   │   └── github_api.py       # GitHub API response schemas
 │   └── search/                 # Search module [TODO]
 │       └── query.py            # Query builder
 ├── alembic/                    # Database migrations
 │   ├── env.py                  # Async alembic config
 │   └── versions/               # Migration files
 ├── tests/                      # Test suite
+│   ├── conftest.py             # Shared fixtures (db_session, sample data)
+│   ├── factories.py            # Factory functions for test data
+│   ├── fixtures/               # Mock data
+│   │   └── github_responses.py # GitHub API mock responses
+│   ├── test_config.py          # Settings tests
+│   ├── test_db_engine.py       # Engine & session tests
+│   ├── test_db_models.py       # ORM model tests
+│   ├── test_schemas_*.py       # Schema validation tests
+│   └── ...
 ├── docs/                       # Documentation
 ├── pyproject.toml              # Project configuration
 └── uv.lock                     # Dependency lockfile
@@ -70,6 +85,66 @@ All database operations use async SQLAlchemy with aiosqlite. This allows efficie
 - **Engine** (`db/engine.py`): Connection and session management
 - **Schemas** (`schemas/`): Input/output validation
 - **Repositories** (`db/repositories.py`): Data access patterns
+
+## Schemas Module
+
+The `schemas/` module provides Pydantic models for validation and serialization:
+
+### Schema Categories
+
+| Category | Schemas | Purpose |
+|----------|---------|---------|
+| **Base** | `SchemaBase` | Factory pattern with `from_orm()` method |
+| **PR** | `PRCreate`, `PRSync`, `PRMerge`, `PRRead` | PR lifecycle stages |
+| **Repository** | `RepositoryCreate`, `RepositoryRead` | Repository CRUD |
+| **Tags** | `UserTagCreate`, `UserTagRead` | User tag management |
+| **Nested** | `CommitBreakdown`, `ParticipantEntry` | Complex field types |
+| **GitHub API** | `GitHubPullRequest`, `GitHubUser`, etc. | Parse API responses |
+
+### PR Schema Lifecycle
+
+```
+GitHub API Response
+       │
+       ▼
+ GitHubPullRequest.to_pr_create()  →  PRCreate (immutable fields)
+ GitHubPullRequest.to_pr_sync()    →  PRSync (synced fields)
+       │
+       ▼
+  SQLAlchemy Model
+       │
+       ▼
+ PRRead.from_orm(model)  →  PRRead (output)
+       │
+       ▼
+  CLI / API Response
+```
+
+### Factory Pattern
+
+All schemas inherit from `SchemaBase` which provides:
+
+```python
+# Convert SQLAlchemy model to Pydantic schema
+pr_read = PRRead.from_orm(pr_model)
+
+# Convert list of models
+pr_list = PRRead.from_orm_list(pr_models)
+
+# Convert GitHub API response to internal schemas
+pr_create = github_pr.to_pr_create(repository_id)
+pr_sync = github_pr.to_pr_sync(files, commits, reviews)
+```
+
+### Validation Rules
+
+| Field | Constraint |
+|-------|------------|
+| `title` | max 500 chars |
+| `link` | max 500 chars, valid URL |
+| `submitter`, `merged_by` | max 100 chars |
+| `classify_tags` | max 500 chars |
+| `color` | hex format `#rrggbb` |
 
 ### 4. Configuration Management
 Environment-based configuration via pydantic-settings:
@@ -114,9 +189,62 @@ config.py ←── db/engine.py ←── db/models.py
 | `db/engine.py` | ✅ Complete | Async session factory |
 | `cli/app.py` | ✅ Scaffold | Stub commands |
 | `alembic/` | ✅ Complete | Initial migration applied |
-| `schemas/` | 🔲 TODO | Pydantic models |
+| `schemas/` | ✅ Complete | 8 files, factory pattern, GitHub API schemas |
+| `tests/` | ✅ Complete | 69 tests, 87% coverage, factory pattern |
 | `db/repositories.py` | 🔲 TODO | Data access layer |
 | `github/client.py` | 🔲 TODO | API wrapper |
 | `github/sync.py` | 🔲 TODO | Sync logic |
 | `search/query.py` | 🔲 TODO | Search builder |
-| `tests/conftest.py` | 🔲 TODO | Test fixtures |
+
+## Test Infrastructure
+
+The `tests/` module provides comprehensive test coverage using pytest-asyncio.
+
+### Test Files
+
+| File | Purpose |
+|------|---------|
+| `conftest.py` | Async DB fixtures, sample data fixtures |
+| `factories.py` | Model and schema factory functions |
+| `fixtures/github_responses.py` | Mock GitHub API responses |
+| `test_config.py` | Settings and environment tests |
+| `test_db_engine.py` | Engine creation, session lifecycle |
+| `test_db_models.py` | ORM models, relationships, constraints |
+| `test_schemas_pr.py` | PR schema validation |
+| `test_schemas_repository.py` | Repository schema validation |
+| `test_schemas_tag.py` | UserTag schema, color validation |
+| `test_schemas_nested.py` | CommitBreakdown, ParticipantEntry |
+| `test_schemas_github_api.py` | GitHub API parsing, factory methods |
+
+### Factory Pattern
+
+Factory functions reduce test boilerplate and improve maintainability:
+
+```python
+# Model factories (add to session, tests control flush)
+from tests.factories import make_repository, make_pull_request, make_merged_pr, make_user_tag
+
+repo = make_repository(db_session, owner="prebid", name="prebid-server")
+await db_session.flush()
+
+pr = make_pull_request(db_session, repo, number=1234, title="Add feature")
+await db_session.flush()
+
+# Schema factories (return dicts for Pydantic validation)
+from tests.factories import make_github_pr, make_github_user, make_github_review
+
+github_pr = make_github_pr(number=1234, state="open", title="Test PR")
+```
+
+### Async Database Fixtures
+
+Tests use in-memory SQLite with auto-rollback for isolation:
+
+```python
+@pytest.fixture
+async def db_session(test_engine):
+    """Async session with auto-rollback."""
+    async with session_factory() as session:
+        yield session
+        await session.rollback()  # Isolation between tests
+```

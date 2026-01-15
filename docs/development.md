@@ -108,13 +108,37 @@ uv run ruff format --check src/ tests/
 uv run pytest
 
 # Run with coverage
-uv run pytest --cov
+uv run pytest --cov=src/github_activity_db --cov-report=term-missing
 
 # Run specific test file
-uv run pytest tests/test_db/test_models.py
+uv run pytest tests/test_db_models.py -v
+
+# Run tests matching a pattern
+uv run pytest -k "test_pr"
 
 # Run with verbose output
 uv run pytest -v
+```
+
+**Test Structure:**
+- `tests/conftest.py` - Shared fixtures (async DB session, sample data)
+- `tests/factories.py` - Factory functions for creating test data
+- `tests/fixtures/` - Mock data (GitHub API responses)
+- `tests/test_*.py` - Test files for each module
+
+**Writing Tests:**
+```python
+# Use factories for ORM model tests
+from tests.factories import make_repository, make_pull_request
+
+async def test_example(db_session):
+    repo = make_repository(db_session)
+    await db_session.flush()
+
+    pr = make_pull_request(db_session, repo, number=1234)
+    await db_session.flush()
+
+    assert pr.repository_id == repo.id
 ```
 
 ### Database
@@ -200,9 +224,26 @@ src/github_activity_db/
 │   ├── __init__.py      # Public exports
 │   ├── models.py        # SQLAlchemy models
 │   └── engine.py        # Async engine/sessions
+├── schemas/             # Pydantic validation models
+│   ├── __init__.py      # Re-exports all schemas
+│   ├── base.py          # SchemaBase with factory pattern
+│   ├── pr.py            # PRCreate, PRSync, PRMerge, PRRead
+│   ├── repository.py    # RepositoryCreate, RepositoryRead
+│   ├── tag.py           # UserTagCreate, UserTagRead
+│   ├── nested.py        # CommitBreakdown, ParticipantEntry
+│   └── github_api.py    # GitHub API response schemas
 ├── github/              # GitHub API [TODO]
-├── schemas/             # Pydantic models [TODO]
 └── search/              # Search logic [TODO]
+
+tests/
+├── conftest.py          # Shared fixtures (db_session, sample data)
+├── factories.py         # Factory functions for test data
+├── fixtures/            # Mock data
+│   └── github_responses.py
+├── test_config.py       # Settings tests
+├── test_db_engine.py    # Engine & session tests
+├── test_db_models.py    # ORM model tests
+└── test_schemas_*.py    # Schema validation tests
 ```
 
 ## Adding New Features
