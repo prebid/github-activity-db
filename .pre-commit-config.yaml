@@ -1,0 +1,53 @@
+# See https://pre-commit.com for more information
+# See https://pre-commit.com/hooks.html for more hooks
+
+default_language_version:
+  python: python3.12
+
+repos:
+  # ------------------------------------------------------------------------------
+  # General hooks
+  # ------------------------------------------------------------------------------
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-toml
+      - id: check-added-large-files
+        args: ["--maxkb=1000"]
+      - id: check-merge-conflict
+      - id: detect-private-key
+
+  # ------------------------------------------------------------------------------
+  # Ruff - Linting & Formatting (replaces black, isort, flake8)
+  # ------------------------------------------------------------------------------
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.8.6
+    hooks:
+      # Run the linter with auto-fix
+      - id: ruff
+        args: [--fix, --exit-non-zero-on-fix]
+      # Run the formatter
+      - id: ruff-format
+
+  # ------------------------------------------------------------------------------
+  # Mypy - Type Checking
+  # ------------------------------------------------------------------------------
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.14.1
+    hooks:
+      - id: mypy
+        additional_dependencies:
+          - pydantic>=2.0
+          - pydantic-settings>=2.0
+          - sqlalchemy>=2.0
+        args: [--config-file=pyproject.toml]
+        pass_filenames: false
+        # Only run on src directory
+        files: ^src/
+
+ci:
+  autoupdate_schedule: weekly
+  skip: [mypy]  # mypy can be slow in CI pre-commit
