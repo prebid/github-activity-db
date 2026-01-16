@@ -63,7 +63,11 @@ select = [
     "RUF",    # ruff-specific rules
 ]
 ignore = [
-    "S101",   # allow assert in tests
+    "S101",     # allow assert in tests
+    "RUF022",   # allow categorized __all__ (not alphabetically sorted)
+    "UP046",    # allow Generic[T] subclass pattern for broader compatibility
+    "ASYNC109", # allow timeout parameter naming in async functions
+    "ASYNC110", # allow sleep in while loop for queue drain patterns
 ]
 
 [tool.ruff.lint.per-file-ignores]

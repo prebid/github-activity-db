@@ -12,11 +12,12 @@ uv run alembic upgrade head
 
 # CLI
 uv run ghactivity --help
+uv run ghactivity github rate-limit --all  # Check rate limits
 
 # Development
 uv run mypy src/           # Type check
 uv run ruff check src/     # Lint
-uv run pytest              # Test
+uv run pytest              # Test (268 tests)
 ```
 
 ## Documentation
@@ -29,16 +30,22 @@ uv run pytest              # Test
 | [Development](docs/development.md) | Setup, commands, configuration, troubleshooting |
 | [Roadmap](docs/roadmap.md) | Implementation status and future plans |
 
-## Current Scope (Phase 1)
+## Current Scope
 
-**In Scope:**
+**Phase 1 (Complete):**
 - Pull Request data only
 - 8 Prebid repositories
 - Custom user tags via CLI
 - Agent-generated classifications (`classify_tags`) and summaries (`ai_summary`)
 
-**Out of Scope:**
-- GitHub Issues (Phase 2)
+**Phase 1.5 (Complete):**
+- Rate limit monitoring with proactive tracking
+- Request pacing with token bucket algorithm
+- Priority queue scheduler with concurrency control
+- Batch execution with progress tracking
+
+**Out of Scope (Phase 2+):**
+- GitHub Issues
 - Webhooks / real-time sync
 - Web UI
 
@@ -54,9 +61,25 @@ uv run pytest              # Test
 | Migrations | alembic |
 | Package Manager | uv |
 
+## Key Modules
+
+### GitHub Client (`github/client.py`)
+Async GitHub API client with integrated rate limit tracking.
+
+### Rate Limiting (`github/rate_limit/`)
+- `RateLimitMonitor`: Tracks rate limit state from response headers (zero API cost)
+- `RateLimitStatus`: State machine (HEALTHY → WARNING → CRITICAL → EXHAUSTED)
+- Passive header tracking on every API response
+
+### Request Pacing (`github/pacing/`)
+- `RequestPacer`: Token bucket algorithm with adaptive throttling
+- `RequestScheduler`: Priority queue with semaphore-controlled concurrency
+- `BatchExecutor`: Coordinates batch operations
+- `ProgressTracker`: Observable progress reporting
+
 ## Status
 
-**Phase 1 in progress.** Core database and CLI scaffold complete. See [Roadmap](docs/roadmap.md) for details.
+**Phase 1.5 complete.** Rate limiting and request pacing implemented. See [Roadmap](docs/roadmap.md) for details.
 
 ## Environment Variables
 

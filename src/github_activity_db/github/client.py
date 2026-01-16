@@ -1,11 +1,14 @@
 """Async GitHub API client wrapper using githubkit.
 
 This module provides a typed async interface to the GitHub REST API
-for pull request data retrieval.
+for pull request data retrieval with integrated rate limit monitoring.
 """
 
+from __future__ import annotations
+
+import logging
 from datetime import UTC, datetime
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 from githubkit import GitHub
 from githubkit.exception import RequestFailed
@@ -26,6 +29,11 @@ from .exceptions import (
     GitHubRateLimitError,
 )
 
+if TYPE_CHECKING:
+    from .rate_limit.monitor import RateLimitMonitor
+
+logger = logging.getLogger(__name__)
+
 PRState = Literal["open", "closed", "all"]
 
 
@@ -44,11 +52,18 @@ class GitHubClient:
         await client.close()
     """
 
-    def __init__(self, token: str | None = None) -> None:
+    def __init__(
+        self,
+        token: str | None = None,
+        rate_monitor: RateLimitMonitor | None = None,
+    ) -> None:
         """Initialize the GitHub client.
 
         Args:
             token: GitHub PAT. If not provided, uses GITHUB_TOKEN from settings.
+            rate_monitor: Optional RateLimitMonitor for tracking rate limits.
+                         When provided, response headers are automatically
+                         used to update the monitor's state.
 
         Raises:
             GitHubAuthenticationError: If no token is available.
@@ -59,6 +74,7 @@ class GitHubClient:
                 "GitHub token required. Set GITHUB_TOKEN environment variable."
             )
         self._client: Any = None
+        self._rate_monitor = rate_monitor
 
     @property
     def _github(self) -> Any:
@@ -67,12 +83,43 @@ class GitHubClient:
             self._client = GitHub(self._token)
         return self._client
 
+    @property
+    def rate_monitor(self) -> RateLimitMonitor | None:
+        """Access the rate limit monitor (if configured)."""
+        return self._rate_monitor
+
+    def _update_rate_limit_from_response(self, response: Any) -> None:
+        """Extract rate limit headers from response and update monitor.
+
+        Args:
+            response: A githubkit Response object with headers attribute.
+        """
+        if self._rate_monitor is None:
+            return
+
+        try:
+            # githubkit Response objects have a .headers attribute
+            headers = getattr(response, "headers", None)
+            if headers is None:
+                return
+
+            # Convert headers to dict if needed (httpx.Headers → dict)
+            if hasattr(headers, "items"):
+                header_dict = dict(headers.items())
+            else:
+                header_dict = dict(headers)
+
+            self._rate_monitor.update_from_headers(header_dict)
+        except Exception as e:
+            # Don't let rate limit tracking failures break API calls
+            logger.debug("Failed to update rate limit from headers: %s", e)
+
     async def close(self) -> None:
         """Close the underlying HTTP client."""
         if self._client is not None:
             self._client = None
 
-    async def __aenter__(self) -> "GitHubClient":
+    async def __aenter__(self) -> GitHubClient:
         """Async context manager entry."""
         return self
 
@@ -95,6 +142,7 @@ class GitHubClient:
             Dict with 'limit', 'remaining', 'reset' (datetime), 'used' keys.
         """
         resp = await self._github.rest.rate_limit.async_get()
+        self._update_rate_limit_from_response(resp)
         core = resp.parsed_data.resources.core
         return {
             "limit": core.limit,
@@ -176,6 +224,7 @@ class GitHubClient:
                 repo=repo,
                 pull_number=number,
             )
+            self._update_rate_limit_from_response(resp)
             return GitHubPullRequest.model_validate(resp.parsed_data.model_dump())
         except RequestFailed as e:
             if e.response.status_code == 404:
@@ -344,6 +393,9 @@ class GitHubClient:
     # -------------------------------------------------------------------------
     def _handle_error(self, error: RequestFailed) -> GitHubClientError:
         """Convert githubkit exceptions to our custom exceptions."""
+        # Update rate limit from error response headers (they still count)
+        self._update_rate_limit_from_response(error.response)
+
         status = error.response.status_code
 
         if status == 401:

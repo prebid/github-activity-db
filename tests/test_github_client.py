@@ -36,10 +36,16 @@ class TestGitHubClientInit:
 
     def test_init_without_token_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Client raises error if no token available."""
+        from github_activity_db.config import get_settings
+
         monkeypatch.setenv("GITHUB_TOKEN", "")
-        with pytest.raises(GitHubAuthenticationError) as exc_info:
-            GitHubClient()
-        assert "GITHUB_TOKEN" in str(exc_info.value)
+        get_settings.cache_clear()  # Clear cached settings
+        try:
+            with pytest.raises(GitHubAuthenticationError) as exc_info:
+                GitHubClient()
+            assert "GITHUB_TOKEN" in str(exc_info.value)
+        finally:
+            get_settings.cache_clear()  # Restore for other tests
 
 
 class TestGitHubClientContextManager:

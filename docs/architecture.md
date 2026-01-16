@@ -38,9 +38,18 @@ github-activity-db/
 │   │   ├── models.py           # SQLAlchemy ORM models
 │   │   ├── engine.py           # Async engine/session
 │   │   └── repositories.py     # Data access layer [TODO]
-│   ├── github/                 # GitHub integration [TODO]
-│   │   ├── client.py           # githubkit wrapper
-│   │   └── sync.py             # Sync logic
+│   ├── github/                 # GitHub integration
+│   │   ├── client.py           # githubkit wrapper with rate limit tracking
+│   │   ├── exceptions.py       # Custom GitHub exceptions
+│   │   ├── rate_limit/         # Rate limit monitoring
+│   │   │   ├── schemas.py      # RateLimitPool, PoolRateLimit, RateLimitSnapshot
+│   │   │   └── monitor.py      # RateLimitMonitor (state machine)
+│   │   ├── pacing/             # Request pacing
+│   │   │   ├── pacer.py        # RequestPacer (token bucket algorithm)
+│   │   │   ├── scheduler.py    # RequestScheduler (priority queue)
+│   │   │   ├── batch.py        # BatchExecutor
+│   │   │   └── progress.py     # ProgressTracker
+│   │   └── sync.py             # Sync logic [TODO]
 │   ├── schemas/                # Pydantic validation models
 │   │   ├── __init__.py         # Re-exports all schemas
 │   │   ├── base.py             # SchemaBase with factory pattern
@@ -184,15 +193,17 @@ config.py ←── db/engine.py ←── db/models.py
 
 | Module | Status | Notes |
 |--------|--------|-------|
-| `config.py` | ✅ Complete | 8 repos configured |
+| `config.py` | ✅ Complete | 8 repos, rate limit & pacing configs |
 | `db/models.py` | ✅ Complete | 4 tables, 26 columns |
 | `db/engine.py` | ✅ Complete | Async session factory |
-| `cli/app.py` | ✅ Scaffold | Stub commands |
+| `cli/app.py` | ✅ Complete | GitHub commands with rate limit display |
 | `alembic/` | ✅ Complete | Initial migration applied |
 | `schemas/` | ✅ Complete | 8 files, factory pattern, GitHub API schemas |
-| `tests/` | ✅ Complete | 69 tests, 87% coverage, factory pattern |
+| `github/client.py` | ✅ Complete | API wrapper with rate limit tracking |
+| `github/rate_limit/` | ✅ Complete | Monitor, schemas, state machine |
+| `github/pacing/` | ✅ Complete | Pacer, scheduler, batch, progress |
+| `tests/` | ✅ Complete | 268 tests, factory pattern |
 | `db/repositories.py` | 🔲 TODO | Data access layer |
-| `github/client.py` | 🔲 TODO | API wrapper |
 | `github/sync.py` | 🔲 TODO | Sync logic |
 | `search/query.py` | 🔲 TODO | Search builder |
 
@@ -207,14 +218,14 @@ The `tests/` module provides comprehensive test coverage using pytest-asyncio.
 | `conftest.py` | Async DB fixtures, sample data fixtures |
 | `factories.py` | Model and schema factory functions |
 | `fixtures/github_responses.py` | Mock GitHub API responses |
+| `fixtures/rate_limit_responses.py` | Rate limit header fixtures |
 | `test_config.py` | Settings and environment tests |
 | `test_db_engine.py` | Engine creation, session lifecycle |
 | `test_db_models.py` | ORM models, relationships, constraints |
-| `test_schemas_pr.py` | PR schema validation |
-| `test_schemas_repository.py` | Repository schema validation |
-| `test_schemas_tag.py` | UserTag schema, color validation |
-| `test_schemas_nested.py` | CommitBreakdown, ParticipantEntry |
-| `test_schemas_github_api.py` | GitHub API parsing, factory methods |
+| `test_github_client.py` | GitHub client API wrapper tests |
+| `test_schemas_*.py` | Schema validation tests |
+| `github/rate_limit/test_*.py` | Rate limit schemas and monitor tests |
+| `github/pacing/test_*.py` | Pacer, scheduler, batch, progress tests |
 
 ### Factory Pattern
 

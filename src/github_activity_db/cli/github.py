@@ -5,6 +5,7 @@ from datetime import datetime
 
 import typer
 from rich.console import Console
+from rich.progress import BarColumn, Progress, TextColumn
 from rich.table import Table
 
 from github_activity_db.config import get_settings
@@ -13,6 +14,9 @@ from github_activity_db.github import (
     GitHubClient,
     GitHubNotFoundError,
     GitHubRateLimitError,
+    RateLimitMonitor,
+    RateLimitPool,
+    RateLimitStatus,
 )
 
 app = typer.Typer(help="GitHub API commands")
@@ -21,7 +25,7 @@ console = Console()
 
 def _run_async[T](coro: T) -> T:
     """Run an async function in the event loop."""
-    return asyncio.get_event_loop().run_until_complete(coro)  # type: ignore[arg-type,return-value]
+    return asyncio.get_event_loop().run_until_complete(coro)  # type: ignore[arg-type]
 
 
 @app.command("test")
@@ -149,12 +153,59 @@ def test_connection(
             console.print(f"[red]Error:[/red] {e}")
             raise typer.Exit(1) from None
 
-    _run_async(_test())
+    _run_async(_test())  # type: ignore[unused-coroutine]
+
+
+def _get_status_style(status: RateLimitStatus) -> str:
+    """Get rich style for status."""
+    match status:
+        case RateLimitStatus.HEALTHY:
+            return "[green]HEALTHY[/green]"
+        case RateLimitStatus.WARNING:
+            return "[yellow]WARNING[/yellow]"
+        case RateLimitStatus.CRITICAL:
+            return "[red]CRITICAL[/red]"
+        case RateLimitStatus.EXHAUSTED:
+            return "[bold red]EXHAUSTED[/bold red]"
+        case _:
+            return str(status)
+
+
+def _format_time_remaining(seconds: int) -> str:
+    """Format seconds as human-readable time."""
+    if seconds <= 0:
+        return "Now"
+    if seconds < 60:
+        return f"{seconds}s"
+    if seconds < 3600:
+        return f"{seconds // 60}m {seconds % 60}s"
+    hours = seconds // 3600
+    minutes = (seconds % 3600) // 60
+    return f"{hours}h {minutes}m"
 
 
 @app.command("rate-limit")
-def show_rate_limit() -> None:
-    """Show current GitHub API rate limit status."""
+def show_rate_limit(
+    all_pools: bool = typer.Option(
+        False,
+        "--all",
+        "-a",
+        help="Show all rate limit pools (not just core)",
+    ),
+    verbose: bool = typer.Option(
+        False,
+        "--verbose",
+        "-v",
+        help="Show detailed information",
+    ),
+) -> None:
+    """Show current GitHub API rate limit status.
+
+    Examples:
+        ghactivity github rate-limit
+        ghactivity github rate-limit --all
+        ghactivity github rate-limit -v
+    """
 
     async def _check() -> None:
         settings = get_settings()
@@ -164,41 +215,112 @@ def show_rate_limit() -> None:
             raise typer.Exit(1)
 
         try:
-            async with GitHubClient() as client:
-                rate = await client.get_rate_limit()
+            monitor = RateLimitMonitor()
+            await monitor.initialize()
 
-                table = Table(title="GitHub API Rate Limit")
-                table.add_column("Metric", style="bold")
-                table.add_column("Value")
+            # Token verification
+            is_pat = monitor.verify_pat()
+            if is_pat:
+                console.print("[green]✓[/green] Authenticated with PAT (5,000 requests/hour)")
+            else:
+                console.print(
+                    "[yellow]⚠[/yellow] Unauthenticated or limited token "
+                    "(60 requests/hour)"
+                )
 
-                table.add_row("Limit", str(rate["limit"]))
-                table.add_row("Used", str(rate["used"]))
-                table.add_row("Remaining", str(rate["remaining"]))
+            # Determine which pools to show
+            pools_to_show = (
+                list(RateLimitPool) if all_pools else [RateLimitPool.CORE]
+            )
 
-                reset_time = rate["reset"]
-                if isinstance(reset_time, datetime):
-                    reset_str = reset_time.strftime("%Y-%m-%d %H:%M:%S UTC")
+            # Build table
+            table = Table(title="GitHub API Rate Limits")
+            table.add_column("Pool", style="bold")
+            table.add_column("Status")
+            table.add_column("Remaining", justify="right")
+            table.add_column("Limit", justify="right")
+            table.add_column("Used %", justify="right")
+            table.add_column("Resets In", justify="right")
+
+            for pool in pools_to_show:
+                pool_limit = monitor.get_pool_limit(pool)
+                if pool_limit is None:
+                    continue
+
+                status = monitor.get_status(pool)
+                time_remaining = monitor.time_until_reset(pool)
+
+                # Format usage percentage with color
+                usage_pct = pool_limit.usage_percent
+                if usage_pct < 50:
+                    usage_str = f"[green]{usage_pct:.1f}%[/green]"
+                elif usage_pct < 80:
+                    usage_str = f"[yellow]{usage_pct:.1f}%[/yellow]"
                 else:
-                    reset_str = str(reset_time)
-                table.add_row("Resets At", reset_str)
+                    usage_str = f"[red]{usage_pct:.1f}%[/red]"
 
-                console.print(table)
+                table.add_row(
+                    pool.value,
+                    _get_status_style(status),
+                    str(pool_limit.remaining),
+                    str(pool_limit.limit),
+                    usage_str,
+                    _format_time_remaining(time_remaining),
+                )
 
-                # Color-coded status
-                limit = rate["limit"]
-                remaining = rate["remaining"]
-                if isinstance(limit, int) and isinstance(remaining, int) and limit > 0:
-                    remaining_pct = remaining / limit * 100
-                    if remaining_pct > 50:
-                        status = "[green]Healthy[/green]"
-                    elif remaining_pct > 10:
-                        status = "[yellow]Moderate[/yellow]"
-                    else:
-                        status = "[red]Low - consider waiting[/red]"
-                    console.print(f"\nStatus: {status}")
+            console.print()
+            console.print(table)
+
+            # Visual progress bar for core pool
+            core_limit = monitor.get_pool_limit(RateLimitPool.CORE)
+            if core_limit:
+                console.print()
+                remaining_pct = core_limit.remaining_percent
+                with Progress(
+                    TextColumn("[bold]Core quota:[/bold]"),
+                    BarColumn(bar_width=40, complete_style="green", finished_style="green"),
+                    TextColumn(f"{remaining_pct:.1f}% remaining"),
+                    console=console,
+                    transient=True,
+                ) as progress:
+                    task = progress.add_task("", total=100)
+                    progress.update(task, completed=remaining_pct)
+                    # Force display since transient
+                    progress.refresh()
+
+            # Verbose mode: additional details
+            if verbose:
+                console.print("\n[bold]Detailed Information[/bold]")
+                snapshot = monitor._snapshot
+                if snapshot:
+                    console.print(f"  Last updated: {snapshot.timestamp:%Y-%m-%d %H:%M:%S UTC}")
+                    for pool in pools_to_show:
+                        pool_limit = monitor.get_pool_limit(pool)
+                        if pool_limit and pool_limit.reset_at:
+                            console.print(
+                                f"  {pool.value} resets at: "
+                                f"{pool_limit.reset_at:%Y-%m-%d %H:%M:%S UTC}"
+                            )
+
+            # Recommendations
+            core_status = monitor.get_status(RateLimitPool.CORE)
+            if core_status == RateLimitStatus.CRITICAL:
+                console.print(
+                    "\n[yellow]Recommendation:[/yellow] Rate limit is low. "
+                    "Consider waiting before making more API calls."
+                )
+            elif core_status == RateLimitStatus.EXHAUSTED:
+                time_left = monitor.time_until_reset(RateLimitPool.CORE)
+                console.print(
+                    f"\n[red]Rate limit exhausted![/red] "
+                    f"Wait {_format_time_remaining(time_left)} before making API calls."
+                )
 
         except GitHubAuthenticationError:
             console.print("[red]Error:[/red] Invalid GitHub token")
             raise typer.Exit(1) from None
+        except Exception as e:
+            console.print(f"[red]Error:[/red] {e}")
+            raise typer.Exit(1) from None
 
-    _run_async(_check())
+    _run_async(_check())  # type: ignore[unused-coroutine]
