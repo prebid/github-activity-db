@@ -12,12 +12,13 @@ uv run alembic upgrade head
 
 # CLI
 uv run ghactivity --help
-uv run ghactivity github rate-limit --all  # Check rate limits
+uv run ghactivity github rate-limit --all         # Check rate limits
+uv run ghactivity sync pr owner/repo 1234         # Sync single PR
 
 # Development
 uv run mypy src/           # Type check
 uv run ruff check src/     # Lint
-uv run pytest              # Test (268 tests)
+uv run pytest              # Test (304 tests)
 ```
 
 ## Documentation
@@ -43,6 +44,13 @@ uv run pytest              # Test (268 tests)
 - Request pacing with token bucket algorithm
 - Priority queue scheduler with concurrency control
 - Batch execution with progress tracking
+
+**Phase 1.6 (Complete):**
+- Single PR ingestion pipeline (fetch → transform → store)
+- Repository layer with CRUD operations
+- 2-week grace period for merged PRs
+- Diff detection (skip unchanged PRs)
+- CLI: `ghactivity sync pr` with --dry-run, --format, --quiet, --verbose
 
 **Out of Scope (Phase 2+):**
 - GitHub Issues
@@ -77,9 +85,17 @@ Async GitHub API client with integrated rate limit tracking.
 - `BatchExecutor`: Coordinates batch operations
 - `ProgressTracker`: Observable progress reporting
 
+### PR Ingestion (`github/sync/`)
+- `PRIngestionService`: Orchestrates fetch → transform → store pipeline
+- `PRIngestionResult`: Structured result with action tracking (created/updated/skipped)
+
+### Repository Layer (`db/repositories/`)
+- `RepositoryRepository`: CRUD for Repository table with get_or_create
+- `PullRequestRepository`: CRUD for PullRequest table with frozen state handling
+
 ## Status
 
-**Phase 1.5 complete.** Rate limiting and request pacing implemented. See [Roadmap](docs/roadmap.md) for details.
+**Phase 1.6 complete.** Single PR ingestion pipeline implemented. See [Roadmap](docs/roadmap.md) for details.
 
 ## Environment Variables
 
@@ -89,3 +105,4 @@ Async GitHub API client with integrated rate limit tracking.
 | `DATABASE_URL` | No | `sqlite+aiosqlite:///./github_activity.db` | Database connection |
 | `LOG_LEVEL` | No | `INFO` | Logging level |
 | `ENVIRONMENT` | No | `development` | App environment |
+| `SYNC__MERGE_GRACE_PERIOD_DAYS` | No | `14` | Days after merge before PR is frozen |

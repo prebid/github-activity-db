@@ -5,6 +5,7 @@ from rich.console import Console
 
 from github_activity_db import __version__
 from github_activity_db.cli import github as github_cmd
+from github_activity_db.cli import sync as sync_cmd
 
 app = typer.Typer(
     name="ghactivity",
@@ -37,12 +38,6 @@ def main(
 
 
 @app.command()
-def sync() -> None:
-    """Sync PR data from GitHub repositories."""
-    console.print("[yellow]Sync command not yet implemented.[/yellow]")
-
-
-@app.command()
 def search(query: str = typer.Argument(default="", help="Search query")) -> None:
     """Search stored PR data."""
     console.print(f"[yellow]Search for '{query}' not yet implemented.[/yellow]")
@@ -54,8 +49,9 @@ def tags() -> None:
     console.print("[yellow]Tags command not yet implemented.[/yellow]")
 
 
-# Register github subcommand
+# Register subcommands
 app.add_typer(github_cmd.app, name="github")
+app.add_typer(sync_cmd.app, name="sync")
 
 
 if __name__ == "__main__":

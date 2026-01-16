@@ -4,6 +4,7 @@ This module provides:
 - GitHubClient: Async GitHub API client with rate limit tracking
 - Rate limit monitoring: RateLimitMonitor, RateLimitStatus, etc.
 - Request pacing: RequestPacer, RequestScheduler, RequestPriority
+- PR Sync: PRIngestionService, PRIngestionResult
 """
 
 from .client import GitHubClient
@@ -27,6 +28,12 @@ from .rate_limit import (
     RateLimitSnapshot,
     RateLimitStatus,
 )
+from .sync import (
+    OutputFormat,
+    PRIngestionResult,
+    PRIngestionService,
+    SyncStrategy,
+)
 
 __all__ = [
     # Client
@@ -48,4 +55,9 @@ __all__ = [
     "RequestScheduler",
     "RequestState",
     "wait_with_pacer",
+    # PR Sync
+    "OutputFormat",
+    "PRIngestionResult",
+    "PRIngestionService",
+    "SyncStrategy",
 ]

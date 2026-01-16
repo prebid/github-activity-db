@@ -1,5 +1,6 @@
 """Configuration settings for GitHub Activity DB."""
 
+from datetime import timedelta
 from functools import lru_cache
 from typing import Literal
 
@@ -94,6 +95,25 @@ class PacingConfig(BaseModel):
     )
 
 
+class SyncConfig(BaseModel):
+    """Configuration for PR sync behavior.
+
+    Controls how PRs are synced from GitHub to the database,
+    including grace periods for merged PRs.
+    """
+
+    merge_grace_period_days: int = Field(
+        default=14,
+        ge=0,
+        description="Days after merge before PR is frozen (0 = freeze immediately)",
+    )
+
+    @property
+    def merge_grace_period(self) -> timedelta:
+        """Get the grace period as a timedelta."""
+        return timedelta(days=self.merge_grace_period_days)
+
+
 class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
 
@@ -142,6 +162,14 @@ class Settings(BaseSettings):
     pacing: PacingConfig = Field(
         default_factory=PacingConfig,
         description="Request pacing configuration",
+    )
+
+    # --------------------------------------------------------------------------
+    # Sync Configuration
+    # --------------------------------------------------------------------------
+    sync: SyncConfig = Field(
+        default_factory=SyncConfig,
+        description="PR sync behavior configuration",
     )
 
     # --------------------------------------------------------------------------

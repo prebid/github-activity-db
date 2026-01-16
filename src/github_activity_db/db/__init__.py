@@ -16,18 +16,29 @@ from github_activity_db.db.models import (
     UserTag,
     pr_user_tags,
 )
+from github_activity_db.db.repositories import (
+    BaseRepository,
+    PullRequestRepository,
+    RepositoryRepository,
+)
 
 __all__ = [
+    # Models
     "Base",
     "PRState",
     "PullRequest",
     "Repository",
     "UserTag",
+    "pr_user_tags",
+    # Engine
     "create_tables",
     "dispose_engine",
     "drop_tables",
     "get_engine",
     "get_session",
     "get_session_factory",
-    "pr_user_tags",
+    # Repositories
+    "BaseRepository",
+    "PullRequestRepository",
+    "RepositoryRepository",
 ]

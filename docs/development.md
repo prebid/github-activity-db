@@ -76,8 +76,19 @@ uv run ghactivity --help
 # Show version
 uv run ghactivity --version
 
-# Subcommands (when implemented)
-uv run ghactivity sync --help
+# GitHub commands
+uv run ghactivity github rate-limit           # Check core rate limit
+uv run ghactivity github rate-limit --all     # Show all pools
+uv run ghactivity github rate-limit --all -v  # Verbose with reset times
+
+# Sync commands
+uv run ghactivity sync pr owner/repo 1234              # Sync single PR
+uv run ghactivity sync pr owner/repo 1234 --verbose    # Detailed output
+uv run ghactivity sync pr owner/repo 1234 --quiet      # Silent (errors only)
+uv run ghactivity sync pr owner/repo 1234 --dry-run    # Preview without writing
+uv run ghactivity sync pr owner/repo 1234 --format json # JSON output
+
+# Not yet implemented
 uv run ghactivity search --help
 uv run ghactivity user-tags --help
 ```
@@ -219,11 +230,17 @@ src/github_activity_db/
 ├── config.py            # Settings (pydantic-settings)
 ├── cli/                 # CLI commands
 │   ├── __init__.py
-│   └── app.py           # Typer application
+│   ├── app.py           # Typer application
+│   ├── github.py        # GitHub commands (rate-limit)
+│   └── sync.py          # Sync commands (sync pr)
 ├── db/                  # Database layer
 │   ├── __init__.py      # Public exports
 │   ├── models.py        # SQLAlchemy models
-│   └── engine.py        # Async engine/sessions
+│   ├── engine.py        # Async engine/sessions
+│   └── repositories/    # Repository pattern
+│       ├── base.py      # BaseRepository ABC
+│       ├── repository.py # RepositoryRepository
+│       └── pull_request.py # PullRequestRepository
 ├── schemas/             # Pydantic validation models
 │   ├── __init__.py      # Re-exports all schemas
 │   ├── base.py          # SchemaBase with factory pattern
@@ -232,18 +249,28 @@ src/github_activity_db/
 │   ├── tag.py           # UserTagCreate, UserTagRead
 │   ├── nested.py        # CommitBreakdown, ParticipantEntry
 │   └── github_api.py    # GitHub API response schemas
-├── github/              # GitHub API [TODO]
+├── github/              # GitHub integration
+│   ├── client.py        # githubkit wrapper
+│   ├── exceptions.py    # Custom exceptions
+│   ├── rate_limit/      # Rate limit monitoring
+│   ├── pacing/          # Request pacing
+│   └── sync/            # PR ingestion service
 └── search/              # Search logic [TODO]
 
 tests/
 ├── conftest.py          # Shared fixtures (db_session, sample data)
 ├── factories.py         # Factory functions for test data
-├── fixtures/            # Mock data
-│   └── github_responses.py
+├── fixtures/            # Mock data and real GitHub fixtures
+├── db/repositories/     # Repository tests
+├── github/              # GitHub module tests
+│   ├── rate_limit/      # Rate limit tests
+│   ├── pacing/          # Pacing tests
+│   └── sync/            # Ingestion tests
 ├── test_config.py       # Settings tests
-├── test_db_engine.py    # Engine & session tests
-├── test_db_models.py    # ORM model tests
-└── test_schemas_*.py    # Schema validation tests
+├── test_db_*.py         # Database tests
+├── test_schemas_*.py    # Schema validation tests
+├── test_pr_ingestion_e2e.py # E2E integration tests
+└── test_cli_sync.py     # CLI sync command tests
 ```
 
 ## Adding New Features

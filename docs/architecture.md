@@ -31,13 +31,17 @@ github-activity-db/
 │   ├── config.py               # Settings (pydantic-settings)
 │   ├── cli/                    # CLI commands
 │   │   ├── app.py              # Main typer app
-│   │   ├── sync.py             # Sync commands [TODO]
+│   │   ├── github.py           # GitHub commands (rate-limit)
+│   │   ├── sync.py             # Sync commands (sync pr)
 │   │   ├── search.py           # Search commands [TODO]
 │   │   └── tags.py             # Tag management [TODO]
 │   ├── db/                     # Database layer
 │   │   ├── models.py           # SQLAlchemy ORM models
 │   │   ├── engine.py           # Async engine/session
-│   │   └── repositories.py     # Data access layer [TODO]
+│   │   └── repositories/       # Repository pattern
+│   │       ├── base.py         # BaseRepository ABC
+│   │       ├── repository.py   # RepositoryRepository
+│   │       └── pull_request.py # PullRequestRepository
 │   ├── github/                 # GitHub integration
 │   │   ├── client.py           # githubkit wrapper with rate limit tracking
 │   │   ├── exceptions.py       # Custom GitHub exceptions
@@ -49,7 +53,10 @@ github-activity-db/
 │   │   │   ├── scheduler.py    # RequestScheduler (priority queue)
 │   │   │   ├── batch.py        # BatchExecutor
 │   │   │   └── progress.py     # ProgressTracker
-│   │   └── sync.py             # Sync logic [TODO]
+│   │   └── sync/               # PR sync/ingestion
+│   │       ├── ingestion.py    # PRIngestionService
+│   │       ├── results.py      # PRIngestionResult
+│   │       └── enums.py        # SyncStrategy, OutputFormat
 │   ├── schemas/                # Pydantic validation models
 │   │   ├── __init__.py         # Re-exports all schemas
 │   │   ├── base.py             # SchemaBase with factory pattern
@@ -193,18 +200,19 @@ config.py ←── db/engine.py ←── db/models.py
 
 | Module | Status | Notes |
 |--------|--------|-------|
-| `config.py` | ✅ Complete | 8 repos, rate limit & pacing configs |
+| `config.py` | ✅ Complete | 8 repos, rate limit, pacing & sync configs |
 | `db/models.py` | ✅ Complete | 4 tables, 26 columns |
 | `db/engine.py` | ✅ Complete | Async session factory |
-| `cli/app.py` | ✅ Complete | GitHub commands with rate limit display |
+| `db/repositories/` | ✅ Complete | Repository, PullRequest repositories |
+| `cli/app.py` | ✅ Complete | GitHub and sync commands |
+| `cli/sync.py` | ✅ Complete | Single PR sync with --dry-run, --format, etc. |
 | `alembic/` | ✅ Complete | Initial migration applied |
 | `schemas/` | ✅ Complete | 8 files, factory pattern, GitHub API schemas |
 | `github/client.py` | ✅ Complete | API wrapper with rate limit tracking |
 | `github/rate_limit/` | ✅ Complete | Monitor, schemas, state machine |
 | `github/pacing/` | ✅ Complete | Pacer, scheduler, batch, progress |
-| `tests/` | ✅ Complete | 268 tests, factory pattern |
-| `db/repositories.py` | 🔲 TODO | Data access layer |
-| `github/sync.py` | 🔲 TODO | Sync logic |
+| `github/sync/` | ✅ Complete | PRIngestionService, results, enums |
+| `tests/` | ✅ Complete | 304 tests, factory pattern |
 | `search/query.py` | 🔲 TODO | Search builder |
 
 ## Test Infrastructure
@@ -219,13 +227,20 @@ The `tests/` module provides comprehensive test coverage using pytest-asyncio.
 | `factories.py` | Model and schema factory functions |
 | `fixtures/github_responses.py` | Mock GitHub API responses |
 | `fixtures/rate_limit_responses.py` | Rate limit header fixtures |
+| `fixtures/real_pr_open.py` | Real open PR fixture from GitHub |
+| `fixtures/real_pr_merged.py` | Real merged PR fixture from GitHub |
 | `test_config.py` | Settings and environment tests |
 | `test_db_engine.py` | Engine creation, session lifecycle |
 | `test_db_models.py` | ORM models, relationships, constraints |
 | `test_github_client.py` | GitHub client API wrapper tests |
 | `test_schemas_*.py` | Schema validation tests |
+| `test_schemas_contract.py` | Contract tests with real GitHub fixtures |
 | `github/rate_limit/test_*.py` | Rate limit schemas and monitor tests |
 | `github/pacing/test_*.py` | Pacer, scheduler, batch, progress tests |
+| `db/repositories/test_*.py` | Repository CRUD and state tests |
+| `github/sync/test_*.py` | Ingestion service tests |
+| `test_pr_ingestion_e2e.py` | End-to-end PR ingestion tests |
+| `test_cli_sync.py` | CLI sync command tests |
 
 ### Factory Pattern
 
