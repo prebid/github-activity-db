@@ -457,19 +457,343 @@ ghactivity sync pr prebid/prebid-server 1234 --format json  # JSON output for sc
 
 ## Phase 2: Enhanced Features (Future)
 
-### GitHub Issues Support
+### 2.1 GitHub User Identity (Normalized)
+
+**Problem Statement:**
+
+User identities are currently scattered and inconsistent:
+- `submitter`, `merged_by` store GitHub login (e.g., "optidigital-prebid")
+- `commits_breakdown.author` stores git display name (e.g., "Victor Gonzalez")
+- `participants` keys are GitHub logins
+- No way to query "all PRs involving user X"
+- If a user changes their GitHub username, old data becomes orphaned
+- Can't distinguish bots from humans
+- Can't store user metadata (avatar, company, etc.)
+
+**Solution: Normalized `github_users` Table**
+
+#### Schema Design
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                      github_users                            │
+├─────────────────────────────────────────────────────────────┤
+│ id           INTEGER PRIMARY KEY   -- GitHub's user ID       │
+│ login        VARCHAR(100) NOT NULL -- Current username       │
+│ name         VARCHAR(200)          -- Display name           │
+│ email        VARCHAR(200)          -- Public email           │
+│ avatar_url   VARCHAR(500)          -- Profile picture URL    │
+│ type         VARCHAR(20) NOT NULL  -- User, Bot, Organization│
+│ company      VARCHAR(200)          -- Company field          │
+│ first_seen_at DATETIME NOT NULL    -- When we first saw them │
+│ last_seen_at  DATETIME NOT NULL    -- Last activity date     │
+│ created_at    DATETIME NOT NULL    -- Record creation        │
+│ updated_at    DATETIME NOT NULL    -- Record update          │
+├─────────────────────────────────────────────────────────────┤
+│ UNIQUE INDEX ON (login)                                      │
+└─────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────┐
+│                    pr_participants                           │
+│              (replaces JSON participants field)              │
+├─────────────────────────────────────────────────────────────┤
+│ pr_id        INTEGER FK(pull_requests.id) ON DELETE CASCADE  │
+│ user_id      INTEGER FK(github_users.id)                     │
+│ actions      JSON NOT NULL         -- ["approval", "comment"]│
+│ first_action_at DATETIME           -- When first participated│
+│ last_action_at  DATETIME           -- When last participated │
+├─────────────────────────────────────────────────────────────┤
+│ PRIMARY KEY (pr_id, user_id)                                 │
+└─────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────┐
+│                    pr_commits                                │
+│            (replaces JSON commits_breakdown field)           │
+├─────────────────────────────────────────────────────────────┤
+│ id           INTEGER PRIMARY KEY                             │
+│ pr_id        INTEGER FK(pull_requests.id) ON DELETE CASCADE  │
+│ sha          VARCHAR(40) NOT NULL  -- Commit SHA             │
+│ author_id    INTEGER FK(github_users.id) NULLABLE            │
+│ author_name  VARCHAR(200) NOT NULL -- Git author name        │
+│ author_email VARCHAR(200) NOT NULL -- Git author email       │
+│ message      TEXT                  -- Commit message         │
+│ committed_at DATETIME NOT NULL     -- Commit timestamp       │
+├─────────────────────────────────────────────────────────────┤
+│ UNIQUE INDEX ON (pr_id, sha)                                 │
+│ INDEX ON (author_id)                                         │
+│ INDEX ON (author_email)  -- For matching non-linked commits  │
+└─────────────────────────────────────────────────────────────┘
+```
+
+#### Entity Relationship Diagram
+
+```
+┌──────────────┐       ┌─────────────────┐       ┌──────────────┐
+│ github_users │       │  pull_requests  │       │ repositories │
+├──────────────┤       ├─────────────────┤       ├──────────────┤
+│ id (PK)      │◄──┐   │ id (PK)         │──────►│ id (PK)      │
+│ login        │   │   │ repository_id   │       │ owner        │
+│ name         │   │   │ submitter_id ───┼───────┤ name         │
+│ email        │   │   │ merged_by_id ───┼───┐   └──────────────┘
+│ type         │   │   │ number          │   │
+└──────────────┘   │   │ title           │   │
+       ▲           │   │ state           │   │
+       │           │   │ ...             │   │
+       │           │   └────────┬────────┘   │
+       │           │            │            │
+       │           └────────────┼────────────┘
+       │                        │
+       │              ┌─────────┴─────────┐
+       │              │                   │
+       │              ▼                   ▼
+       │   ┌─────────────────┐   ┌──────────────┐
+       │   │ pr_participants │   │  pr_commits  │
+       │   ├─────────────────┤   ├──────────────┤
+       └───┤ user_id (FK)    │   │ author_id(FK)│───┐
+           │ pr_id (FK)      │   │ pr_id (FK)   │   │
+           │ actions (JSON)  │   │ sha          │   │
+           └─────────────────┘   │ author_name  │   │
+                                 │ author_email │◄──┘ (nullable link)
+                                 │ message      │
+                                 └──────────────┘
+```
+
+#### Migration Strategy
+
+**Step 1: Create new tables (non-breaking)**
+```sql
+CREATE TABLE github_users (...);
+CREATE TABLE pr_participants (...);
+CREATE TABLE pr_commits (...);
+```
+
+**Step 2: Add nullable FK columns to pull_requests**
+```sql
+ALTER TABLE pull_requests ADD COLUMN submitter_id INTEGER REFERENCES github_users(id);
+ALTER TABLE pull_requests ADD COLUMN merged_by_id INTEGER REFERENCES github_users(id);
+```
+
+**Step 3: Backfill migration script**
+```python
+# For each PR:
+#   1. Look up or create github_users from submitter/merged_by logins
+#   2. Populate submitter_id, merged_by_id
+#   3. Migrate participants JSON → pr_participants rows
+#   4. Migrate commits_breakdown JSON → pr_commits rows
+#   5. Attempt to link pr_commits.author_id by matching email
+```
+
+**Step 4: Mark old columns as deprecated**
+```python
+# Keep for backwards compatibility during transition:
+# - submitter (string) - deprecated, use submitter_id
+# - merged_by (string) - deprecated, use merged_by_id
+# - participants (JSON) - deprecated, use pr_participants
+# - commits_breakdown (JSON) - deprecated, use pr_commits
+```
+
+**Step 5: Remove deprecated columns (future)**
+```sql
+ALTER TABLE pull_requests DROP COLUMN submitter;
+ALTER TABLE pull_requests DROP COLUMN merged_by;
+ALTER TABLE pull_requests DROP COLUMN participants;
+ALTER TABLE pull_requests DROP COLUMN commits_breakdown;
+```
+
+#### User Resolution Logic
+
+```python
+class GitHubUserRepository:
+    """Repository for GitHub user identity management."""
+
+    async def get_or_create_from_api(
+        self,
+        user_data: GitHubUser
+    ) -> tuple[User, bool]:
+        """
+        Get existing user or create from API response.
+
+        GitHub API provides: id, login, type, avatar_url
+        Additional fields fetched lazily or via user endpoint.
+        """
+
+    async def link_commit_author(
+        self,
+        author_name: str,
+        author_email: str,
+    ) -> int | None:
+        """
+        Attempt to link a git commit author to a GitHub user.
+
+        Strategy:
+        1. Exact email match in github_users.email
+        2. Email match in previously seen pr_commits
+        3. Return None if no match (store unlinked)
+        """
+
+    async def merge_identities(
+        self,
+        primary_id: int,
+        duplicate_id: int,
+    ) -> None:
+        """
+        Merge two user records (e.g., discovered same person).
+        Updates all FKs to point to primary_id.
+        """
+```
+
+#### Sync Changes
+
+```python
+# Current (Phase 1.6):
+pr_sync = gh_pr.to_pr_sync(files, commits, reviews)
+# participants is JSON dict
+
+# Phase 2:
+async def sync_pr_with_users(
+    gh_pr: GitHubPullRequest,
+    files: list[GitHubFile],
+    commits: list[GitHubCommit],
+    reviews: list[GitHubReview],
+    user_repo: GitHubUserRepository,
+) -> tuple[PRSync, list[PRParticipant], list[PRCommit]]:
+    """
+    Transform GitHub data with proper user resolution.
+
+    Returns:
+        - PRSync (without participants/commits_breakdown)
+        - List of PRParticipant records to insert
+        - List of PRCommit records to insert
+    """
+    # 1. Resolve submitter → submitter_id
+    submitter, _ = await user_repo.get_or_create_from_api(gh_pr.user)
+
+    # 2. Resolve merged_by → merged_by_id (if merged)
+    merged_by_id = None
+    if gh_pr.merged_by:
+        merged_by, _ = await user_repo.get_or_create_from_api(gh_pr.merged_by)
+        merged_by_id = merged_by.id
+
+    # 3. Build participant records from reviews
+    participants = []
+    for review in reviews:
+        user, _ = await user_repo.get_or_create_from_api(review.user)
+        participants.append(PRParticipant(
+            user_id=user.id,
+            actions=[map_review_state(review.state)],
+            first_action_at=review.submitted_at,
+        ))
+
+    # 4. Build commit records with attempted user linking
+    pr_commits = []
+    for commit in commits:
+        author_id = await user_repo.link_commit_author(
+            commit.commit.author.name,
+            commit.commit.author.email,
+        )
+        pr_commits.append(PRCommit(
+            sha=commit.sha,
+            author_id=author_id,  # May be None
+            author_name=commit.commit.author.name,
+            author_email=commit.commit.author.email,
+            message=commit.commit.message,
+            committed_at=commit.commit.author.date,
+        ))
+
+    return pr_sync, participants, pr_commits
+```
+
+#### Query Examples
+
+```sql
+-- All PRs where user participated (as submitter, reviewer, or committer)
+SELECT DISTINCT p.* FROM pull_requests p
+LEFT JOIN pr_participants pp ON p.id = pp.pr_id
+LEFT JOIN pr_commits pc ON p.id = pc.pr_id
+WHERE p.submitter_id = ?
+   OR p.merged_by_id = ?
+   OR pp.user_id = ?
+   OR pc.author_id = ?;
+
+-- Top reviewers by approval count
+SELECT u.login, COUNT(*) as approvals
+FROM github_users u
+JOIN pr_participants pp ON u.id = pp.user_id
+WHERE pp.actions @> '["approval"]'
+GROUP BY u.id
+ORDER BY approvals DESC;
+
+-- Contributors who commit but don't have GitHub accounts linked
+SELECT DISTINCT author_name, author_email
+FROM pr_commits
+WHERE author_id IS NULL;
+
+-- Bots vs humans activity
+SELECT u.type, COUNT(DISTINCT p.id) as pr_count
+FROM github_users u
+JOIN pull_requests p ON u.id = p.submitter_id
+GROUP BY u.type;
+```
+
+#### CLI Enhancements
+
+```bash
+# List known users
+ghactivity users list
+ghactivity users list --type bot
+ghactivity users list --sort-by activity
+
+# Show user activity
+ghactivity users show octocat
+ghactivity users show octocat --prs
+ghactivity users show octocat --reviews
+
+# Link commit author to GitHub user (manual override)
+ghactivity users link-email "victor@example.com" --to octocat
+
+# Merge duplicate user records
+ghactivity users merge duplicate-login --into primary-login
+```
+
+#### Testing Strategy
+
+| Test Category | Purpose |
+|---------------|---------|
+| Schema | Verify FK constraints, indexes, cascades |
+| Migration | Test backfill from existing JSON data |
+| User Resolution | Test get_or_create, email matching |
+| Identity Linking | Test commit author → user matching |
+| Queries | Verify user-centric query performance |
+
+#### Goals Checklist
+
+- [ ] Create `github_users` table with GitHub user ID as PK
+- [ ] Create `pr_participants` junction table
+- [ ] Create `pr_commits` table with full commit data
+- [ ] Add `submitter_id`, `merged_by_id` FK columns to `pull_requests`
+- [ ] Implement `GitHubUserRepository` with resolution logic
+- [ ] Update sync pipeline to populate user tables
+- [ ] Write backfill migration for existing data
+- [ ] Add commit author → user email matching
+- [ ] CLI commands for user management
+- [ ] Deprecate old string/JSON columns
+- [ ] Update all queries to use normalized tables
+
+---
+
+### 2.2 GitHub Issues Support
 
 - [ ] Issue data model (similar to PR)
 - [ ] Issue sync from GitHub API
 - [ ] Issue tagging and search
 
-### Agent Integration
+### 2.3 Agent Integration
 
 - [ ] `classify_tags` generation pipeline
 - [ ] `ai_summary` generation on PR merge
 - [ ] Configurable prompts/models
 
-### Search Enhancements
+### 2.4 Search Enhancements
 
 - [ ] Full-text search on title/description
 - [ ] Date range filtering

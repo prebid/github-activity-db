@@ -9,5 +9,6 @@ class ParticipantActionType(str, Enum):
     COMMENT = "comment"
     APPROVAL = "approval"
     CHANGES_REQUESTED = "changes_requested"
+    DISMISSED = "dismissed"
     REVIEW = "review"
     COMMIT = "commit"

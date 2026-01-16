@@ -183,6 +183,8 @@ class GitHubPullRequest(BaseModel):
                 participant_map[username].append(ParticipantActionType.APPROVAL)
             elif review.state == "CHANGES_REQUESTED":
                 participant_map[username].append(ParticipantActionType.CHANGES_REQUESTED)
+            elif review.state == "DISMISSED":
+                participant_map[username].append(ParticipantActionType.DISMISSED)
             elif review.state in ("COMMENTED", "PENDING"):
                 participant_map[username].append(ParticipantActionType.REVIEW)
 
