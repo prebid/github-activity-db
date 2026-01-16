@@ -14,11 +14,12 @@ uv run alembic upgrade head
 uv run ghactivity --help
 uv run ghactivity github rate-limit --all         # Check rate limits
 uv run ghactivity sync pr owner/repo 1234         # Sync single PR
+uv run ghactivity sync repo owner/repo --since 2024-10-01  # Bulk sync
 
 # Development
 uv run mypy src/           # Type check
 uv run ruff check src/     # Lint
-uv run pytest              # Test (304 tests)
+uv run pytest              # Test (402 tests)
 ```
 
 ## Documentation
@@ -29,30 +30,20 @@ uv run pytest              # Test (304 tests)
 | [Database](docs/database.md) | Schema, tables, migrations, usage examples |
 | [Data Model](docs/data-model.md) | PR fields, sync behavior, tagging systems |
 | [Development](docs/development.md) | Setup, commands, configuration, troubleshooting |
-| [Roadmap](docs/roadmap.md) | Implementation status and future plans |
+| [Roadmap](docs/roadmap.md) | Implementation phases and future plans |
 
 ## Current Scope
 
-**Phase 1 (Complete):**
-- Pull Request data only
-- 8 Prebid repositories
+**Implemented:**
+- Pull Request data from 8 Prebid repositories
 - Custom user tags via CLI
 - Agent-generated classifications (`classify_tags`) and summaries (`ai_summary`)
-
-**Phase 1.5 (Complete):**
 - Rate limit monitoring with proactive tracking
-- Request pacing with token bucket algorithm
-- Priority queue scheduler with concurrency control
-- Batch execution with progress tracking
+- Request pacing with token bucket algorithm and priority queue scheduler
+- Single and bulk PR ingestion pipelines with 2-week grace period for merged PRs
+- CLI commands: `ghactivity sync pr` and `ghactivity sync repo`
 
-**Phase 1.6 (Complete):**
-- Single PR ingestion pipeline (fetch → transform → store)
-- Repository layer with CRUD operations
-- 2-week grace period for merged PRs
-- Diff detection (skip unchanged PRs)
-- CLI: `ghactivity sync pr` with --dry-run, --format, --quiet, --verbose
-
-**Out of Scope (Phase 2+):**
+**Out of Scope (Future):**
 - GitHub Issues
 - Webhooks / real-time sync
 - Web UI
@@ -72,30 +63,25 @@ uv run pytest              # Test (304 tests)
 ## Key Modules
 
 ### GitHub Client (`github/client.py`)
-Async GitHub API client with integrated rate limit tracking.
+Async GitHub API client with integrated rate limit tracking. Provides both eager (`list_pull_requests`) and lazy (`iter_pull_requests`) iteration for efficient pagination.
 
 ### Rate Limiting (`github/rate_limit/`)
 - `RateLimitMonitor`: Tracks rate limit state from response headers (zero API cost)
 - `RateLimitStatus`: State machine (HEALTHY → WARNING → CRITICAL → EXHAUSTED)
-- Passive header tracking on every API response
 
 ### Request Pacing (`github/pacing/`)
 - `RequestPacer`: Token bucket algorithm with adaptive throttling
 - `RequestScheduler`: Priority queue with semaphore-controlled concurrency
-- `BatchExecutor`: Coordinates batch operations
-- `ProgressTracker`: Observable progress reporting
+- `BatchExecutor`: Coordinates batch operations with progress tracking
 
 ### PR Ingestion (`github/sync/`)
-- `PRIngestionService`: Orchestrates fetch → transform → store pipeline
-- `PRIngestionResult`: Structured result with action tracking (created/updated/skipped)
+- `PRIngestionService`: Single PR fetch → transform → store pipeline
+- `BulkPRIngestionService`: Multi-PR import using lazy iteration for efficient date filtering
+- `PRIngestionResult` / `BulkIngestionResult`: Structured results (created/updated/skipped/failed)
 
 ### Repository Layer (`db/repositories/`)
 - `RepositoryRepository`: CRUD for Repository table with get_or_create
 - `PullRequestRepository`: CRUD for PullRequest table with frozen state handling
-
-## Status
-
-**Phase 1.6 complete.** Single PR ingestion pipeline implemented. See [Roadmap](docs/roadmap.md) for details.
 
 ## Environment Variables
 

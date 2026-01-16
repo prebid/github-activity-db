@@ -7,6 +7,7 @@ for pull request data retrieval with integrated rate limit monitoring.
 from __future__ import annotations
 
 import logging
+from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, Literal
 
@@ -160,6 +161,8 @@ class GitHubClient:
         repo: str,
         *,
         state: PRState = "open",
+        sort: Literal["created", "updated", "popularity", "long-running"] = "created",
+        direction: Literal["asc", "desc"] = "desc",
         per_page: int = 100,
     ) -> list[GitHubPullRequest]:
         """List pull requests for a repository.
@@ -171,6 +174,8 @@ class GitHubClient:
             owner: Repository owner (org or user)
             repo: Repository name
             state: Filter by state ("open", "closed", "all")
+            sort: What to sort results by ("created", "updated", "popularity", "long-running")
+            direction: Sort direction ("asc", "desc")
             per_page: Results per page (max 100)
 
         Returns:
@@ -184,6 +189,8 @@ class GitHubClient:
                 owner=owner,
                 repo=repo,
                 state=state,
+                sort=sort,
+                direction=direction,
                 per_page=per_page,
             ):
                 try:
@@ -193,6 +200,51 @@ class GitHubClient:
                     continue
 
             return prs
+        except RequestFailed as e:
+            raise self._handle_error(e) from e
+
+    async def iter_pull_requests(
+        self,
+        owner: str,
+        repo: str,
+        *,
+        state: PRState = "open",
+        sort: Literal["created", "updated", "popularity", "long-running"] = "created",
+        direction: Literal["asc", "desc"] = "desc",
+        per_page: int = 100,
+    ) -> AsyncIterator[GitHubPullRequest]:
+        """Iterate over pull requests lazily (for efficient early termination).
+
+        Unlike list_pull_requests(), this yields PRs one at a time and only
+        fetches new pages as needed. Use this when you might break early
+        (e.g., date filtering with --since).
+
+        Args:
+            owner: Repository owner (org or user)
+            repo: Repository name
+            state: Filter by state ("open", "closed", "all")
+            sort: What to sort results by ("created", "updated", "popularity", "long-running")
+            direction: Sort direction ("asc", "desc")
+            per_page: Results per page (max 100)
+
+        Yields:
+            GitHubPullRequest objects (partial data - stats may be 0)
+        """
+        try:
+            async for pr_data in self._github.paginate(
+                self._github.rest.pulls.async_list,
+                owner=owner,
+                repo=repo,
+                state=state,
+                sort=sort,
+                direction=direction,
+                per_page=per_page,
+            ):
+                try:
+                    yield GitHubPullRequest.model_validate(pr_data.model_dump())
+                except ValidationError:
+                    # Skip PRs that don't validate (shouldn't happen normally)
+                    continue
         except RequestFailed as e:
             raise self._handle_error(e) from e
 

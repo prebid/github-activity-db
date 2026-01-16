@@ -81,12 +81,20 @@ uv run ghactivity github rate-limit           # Check core rate limit
 uv run ghactivity github rate-limit --all     # Show all pools
 uv run ghactivity github rate-limit --all -v  # Verbose with reset times
 
-# Sync commands
+# Sync commands - single PR
 uv run ghactivity sync pr owner/repo 1234              # Sync single PR
 uv run ghactivity sync pr owner/repo 1234 --verbose    # Detailed output
 uv run ghactivity sync pr owner/repo 1234 --quiet      # Silent (errors only)
 uv run ghactivity sync pr owner/repo 1234 --dry-run    # Preview without writing
 uv run ghactivity sync pr owner/repo 1234 --format json # JSON output
+
+# Sync commands - bulk repository
+uv run ghactivity sync repo owner/repo                    # Sync all PRs
+uv run ghactivity sync repo owner/repo --since 2024-10-01 # Since date
+uv run ghactivity sync repo owner/repo --state open       # Only open PRs
+uv run ghactivity sync repo owner/repo --max 10           # Limit count
+uv run ghactivity sync repo owner/repo --dry-run          # Preview mode
+uv run ghactivity sync repo owner/repo --format json      # JSON output
 
 # Not yet implemented
 uv run ghactivity search --help

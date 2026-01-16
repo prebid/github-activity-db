@@ -5,6 +5,7 @@ This module provides:
 - Rate limit monitoring: RateLimitMonitor, RateLimitStatus, etc.
 - Request pacing: RequestPacer, RequestScheduler, RequestPriority
 - PR Sync: PRIngestionService, PRIngestionResult
+- Bulk PR Sync: BulkPRIngestionService, BulkIngestionConfig, BulkIngestionResult
 """
 
 from .client import GitHubClient
@@ -29,6 +30,9 @@ from .rate_limit import (
     RateLimitStatus,
 )
 from .sync import (
+    BulkIngestionConfig,
+    BulkIngestionResult,
+    BulkPRIngestionService,
     OutputFormat,
     PRIngestionResult,
     PRIngestionService,
@@ -55,9 +59,13 @@ __all__ = [
     "RequestScheduler",
     "RequestState",
     "wait_with_pacer",
-    # PR Sync
+    # PR Sync (single)
     "OutputFormat",
     "PRIngestionResult",
     "PRIngestionService",
     "SyncStrategy",
+    # PR Sync (bulk)
+    "BulkIngestionConfig",
+    "BulkIngestionResult",
+    "BulkPRIngestionService",
 ]

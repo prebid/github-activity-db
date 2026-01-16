@@ -54,7 +54,8 @@ github-activity-db/
 │   │   │   ├── batch.py        # BatchExecutor
 │   │   │   └── progress.py     # ProgressTracker
 │   │   └── sync/               # PR sync/ingestion
-│   │       ├── ingestion.py    # PRIngestionService
+│   │       ├── ingestion.py    # PRIngestionService (single PR)
+│   │       ├── bulk_ingestion.py # BulkPRIngestionService (multi-PR)
 │   │       ├── results.py      # PRIngestionResult
 │   │       └── enums.py        # SyncStrategy, OutputFormat
 │   ├── schemas/                # Pydantic validation models
@@ -211,8 +212,8 @@ config.py ←── db/engine.py ←── db/models.py
 | `github/client.py` | ✅ Complete | API wrapper with rate limit tracking |
 | `github/rate_limit/` | ✅ Complete | Monitor, schemas, state machine |
 | `github/pacing/` | ✅ Complete | Pacer, scheduler, batch, progress |
-| `github/sync/` | ✅ Complete | PRIngestionService, results, enums |
-| `tests/` | ✅ Complete | 304 tests, factory pattern |
+| `github/sync/` | ✅ Complete | PRIngestionService, BulkPRIngestionService, results, enums |
+| `tests/` | ✅ Complete | 402 tests, factory pattern |
 | `search/query.py` | 🔲 TODO | Search builder |
 
 ## Test Infrastructure
