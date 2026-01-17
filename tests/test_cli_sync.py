@@ -12,6 +12,22 @@ from github_activity_db.db.models import PRState
 runner = CliRunner()
 
 
+class TestGlobalFlags:
+    """Tests for global CLI flags (--verbose, --quiet)."""
+
+    def test_global_help_shows_verbose_flag(self):
+        """Main help text shows --verbose and -v flags."""
+        result = runner.invoke(app, ["--help"])
+        assert "-v" in result.stdout
+        assert "--verbose" in result.stdout
+
+    def test_global_help_shows_quiet_flag(self):
+        """Main help text shows --quiet and -q flags."""
+        result = runner.invoke(app, ["--help"])
+        assert "-q" in result.stdout
+        assert "--quiet" in result.stdout
+
+
 @pytest.fixture
 def mock_ingestion_result():
     """Create a mock successful ingestion result."""
@@ -108,10 +124,10 @@ class TestSyncPRFlags:
     @patch("github_activity_db.cli.sync.GitHubClient")
     @patch("github_activity_db.cli.sync.get_session")
     @patch("github_activity_db.cli.sync.PRIngestionService")
-    def test_quiet_suppresses_output_on_success(
+    def test_global_quiet_flag_works(
         self, mock_service_class, mock_get_session, mock_client, mock_ingestion_result
     ):
-        """--quiet suppresses output on successful sync."""
+        """Global --quiet flag works (controls log level, not CLI output)."""
         # Setup mocks
         mock_result = MagicMock()
         mock_result.to_dict.return_value = mock_ingestion_result
@@ -127,19 +143,20 @@ class TestSyncPRFlags:
         mock_client.return_value.__aenter__ = AsyncMock(return_value=mock_client_instance)
         mock_client.return_value.__aexit__ = AsyncMock(return_value=None)
 
-        result = runner.invoke(app, ["sync", "pr", "owner/repo", "123", "--quiet"])
+        # --quiet is a global flag, must come before subcommand
+        result = runner.invoke(app, ["--quiet", "sync", "pr", "owner/repo", "123"])
 
         assert result.exit_code == 0
-        # Output should be empty (or minimal whitespace)
-        assert result.stdout.strip() == ""
+        # CLI output still shows result (quiet only affects log level)
+        assert "Created" in result.stdout
 
     @patch("github_activity_db.cli.sync.GitHubClient")
     @patch("github_activity_db.cli.sync.get_session")
     @patch("github_activity_db.cli.sync.PRIngestionService")
-    def test_verbose_shows_extra_info(
+    def test_global_verbose_flag_works(
         self, mock_service_class, mock_get_session, mock_client, mock_ingestion_result
     ):
-        """--verbose shows additional PR details."""
+        """Global --verbose flag works (controls log level, not CLI output)."""
         # Setup mocks
         mock_result = MagicMock()
         mock_result.to_dict.return_value = mock_ingestion_result
@@ -155,11 +172,12 @@ class TestSyncPRFlags:
         mock_client.return_value.__aenter__ = AsyncMock(return_value=mock_client_instance)
         mock_client.return_value.__aexit__ = AsyncMock(return_value=None)
 
-        result = runner.invoke(app, ["sync", "pr", "owner/repo", "123", "--verbose"])
+        # --verbose is a global flag, must come before subcommand
+        result = runner.invoke(app, ["--verbose", "sync", "pr", "owner/repo", "123"])
 
         assert result.exit_code == 0
-        assert "State:" in result.stdout
-        assert "ID:" in result.stdout
+        # CLI output shows result (verbose only affects log level)
+        assert "Created" in result.stdout
 
     @patch("github_activity_db.cli.sync.GitHubClient")
     @patch("github_activity_db.cli.sync.get_session")
@@ -281,11 +299,11 @@ class TestSyncPRShortFlags:
     """Tests for short flag aliases."""
 
     def test_help_shows_short_flags(self):
-        """Help text shows short flag aliases."""
+        """Help text shows short flag aliases for subcommand options."""
         result = runner.invoke(app, ["sync", "pr", "--help"])
-        assert "-v" in result.stdout  # --verbose
-        assert "-q" in result.stdout  # --quiet
+        # -f is a sync pr option
         assert "-f" in result.stdout  # --format
+        # Note: -v/--verbose and -q/--quiet are global flags (not on sync pr)
 
     @patch("github_activity_db.cli.sync.GitHubClient")
     @patch("github_activity_db.cli.sync.get_session")
@@ -427,7 +445,7 @@ class TestSyncRepoFlags:
     @patch("github_activity_db.cli.sync.RateLimitMonitor")
     @patch("github_activity_db.cli.sync.RequestPacer")
     @patch("github_activity_db.cli.sync.RequestScheduler")
-    def test_quiet_suppresses_progress_output(
+    def test_global_quiet_flag_works_with_repo(
         self,
         mock_scheduler_class,
         mock_pacer_class,
@@ -437,7 +455,7 @@ class TestSyncRepoFlags:
         mock_client,
         mock_bulk_ingestion_result,
     ):
-        """--quiet suppresses progress output."""
+        """Global --quiet flag works with sync repo (controls log level)."""
         # Setup mocks
         mock_result = MagicMock()
         mock_result.to_dict.return_value = mock_bulk_ingestion_result
@@ -459,11 +477,12 @@ class TestSyncRepoFlags:
         mock_scheduler.shutdown = AsyncMock()
         mock_scheduler_class.return_value = mock_scheduler
 
-        result = runner.invoke(app, ["sync", "repo", "owner/repo", "--quiet"])
+        # --quiet is a global flag, must come before subcommand
+        result = runner.invoke(app, ["--quiet", "sync", "repo", "owner/repo"])
 
         assert result.exit_code == 0
-        # Should not show "Syncing PRs" progress message
-        assert "Syncing PRs" not in result.stdout
+        # CLI output still shows result (quiet only affects log level)
+        assert "Sync Complete" in result.stdout
 
     @patch("github_activity_db.cli.sync.GitHubClient")
     @patch("github_activity_db.cli.sync.get_session")
@@ -604,7 +623,7 @@ class TestSyncRepoFlags:
     @patch("github_activity_db.cli.sync.RateLimitMonitor")
     @patch("github_activity_db.cli.sync.RequestPacer")
     @patch("github_activity_db.cli.sync.RequestScheduler")
-    def test_verbose_shows_failed_prs(
+    def test_failed_prs_always_shown(
         self,
         mock_scheduler_class,
         mock_pacer_class,
@@ -613,7 +632,7 @@ class TestSyncRepoFlags:
         mock_get_session,
         mock_client,
     ):
-        """--verbose shows failed PRs when there are failures."""
+        """Failed PRs are always shown when there are failures."""
         # Setup mocks with failures
         result_with_failures = {
             "total_discovered": 10,
@@ -650,7 +669,8 @@ class TestSyncRepoFlags:
         mock_scheduler.shutdown = AsyncMock()
         mock_scheduler_class.return_value = mock_scheduler
 
-        result = runner.invoke(app, ["sync", "repo", "owner/repo", "--verbose"])
+        # Failed PRs are always shown (no verbose required anymore)
+        result = runner.invoke(app, ["sync", "repo", "owner/repo"])
 
         assert result.exit_code == 0
         assert "Failed PRs" in result.stdout
@@ -714,13 +734,13 @@ class TestSyncRepoShortFlags:
     """Tests for sync repo short flag aliases."""
 
     def test_help_shows_short_flags(self):
-        """Help text shows short flag aliases."""
+        """Help text shows short flag aliases for subcommand options."""
         result = runner.invoke(app, ["sync", "repo", "--help"])
-        assert "-v" in result.stdout  # --verbose
-        assert "-q" in result.stdout  # --quiet
+        # Subcommand options
         assert "-f" in result.stdout  # --format
         assert "-s" in result.stdout  # --state
         assert "-m" in result.stdout  # --max
+        # Note: -v/--verbose and -q/--quiet are global flags (not on sync repo)
 
     @patch("github_activity_db.cli.sync.GitHubClient")
     @patch("github_activity_db.cli.sync.get_session")

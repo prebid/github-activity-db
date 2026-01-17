@@ -536,6 +536,109 @@ src/github_activity_db/github/sync/
 
 ---
 
+## Phase 1.9: Logging Infrastructure ✅ COMPLETE
+
+Replaces stdlib logging with loguru for improved developer experience, structured context binding, and proper log level control.
+
+### Why Loguru?
+
+| Feature | stdlib logging | loguru |
+|---------|---------------|--------|
+| Setup complexity | Handler/Formatter boilerplate | Zero-config |
+| Context binding | Manual, verbose | `logger.bind(repo="...", pr=123)` |
+| Exception tracebacks | Basic | Rich, colorized |
+| File rotation | Requires RotatingFileHandler | Built-in |
+| Type hints | Limited | Full support |
+
+### Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                         CLI Entry Point                                  │
+│                     cli/app.py callback()                                │
+│         setup_logging(level, verbose, quiet, log_file)                   │
+└────────────────────────────────┬────────────────────────────────────────┘
+                                 │
+                                 ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│                      logging.py Module                                   │
+│  ┌─────────────────────────────────────────────────────────────────┐   │
+│  │  setup_logging()     Configure handlers, levels, interception    │   │
+│  │  get_logger(name)    Get logger with name context bound          │   │
+│  │  bind_repo()         Bind repository context                     │   │
+│  │  bind_pr()           Bind PR context                             │   │
+│  │  InterceptHandler    Route stdlib → loguru                       │   │
+│  └─────────────────────────────────────────────────────────────────┘   │
+└────────────────────────────────┬────────────────────────────────────────┘
+                                 │
+              ┌──────────────────┼──────────────────┐
+              │                  │                  │
+              ▼                  ▼                  ▼
+         Console            File (opt)        SQLAlchemy
+         (stderr)           (rotation)        (intercepted)
+```
+
+### Configuration
+
+**Environment Variables:**
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `LOG_LEVEL` | `INFO` | Base log level |
+| `LOGGING__LOG_FILE` | None | Enable file logging with rotation |
+| `LOGGING__ROTATION` | `10 MB` | When to rotate log file |
+| `LOGGING__RETENTION` | `7 days` | How long to keep rotated logs |
+
+**CLI Flags (Global):**
+
+| Flag | Short | Effect |
+|------|-------|--------|
+| `--verbose` | `-v` | DEBUG level (overrides LOG_LEVEL) |
+| `--quiet` | `-q` | WARNING level (overrides LOG_LEVEL) |
+
+### Usage Examples
+
+```bash
+# Standard logging (INFO level)
+ghactivity sync all --since 2024-12-17
+
+# Debug logging (shows SQLAlchemy queries, detailed traces)
+ghactivity -v sync pr prebid/prebid-server 1234
+
+# Quiet mode (warnings and errors only)
+ghactivity -q sync all
+
+# With file logging
+LOGGING__LOG_FILE=./sync.log ghactivity sync all --since 2024-12-17
+```
+
+### Context Binding
+
+Loguru's `bind()` enables structured logging with contextual data:
+
+```python
+from github_activity_db.logging import bind_pr, get_logger
+
+logger = get_logger(__name__)
+
+# Bind PR context for all subsequent logs
+pr_logger = bind_pr("prebid", "prebid-server", 1234)
+pr_logger.info("Processing")
+# Output: 10:15:30 | INFO | repo=prebid/prebid-server pr=1234 | Processing
+```
+
+### File Structure
+
+```
+src/github_activity_db/
+├── logging.py              # NEW: Core logging module
+├── config.py               # Updated: LoggingConfig
+└── cli/
+    └── app.py              # Updated: Global -v/-q flags, logging setup
+```
+
+---
+
 ## Phase 2: Enhanced Features (Future)
 
 ### 2.1 GitHub User Identity (Normalized)

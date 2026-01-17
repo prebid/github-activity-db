@@ -6,7 +6,6 @@ GitHub API operations like sync jobs.
 
 from __future__ import annotations
 
-import logging
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -14,7 +13,9 @@ from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any
 
-logger = logging.getLogger(__name__)
+from github_activity_db.logging import get_logger
+
+logger = get_logger(__name__)
 
 
 class ProgressState(StrEnum):

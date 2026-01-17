@@ -7,7 +7,6 @@ infrastructure for efficient rate-limited imports.
 
 from __future__ import annotations
 
-import logging
 import time
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -20,6 +19,7 @@ from github_activity_db.github.pacing import (
     RequestPriority,
     RequestScheduler,
 )
+from github_activity_db.logging import get_logger
 
 from .ingestion import PRIngestionService
 from .results import PRIngestionResult
@@ -27,7 +27,7 @@ from .results import PRIngestionResult
 if TYPE_CHECKING:
     from github_activity_db.github.client import GitHubClient
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 @dataclass

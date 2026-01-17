@@ -214,11 +214,18 @@ class TestSyncPRIntegration:
 
         assert result.exit_code == 0, f"CLI failed: {result.output}"
 
-        # Parse JSON output
+        # Parse JSON output (extract JSON from output which may include log lines)
+        output = result.output
         try:
-            data = json.loads(result.output)
+            # Find the JSON object in the output (starts with '{', ends with '}')
+            json_start = output.find("{")
+            json_end = output.rfind("}") + 1
+            if json_start == -1 or json_end == 0:
+                pytest.fail(f"No JSON found in output: {output}")
+            json_str = output[json_start:json_end]
+            data = json.loads(json_str)
         except json.JSONDecodeError:
-            pytest.fail(f"Output is not valid JSON: {result.output}")
+            pytest.fail(f"Output is not valid JSON: {output}")
 
         # Verify expected fields
         assert "success" in data or "created" in data

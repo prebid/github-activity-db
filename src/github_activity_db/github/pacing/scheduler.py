@@ -14,7 +14,6 @@ from __future__ import annotations
 
 import asyncio
 import heapq
-import logging
 import uuid
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
@@ -23,10 +22,11 @@ from enum import IntEnum
 from typing import Any, Generic, TypeVar
 
 from github_activity_db.github.exceptions import GitHubRateLimitError
+from github_activity_db.logging import get_logger
 
 from .pacer import RequestPacer
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 T = TypeVar("T")
 

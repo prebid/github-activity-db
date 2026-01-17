@@ -6,7 +6,6 @@ for pull request data retrieval with integrated rate limit monitoring.
 
 from __future__ import annotations
 
-import logging
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, Literal
@@ -16,6 +15,7 @@ from githubkit.exception import RequestFailed
 from pydantic import ValidationError
 
 from github_activity_db.config import get_settings
+from github_activity_db.logging import get_logger
 from github_activity_db.schemas.github_api import (
     GitHubCommit,
     GitHubFile,
@@ -33,7 +33,7 @@ from .exceptions import (
 if TYPE_CHECKING:
     from .rate_limit.monitor import RateLimitMonitor
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 PRState = Literal["open", "closed", "all"]
 

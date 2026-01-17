@@ -114,6 +114,30 @@ class SyncConfig(BaseModel):
         return timedelta(days=self.merge_grace_period_days)
 
 
+class LoggingConfig(BaseModel):
+    """Configuration for logging behavior.
+
+    Controls file logging, rotation, and output format.
+    """
+
+    log_file: str | None = Field(
+        default=None,
+        description="Optional path for file logging (enables rotation)",
+    )
+    rotation: str = Field(
+        default="10 MB",
+        description="When to rotate log file (e.g., '10 MB', '1 day')",
+    )
+    retention: str = Field(
+        default="7 days",
+        description="How long to keep rotated logs",
+    )
+    serialize: bool = Field(
+        default=False,
+        description="If True, output JSON format to file",
+    )
+
+
 class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
 
@@ -170,6 +194,14 @@ class Settings(BaseSettings):
     sync: SyncConfig = Field(
         default_factory=SyncConfig,
         description="PR sync behavior configuration",
+    )
+
+    # --------------------------------------------------------------------------
+    # Logging Configuration
+    # --------------------------------------------------------------------------
+    logging: LoggingConfig = Field(
+        default_factory=LoggingConfig,
+        description="Logging configuration (file output, rotation)",
     )
 
     # --------------------------------------------------------------------------

@@ -80,18 +80,6 @@ def sync_single_pr(
         ...,
         help="PR number to sync",
     ),
-    verbose: bool = typer.Option(
-        False,
-        "--verbose",
-        "-v",
-        help="Show detailed output",
-    ),
-    quiet: bool = typer.Option(
-        False,
-        "--quiet",
-        "-q",
-        help="Only output on error",
-    ),
     dry_run: bool = typer.Option(
         False,
         "--dry-run",
@@ -110,7 +98,7 @@ def sync_single_pr(
         ghactivity sync pr prebid/prebid-server 4663
         ghactivity sync pr prebid/prebid-server 4663 --dry-run
         ghactivity sync pr prebid/prebid-server 4663 --format json
-        ghactivity sync pr prebid/prebid-server 4663 -v
+        ghactivity -v sync pr prebid/prebid-server 4663  # Debug logging
     """
     # Validate repo format
     if "/" not in repo:
@@ -150,10 +138,6 @@ def sync_single_pr(
         console.print(f"[red]Error:[/red] {result.get('error', 'Unknown error')}")
         raise typer.Exit(1)
 
-    # Quiet mode - silent on success
-    if quiet:
-        return
-
     # Text output
     prefix = "[dim](dry-run)[/dim] " if dry_run else ""
     action = result.get("action", "unknown").title()
@@ -164,14 +148,6 @@ def sync_single_pr(
         title = title[:57] + "..."
 
     console.print(f"{prefix}[bold]{action}[/bold] PR #{pr_number}: {title}")
-
-    # Verbose output
-    if verbose:
-        if result.get("pr_id"):
-            console.print(f"  ID: {result['pr_id']}")
-        if result.get("state"):
-            console.print(f"  State: {result['state']}")
-        console.print(f"  Repository: {repo}")
 
 
 @app.command("repo")
@@ -201,18 +177,6 @@ def sync_repository(
         "--max",
         "-m",
         help="Maximum number of PRs to sync (useful for testing)",
-    ),
-    verbose: bool = typer.Option(
-        False,
-        "--verbose",
-        "-v",
-        help="Show detailed output including per-PR progress",
-    ),
-    quiet: bool = typer.Option(
-        False,
-        "--quiet",
-        "-q",
-        help="Only output final summary on success",
     ),
     dry_run: bool = typer.Option(
         False,
@@ -301,8 +265,8 @@ def sync_repository(
                 finally:
                     await scheduler.shutdown(wait=True)
 
-    # Show progress spinner for non-quiet mode
-    if not quiet and output_format == OutputFormat.TEXT:
+    # Show progress info
+    if output_format == OutputFormat.TEXT:
         console.print(f"[dim]Syncing PRs from {repo}...[/dim]")
         if since_dt:
             console.print(f"[dim]  Since: {since_dt.date()}[/dim]")
@@ -323,10 +287,6 @@ def sync_repository(
     # JSON output
     if output_format == OutputFormat.JSON:
         console.print_json(json.dumps(result))
-        return
-
-    # Quiet mode - just show summary
-    if quiet:
         return
 
     # Text output
@@ -354,8 +314,8 @@ def sync_repository(
     console.print(f"  Duration: {result.get('duration_seconds', 0):.1f}s")
     console.print(f"  Success rate: {result.get('success_rate', 100):.1f}%")
 
-    # Verbose output - show failed PRs
-    if verbose and failed > 0:
+    # Show failed PRs if any
+    if failed > 0:
         console.print()
         console.print("[bold]Failed PRs:[/bold]")
         for failed_pr in result.get("failed_prs", []):
@@ -394,18 +354,6 @@ def sync_all_repositories(
         "--max-per-repo",
         "-m",
         help="Maximum number of PRs to sync per repository (useful for testing)",
-    ),
-    verbose: bool = typer.Option(
-        False,
-        "--verbose",
-        "-v",
-        help="Show detailed output including per-repository progress",
-    ),
-    quiet: bool = typer.Option(
-        False,
-        "--quiet",
-        "-q",
-        help="Only output final summary on success",
     ),
     dry_run: bool = typer.Option(
         False,
@@ -494,8 +442,8 @@ def sync_all_repositories(
                 finally:
                     await scheduler.shutdown(wait=True)
 
-    # Show progress spinner for non-quiet mode
-    if not quiet and output_format == OutputFormat.TEXT:
+    # Show progress info
+    if output_format == OutputFormat.TEXT:
         console.print(f"[dim]Syncing {len(display_repos)} repositories...[/dim]")
         if since_dt:
             console.print(f"[dim]  Since: {since_dt.date()}[/dim]")
@@ -520,10 +468,6 @@ def sync_all_repositories(
     # JSON output
     if output_format == OutputFormat.JSON:
         console.print_json(json.dumps(result))
-        return
-
-    # Quiet mode - just show summary
-    if quiet:
         return
 
     # Text output
@@ -558,18 +502,17 @@ def sync_all_repositories(
     console.print(f"  Total discovered: {summary.get('total_discovered', 0)}")
     console.print(f"  Duration: {summary.get('duration_seconds', 0):.1f}s")
 
-    # Verbose output - show per-repository details
-    if verbose:
-        console.print()
-        console.print("[bold]Per-Repository Details:[/bold]")
-        for repo_data in result.get("repositories", []):
-            repo_name = repo_data.get("repository", "?")
-            created = repo_data.get("created", 0)
-            updated = repo_data.get("updated", 0)
-            failed = repo_data.get("failed", 0)
-            duration = repo_data.get("duration_seconds", 0)
+    # Show per-repository details
+    console.print()
+    console.print("[bold]Per-Repository Details:[/bold]")
+    for repo_data in result.get("repositories", []):
+        repo_name = repo_data.get("repository", "?")
+        created = repo_data.get("created", 0)
+        updated = repo_data.get("updated", 0)
+        failed = repo_data.get("failed", 0)
+        duration = repo_data.get("duration_seconds", 0)
 
-            status = "[green]OK[/green]" if failed == 0 else f"[red]{failed} failed[/red]"
-            console.print(
-                f"  {repo_name}: +{created} ~{updated} ({status}) [{duration:.1f}s]"
-            )
+        status = "[green]OK[/green]" if failed == 0 else f"[red]{failed} failed[/red]"
+        console.print(
+            f"  {repo_name}: +{created} ~{updated} ({status}) [{duration:.1f}s]"
+        )

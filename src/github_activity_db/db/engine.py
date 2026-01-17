@@ -26,7 +26,7 @@ def get_engine() -> AsyncEngine:
         settings = get_settings()
         _engine = create_async_engine(
             settings.database_url,
-            echo=settings.environment == "development",
+            echo=False,  # SQLAlchemy logging controlled via loguru interception
             future=True,
             poolclass=pool.NullPool,  # Required for SQLite to prevent "database is locked"
         )

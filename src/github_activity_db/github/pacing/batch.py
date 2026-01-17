@@ -8,15 +8,16 @@ for progress reporting.
 from __future__ import annotations
 
 import asyncio
-import logging
 from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass, field
 from typing import Generic, TypeVar
 
+from github_activity_db.logging import get_logger
+
 from .progress import ProgressTracker
 from .scheduler import RequestPriority, RequestScheduler
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 T = TypeVar("T")
 R = TypeVar("R")

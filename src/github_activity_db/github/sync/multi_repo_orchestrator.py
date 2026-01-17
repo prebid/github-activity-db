@@ -6,7 +6,6 @@ existing BulkPRIngestionService for per-repository processing.
 
 from __future__ import annotations
 
-import logging
 import time
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -14,6 +13,7 @@ from typing import TYPE_CHECKING, Any
 
 from github_activity_db.config import get_settings
 from github_activity_db.db.repositories import PullRequestRepository, RepositoryRepository
+from github_activity_db.logging import get_logger
 
 from .bulk_ingestion import BulkIngestionConfig, BulkIngestionResult, BulkPRIngestionService
 
@@ -21,7 +21,7 @@ if TYPE_CHECKING:
     from github_activity_db.github.client import GitHubClient
     from github_activity_db.github.pacing import RequestScheduler
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 @dataclass

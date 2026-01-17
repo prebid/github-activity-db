@@ -5,15 +5,14 @@ transforming it through our schema hierarchy, and persisting
 to the database.
 """
 
-import logging
-
 from github_activity_db.db.repositories import PullRequestRepository, RepositoryRepository
 from github_activity_db.github.client import GitHubClient
+from github_activity_db.logging import bind_pr, get_logger
 from github_activity_db.schemas import PRMerge
 
 from .results import PRIngestionResult
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class PRIngestionService:
@@ -85,16 +84,19 @@ class PRIngestionService:
         Note:
             Errors are captured in result.error, not raised.
         """
+        # Bind PR context for all logs in this method
+        pr_logger = bind_pr(owner, repo, pr_number)
+
         try:
             # Step 1: Ensure repository exists
             repository, repo_created = await self._repo_repository.get_or_create(
                 owner, repo
             )
             if repo_created:
-                logger.info("Created repository: %s/%s (id=%d)", owner, repo, repository.id)
+                pr_logger.info("Created repository record", repo_id=repository.id)
 
             # Step 2: Fetch full PR data from GitHub API
-            logger.debug("Fetching PR #%d from %s/%s", pr_number, owner, repo)
+            pr_logger.debug("Fetching PR data from GitHub")
             gh_pr, files, commits, reviews = await self._client.get_full_pull_request(
                 owner, repo, pr_number
             )
@@ -109,18 +111,18 @@ class PRIngestionService:
             if existing is not None:
                 # Check if frozen (merged past grace period)
                 if self._pr_repository._is_frozen(existing):
-                    logger.debug("PR #%d is frozen, skipping update", pr_number)
+                    pr_logger.debug("PR is frozen, skipping update")
                     return PRIngestionResult.from_skipped_frozen(existing)
 
                 # Check if unchanged (diff detection)
                 if self._pr_repository.is_unchanged(existing, pr_sync):
-                    logger.debug("PR #%d unchanged, skipping update", pr_number)
+                    pr_logger.debug("PR unchanged, skipping update")
                     return PRIngestionResult.from_skipped_unchanged(existing)
 
             # Step 5: Dry run check
             if dry_run:
-                logger.info("Dry run: would %s PR #%d",
-                           "create" if existing is None else "update", pr_number)
+                action = "create" if existing is None else "update"
+                pr_logger.info("Dry run: would {action} PR", action=action)
                 # Return what would happen without writing
                 if existing is None:
                     return PRIngestionResult(
@@ -143,17 +145,16 @@ class PRIngestionService:
                     merged_by=gh_pr.merged_by.login if gh_pr.merged_by else None,
                 )
                 pr = await self._pr_repository.apply_merge(pr.id, merge_data)  # type: ignore[assignment]
-                logger.info("Applied merge data to PR #%d", pr_number)
+                pr_logger.info("Applied merge data")
 
             # Return appropriate result
             if created:
-                logger.info("Created PR #%d: %s", pr_number, pr.title[:50])
+                pr_logger.info("Created PR", title=pr.title[:50])
                 return PRIngestionResult.from_created(pr)
             else:
-                logger.info("Updated PR #%d: %s", pr_number, pr.title[:50])
+                pr_logger.info("Updated PR", title=pr.title[:50])
                 return PRIngestionResult.from_updated(pr)
 
         except Exception as e:
-            logger.error("Failed to ingest PR #%d from %s/%s: %s",
-                        pr_number, owner, repo, e)
+            pr_logger.error("Failed to ingest PR", error=str(e))
             return PRIngestionResult.from_error(e)

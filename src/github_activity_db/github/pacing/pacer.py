@@ -13,7 +13,6 @@ Where throttle_multiplier increases as quota health decreases.
 from __future__ import annotations
 
 import asyncio
-import logging
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 
@@ -23,11 +22,12 @@ from github_activity_db.github.rate_limit.schemas import (
     RateLimitPool,
     RateLimitStatus,
 )
+from github_activity_db.logging import get_logger
 
 if TYPE_CHECKING:
     from github_activity_db.github.rate_limit.monitor import RateLimitMonitor
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class RequestPacer:

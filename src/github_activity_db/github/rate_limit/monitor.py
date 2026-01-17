@@ -14,12 +14,12 @@ Key Features:
 from __future__ import annotations
 
 import asyncio
-import logging
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 from github_activity_db.config import RateLimitConfig, get_settings
+from github_activity_db.logging import get_logger
 
 from .schemas import (
     PoolRateLimit,
@@ -34,7 +34,7 @@ if TYPE_CHECKING:
 
     GitHub = Any  # Avoid generic type parameter issues
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 # Type for threshold callbacks
 ThresholdCallback = Callable[[PoolRateLimit, RateLimitStatus], Awaitable[None] | None]
