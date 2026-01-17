@@ -35,6 +35,9 @@ class GitHubCommit(BaseModel):
 
     sha: str = Field(description="Commit SHA")
     commit: "GitHubCommitDetail" = Field(description="Commit details")
+    author: "GitHubUser | None" = Field(
+        default=None, description="GitHub user who authored (null if git email not linked)"
+    )
 
 
 class GitHubCommitDetail(BaseModel):
@@ -159,13 +162,14 @@ class GitHubPullRequest(BaseModel):
         # Extract filenames
         filenames = [f.filename for f in (files or [])]
 
-        # Build commits breakdown
+        # Build commits breakdown (prefer GitHub username, fall back to git author name)
         commits_breakdown = []
         for commit in commits or []:
+            author = commit.author.login if commit.author else commit.commit.author.name
             commits_breakdown.append(
                 CommitBreakdown(
                     date=commit.commit.author.date,
-                    author=commit.commit.author.name,
+                    author=author,
                 )
             )
 

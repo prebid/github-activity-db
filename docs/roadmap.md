@@ -645,6 +645,37 @@ src/github_activity_db/
 
 Normalize user identities into a dedicated `github_users` table to enable queries like "all PRs involving user X" and handle username changes gracefully.
 
+**Key Design Consideration: Verified vs Unverified Identities**
+
+GitHub's API returns two types of author information for commits:
+- **GitHub User** (`commit.author.login`): Verified GitHub account linked to the git email
+- **Git Author** (`commit.commit.author.name`): Name from `git config user.name` (fallback when email not linked)
+
+The `github_users` table should track this distinction:
+
+```python
+class GitHubUser(Base):
+    id: int                      # Primary key
+    username: str                # GitHub login OR git author name
+    github_id: int | None        # GitHub user ID (null if unverified)
+    is_verified: bool            # True = linked GitHub account, False = git-only
+    email: str | None            # Git email (for potential future linking)
+    display_name: str | None     # Full name if available
+    first_seen_at: datetime      # When we first encountered this user
+
+    # Relationships
+    prs_submitted: list[PullRequest]
+    prs_merged: list[PullRequest]
+    commits: list[CommitAuthor]
+    reviews: list[Review]
+```
+
+**Benefits:**
+- Query all contributions by a user across verified and unverified commits
+- Identify when a git author name gets linked to a GitHub account
+- Track contributors who haven't linked their git email to GitHub
+- Enable future deduplication (e.g., "Victor Gonzalez" → "optidigital-prebid")
+
 ### 2.2 GitHub Issues Support
 
 - Issue data model (similar to PR)
