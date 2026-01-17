@@ -345,9 +345,9 @@ With `--since` filtering, discovery calls are reduced significantly due to lazy 
 
 ---
 
-## Phase 1.7.5: Test Coverage & Documentation
+## Phase 1.7.5: Test Coverage & Documentation ✅ COMPLETE
 
-Expand test coverage and create comprehensive testing documentation before adding multi-repo orchestration.
+Expanded test coverage and created comprehensive testing documentation before adding multi-repo orchestration.
 
 ### Documentation
 
@@ -368,20 +368,21 @@ Comprehensive testing guide covering:
 
 ### Test Expansion
 
-#### Current State (403 tests)
+#### Current State (445 tests)
 
 | Module | Tests | Status |
 |--------|-------|--------|
-| `github/pacing/` | 104 | ✅ Comprehensive |
-| `github/sync/` | 31 | ✅ Good |
+| `github/pacing/` | 113 | ✅ Comprehensive (incl. integration) |
+| `github/sync/` | 43 | ✅ Comprehensive (incl. MultiRepoOrchestrator) |
+| `github/rate_limit/` | 50+ | ✅ Comprehensive (incl. state transitions) |
 | `db/repositories/` | 42 | ✅ Good |
 | `schemas/` | 150+ | ✅ Comprehensive |
-| `cli/` | 27 | ⚠️ Mocked only |
+| `cli/` | 31 | ✅ Integration tests added |
 | E2E | 11 | ✅ Core paths |
 
-#### Tests to Add
+#### Tests Added
 
-**1. GitHubClient Tests** (HIGH PRIORITY)
+**1. GitHubClient Tests** ✅
 
 File: `tests/github/test_client.py`
 
@@ -393,7 +394,7 @@ File: `tests/github/test_client.py`
 | `test_get_full_pull_request_not_found` | 404 handling |
 | `test_rate_limit_header_extraction` | Verify monitor updates from headers |
 
-**2. CLI Integration Tests** (HIGH PRIORITY)
+**2. CLI Integration Tests** ✅
 
 File: `tests/cli/test_sync_integration.py`
 
@@ -404,7 +405,7 @@ File: `tests/cli/test_sync_integration.py`
 | `test_sync_repo_dry_run_no_writes` | Verify dry-run doesn't persist |
 | `test_sync_repo_json_output_structure` | Verify JSON schema |
 
-**3. Pacer + Scheduler Integration** (MEDIUM PRIORITY)
+**3. Pacer + Scheduler Integration** ✅
 
 File: `tests/github/pacing/test_integration.py`
 
@@ -414,9 +415,9 @@ File: `tests/github/pacing/test_integration.py`
 | `test_batch_executor_respects_rate_limits` | Verify throttling |
 | `test_scheduler_priority_with_pacing` | HIGH tasks get less delay |
 
-**4. Rate Limit State Transitions** (MEDIUM PRIORITY)
+**4. Rate Limit State Transitions** ✅
 
-File: Update `tests/github/rate_limit/test_monitor.py`
+File: `tests/github/rate_limit/test_monitor.py`
 
 | Test | Purpose |
 |------|---------|
@@ -426,7 +427,7 @@ File: Update `tests/github/rate_limit/test_monitor.py`
 
 ---
 
-## Phase 1.8: Multi-Repository Sync Orchestration
+## Phase 1.8: Multi-Repository Sync Orchestration ✅ COMPLETE
 
 Extends bulk PR ingestion to support syncing all 8 Prebid repositories in a single command, verifying the implementation scales and is composable.
 

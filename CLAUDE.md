@@ -15,11 +15,12 @@ uv run ghactivity --help
 uv run ghactivity github rate-limit --all         # Check rate limits
 uv run ghactivity sync pr owner/repo 1234         # Sync single PR
 uv run ghactivity sync repo owner/repo --since 2024-10-01  # Bulk sync
+uv run ghactivity sync all --since 2024-10-01     # Multi-repo sync
 
 # Development
 uv run mypy src/           # Type check
 uv run ruff check src/     # Lint
-uv run pytest              # Test (403+ tests)
+uv run pytest              # Test (445 tests)
 ```
 
 ## Documentation
@@ -42,7 +43,8 @@ uv run pytest              # Test (403+ tests)
 - Rate limit monitoring with proactive tracking
 - Request pacing with token bucket algorithm and priority queue scheduler
 - Single and bulk PR ingestion pipelines with 2-week grace period for merged PRs
-- CLI commands: `ghactivity sync pr` and `ghactivity sync repo`
+- Multi-repository sync orchestration for all tracked Prebid repositories
+- CLI commands: `ghactivity sync pr`, `ghactivity sync repo`, and `ghactivity sync all`
 
 **Out of Scope (Future):**
 - GitHub Issues
@@ -78,7 +80,8 @@ Async GitHub API client with integrated rate limit tracking. Provides both eager
 ### PR Ingestion (`github/sync/`)
 - `PRIngestionService`: Single PR fetch → transform → store pipeline
 - `BulkPRIngestionService`: Multi-PR import using lazy iteration for efficient date filtering
-- `PRIngestionResult` / `BulkIngestionResult`: Structured results (created/updated/skipped/failed)
+- `MultiRepoOrchestrator`: Coordinates syncing all tracked Prebid repositories
+- `PRIngestionResult` / `BulkIngestionResult` / `MultiRepoSyncResult`: Structured results
 
 ### Repository Layer (`db/repositories/`)
 - `RepositoryRepository`: CRUD for Repository table with get_or_create
