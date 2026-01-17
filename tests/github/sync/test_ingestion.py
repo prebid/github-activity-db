@@ -171,6 +171,82 @@ class TestPRIngestionServiceSkip:
         assert result.updated is False
 
 
+class TestPRIngestionServiceAbandoned:
+    """Tests for abandoned PR handling.
+
+    Abandoned PRs are closed without being merged. They are filtered out
+    during ingestion because the list API doesn't include merge status.
+    """
+
+    async def test_ingest_skips_abandoned_pr(self, db_session, mock_client, parse_real_pr):
+        """Ingesting an abandoned PR (closed but not merged) skips it.
+
+        NOTE: The GitHub list API does NOT include merge status. We can only
+        determine if a closed PR is actually merged vs abandoned by fetching
+        the full PR data.
+        """
+        gh_pr, files, commits, reviews = parse_real_pr(REAL_OPEN_PR)
+        # Modify the PR to be closed but not merged (abandoned)
+        gh_pr = GitHubPullRequest(
+            **{
+                **gh_pr.model_dump(),
+                "state": "closed",
+                "merged": False,
+                "closed_at": "2025-01-15T10:00:00Z",
+            }
+        )
+        mock_client.get_full_pull_request.return_value = (gh_pr, files, commits, reviews)
+
+        repo_repository = RepositoryRepository(db_session)
+        pr_repository = PullRequestRepository(db_session)
+        service = PRIngestionService(mock_client, repo_repository, pr_repository)
+
+        result = await service.ingest_pr("prebid", "prebid-server", 4663)
+
+        assert result.success is True
+        assert result.skipped_abandoned is True
+        assert result.created is False
+        assert result.updated is False
+        assert result.action == "skipped (abandoned)"
+
+    async def test_ingest_abandoned_returns_existing_if_present(
+        self, db_session, mock_client, parse_real_pr
+    ):
+        """If an abandoned PR was previously tracked, return the existing record."""
+        # Create existing PR (maybe it was tracked when open)
+        repo = make_repository(db_session, owner="prebid", name="prebid-server")
+        await db_session.flush()
+        existing = make_pull_request(
+            db_session, repo,
+            number=4663,
+            state=PRState.OPEN,
+        )
+        await db_session.flush()
+
+        gh_pr, files, commits, reviews = parse_real_pr(REAL_OPEN_PR)
+        # Modify the PR to be closed but not merged (abandoned)
+        gh_pr = GitHubPullRequest(
+            **{
+                **gh_pr.model_dump(),
+                "state": "closed",
+                "merged": False,
+                "closed_at": "2025-01-15T10:00:00Z",
+            }
+        )
+        mock_client.get_full_pull_request.return_value = (gh_pr, files, commits, reviews)
+
+        repo_repository = RepositoryRepository(db_session)
+        pr_repository = PullRequestRepository(db_session)
+        service = PRIngestionService(mock_client, repo_repository, pr_repository)
+
+        result = await service.ingest_pr("prebid", "prebid-server", 4663)
+
+        assert result.success is True
+        assert result.skipped_abandoned is True
+        assert result.pr is not None
+        assert result.pr.id == existing.id
+
+
 class TestPRIngestionServiceMerge:
     """Tests for merge handling."""
 

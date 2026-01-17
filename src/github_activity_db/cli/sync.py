@@ -248,10 +248,13 @@ def sync_repository(
                 # Create progress tracker
                 progress_tracker = ProgressTracker(name="PR Import")
 
+                # Shared lock to serialize database writes across concurrent operations
+                write_lock = asyncio.Lock()
+
                 service = BulkPRIngestionService(
                     client=client,
-                    repo_repository=RepositoryRepository(session),
-                    pr_repository=PullRequestRepository(session),
+                    repo_repository=RepositoryRepository(session, write_lock=write_lock),
+                    pr_repository=PullRequestRepository(session, write_lock=write_lock),
                     scheduler=scheduler,
                     progress=progress_tracker,
                 )
@@ -426,10 +429,13 @@ def sync_all_repositories(
                 pacer = RequestPacer(monitor)
                 scheduler = RequestScheduler(pacer, max_concurrent=config.concurrency)
 
+                # Shared lock to serialize database writes across concurrent operations
+                write_lock = asyncio.Lock()
+
                 orchestrator = MultiRepoOrchestrator(
                     client=client,
-                    repo_repository=RepositoryRepository(session),
-                    pr_repository=PullRequestRepository(session),
+                    repo_repository=RepositoryRepository(session, write_lock=write_lock),
+                    pr_repository=PullRequestRepository(session, write_lock=write_lock),
                     scheduler=scheduler,
                 )
 
@@ -516,3 +522,16 @@ def sync_all_repositories(
         console.print(
             f"  {repo_name}: +{created} ~{updated} ({status}) [{duration:.1f}s]"
         )
+
+    # Show failed PRs if any (for retry guidance)
+    total_failed = summary.get("total_failed", 0)
+    if total_failed > 0:
+        console.print()
+        console.print("[bold red]Failed PRs (retry with: ghactivity sync pr <repo> <number>):[/bold red]")
+        for repo_data in result.get("repositories", []):
+            repo_name = repo_data.get("repository", "?")
+            failed_prs = repo_data.get("failed_prs", [])
+            for failed_pr in failed_prs:
+                pr_num = failed_pr.get("pr_number", "?")
+                error = failed_pr.get("error", "Unknown error")[:80]
+                console.print(f"  {repo_name} #{pr_num}: {error}")

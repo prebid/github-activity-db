@@ -32,6 +32,9 @@ class PRIngestionResult:
     skipped_unchanged: bool = False
     """True if PR was skipped because no changes detected."""
 
+    skipped_abandoned: bool = False
+    """True if PR was skipped because it's abandoned (closed but not merged)."""
+
     error: Exception | None = None
     """Exception if operation failed."""
 
@@ -62,6 +65,8 @@ class PRIngestionResult:
             return "skipped (frozen)"
         if self.skipped_unchanged:
             return "skipped (unchanged)"
+        if self.skipped_abandoned:
+            return "skipped (abandoned)"
         return "unknown"
 
     def to_dict(self) -> dict[str, object]:
@@ -77,6 +82,7 @@ class PRIngestionResult:
             "updated": self.updated,
             "skipped_frozen": self.skipped_frozen,
             "skipped_unchanged": self.skipped_unchanged,
+            "skipped_abandoned": self.skipped_abandoned,
         }
 
         if self.pr:
@@ -150,3 +156,17 @@ class PRIngestionResult:
             PRIngestionResult with skipped_unchanged=True
         """
         return cls(pr=pr, skipped_unchanged=True)
+
+    @classmethod
+    def from_skipped_abandoned(cls, pr: PullRequest | None = None) -> "PRIngestionResult":
+        """Create a result for a skipped abandoned PR.
+
+        Abandoned PRs are closed without being merged - we don't track them.
+
+        Args:
+            pr: The existing PR if any (may be None for newly discovered abandoned PRs)
+
+        Returns:
+            PRIngestionResult with skipped_abandoned=True
+        """
+        return cls(pr=pr, skipped_abandoned=True)

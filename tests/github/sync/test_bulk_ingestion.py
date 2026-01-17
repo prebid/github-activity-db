@@ -269,7 +269,7 @@ class TestDiscoverPRs:
         assert pr_numbers == [101]
 
     @pytest.mark.asyncio
-    async def test_discover_excludes_abandoned_prs(
+    async def test_discover_includes_closed_prs(
         self,
         mock_github_client,
         mock_repo_repository,
@@ -278,7 +278,12 @@ class TestDiscoverPRs:
         open_pr_data,
         abandoned_pr_data,
     ):
-        """Abandoned PRs (closed but not merged) are excluded."""
+        """Closed PRs are included in discovery - abandoned filtering happens during ingestion.
+
+        NOTE: The GitHub list API does NOT include merge status (merged is always False).
+        We cannot filter abandoned PRs during discovery - we include all closed PRs and
+        filter them during ingestion when we have the full PR data.
+        """
         mock_github_client.iter_pull_requests.return_value = async_iter([
             GitHubPullRequest.model_validate(open_pr_data),
             GitHubPullRequest.model_validate(abandoned_pr_data),
@@ -294,8 +299,9 @@ class TestDiscoverPRs:
         config = BulkIngestionConfig(state="all")
         pr_numbers = await service.discover_prs("owner", "repo", config)
 
-        # Should only include open PR, not abandoned
-        assert pr_numbers == [100]
+        # Both open PR (#100) and closed PR (#103) should be discovered
+        # Abandoned filtering happens during ingestion, not discovery
+        assert pr_numbers == [100, 103]
 
     @pytest.mark.asyncio
     async def test_discover_respects_since_date(

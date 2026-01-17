@@ -101,6 +101,15 @@ class PRIngestionService:
                 owner, repo, pr_number
             )
 
+            # Step 2.5: Skip abandoned PRs (closed but not merged)
+            # NOTE: We check this here because the list API does NOT include merge status.
+            # Only the full PR endpoint tells us if a closed PR was actually merged.
+            if gh_pr.state == "closed" and not gh_pr.merged:
+                pr_logger.debug("PR is abandoned (closed without merge), skipping")
+                # Check if we have an existing record to return
+                existing = await self._pr_repository.get_by_number(repository.id, pr_number)
+                return PRIngestionResult.from_skipped_abandoned(existing)
+
             # Step 3: Transform to internal schemas
             pr_create = gh_pr.to_pr_create(repository.id)
             pr_sync = gh_pr.to_pr_sync(files, commits, reviews)

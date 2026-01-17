@@ -4,6 +4,7 @@ Provides common session handling and CRUD operations that can be
 shared across all repositories.
 """
 
+import asyncio
 from typing import Generic, TypeVar
 
 from sqlalchemy import select
@@ -28,17 +29,29 @@ class BaseRepository(Generic[ModelT]):
 
             async def get_by_email(self, email: str) -> User | None:
                 return await self._get_by_field("email", email)
+
+    Concurrency:
+        When multiple coroutines share the same session (e.g., during bulk
+        ingestion), pass a shared write_lock to serialize database writes
+        and avoid "Session.add() during flush" errors.
     """
 
-    def __init__(self, session: AsyncSession, model_class: type[ModelT]) -> None:
+    def __init__(
+        self,
+        session: AsyncSession,
+        model_class: type[ModelT],
+        write_lock: asyncio.Lock | None = None,
+    ) -> None:
         """Initialize the repository with a session.
 
         Args:
             session: Async SQLAlchemy session (caller manages lifecycle)
             model_class: The SQLAlchemy model class this repository manages
+            write_lock: Optional lock to serialize write operations (shared across repos)
         """
         self._session = session
         self._model_class = model_class
+        self._write_lock = write_lock
 
     @property
     def session(self) -> AsyncSession:
@@ -114,8 +127,14 @@ class BaseRepository(Generic[ModelT]):
 
         This executes SQL but does not commit the transaction.
         Useful for getting generated IDs before commit.
+
+        If a write_lock was provided, acquires it to serialize flushes.
         """
-        await self._session.flush()
+        if self._write_lock:
+            async with self._write_lock:
+                await self._session.flush()
+        else:
+            await self._session.flush()
 
     async def refresh(self, entity: ModelT) -> ModelT:
         """Refresh an entity from the database.

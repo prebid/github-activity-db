@@ -1,5 +1,6 @@
 """Repository for GitHub Repository model CRUD operations."""
 
+import asyncio
 from datetime import datetime
 
 from sqlalchemy import select
@@ -16,13 +17,18 @@ class RepositoryRepository(BaseRepository[Repository]):
     Handles CRUD operations for tracked GitHub repositories.
     """
 
-    def __init__(self, session: AsyncSession) -> None:
+    def __init__(
+        self,
+        session: AsyncSession,
+        write_lock: asyncio.Lock | None = None,
+    ) -> None:
         """Initialize the repository.
 
         Args:
             session: Async SQLAlchemy session
+            write_lock: Optional lock to serialize write operations (for concurrent use)
         """
-        super().__init__(session, Repository)
+        super().__init__(session, Repository, write_lock)
 
     # -------------------------------------------------------------------------
     # Query Methods

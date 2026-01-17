@@ -103,10 +103,18 @@ Test complete workflows from input to output.
 
 | Gap | Priority | Notes |
 |-----|----------|-------|
+| **API contract tests** | **CRITICAL** | Verify assumptions about GitHub API behavior (see Phase 1.11 in roadmap) |
+| **Mock accuracy validation** | **HIGH** | Ensure mocks reflect real API behavior (list vs full API) |
 | GitHubClient unit tests | HIGH | Core component lacks dedicated tests |
 | CLI integration tests | HIGH | Only mocked, no real DB tests |
 | Pacer + Scheduler integration | MEDIUM | Tested separately, not together |
 | Rate limit state transitions | MEDIUM | Partial coverage |
+
+### Lessons Learned
+
+**GitHub List API Bug (2025-01):** The list API (`/repos/{owner}/{repo}/pulls`) does NOT include the actual `merged` status - it always returns `False`. Our tests used mocks that incorrectly set `merged=True` on list responses, masking this discrepancy. This led to all merged PRs being filtered out during discovery.
+
+**Key takeaway:** Mocks must accurately reflect real API behavior, not idealized behavior. Add contract tests to document and verify API assumptions.
 
 ---
 

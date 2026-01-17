@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 
@@ -34,14 +35,16 @@ class PullRequestRepository(BaseRepository[PullRequest]):
         self,
         session: AsyncSession,
         grace_period: timedelta | None = None,
+        write_lock: asyncio.Lock | None = None,
     ) -> None:
         """Initialize the repository.
 
         Args:
             session: Async SQLAlchemy session
             grace_period: Override for merge grace period (uses config if None)
+            write_lock: Optional lock to serialize write operations (for concurrent use)
         """
-        super().__init__(session, PullRequest)
+        super().__init__(session, PullRequest, write_lock)
         self._grace_period = grace_period or get_settings().sync.merge_grace_period
 
     # -------------------------------------------------------------------------

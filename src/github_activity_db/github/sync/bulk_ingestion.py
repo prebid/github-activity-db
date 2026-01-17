@@ -78,6 +78,9 @@ class BulkIngestionResult:
     skipped_unchanged: int = 0
     """PRs skipped because unchanged since last sync."""
 
+    skipped_abandoned: int = 0
+    """PRs skipped because abandoned (closed but not merged)."""
+
     failed: int = 0
     """PRs that failed to ingest."""
 
@@ -94,8 +97,8 @@ class BulkIngestionResult:
 
     @property
     def total_skipped(self) -> int:
-        """Total PRs skipped (frozen + unchanged)."""
-        return self.skipped_frozen + self.skipped_unchanged
+        """Total PRs skipped (frozen + unchanged + abandoned)."""
+        return self.skipped_frozen + self.skipped_unchanged + self.skipped_abandoned
 
     @property
     def success_rate(self) -> float:
@@ -113,6 +116,7 @@ class BulkIngestionResult:
             "updated": self.updated,
             "skipped_frozen": self.skipped_frozen,
             "skipped_unchanged": self.skipped_unchanged,
+            "skipped_abandoned": self.skipped_abandoned,
             "failed": self.failed,
             "failed_prs": [
                 {"pr_number": num, "error": msg} for num, msg in self.failed_prs
@@ -225,22 +229,19 @@ class BulkPRIngestionService:
                 logger.debug("PR #%d created after until date, skipping", pr.number)
                 continue
 
-            # State filtering - exclude abandoned PRs (closed but not merged)
+            # State filtering
+            # NOTE: The list API does NOT include merge status (pr.merged is always False).
+            # We cannot filter out "abandoned" PRs here - that must happen during ingestion
+            # when we fetch the full PR details which include actual merge status.
             is_open = pr.state == "open"
-            is_merged = pr.merged
 
             if config.state == "open" and not is_open:
                 continue
-            elif config.state == "merged" and not is_merged:
+            elif config.state == "merged" and is_open:
+                # Can only skip open PRs for "merged" filter; closed PRs might be merged
                 continue
-            elif config.state == "all":
-                # Include open and merged, exclude abandoned (closed but not merged)
-                if not is_open and not is_merged:
-                    logger.debug(
-                        "PR #%d is abandoned (closed but not merged), skipping",
-                        pr.number,
-                    )
-                    continue
+            # For state="all", include both open and closed PRs
+            # The ingestion step will determine if closed PRs are merged or abandoned
 
             pr_numbers.append(pr.number)
 
@@ -329,6 +330,8 @@ class BulkPRIngestionService:
                 result.skipped_frozen += 1
             elif pr_result.skipped_unchanged:
                 result.skipped_unchanged += 1
+            elif pr_result.skipped_abandoned:
+                result.skipped_abandoned += 1
             elif pr_result.error:
                 result.failed += 1
                 result.failed_prs.append(
@@ -345,14 +348,15 @@ class BulkPRIngestionService:
 
         logger.info(
             "Bulk ingestion complete for %s/%s: "
-            "created=%d, updated=%d, skipped_frozen=%d, skipped_unchanged=%d, failed=%d "
-            "(%.1fs)",
+            "created=%d, updated=%d, skipped_frozen=%d, skipped_unchanged=%d, "
+            "skipped_abandoned=%d, failed=%d (%.1fs)",
             owner,
             repo,
             result.created,
             result.updated,
             result.skipped_frozen,
             result.skipped_unchanged,
+            result.skipped_abandoned,
             result.failed,
             result.duration_seconds,
         )
