@@ -3,10 +3,7 @@
 import time
 from datetime import UTC, datetime
 
-import pytest
-
 from github_activity_db.github.pacing.progress import (
-    ProgressCallback,
     ProgressState,
     ProgressTracker,
     ProgressUpdate,

@@ -12,13 +12,13 @@ This diagram shows how all components fit together into a cohesive system:
 ┌─────────────────────────────────────────────────────────────────────────┐
 │                        Application Layer                                 │
 │                    CLI Commands (cli/*.py)                               │
-│         ghactivity sync pr | ghactivity sync repo | ghactivity github    │
+│    ghactivity sync pr | ghactivity sync repo | ghactivity sync all       │
 └────────────────────────────────┬────────────────────────────────────────┘
                                  │
                                  ▼
 ┌─────────────────────────────────────────────────────────────────────────┐
 │                         Service Layer                                    │
-│          PRIngestionService  |  BulkPRIngestionService                   │
+│   PRIngestionService | BulkPRIngestionService | MultiRepoOrchestrator    │
 │                                                                          │
 │    Orchestrates "what to do": fetch PR → transform → store               │
 │    Abstracted from rate limiting details                                 │
@@ -59,7 +59,7 @@ This diagram shows how all components fit together into a cohesive system:
 
 ---
 
-## Phase 1: Core Implementation
+## Phase 1: Core Implementation ✅ COMPLETE
 
 Foundation layer providing database models, GitHub client, and CLI scaffold.
 
@@ -75,7 +75,7 @@ Foundation layer providing database models, GitHub client, and CLI scaffold.
 
 ---
 
-## Phase 1.5: Rate Limiting & Request Pacing
+## Phase 1.5: Rate Limiting & Request Pacing ✅ COMPLETE
 
 Internal layers within the GitHub module for request control. These components are internal to the GitHub layer - higher layers don't interact with them directly.
 
@@ -179,7 +179,7 @@ ghactivity github rate-limit --all -v  # Verbose with reset times
 
 ---
 
-## Phase 1.6: Single PR Ingestion Pipeline
+## Phase 1.6: Single PR Ingestion Pipeline ✅ COMPLETE
 
 End-to-end pipeline to fetch a single PR from GitHub API, transform it through the schema hierarchy, and persist it to the database.
 
@@ -256,7 +256,7 @@ ghactivity sync pr prebid/prebid-server 1234 --format json # JSON output
 
 ---
 
-## Phase 1.7: Bulk PR Ingestion
+## Phase 1.7: Bulk PR Ingestion ✅ COMPLETE
 
 Extends the single PR pipeline to support bulk historical imports using lazy pagination for efficient date filtering.
 
@@ -342,6 +342,196 @@ ghactivity sync repo prebid/prebid-server --format json      # JSON output
 | 500 | 5 | 2000 | ~2005 | ~25 min |
 
 With `--since` filtering, discovery calls are reduced significantly due to lazy pagination stopping early.
+
+---
+
+## Phase 1.7.5: Test Coverage & Documentation
+
+Expand test coverage and create comprehensive testing documentation before adding multi-repo orchestration.
+
+### Documentation
+
+#### New: `docs/testing.md`
+
+Comprehensive testing guide covering:
+
+| Section | Content |
+|---------|---------|
+| Philosophy | Test pyramid, mocking strategy, coverage goals |
+| Test Categories | Unit vs Integration vs E2E with examples |
+| Current Coverage | 403+ tests, breakdown by module, known gaps |
+| Infrastructure | Fixtures, factories, async patterns |
+| Mocking Patterns | AsyncMock, async_iter helper, response fixtures |
+| Running Tests | Commands, filtering, coverage reports |
+| Writing Tests | Naming conventions, AAA pattern |
+| Troubleshooting | Common async and database issues |
+
+### Test Expansion
+
+#### Current State (403 tests)
+
+| Module | Tests | Status |
+|--------|-------|--------|
+| `github/pacing/` | 104 | ✅ Comprehensive |
+| `github/sync/` | 31 | ✅ Good |
+| `db/repositories/` | 42 | ✅ Good |
+| `schemas/` | 150+ | ✅ Comprehensive |
+| `cli/` | 27 | ⚠️ Mocked only |
+| E2E | 11 | ✅ Core paths |
+
+#### Tests to Add
+
+**1. GitHubClient Tests** (HIGH PRIORITY)
+
+File: `tests/github/test_client.py`
+
+| Test | Purpose |
+|------|---------|
+| `test_iter_pull_requests_pagination` | Verify lazy iteration works |
+| `test_iter_pull_requests_early_termination` | Verify pagination stops on break |
+| `test_get_full_pull_request_success` | Verify full PR fetch |
+| `test_get_full_pull_request_not_found` | 404 handling |
+| `test_rate_limit_header_extraction` | Verify monitor updates from headers |
+
+**2. CLI Integration Tests** (HIGH PRIORITY)
+
+File: `tests/cli/test_sync_integration.py`
+
+| Test | Purpose |
+|------|---------|
+| `test_sync_pr_creates_database_record` | Real DB, mocked API |
+| `test_sync_repo_with_small_batch` | End-to-end with --max 3 |
+| `test_sync_repo_dry_run_no_writes` | Verify dry-run doesn't persist |
+| `test_sync_repo_json_output_structure` | Verify JSON schema |
+
+**3. Pacer + Scheduler Integration** (MEDIUM PRIORITY)
+
+File: `tests/github/pacing/test_integration.py`
+
+| Test | Purpose |
+|------|---------|
+| `test_scheduler_uses_pacer_delays` | Verify pacing applied |
+| `test_batch_executor_respects_rate_limits` | Verify throttling |
+| `test_scheduler_priority_with_pacing` | HIGH tasks get less delay |
+
+**4. Rate Limit State Transitions** (MEDIUM PRIORITY)
+
+File: Update `tests/github/rate_limit/test_monitor.py`
+
+| Test | Purpose |
+|------|---------|
+| `test_state_healthy_to_warning_transition` | State machine correctness |
+| `test_state_warning_to_critical_transition` | State machine correctness |
+| `test_state_recovery_after_reset` | Recovery behavior |
+
+---
+
+## Phase 1.8: Multi-Repository Sync Orchestration
+
+Extends bulk PR ingestion to support syncing all 8 Prebid repositories in a single command, verifying the implementation scales and is composable.
+
+### Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                         CLI: ghactivity sync all                         │
+└────────────────────────────────────┬────────────────────────────────────┘
+                                     │
+                                     ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│                     MultiRepoOrchestrator                                │
+│                                                                          │
+│  async def sync_all(config):                                             │
+│      repos = await initialize_repositories()                             │
+│      for repo in repos:                                                  │
+│          result = await bulk_service.ingest_repository(repo, config)     │
+│          await update_last_synced_at(repo)                               │
+│      return MultiRepoSyncResult.aggregate(results)                       │
+└───────────────────────────────────┬─────────────────────────────────────┘
+                                    │
+              ┌─────────────────────┼─────────────────────┐
+              │                     │                     │
+              ▼                     ▼                     ▼
+    RepositoryRepository   BulkPRIngestionService   Settings.tracked_repos
+    (get_or_create)        (per-repo ingestion)     (8 Prebid repos)
+```
+
+### Tracked Repositories
+
+```python
+tracked_repos = [
+    "prebid/prebid-server",
+    "prebid/prebid-server-java",
+    "prebid/Prebid.js",
+    "prebid/prebid.github.io",
+    "prebid/prebid-mobile-android",
+    "prebid/prebid-mobile-ios",
+    "prebid/prebid-universal-creative",
+    "prebid/professor-prebid",
+]
+```
+
+### Result Objects
+
+```python
+@dataclass
+class RepoSyncResult:
+    repository: str
+    result: BulkIngestionResult
+    started_at: datetime
+    completed_at: datetime
+
+@dataclass
+class MultiRepoSyncResult:
+    repo_results: list[RepoSyncResult]
+    total_discovered: int
+    total_created: int
+    total_updated: int
+    total_skipped: int
+    total_failed: int
+    duration_seconds: float
+```
+
+### CLI Commands
+
+```bash
+ghactivity sync all                                    # Sync all 8 repos
+ghactivity sync all --since 2024-10-01                 # With date filter
+ghactivity sync all --state merged                     # Only merged PRs
+ghactivity sync all --repos prebid/Prebid.js,prebid/prebid-server  # Specific repos
+ghactivity sync all --max-per-repo 50                  # Limit per repo
+ghactivity sync all --dry-run                          # Preview mode
+ghactivity sync all --format json                      # JSON output
+```
+
+### Progress Output
+
+```
+Syncing 8 repositories...
+
+[1/8] prebid/prebid-server
+      Discovered: 150 | Created: 45 | Updated: 80 | Skipped: 20 | Failed: 5
+
+[2/8] prebid/Prebid.js
+      Discovered: 230 | Created: 100 | Updated: 110 | Skipped: 15 | Failed: 5
+...
+
+Summary:
+  Repositories synced: 8
+  Total PRs processed: 1,240
+  Created: 450 | Updated: 620 | Skipped: 150 | Failed: 20
+  Duration: 45m 30s
+```
+
+### File Structure
+
+```
+src/github_activity_db/github/sync/
+├── __init__.py                    # Add exports
+├── multi_repo_orchestrator.py     # NEW: MultiRepoOrchestrator + result classes
+├── bulk_ingestion.py              # Existing
+└── ingestion.py                   # Existing
+```
 
 ---
 

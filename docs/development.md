@@ -122,6 +122,8 @@ uv run ruff format --check src/ tests/
 
 ### Testing
 
+For comprehensive testing documentation (philosophy, patterns, coverage goals), see **[Testing Guide](testing.md)**.
+
 ```bash
 # Run all tests
 uv run pytest
@@ -134,30 +136,6 @@ uv run pytest tests/test_db_models.py -v
 
 # Run tests matching a pattern
 uv run pytest -k "test_pr"
-
-# Run with verbose output
-uv run pytest -v
-```
-
-**Test Structure:**
-- `tests/conftest.py` - Shared fixtures (async DB session, sample data)
-- `tests/factories.py` - Factory functions for creating test data
-- `tests/fixtures/` - Mock data (GitHub API responses)
-- `tests/test_*.py` - Test files for each module
-
-**Writing Tests:**
-```python
-# Use factories for ORM model tests
-from tests.factories import make_repository, make_pull_request
-
-async def test_example(db_session):
-    repo = make_repository(db_session)
-    await db_session.flush()
-
-    pr = make_pull_request(db_session, repo, number=1234)
-    await db_session.flush()
-
-    assert pr.repository_id == repo.id
 ```
 
 ### Database

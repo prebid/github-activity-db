@@ -9,7 +9,7 @@ Tests cover:
 """
 
 from datetime import UTC, datetime, timedelta
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -20,8 +20,7 @@ from github_activity_db.github.sync.bulk_ingestion import (
 )
 from github_activity_db.github.sync.results import PRIngestionResult
 from github_activity_db.schemas.github_api import GitHubPullRequest
-
-from tests.factories import make_github_pr, make_github_merged_pr
+from tests.factories import make_github_merged_pr, make_github_pr
 
 
 async def async_iter(items):

@@ -4,7 +4,6 @@ These tests verify the state machine behavior, threshold callbacks,
 and PAT verification logic.
 """
 
-from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -14,9 +13,7 @@ from github_activity_db.github.rate_limit.monitor import RateLimitMonitor
 from github_activity_db.github.rate_limit.schemas import (
     PoolRateLimit,
     RateLimitPool,
-    RateLimitSnapshot,
     RateLimitStatus,
-    TokenInfo,
 )
 from tests.fixtures.rate_limit_responses import (
     HEADERS_CRITICAL,
@@ -519,6 +516,107 @@ class TestRefresh:
 
         with pytest.raises(RuntimeError, match="Cannot refresh without GitHub client"):
             await monitor.refresh()
+
+
+class TestStateTransitionsIntegration:
+    """Integration tests for rate limit state machine transitions.
+
+    These tests verify the complete state machine behavior including
+    recovery scenarios that simulate real-world usage patterns.
+    """
+
+    def test_healthy_to_warning_transition(self) -> None:
+        """Track explicit transition from HEALTHY to WARNING."""
+        monitor = RateLimitMonitor()
+
+        # Start healthy using predefined headers
+        monitor.update_from_headers(HEADERS_HEALTHY)
+        assert monitor.get_status() == RateLimitStatus.HEALTHY
+
+        # Transition to WARNING using predefined headers
+        monitor.update_from_headers(HEADERS_WARNING)
+        assert monitor.get_status() == RateLimitStatus.WARNING
+
+        # Verify pool limit reflects the change
+        pool_limit = monitor.get_pool_limit()
+        assert pool_limit is not None
+        assert pool_limit.remaining == 1500
+
+    def test_warning_to_critical_transition(self) -> None:
+        """Track explicit transition from WARNING to CRITICAL."""
+        monitor = RateLimitMonitor()
+
+        # Start at WARNING
+        monitor.update_from_headers(HEADERS_WARNING)
+        assert monitor.get_status() == RateLimitStatus.WARNING
+
+        # Drop to CRITICAL
+        monitor.update_from_headers(HEADERS_CRITICAL)
+        assert monitor.get_status() == RateLimitStatus.CRITICAL
+
+    def test_recovery_after_reset(self) -> None:
+        """Verify state recovers after rate limit reset."""
+        monitor = RateLimitMonitor()
+
+        # Start exhausted
+        monitor.update_from_headers(HEADERS_EXHAUSTED)
+        assert monitor.get_status() == RateLimitStatus.EXHAUSTED
+        assert monitor.can_make_request() is False
+
+        # Simulate reset - full quota restored
+        monitor.update_from_headers(HEADERS_HEALTHY)
+
+        # Should be healthy again
+        assert monitor.get_status() == RateLimitStatus.HEALTHY
+        assert monitor.can_make_request() is True
+
+    def test_gradual_exhaustion_scenario(self) -> None:
+        """Simulate gradual rate limit exhaustion during heavy usage."""
+        monitor = RateLimitMonitor()
+        statuses: list[RateLimitStatus] = []
+
+        def track_status(limit: PoolRateLimit, status: RateLimitStatus) -> None:
+            statuses.append(status)
+
+        monitor.on_threshold_crossed(track_status)
+
+        # Simulate heavy API usage pattern using predefined headers
+        monitor.update_from_headers(HEADERS_HEALTHY)   # 90% - HEALTHY
+        monitor.update_from_headers(HEADERS_WARNING)   # 30% - WARNING (callback)
+        monitor.update_from_headers(HEADERS_CRITICAL)  # 5% - CRITICAL (callback)
+        monitor.update_from_headers(HEADERS_EXHAUSTED) # 0% - EXHAUSTED (callback)
+
+        # Should have recorded WARNING, CRITICAL, EXHAUSTED transitions
+        assert RateLimitStatus.WARNING in statuses
+        assert RateLimitStatus.CRITICAL in statuses
+        assert RateLimitStatus.EXHAUSTED in statuses
+
+    def test_partial_recovery_scenario(self) -> None:
+        """Test partial recovery doesn't trigger callbacks."""
+        monitor = RateLimitMonitor()
+        callback_count = 0
+
+        def count_callbacks(limit: PoolRateLimit, status: RateLimitStatus) -> None:
+            nonlocal callback_count
+            callback_count += 1
+
+        monitor.on_threshold_crossed(count_callbacks)
+
+        # Go to CRITICAL
+        monitor.update_from_headers(HEADERS_CRITICAL)
+        initial_count = callback_count  # Should be 1 (degradation from default HEALTHY)
+
+        # Partial recovery to WARNING (improvement, no callback)
+        monitor.update_from_headers(HEADERS_WARNING)
+        assert callback_count == initial_count  # No new callback
+
+        # Further recovery to HEALTHY (improvement, no callback)
+        monitor.update_from_headers(HEADERS_HEALTHY)
+        assert callback_count == initial_count  # Still no new callback
+
+        # Now degrade again - should trigger callback
+        monitor.update_from_headers(HEADERS_WARNING)
+        assert callback_count == initial_count + 1  # New callback
 
 
 class TestToDict:

@@ -71,7 +71,7 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**/*.py" = ["S101"]
+"tests/**/*.py" = ["S101", "S105", "S106"]  # allow assert and test tokens/passwords
 
 [tool.ruff.lint.isort]
 known-first-party = ["github_activity_db"]

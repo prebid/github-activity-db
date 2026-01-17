@@ -19,7 +19,7 @@ uv run ghactivity sync repo owner/repo --since 2024-10-01  # Bulk sync
 # Development
 uv run mypy src/           # Type check
 uv run ruff check src/     # Lint
-uv run pytest              # Test (402 tests)
+uv run pytest              # Test (403+ tests)
 ```
 
 ## Documentation
@@ -30,6 +30,7 @@ uv run pytest              # Test (402 tests)
 | [Database](docs/database.md) | Schema, tables, migrations, usage examples |
 | [Data Model](docs/data-model.md) | PR fields, sync behavior, tagging systems |
 | [Development](docs/development.md) | Setup, commands, configuration, troubleshooting |
+| [Testing](docs/testing.md) | Testing strategy, infrastructure, patterns, coverage |
 | [Roadmap](docs/roadmap.md) | Implementation phases and future plans |
 
 ## Current Scope

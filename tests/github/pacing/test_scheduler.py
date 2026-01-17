@@ -6,7 +6,6 @@ retry logic, and rate limit handling.
 
 import asyncio
 from datetime import UTC, datetime, timedelta
-from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 

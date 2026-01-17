@@ -5,7 +5,6 @@ and adaptive throttling behavior.
 """
 
 from datetime import UTC, datetime, timedelta
-from unittest.mock import MagicMock
 
 import pytest
 

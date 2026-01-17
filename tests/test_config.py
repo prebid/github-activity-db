@@ -46,7 +46,7 @@ class TestSettings:
         settings = Settings(_env_file=None)
 
         assert settings.database_url == "sqlite+aiosqlite:///./test.db"
-        assert settings.github_token == "test_token_123"  # noqa: S105
+        assert settings.github_token == "test_token_123"
         assert settings.environment == "production"
         assert settings.log_level == "DEBUG"
 
@@ -72,7 +72,7 @@ class TestSettings:
         settings = Settings(_env_file=None)
 
         assert settings.database_url == "sqlite+aiosqlite:///./lower.db"
-        assert settings.github_token == "upper_token"  # noqa: S105
+        assert settings.github_token == "upper_token"
 
 
 class TestGetSettings:

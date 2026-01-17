@@ -213,65 +213,30 @@ config.py ←── db/engine.py ←── db/models.py
 | `github/rate_limit/` | ✅ Complete | Monitor, schemas, state machine |
 | `github/pacing/` | ✅ Complete | Pacer, scheduler, batch, progress |
 | `github/sync/` | ✅ Complete | PRIngestionService, BulkPRIngestionService, results, enums |
-| `tests/` | ✅ Complete | 402 tests, factory pattern |
+| `tests/` | ✅ Complete | 403+ tests, factory pattern |
 | `search/query.py` | 🔲 TODO | Search builder |
 
 ## Test Infrastructure
 
-The `tests/` module provides comprehensive test coverage using pytest-asyncio.
+The `tests/` module provides comprehensive test coverage using pytest-asyncio. For detailed testing documentation including philosophy, patterns, and coverage goals, see **[Testing Guide](testing.md)**.
 
-### Test Files
+### Quick Reference
 
-| File | Purpose |
-|------|---------|
-| `conftest.py` | Async DB fixtures, sample data fixtures |
-| `factories.py` | Model and schema factory functions |
-| `fixtures/github_responses.py` | Mock GitHub API responses |
-| `fixtures/rate_limit_responses.py` | Rate limit header fixtures |
-| `fixtures/real_pr_open.py` | Real open PR fixture from GitHub |
-| `fixtures/real_pr_merged.py` | Real merged PR fixture from GitHub |
-| `test_config.py` | Settings and environment tests |
-| `test_db_engine.py` | Engine creation, session lifecycle |
-| `test_db_models.py` | ORM models, relationships, constraints |
-| `test_github_client.py` | GitHub client API wrapper tests |
-| `test_schemas_*.py` | Schema validation tests |
-| `test_schemas_contract.py` | Contract tests with real GitHub fixtures |
-| `github/rate_limit/test_*.py` | Rate limit schemas and monitor tests |
-| `github/pacing/test_*.py` | Pacer, scheduler, batch, progress tests |
-| `db/repositories/test_*.py` | Repository CRUD and state tests |
-| `github/sync/test_*.py` | Ingestion service tests |
-| `test_pr_ingestion_e2e.py` | End-to-end PR ingestion tests |
-| `test_cli_sync.py` | CLI sync command tests |
+```bash
+# Run all tests
+uv run pytest
 
-### Factory Pattern
-
-Factory functions reduce test boilerplate and improve maintainability:
-
-```python
-# Model factories (add to session, tests control flush)
-from tests.factories import make_repository, make_pull_request, make_merged_pr, make_user_tag
-
-repo = make_repository(db_session, owner="prebid", name="prebid-server")
-await db_session.flush()
-
-pr = make_pull_request(db_session, repo, number=1234, title="Add feature")
-await db_session.flush()
-
-# Schema factories (return dicts for Pydantic validation)
-from tests.factories import make_github_pr, make_github_user, make_github_review
-
-github_pr = make_github_pr(number=1234, state="open", title="Test PR")
+# Run with coverage
+uv run pytest --cov=src/github_activity_db --cov-report=term-missing
 ```
 
-### Async Database Fixtures
+### Test Organization
 
-Tests use in-memory SQLite with auto-rollback for isolation:
-
-```python
-@pytest.fixture
-async def db_session(test_engine):
-    """Async session with auto-rollback."""
-    async with session_factory() as session:
-        yield session
-        await session.rollback()  # Isolation between tests
-```
+| Directory | Purpose |
+|-----------|---------|
+| `tests/conftest.py` | Shared fixtures (db_session, engine) |
+| `tests/factories.py` | Factory functions for test data |
+| `tests/fixtures/` | Mock data and real GitHub fixtures |
+| `tests/db/` | Database layer tests |
+| `tests/github/` | GitHub module tests (pacing, rate_limit, sync) |
+| `tests/test_*.py` | Top-level module tests |

@@ -7,8 +7,6 @@ and response headers.
 import time
 from datetime import UTC, datetime, timedelta
 
-import pytest
-
 from github_activity_db.github.rate_limit.schemas import (
     PoolRateLimit,
     RateLimitPool,
@@ -23,7 +21,6 @@ from tests.fixtures.rate_limit_responses import (
     HEADERS_HEALTHY,
     HEADERS_PARTIAL,
     HEADERS_SEARCH_POOL,
-    HEADERS_UNAUTHENTICATED,
     HEADERS_WARNING,
     HEADERS_ZERO_LIMIT,
     RATE_LIMIT_RESPONSE_CRITICAL,
