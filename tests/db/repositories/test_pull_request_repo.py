@@ -248,7 +248,8 @@ class TestPullRequestRepositoryCreateOrUpdate:
         repo = make_repository(db_session)
         await db_session.flush()
         existing = make_pull_request(
-            db_session, repo,
+            db_session,
+            repo,
             number=1234,
             title="Old Title",
             state=PRState.OPEN,
@@ -315,6 +316,7 @@ class TestPullRequestRepositoryMerge:
         pr_repository = PullRequestRepository(db_session)
         result = await pr_repository.apply_merge(pr.id, merge_data)
 
+        assert result is not None
         assert result.ai_summary == "This PR fixes a bug."
 
 
@@ -365,7 +367,8 @@ class TestPullRequestRepositoryFrozen:
         # Merged 30 days ago
         old_merge_date = datetime.now(UTC) - timedelta(days=30)
         existing = make_merged_pr(
-            db_session, repo,
+            db_session,
+            repo,
             number=1234,
             title="Original Title",
             close_date=old_merge_date,
@@ -464,6 +467,7 @@ class TestPullRequestRepositoryStateMachine:
         merge_data = PRMerge(close_date=JAN_12, merged_by="merger")
         result = await pr_repository.apply_merge(pr.id, merge_data)
 
+        assert result is not None
         assert result.state == PRState.MERGED
         assert result.close_date == JAN_12
 
@@ -473,7 +477,8 @@ class TestPullRequestRepositoryStateMachine:
         await db_session.flush()
         # Merged just now
         _pr = make_merged_pr(
-            db_session, repo,
+            db_session,
+            repo,
             number=1234,
             title="Old Title",
             close_date=datetime.now(UTC),

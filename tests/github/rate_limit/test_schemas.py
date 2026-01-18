@@ -338,9 +338,7 @@ class TestRateLimitSnapshot:
     def test_from_response_headers_unknown_resource(self) -> None:
         """Unknown resource falls back to default pool."""
         headers = make_rate_limit_headers(resource="unknown_pool")
-        snapshot = RateLimitSnapshot.from_response_headers(
-            headers, default_pool=RateLimitPool.CORE
-        )
+        snapshot = RateLimitSnapshot.from_response_headers(headers, default_pool=RateLimitPool.CORE)
 
         # Should fall back to core
         assert RateLimitPool.CORE in snapshot.pools
@@ -467,3 +465,299 @@ class TestResetTimestampParsing:
         assert core is not None
         # Should use current time as fallback, so seconds_until_reset should be ~0
         assert core.seconds_until_reset >= 0
+
+
+# =============================================================================
+# MEDIUM PRIORITY: Header Parsing Edge Cases
+# =============================================================================
+
+
+class TestHeaderParsingEdgeCases:
+    """Tests for header parsing with unusual/malformed values."""
+
+    def test_parse_headers_empty_dict(self) -> None:
+        """Handles completely empty headers dict."""
+        snapshot = RateLimitSnapshot.from_response_headers({})
+
+        # Should create a default snapshot with fallback values
+        core = snapshot.get_core()
+        assert core is not None
+        # Default values should be used (5000/5000)
+        assert core.limit == 5000
+        assert core.remaining == 5000
+
+    def test_parse_headers_missing_resource(self) -> None:
+        """Handles headers without resource field."""
+        headers = {
+            "x-ratelimit-limit": "5000",
+            "x-ratelimit-remaining": "4500",
+            "x-ratelimit-used": "500",
+        }
+
+        snapshot = RateLimitSnapshot.from_response_headers(headers)
+        # Should default to CORE pool
+        core = snapshot.get_core()
+        assert core is not None
+        assert core.remaining == 4500
+
+    def test_parse_headers_whitespace_values(self) -> None:
+        """Handles whitespace in header values."""
+        headers = {
+            "x-ratelimit-limit": " 5000 ",
+            "x-ratelimit-remaining": " 4500 ",
+            "x-ratelimit-used": " 500 ",
+            "x-ratelimit-resource": " core ",
+        }
+
+        snapshot = RateLimitSnapshot.from_response_headers(headers)
+        core = snapshot.get_core()
+        assert core is not None
+        # Whitespace should be stripped
+        assert core.limit == 5000
+        assert core.remaining == 4500
+
+    def test_parse_headers_very_large_values(self) -> None:
+        """Handles very large numeric values."""
+        headers = {
+            "x-ratelimit-limit": "999999999",
+            "x-ratelimit-remaining": "999999998",
+            "x-ratelimit-used": "1",
+            "x-ratelimit-resource": "core",
+            "x-ratelimit-reset": str(int(time.time()) + 3600),
+        }
+
+        snapshot = RateLimitSnapshot.from_response_headers(headers)
+        core = snapshot.get_core()
+        assert core is not None
+        assert core.limit == 999999999
+        assert core.remaining == 999999998
+
+    def test_parse_headers_uppercase_resource_falls_back_to_default(self) -> None:
+        """Uppercase resource values fall back to default pool (CORE)."""
+        # Test uppercase - GitHub sends lowercase, so uppercase is non-standard
+        headers_upper = {
+            "x-ratelimit-limit": "5000",
+            "x-ratelimit-remaining": "4500",
+            "x-ratelimit-resource": "CORE",
+        }
+        snapshot = RateLimitSnapshot.from_response_headers(headers_upper)
+        # Falls back to CORE as default pool for unrecognized values
+        assert snapshot.get_core() is not None
+
+        # Test mixed case
+        headers_mixed = {
+            "x-ratelimit-limit": "30",
+            "x-ratelimit-remaining": "25",
+            "x-ratelimit-resource": "Search",
+        }
+        snapshot = RateLimitSnapshot.from_response_headers(headers_mixed)
+        # Falls back to CORE for unrecognized "Search" (lowercase "search" expected)
+        assert snapshot.get_core() is not None
+        # Search pool not populated because resource string didn't match
+        assert snapshot.get_pool(RateLimitPool.SEARCH) is None
+
+    def test_parse_headers_unknown_resource_uses_default(self) -> None:
+        """Unknown resource value should use default pool."""
+        headers = {
+            "x-ratelimit-limit": "5000",
+            "x-ratelimit-remaining": "4500",
+            "x-ratelimit-resource": "unknown_pool",
+        }
+
+        snapshot = RateLimitSnapshot.from_response_headers(headers)
+        # Should fall back to CORE pool
+        core = snapshot.get_core()
+        assert core is not None
+        assert core.remaining == 4500
+
+
+# =============================================================================
+# MEDIUM PRIORITY: Threshold Boundary Tests
+# =============================================================================
+
+
+class TestThresholdBoundaryConditions:
+    """Tests for status at exact threshold boundaries."""
+
+    def test_status_exactly_at_healthy_threshold(self) -> None:
+        """Status at exactly 50% remaining."""
+        # 50% = healthy threshold
+        limit = PoolRateLimit(
+            pool=RateLimitPool.CORE,
+            limit=5000,
+            remaining=2500,  # Exactly 50%
+            used=2500,
+            reset_at=datetime.now(UTC),
+        )
+
+        # At boundary, should be HEALTHY (>= threshold)
+        status = limit.get_status(
+            healthy_threshold=50.0,
+            warning_threshold=20.0,
+            critical_threshold=5.0,
+        )
+        assert status == RateLimitStatus.HEALTHY
+
+    def test_status_one_below_healthy_threshold(self) -> None:
+        """Status at just below 50% remaining."""
+        limit = PoolRateLimit(
+            pool=RateLimitPool.CORE,
+            limit=5000,
+            remaining=2499,  # 49.98%
+            used=2501,
+            reset_at=datetime.now(UTC),
+        )
+
+        status = limit.get_status(
+            healthy_threshold=50.0,
+            warning_threshold=20.0,
+            critical_threshold=5.0,
+        )
+        assert status == RateLimitStatus.WARNING
+
+    def test_status_exactly_at_warning_threshold(self) -> None:
+        """Status at exactly 20% remaining."""
+        limit = PoolRateLimit(
+            pool=RateLimitPool.CORE,
+            limit=5000,
+            remaining=1000,  # Exactly 20%
+            used=4000,
+            reset_at=datetime.now(UTC),
+        )
+
+        status = limit.get_status(
+            healthy_threshold=50.0,
+            warning_threshold=20.0,
+            critical_threshold=5.0,
+        )
+        assert status == RateLimitStatus.WARNING
+
+    def test_status_one_below_warning_threshold(self) -> None:
+        """Status at just below 20% remaining."""
+        limit = PoolRateLimit(
+            pool=RateLimitPool.CORE,
+            limit=5000,
+            remaining=999,  # 19.98%
+            used=4001,
+            reset_at=datetime.now(UTC),
+        )
+
+        status = limit.get_status(
+            healthy_threshold=50.0,
+            warning_threshold=20.0,
+            critical_threshold=5.0,
+        )
+        assert status == RateLimitStatus.CRITICAL
+
+    def test_status_exactly_at_critical_threshold(self) -> None:
+        """Status at exactly 5% remaining."""
+        limit = PoolRateLimit(
+            pool=RateLimitPool.CORE,
+            limit=5000,
+            remaining=250,  # Exactly 5%
+            used=4750,
+            reset_at=datetime.now(UTC),
+        )
+
+        status = limit.get_status(
+            healthy_threshold=50.0,
+            warning_threshold=20.0,
+            critical_threshold=5.0,
+        )
+        assert status == RateLimitStatus.CRITICAL
+
+    def test_status_one_above_exhausted(self) -> None:
+        """Status at 0.02% remaining (1 request left)."""
+        limit = PoolRateLimit(
+            pool=RateLimitPool.CORE,
+            limit=5000,
+            remaining=1,  # 0.02%
+            used=4999,
+            reset_at=datetime.now(UTC),
+        )
+
+        status = limit.get_status(
+            healthy_threshold=50.0,
+            warning_threshold=20.0,
+            critical_threshold=5.0,
+        )
+        # 1 remaining is still > 0, so CRITICAL not EXHAUSTED
+        assert status == RateLimitStatus.CRITICAL
+
+    def test_status_exactly_zero_remaining(self) -> None:
+        """Status at exactly 0 remaining."""
+        limit = PoolRateLimit(
+            pool=RateLimitPool.CORE,
+            limit=5000,
+            remaining=0,
+            used=5000,
+            reset_at=datetime.now(UTC),
+        )
+
+        status = limit.get_status(
+            healthy_threshold=50.0,
+            warning_threshold=20.0,
+            critical_threshold=5.0,
+        )
+        assert status == RateLimitStatus.EXHAUSTED
+
+    def test_status_100_percent_remaining(self) -> None:
+        """Status at 100% remaining (full quota)."""
+        limit = PoolRateLimit(
+            pool=RateLimitPool.CORE,
+            limit=5000,
+            remaining=5000,  # 100%
+            used=0,
+            reset_at=datetime.now(UTC),
+        )
+
+        status = limit.get_status(
+            healthy_threshold=50.0,
+            warning_threshold=20.0,
+            critical_threshold=5.0,
+        )
+        assert status == RateLimitStatus.HEALTHY
+
+    def test_status_zero_limit_edge_case(self) -> None:
+        """Handle edge case of 0/0 quota."""
+        limit = PoolRateLimit(
+            pool=RateLimitPool.CORE,
+            limit=0,
+            remaining=0,
+            used=0,
+            reset_at=datetime.now(UTC),
+        )
+
+        # 0/0 should be treated as EXHAUSTED (no capacity)
+        status = limit.get_status(
+            healthy_threshold=50.0,
+            warning_threshold=20.0,
+            critical_threshold=5.0,
+        )
+        assert status == RateLimitStatus.EXHAUSTED
+
+    def test_usage_percent_with_zero_limit(self) -> None:
+        """usage_percent should handle zero limit gracefully."""
+        limit = PoolRateLimit(
+            pool=RateLimitPool.CORE,
+            limit=0,
+            remaining=0,
+            used=0,
+            reset_at=datetime.now(UTC),
+        )
+
+        # Should return 100% usage (fully consumed) to avoid division by zero
+        assert limit.usage_percent == 100.0
+
+    def test_remaining_percent_with_zero_limit(self) -> None:
+        """remaining_percent should handle zero limit gracefully."""
+        limit = PoolRateLimit(
+            pool=RateLimitPool.CORE,
+            limit=0,
+            remaining=0,
+            used=0,
+            reset_at=datetime.now(UTC),
+        )
+
+        # Should return 0% remaining
+        assert limit.remaining_percent == 0.0

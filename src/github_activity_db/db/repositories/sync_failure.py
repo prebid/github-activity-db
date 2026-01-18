@@ -235,9 +235,7 @@ class SyncFailureRepository(BaseRepository[SyncFailure]):
         """
         from sqlalchemy import delete
 
-        stmt = delete(SyncFailure).where(
-            SyncFailure.status == SyncFailureStatus.RESOLVED
-        )
+        stmt = delete(SyncFailure).where(SyncFailure.status == SyncFailureStatus.RESOLVED)
 
         if before is not None:
             stmt = stmt.where(SyncFailure.resolved_at < before)

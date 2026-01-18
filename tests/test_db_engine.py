@@ -1,5 +1,6 @@
 """Tests for database engine and session management."""
 
+import pytest
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
@@ -13,9 +14,7 @@ class TestDatabaseEngine:
         """Test that all tables are created successfully."""
         async with test_engine.connect() as conn:
             # Query SQLite to list tables
-            result = await conn.execute(
-                text("SELECT name FROM sqlite_master WHERE type='table'")
-            )
+            result = await conn.execute(text("SELECT name FROM sqlite_master WHERE type='table'"))
             tables = {row[0] for row in result.fetchall()}
 
         # Verify expected tables exist
@@ -58,7 +57,7 @@ class TestDatabaseEngine:
         )
 
         # Attempt to create a repo but roll back
-        try:
+        with pytest.raises(ValueError, match="Simulated error"):
             async with session_factory() as session:
                 repo = Repository(
                     owner="prebid",
@@ -68,8 +67,6 @@ class TestDatabaseEngine:
                 session.add(repo)
                 await session.flush()  # Write to DB but don't commit
                 raise ValueError("Simulated error")
-        except ValueError:
-            pass
 
         # Verify repo was not persisted
         async with session_factory() as session:

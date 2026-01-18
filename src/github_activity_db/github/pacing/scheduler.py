@@ -358,7 +358,7 @@ class RequestScheduler:
 
         # Retry with exponential backoff for other errors
         if request.retry_count <= request.max_retries:
-            backoff = min(2 ** request.retry_count, 60)  # Cap at 60 seconds
+            backoff = min(2**request.retry_count, 60)  # Cap at 60 seconds
             logger.debug("Retrying request %s in %d seconds", request.id[:8], backoff)
             await asyncio.sleep(backoff)
 

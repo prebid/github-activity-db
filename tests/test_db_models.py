@@ -129,9 +129,7 @@ class TestUserTagModel:
         await db_session.flush()
 
         # Associate tag with PR via junction table (async-safe approach)
-        await db_session.execute(
-            pr_user_tags.insert().values(pr_id=pr.id, user_tag_id=tag.id)
-        )
+        await db_session.execute(pr_user_tags.insert().values(pr_id=pr.id, user_tag_id=tag.id))
         await db_session.flush()
 
         # Query with eager loading to verify relationship
@@ -146,9 +144,7 @@ class TestUserTagModel:
 
         # Verify from tag side
         result = await db_session.execute(
-            select(UserTag)
-            .where(UserTag.id == tag.id)
-            .options(selectinload(UserTag.pull_requests))
+            select(UserTag).where(UserTag.id == tag.id).options(selectinload(UserTag.pull_requests))
         )
         fetched_tag = result.scalar_one()
         assert len(fetched_tag.pull_requests) == 1
@@ -163,9 +159,7 @@ class TestUserTagModel:
         await db_session.flush()
 
         # Associate via junction table (async-safe)
-        await db_session.execute(
-            pr_user_tags.insert().values(pr_id=pr.id, user_tag_id=tag.id)
-        )
+        await db_session.execute(pr_user_tags.insert().values(pr_id=pr.id, user_tag_id=tag.id))
         await db_session.flush()
 
         tag_id = tag.id
@@ -174,9 +168,7 @@ class TestUserTagModel:
 
         # Tag should still exist, but no longer associated
         result = await db_session.execute(
-            select(UserTag)
-            .where(UserTag.id == tag_id)
-            .options(selectinload(UserTag.pull_requests))
+            select(UserTag).where(UserTag.id == tag_id).options(selectinload(UserTag.pull_requests))
         )
         fetched_tag = result.scalar_one()
         assert fetched_tag is not None

@@ -7,6 +7,28 @@ from pydantic import Field
 from .base import SchemaBase
 
 
+def parse_repo_string(full_name: str) -> tuple[str, str]:
+    """Parse 'owner/repo' string into (owner, name) tuple.
+
+    Args:
+        full_name: Full repository path (e.g., 'prebid/prebid-server')
+
+    Returns:
+        Tuple of (owner, name)
+
+    Raises:
+        ValueError: If format is invalid (missing '/')
+
+    Example:
+        >>> parse_repo_string("prebid/prebid-server")
+        ('prebid', 'prebid-server')
+    """
+    if "/" not in full_name:
+        raise ValueError(f"Invalid repository format: '{full_name}'. Expected 'owner/name'")
+    owner, name = full_name.split("/", 1)
+    return owner, name
+
+
 class RepositoryCreate(SchemaBase):
     """Schema for creating a new repository."""
 
@@ -28,7 +50,7 @@ class RepositoryCreate(SchemaBase):
         Returns:
             RepositoryCreate instance with owner and name extracted
         """
-        owner, name = full_name.split("/", 1)
+        owner, name = parse_repo_string(full_name)
         return cls(owner=owner, name=name, full_name=full_name)
 
 

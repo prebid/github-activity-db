@@ -32,7 +32,7 @@ from .schemas import (
 if TYPE_CHECKING:
     from typing import Any
 
-    GitHub = Any  # Avoid generic type parameter issues
+    from githubkit import GitHub
 
 logger = get_logger(__name__)
 
@@ -70,7 +70,7 @@ class RateLimitMonitor:
 
     def __init__(
         self,
-        github: GitHub | None = None,
+        github: GitHub[Any] | None = None,
         config: RateLimitConfig | None = None,
     ) -> None:
         """Initialize the rate limit monitor.

@@ -87,13 +87,13 @@ Test complete workflows from input to output.
 
 ## Current Coverage
 
-### Test Statistics (533 tests)
+### Test Statistics (573+ tests)
 
 | Module | Tests | Coverage |
 |--------|-------|----------|
 | `github/pacing/` | 113 | ✅ Comprehensive |
 | `github/sync/` | 78 | ✅ Comprehensive |
-| `github/rate_limit/` | 15 | ⚠️ Partial |
+| `github/rate_limit/` | 126 | ✅ Comprehensive (96%) |
 | `db/repositories/` | 62 | ✅ Good |
 | `schemas/` | 150+ | ✅ Comprehensive |
 | `cli/` | 38 | ⚠️ Mocked only |
@@ -110,7 +110,6 @@ Test complete workflows from input to output.
 | GitHubClient unit tests | HIGH | Core component lacks dedicated tests |
 | CLI integration tests | HIGH | Only mocked, no real DB tests |
 | Pacer + Scheduler integration | MEDIUM | Tested separately, not together |
-| Rate limit state transitions | MEDIUM | Partial coverage |
 
 ### Lessons Learned
 
@@ -137,7 +136,10 @@ tests/
 │   └── repositories/        # Repository CRUD tests
 ├── github/
 │   ├── pacing/              # Pacer, scheduler, batch tests
-│   ├── rate_limit/          # Rate limit monitor tests
+│   ├── rate_limit/          # Rate limit monitor tests (126 tests)
+│   │   ├── test_monitor.py          # Core monitor functionality
+│   │   ├── test_monitor_concurrency.py  # Thread-safety tests
+│   │   └── test_schemas.py          # Schema validation
 │   └── sync/                # Ingestion service tests
 ├── test_config.py           # Settings tests
 ├── test_db_*.py             # Database layer tests
@@ -512,4 +514,125 @@ assert task.done()
 
 # Good - wait for completion
 await asyncio.wait_for(task, timeout=1.0)
+```
+
+---
+
+## Test Typing
+
+Mypy runs on tests with relaxed strictness settings, allowing flexibility for test-specific patterns while still catching type errors. All 230 test mypy errors have been fixed.
+
+### Mypy Configuration
+
+Tests run with relaxed mypy settings (see `pyproject.toml`):
+
+```toml
+[[tool.mypy.overrides]]
+module = "tests.*"
+disallow_untyped_defs = false
+disallow_incomplete_defs = false
+disallow_untyped_calls = false
+disallow_any_generics = false
+check_untyped_defs = true
+warn_return_any = false
+warn_unused_ignores = true
+```
+
+This allows flexibility for test-specific patterns (mocks, fixtures) while still catching type errors in test logic.
+
+### Running Mypy on Tests
+
+```bash
+# Check tests (runs with relaxed settings)
+uv run mypy tests/
+
+# Check everything
+uv run mypy src/ tests/
+
+# Pre-commit runs mypy on both src/ and tests/
+uv run pre-commit run mypy --all-files
+```
+
+### Type-Safe Test Patterns
+
+**1. Use `model_validate()` instead of `**dict` unpacking:**
+
+```python
+# ❌ Bad - Dict unpacking loses type information
+pr = GitHubPullRequest(**GITHUB_PR_RESPONSE)
+
+# ✅ Good - Pydantic's model_validate handles untyped dicts
+pr = GitHubPullRequest.model_validate(GITHUB_PR_RESPONSE)
+```
+
+**2. Narrow optional types with assertions:**
+
+```python
+# ❌ Bad - mypy error: Item "None" has no attribute "state"
+result = await repo.get_by_number(...)
+assert result.state == PRState.MERGED
+
+# ✅ Good - assertion narrows type from `T | None` to `T`
+result = await repo.get_by_number(...)
+assert result is not None
+assert result.state == PRState.MERGED
+```
+
+**3. Use explicit parameters instead of `**overrides`:**
+
+```python
+# ❌ Bad - Dict merging breaks type safety
+def make_merged_pr(..., **overrides: Any) -> PullRequest:
+    defaults = {"state": PRState.MERGED, ...}
+    return make_pull_request(session, repo, **(defaults | overrides))
+
+# ✅ Good - Explicit typed parameters
+def make_merged_pr(
+    ...,
+    number: int = 1234,
+    merged_by: str = "maintainer",
+) -> PullRequest:
+    return make_pull_request(
+        session, repo,
+        number=number,
+        state=PRState.MERGED,
+        merged_by=merged_by,
+    )
+```
+
+**4. Annotate generic types explicitly:**
+
+```python
+# ❌ Bad - var-annotated error
+executor = BatchExecutor(scheduler)
+
+# ✅ Good - Explicit generic type parameters
+executor: BatchExecutor[int, int] = BatchExecutor(scheduler)
+```
+
+**5. Use `# type: ignore[error-code]` for edge cases:**
+
+```python
+# When mypy can't infer lambda types, use targeted ignores
+scheduler.enqueue(lambda n=i: task(n), priority=RequestPriority.NORMAL)  # type: ignore[misc]
+```
+
+### Factory Functions
+
+Test factories in `tests/factories.py` use explicit parameters for type safety:
+
+```python
+from tests.factories import make_repository, make_pull_request, make_merged_pr
+
+# Create repository
+repo = make_repository(db_session, owner="prebid", name="prebid-server")
+await db_session.flush()
+
+# Create PR with explicit parameters
+pr = make_pull_request(db_session, repo, number=1234, title="Add feature")
+await db_session.flush()
+
+# Create merged PR
+merged_pr = make_merged_pr(db_session, repo, number=5678, merged_by="reviewer")
+await db_session.flush()
 ```

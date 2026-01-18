@@ -195,9 +195,7 @@ class TestGitHubClientPullRequests:
         mock_internal.aclose = AsyncMock()
         client._client = mock_internal
 
-        commits = await client.get_pull_request_commits(
-            "prebid", "prebid-server", 1234
-        )
+        commits = await client.get_pull_request_commits("prebid", "prebid-server", 1234)
 
         assert len(commits) == 3
         assert all(isinstance(c, GitHubCommit) for c in commits)
@@ -225,9 +223,7 @@ class TestGitHubClientPullRequests:
         mock_internal.aclose = AsyncMock()
         client._client = mock_internal
 
-        reviews = await client.get_pull_request_reviews(
-            "prebid", "prebid-server", 1234
-        )
+        reviews = await client.get_pull_request_reviews("prebid", "prebid-server", 1234)
 
         assert len(reviews) == 3
         assert all(isinstance(r, GitHubReview) for r in reviews)
@@ -251,18 +247,10 @@ class TestGitHubClientFullPR:
         mock_reviews = [GitHubReview.model_validate(r) for r in GITHUB_REVIEWS_RESPONSE]
 
         with (
-            patch.object(
-                client, "get_pull_request", AsyncMock(return_value=mock_pr)
-            ),
-            patch.object(
-                client, "get_pull_request_files", AsyncMock(return_value=mock_files)
-            ),
-            patch.object(
-                client, "get_pull_request_commits", AsyncMock(return_value=mock_commits)
-            ),
-            patch.object(
-                client, "get_pull_request_reviews", AsyncMock(return_value=mock_reviews)
-            ),
+            patch.object(client, "get_pull_request", AsyncMock(return_value=mock_pr)),
+            patch.object(client, "get_pull_request_files", AsyncMock(return_value=mock_files)),
+            patch.object(client, "get_pull_request_commits", AsyncMock(return_value=mock_commits)),
+            patch.object(client, "get_pull_request_reviews", AsyncMock(return_value=mock_reviews)),
         ):
             pr, files, commits, reviews = await client.get_full_pull_request(
                 "prebid", "prebid-server", 1234

@@ -4,6 +4,7 @@ These tests validate that our Pydantic schemas correctly parse
 real GitHub API responses captured from prebid/prebid-server.
 """
 
+from typing import cast
 
 from github_activity_db.db.models import PRState
 from github_activity_db.schemas import (
@@ -26,7 +27,7 @@ class TestGitHubPRSchemaContract:
 
     def test_parse_open_pr(self) -> None:
         """Parse real open PR response."""
-        pr = GitHubPullRequest(**REAL_OPEN_PR["pr"])
+        pr = GitHubPullRequest.model_validate(REAL_OPEN_PR["pr"])
 
         assert pr.number == 4663
         assert pr.state == "open"
@@ -37,7 +38,7 @@ class TestGitHubPRSchemaContract:
 
     def test_parse_merged_pr(self) -> None:
         """Parse real merged PR response."""
-        pr = GitHubPullRequest(**REAL_MERGED_PR["pr"])
+        pr = GitHubPullRequest.model_validate(REAL_MERGED_PR["pr"])
 
         assert pr.number == 4646
         assert pr.state == "closed"  # GitHub API returns "closed" for merged
@@ -48,7 +49,7 @@ class TestGitHubPRSchemaContract:
 
     def test_open_pr_dates(self) -> None:
         """Open PR has created_at and updated_at but no closed_at."""
-        pr = GitHubPullRequest(**REAL_OPEN_PR["pr"])
+        pr = GitHubPullRequest.model_validate(REAL_OPEN_PR["pr"])
 
         assert pr.created_at is not None
         assert pr.updated_at is not None
@@ -57,7 +58,7 @@ class TestGitHubPRSchemaContract:
 
     def test_merged_pr_dates(self) -> None:
         """Merged PR has all date fields populated."""
-        pr = GitHubPullRequest(**REAL_MERGED_PR["pr"])
+        pr = GitHubPullRequest.model_validate(REAL_MERGED_PR["pr"])
 
         assert pr.created_at is not None
         assert pr.updated_at is not None
@@ -68,8 +69,8 @@ class TestGitHubPRSchemaContract:
 
     def test_pr_stats_populated(self) -> None:
         """PR stats (additions, deletions, changed_files) are populated."""
-        open_pr = GitHubPullRequest(**REAL_OPEN_PR["pr"])
-        merged_pr = GitHubPullRequest(**REAL_MERGED_PR["pr"])
+        open_pr = GitHubPullRequest.model_validate(REAL_OPEN_PR["pr"])
+        merged_pr = GitHubPullRequest.model_validate(REAL_MERGED_PR["pr"])
 
         # Open PR stats
         assert open_pr.additions == 9
@@ -85,7 +86,7 @@ class TestGitHubPRSchemaContract:
 
     def test_pr_with_labels(self) -> None:
         """Merged PR has labels."""
-        pr = GitHubPullRequest(**REAL_MERGED_PR["pr"])
+        pr = GitHubPullRequest.model_validate(REAL_MERGED_PR["pr"])
 
         assert len(pr.labels) == 1
         assert pr.labels[0].name == "adapter"
@@ -93,13 +94,13 @@ class TestGitHubPRSchemaContract:
 
     def test_pr_without_labels(self) -> None:
         """Open PR has no labels."""
-        pr = GitHubPullRequest(**REAL_OPEN_PR["pr"])
+        pr = GitHubPullRequest.model_validate(REAL_OPEN_PR["pr"])
 
         assert pr.labels == []
 
     def test_pr_with_assignees(self) -> None:
         """Merged PR has assignees."""
-        pr = GitHubPullRequest(**REAL_MERGED_PR["pr"])
+        pr = GitHubPullRequest.model_validate(REAL_MERGED_PR["pr"])
 
         assert len(pr.assignees) == 2
         assignee_logins = [a.login for a in pr.assignees]
@@ -112,7 +113,7 @@ class TestGitHubFileSchemaContract:
 
     def test_parse_files_open_pr(self) -> None:
         """Parse files from open PR."""
-        files = [GitHubFile(**f) for f in REAL_OPEN_PR["files"]]
+        files = [GitHubFile.model_validate(f) for f in REAL_OPEN_PR["files"]]
 
         assert len(files) == OPEN_PR_METADATA["expected_file_count"]
         assert files[0].filename == "static/bidder-info/alchemyx.yaml"
@@ -122,7 +123,7 @@ class TestGitHubFileSchemaContract:
 
     def test_parse_files_merged_pr(self) -> None:
         """Parse files from merged PR."""
-        files = [GitHubFile(**f) for f in REAL_MERGED_PR["files"]]
+        files = [GitHubFile.model_validate(f) for f in REAL_MERGED_PR["files"]]
 
         assert len(files) == MERGED_PR_METADATA["expected_file_count"]
         assert files[0].filename == "static/bidder-info/optidigital.yaml"
@@ -134,7 +135,7 @@ class TestGitHubCommitSchemaContract:
 
     def test_parse_commits_open_pr(self) -> None:
         """Parse commits from open PR."""
-        commits = [GitHubCommit(**c) for c in REAL_OPEN_PR["commits"]]
+        commits = [GitHubCommit.model_validate(c) for c in REAL_OPEN_PR["commits"]]
 
         assert len(commits) == OPEN_PR_METADATA["expected_commit_count"]
         assert commits[0].commit.author.name == "Abraham"
@@ -142,7 +143,7 @@ class TestGitHubCommitSchemaContract:
 
     def test_parse_commits_merged_pr(self) -> None:
         """Parse commits from merged PR."""
-        commits = [GitHubCommit(**c) for c in REAL_MERGED_PR["commits"]]
+        commits = [GitHubCommit.model_validate(c) for c in REAL_MERGED_PR["commits"]]
 
         assert len(commits) == MERGED_PR_METADATA["expected_commit_count"]
         # First commit
@@ -156,18 +157,18 @@ class TestGitHubReviewSchemaContract:
 
     def test_parse_reviews_empty(self) -> None:
         """Open PR has no reviews."""
-        reviews = [GitHubReview(**r) for r in REAL_OPEN_PR["reviews"]]
+        reviews = [GitHubReview.model_validate(r) for r in REAL_OPEN_PR["reviews"]]
 
         assert len(reviews) == OPEN_PR_METADATA["expected_review_count"]
 
     def test_parse_reviews_merged_pr(self) -> None:
         """Parse reviews from merged PR."""
-        reviews = [GitHubReview(**r) for r in REAL_MERGED_PR["reviews"]]
+        reviews = [GitHubReview.model_validate(r) for r in REAL_MERGED_PR["reviews"]]
 
         assert len(reviews) == MERGED_PR_METADATA["expected_review_count"]
 
         # Check review states match expected
-        expected = MERGED_PR_METADATA["expected_reviewer_actions"]
+        expected = cast(dict[str, str], MERGED_PR_METADATA["expected_reviewer_actions"])
         for review in reviews:
             assert review.user.login in expected
             assert review.state == expected[review.user.login]
@@ -178,7 +179,7 @@ class TestPRCreateFactory:
 
     def test_to_pr_create_open_pr(self) -> None:
         """Factory produces valid PRCreate for open PR."""
-        gh_pr = GitHubPullRequest(**REAL_OPEN_PR["pr"])
+        gh_pr = GitHubPullRequest.model_validate(REAL_OPEN_PR["pr"])
         pr_create = gh_pr.to_pr_create(repository_id=1)
 
         assert pr_create.number == gh_pr.number
@@ -189,7 +190,7 @@ class TestPRCreateFactory:
 
     def test_to_pr_create_merged_pr(self) -> None:
         """Factory produces valid PRCreate for merged PR."""
-        gh_pr = GitHubPullRequest(**REAL_MERGED_PR["pr"])
+        gh_pr = GitHubPullRequest.model_validate(REAL_MERGED_PR["pr"])
         pr_create = gh_pr.to_pr_create(repository_id=42)
 
         assert pr_create.number == gh_pr.number
@@ -203,10 +204,10 @@ class TestPRSyncFactory:
 
     def test_to_pr_sync_open_pr(self) -> None:
         """Factory produces valid PRSync for open PR with empty collections."""
-        gh_pr = GitHubPullRequest(**REAL_OPEN_PR["pr"])
-        files = [GitHubFile(**f) for f in REAL_OPEN_PR["files"]]
-        commits = [GitHubCommit(**c) for c in REAL_OPEN_PR["commits"]]
-        reviews = [GitHubReview(**r) for r in REAL_OPEN_PR["reviews"]]
+        gh_pr = GitHubPullRequest.model_validate(REAL_OPEN_PR["pr"])
+        files = [GitHubFile.model_validate(f) for f in REAL_OPEN_PR["files"]]
+        commits = [GitHubCommit.model_validate(c) for c in REAL_OPEN_PR["commits"]]
+        reviews = [GitHubReview.model_validate(r) for r in REAL_OPEN_PR["reviews"]]
 
         pr_sync = gh_pr.to_pr_sync(files=files, commits=commits, reviews=reviews)
 
@@ -224,10 +225,10 @@ class TestPRSyncFactory:
 
     def test_to_pr_sync_merged_pr(self) -> None:
         """Factory produces valid PRSync for merged PR with all data."""
-        gh_pr = GitHubPullRequest(**REAL_MERGED_PR["pr"])
-        files = [GitHubFile(**f) for f in REAL_MERGED_PR["files"]]
-        commits = [GitHubCommit(**c) for c in REAL_MERGED_PR["commits"]]
-        reviews = [GitHubReview(**r) for r in REAL_MERGED_PR["reviews"]]
+        gh_pr = GitHubPullRequest.model_validate(REAL_MERGED_PR["pr"])
+        files = [GitHubFile.model_validate(f) for f in REAL_MERGED_PR["files"]]
+        commits = [GitHubCommit.model_validate(c) for c in REAL_MERGED_PR["commits"]]
+        reviews = [GitHubReview.model_validate(r) for r in REAL_MERGED_PR["reviews"]]
 
         pr_sync = gh_pr.to_pr_sync(files=files, commits=commits, reviews=reviews)
 
@@ -245,7 +246,7 @@ class TestPRSyncFactory:
 
     def test_to_pr_sync_handles_empty_collections(self) -> None:
         """Sync handles PRs with no reviews/commits/files."""
-        gh_pr = GitHubPullRequest(**REAL_OPEN_PR["pr"])
+        gh_pr = GitHubPullRequest.model_validate(REAL_OPEN_PR["pr"])
         pr_sync = gh_pr.to_pr_sync(files=[], commits=[], reviews=[])
 
         assert pr_sync.participants == []
@@ -256,8 +257,8 @@ class TestPRSyncFactory:
         """Review states are mapped to correct participant actions."""
         from github_activity_db.schemas.enums import ParticipantActionType
 
-        gh_pr = GitHubPullRequest(**REAL_MERGED_PR["pr"])
-        reviews = [GitHubReview(**r) for r in REAL_MERGED_PR["reviews"]]
+        gh_pr = GitHubPullRequest.model_validate(REAL_MERGED_PR["pr"])
+        reviews = [GitHubReview.model_validate(r) for r in REAL_MERGED_PR["reviews"]]
 
         pr_sync = gh_pr.to_pr_sync(files=[], commits=[], reviews=reviews)
 
@@ -271,7 +272,7 @@ class TestEdgeCases:
 
     def test_pr_with_null_body(self) -> None:
         """PR with null description."""
-        gh_pr = GitHubPullRequest(**REAL_OPEN_PR["pr"])
+        gh_pr = GitHubPullRequest.model_validate(REAL_OPEN_PR["pr"])
         assert gh_pr.body is None
 
         pr_sync = gh_pr.to_pr_sync()
@@ -279,7 +280,7 @@ class TestEdgeCases:
 
     def test_pr_with_body(self) -> None:
         """PR with description."""
-        gh_pr = GitHubPullRequest(**REAL_MERGED_PR["pr"])
+        gh_pr = GitHubPullRequest.model_validate(REAL_MERGED_PR["pr"])
         assert gh_pr.body == "Adds GPP and GPP_SID macros."
 
         pr_sync = gh_pr.to_pr_sync()
@@ -287,8 +288,8 @@ class TestEdgeCases:
 
     def test_title_within_max_length(self) -> None:
         """PR titles are within max length (500 chars)."""
-        open_pr = GitHubPullRequest(**REAL_OPEN_PR["pr"])
-        merged_pr = GitHubPullRequest(**REAL_MERGED_PR["pr"])
+        open_pr = GitHubPullRequest.model_validate(REAL_OPEN_PR["pr"])
+        merged_pr = GitHubPullRequest.model_validate(REAL_MERGED_PR["pr"])
 
         assert len(open_pr.title) <= 500
         assert len(merged_pr.title) <= 500

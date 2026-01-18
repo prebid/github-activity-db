@@ -61,13 +61,16 @@ select = [
     "S",      # flake8-bandit (security)
     "PTH",    # flake8-use-pathlib
     "RUF",    # ruff-specific rules
+    # Type checking best practices (non-strict mode)
+    "TC006",  # Quote type annotations in cast() calls
+    "FA",     # flake8-future-annotations
 ]
 ignore = [
     "S101",     # allow assert in tests
     "RUF022",   # allow categorized __all__ (not alphabetically sorted)
-    "UP046",    # allow Generic[T] subclass pattern for broader compatibility
     "ASYNC109", # allow timeout parameter naming in async functions
     "ASYNC110", # allow sleep in while loop for queue drain patterns
+    "FA100",    # allow files without `from __future__ import annotations`
 ]
 
 [tool.ruff.lint.per-file-ignores]
@@ -98,12 +101,28 @@ no_implicit_optional = true
 warn_redundant_casts = true
 warn_unused_configs = true
 show_error_codes = true
+# Require error codes on type: ignore comments for maintainability
+enable_error_code = ["ignore-without-code"]
 plugins = ["pydantic.mypy"]
 exclude = ["alembic/", "build/", "dist/"]
 
 [[tool.mypy.overrides]]
 module = ["githubkit.*", "aiosqlite.*"]
 ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+# Relaxed strictness for tests - enables mypy checking while allowing
+# flexibility for test-specific patterns (mocks, fixtures, etc.)
+module = "tests.*"
+disallow_untyped_defs = false
+disallow_incomplete_defs = false
+disallow_untyped_calls = false
+# Relax generic type parameter requirements (allows `dict` without `dict[str, Any]`)
+disallow_any_generics = false
+# Keep important checks enabled
+check_untyped_defs = true
+warn_return_any = false  # Tests often return mock values
+warn_unused_ignores = true
 
 [tool.pydantic-mypy]
 init_forbid_extra = true

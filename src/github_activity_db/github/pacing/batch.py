@@ -10,7 +10,7 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass, field
-from typing import Generic, TypeVar
+from typing import Generic, TypeVar, cast
 
 from github_activity_db.logging import get_logger
 
@@ -218,7 +218,8 @@ class BatchExecutor(Generic[T, R]):
                     if self._progress:
                         self._progress.increment_failed(error=str(res))
                 else:
-                    result.succeeded.append(res)  # type: ignore[arg-type]
+                    # After isinstance(res, Exception) check, res is R
+                    result.succeeded.append(cast("R", res))
                     if self._progress:
                         self._progress.increment()
 

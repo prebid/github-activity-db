@@ -104,8 +104,10 @@ uv run ghactivity user-tags --help
 ### Code Quality
 
 ```bash
-# Type checking
+# Type checking (strict mode for src/, relaxed for tests/)
 uv run mypy src/
+uv run mypy tests/  # Runs with relaxed settings
+uv run mypy src/ tests/  # Check everything
 
 # Linting
 uv run ruff check src/ tests/
@@ -118,6 +120,26 @@ uv run ruff format src/ tests/
 
 # Check formatting without changes
 uv run ruff format --check src/ tests/
+
+# Run all pre-commit checks
+uv run pre-commit run --all-files
+```
+
+### Quality Metrics
+
+The project maintains strict quality standards with automated enforcement:
+
+| Metric | Target | Enforcement |
+|--------|--------|-------------|
+| `type: ignore` comments in src/ | ≤5 | Pre-commit audit |
+| `noqa` comments in src/ | ≤3 | Pre-commit audit |
+| `Any` type aliases | 0 | Pre-commit blocks |
+| Mypy errors | 0 | Pre-commit blocks |
+
+```bash
+# Check current quality metrics
+grep -r "type: ignore" src/ | wc -l  # type:ignore count
+grep -r "noqa:" src/ | wc -l         # noqa count
 ```
 
 ### Testing
@@ -167,14 +189,27 @@ uv run pre-commit install
 
 # Run on all files manually
 uv run pre-commit run --all-files
+
+# Run specific hook
+uv run pre-commit run mypy --all-files
 ```
 
-Hooks configured:
-- `ruff` - Linting and formatting
-- `mypy` - Type checking
-- `trailing-whitespace` - Remove trailing whitespace
-- `end-of-file-fixer` - Ensure newline at end of files
-- `check-yaml` / `check-toml` - Validate config files
+### Configured Hooks
+
+| Hook | Purpose |
+|------|---------|
+| `trailing-whitespace` | Remove trailing whitespace |
+| `end-of-file-fixer` | Ensure newline at end of files |
+| `check-yaml` / `check-toml` | Validate config files |
+| `check-added-large-files` | Block files >1MB |
+| `check-merge-conflict` | Block merge conflict markers |
+| `detect-private-key` | Block private keys |
+| `ruff` | Linting with auto-fix |
+| `ruff-format` | Code formatting |
+| `mypy` | Type checking (src/ and tests/) |
+| `audit-type-ignores` | Report `type: ignore` count (target ≤5) |
+| `audit-noqa` | Report `noqa` count (target ≤3) |
+| `prevent-any-aliases` | Block `TypeName = Any` patterns |
 
 ## Project Configuration
 
@@ -217,6 +252,7 @@ src/github_activity_db/
 ├── cli/                 # CLI commands
 │   ├── __init__.py
 │   ├── app.py           # Typer application
+│   ├── common.py        # Shared option factories
 │   ├── github.py        # GitHub commands (rate-limit)
 │   └── sync.py          # Sync commands (sync pr)
 ├── db/                  # Database layer
@@ -231,7 +267,7 @@ src/github_activity_db/
 │   ├── __init__.py      # Re-exports all schemas
 │   ├── base.py          # SchemaBase with factory pattern
 │   ├── pr.py            # PRCreate, PRSync, PRMerge, PRRead
-│   ├── repository.py    # RepositoryCreate, RepositoryRead
+│   ├── repository.py    # RepositoryCreate, RepositoryRead, parse_repo_string()
 │   ├── tag.py           # UserTagCreate, UserTagRead
 │   ├── nested.py        # CommitBreakdown, ParticipantEntry
 │   └── github_api.py    # GitHub API response schemas
@@ -273,6 +309,29 @@ tests/
 1. Create command file in `src/github_activity_db/cli/`
 2. Register in `src/github_activity_db/cli/app.py`
 3. Add tests in `tests/test_cli/`
+
+**CLI Async Pattern:**
+
+All CLI commands use `run_async_command()` from `cli/common.py` for unified async execution:
+
+```python
+from github_activity_db.cli.common import console, run_async_command
+
+@app.command()
+def my_command() -> None:
+    """Command description."""
+    async def _impl() -> dict[str, Any]:
+        async with GitHubClient() as client:
+            return await client.some_method()
+
+    result = run_async_command(_impl())
+    console.print(f"Result: {result}")
+```
+
+This pattern provides:
+- Clean event loop management via `asyncio.run()`
+- Unified error handling with user-friendly messages
+- Automatic `typer.Exit(1)` on exceptions
 
 ### 3. New Pydantic Schema
 

@@ -18,6 +18,7 @@ from github_activity_db.db.repositories import (
     SyncFailureRepository,
 )
 from github_activity_db.logging import get_logger
+from github_activity_db.schemas import parse_repo_string
 
 from .bulk_ingestion import BulkIngestionConfig, BulkIngestionResult, BulkPRIngestionService
 
@@ -195,7 +196,7 @@ class MultiRepoOrchestrator:
         initialized: list[str] = []
 
         for full_name in repo_list:
-            owner, name = full_name.split("/", 1)
+            owner, name = parse_repo_string(full_name)
             _repo, created = await self._repo_repository.get_or_create(
                 owner=owner,
                 name=name,
@@ -245,7 +246,7 @@ class MultiRepoOrchestrator:
 
         # Sync each repository
         for full_name in repo_list:
-            owner, name = full_name.split("/", 1)
+            owner, name = parse_repo_string(full_name)
             repo_start = datetime.now()
 
             logger.info("Starting sync for %s", full_name)

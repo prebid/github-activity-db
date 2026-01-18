@@ -2,8 +2,6 @@
 
 from datetime import UTC, datetime, timedelta
 
-import pytest
-
 from github_activity_db.db.models import SyncFailureStatus
 from github_activity_db.db.repositories import SyncFailureRepository
 from tests.factories import make_repository, make_sync_failure
@@ -40,18 +38,10 @@ class TestSyncFailureRepositoryQuery:
         repo = make_repository(db_session, owner="prebid", name="prebid-server")
         await db_session.flush()
 
-        pending1 = make_sync_failure(
-            db_session, repo, pr_number=1, status=SyncFailureStatus.PENDING
-        )
-        pending2 = make_sync_failure(
-            db_session, repo, pr_number=2, status=SyncFailureStatus.PENDING
-        )
-        make_sync_failure(
-            db_session, repo, pr_number=3, status=SyncFailureStatus.RESOLVED
-        )
-        make_sync_failure(
-            db_session, repo, pr_number=4, status=SyncFailureStatus.PERMANENT
-        )
+        make_sync_failure(db_session, repo, pr_number=1, status=SyncFailureStatus.PENDING)
+        make_sync_failure(db_session, repo, pr_number=2, status=SyncFailureStatus.PENDING)
+        make_sync_failure(db_session, repo, pr_number=3, status=SyncFailureStatus.RESOLVED)
+        make_sync_failure(db_session, repo, pr_number=4, status=SyncFailureStatus.PERMANENT)
         await db_session.flush()
 
         repository = SyncFailureRepository(db_session)
@@ -98,15 +88,9 @@ class TestSyncFailureRepositoryQuery:
         await db_session.flush()
 
         now = datetime.now(UTC)
-        make_sync_failure(
-            db_session, repo, pr_number=1, failed_at=now - timedelta(hours=1)
-        )
-        make_sync_failure(
-            db_session, repo, pr_number=2, failed_at=now - timedelta(hours=3)
-        )
-        make_sync_failure(
-            db_session, repo, pr_number=3, failed_at=now - timedelta(hours=2)
-        )
+        make_sync_failure(db_session, repo, pr_number=1, failed_at=now - timedelta(hours=1))
+        make_sync_failure(db_session, repo, pr_number=2, failed_at=now - timedelta(hours=3))
+        make_sync_failure(db_session, repo, pr_number=3, failed_at=now - timedelta(hours=2))
         await db_session.flush()
 
         repository = SyncFailureRepository(db_session)
@@ -146,9 +130,7 @@ class TestSyncFailureRepositoryQuery:
         repo = make_repository(db_session, owner="prebid", name="prebid-server")
         await db_session.flush()
 
-        make_sync_failure(
-            db_session, repo, pr_number=123, status=SyncFailureStatus.RESOLVED
-        )
+        make_sync_failure(db_session, repo, pr_number=123, status=SyncFailureStatus.RESOLVED)
         await db_session.flush()
 
         repository = SyncFailureRepository(db_session)
@@ -209,9 +191,7 @@ class TestSyncFailureRepositoryCreate:
         await db_session.flush()
 
         repository = SyncFailureRepository(db_session)
-        failure = await repository.record_failure(
-            repo.id, 123, ValueError("Test error")
-        )
+        failure = await repository.record_failure(repo.id, 123, ValueError("Test error"))
 
         assert failure.id is not None
         assert failure.repository_id == repo.id
@@ -229,15 +209,11 @@ class TestSyncFailureRepositoryCreate:
         repository = SyncFailureRepository(db_session)
 
         # First failure
-        failure1 = await repository.record_failure(
-            repo.id, 123, ValueError("Error 1")
-        )
+        failure1 = await repository.record_failure(repo.id, 123, ValueError("Error 1"))
         assert failure1.retry_count == 0
 
         # Second failure for same PR
-        failure2 = await repository.record_failure(
-            repo.id, 123, ValueError("Error 2")
-        )
+        failure2 = await repository.record_failure(repo.id, 123, ValueError("Error 2"))
 
         # Should be same record with incremented count
         assert failure2.id == failure1.id
@@ -250,9 +226,7 @@ class TestSyncFailureRepositoryCreate:
         await db_session.flush()
 
         repository = SyncFailureRepository(db_session)
-        failure = await repository.record_failure(
-            repo.id, 123, "String error message"
-        )
+        failure = await repository.record_failure(repo.id, 123, "String error message")
 
         assert failure.error_message == "String error message"
         assert failure.error_type == "Unknown"
@@ -334,14 +308,14 @@ class TestSyncFailureRepositoryDelete:
         await db_session.flush()
 
         now = datetime.now(UTC)
-        old_resolved = make_sync_failure(
+        make_sync_failure(
             db_session,
             repo,
             pr_number=1,
             status=SyncFailureStatus.RESOLVED,
             resolved_at=now - timedelta(days=10),
         )
-        recent_resolved = make_sync_failure(
+        make_sync_failure(
             db_session,
             repo,
             pr_number=2,
@@ -356,7 +330,5 @@ class TestSyncFailureRepositoryDelete:
         assert deleted == 1
 
         # Verify recent is still there
-        result = await repository.get_by_repo_and_pr(
-            repo.id, 2, status=SyncFailureStatus.RESOLVED
-        )
+        result = await repository.get_by_repo_and_pr(repo.id, 2, status=SyncFailureStatus.RESOLVED)
         assert result is not None

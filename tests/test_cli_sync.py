@@ -20,9 +20,7 @@ def mock_rate_limit_monitor():
     which requires async support. This fixture mocks the entire RateLimitMonitor
     class so tests don't need to set up the full async call chain.
     """
-    with patch(
-        "github_activity_db.cli.sync.RateLimitMonitor"
-    ) as mock_monitor_class:
+    with patch("github_activity_db.cli.sync.RateLimitMonitor") as mock_monitor_class:
         mock_monitor = MagicMock()
         mock_monitor.initialize = AsyncMock()
         mock_monitor_class.return_value = mock_monitor
@@ -128,9 +126,7 @@ class TestSyncPRFlags:
         mock_client.return_value.__aenter__ = AsyncMock(return_value=mock_client_instance)
         mock_client.return_value.__aexit__ = AsyncMock(return_value=None)
 
-        result = runner.invoke(
-            app, ["sync", "pr", "owner/repo", "123", "--format", "json"]
-        )
+        result = runner.invoke(app, ["sync", "pr", "owner/repo", "123", "--format", "json"])
 
         assert result.exit_code == 0
         # Should be valid JSON
@@ -248,9 +244,7 @@ class TestSyncPRFlags:
         runner.invoke(app, ["sync", "pr", "owner/repo", "123", "--dry-run"])
 
         # Verify dry_run=True was passed to ingest_pr
-        mock_service_instance.ingest_pr.assert_called_once_with(
-            "owner", "repo", 123, dry_run=True
-        )
+        mock_service_instance.ingest_pr.assert_called_once_with("owner", "repo", 123, dry_run=True)
 
 
 class TestSyncPRErrorHandling:
@@ -302,9 +296,7 @@ class TestSyncPRErrorHandling:
     def test_exception_shows_error_and_exits_1(self, mock_get_session, mock_client):
         """Exception during sync shows error and exits with code 1."""
         # Setup mock to raise exception
-        mock_client.return_value.__aenter__ = AsyncMock(
-            side_effect=Exception("Connection failed")
-        )
+        mock_client.return_value.__aenter__ = AsyncMock(side_effect=Exception("Connection failed"))
 
         result = runner.invoke(app, ["sync", "pr", "owner/repo", "123"])
 
@@ -448,9 +440,7 @@ class TestSyncRepoFlags:
         mock_scheduler.shutdown = AsyncMock()
         mock_scheduler_class.return_value = mock_scheduler
 
-        result = runner.invoke(
-            app, ["sync", "repo", "owner/repo", "--format", "json"]
-        )
+        result = runner.invoke(app, ["sync", "repo", "owner/repo", "--format", "json"])
 
         assert result.exit_code == 0
         output = json.loads(result.stdout)
@@ -586,9 +576,7 @@ class TestSyncRepoFlags:
         mock_scheduler.shutdown = AsyncMock()
         mock_scheduler_class.return_value = mock_scheduler
 
-        result = runner.invoke(
-            app, ["sync", "repo", "owner/repo", "--since", "2024-10-01"]
-        )
+        result = runner.invoke(app, ["sync", "repo", "owner/repo", "--since", "2024-10-01"])
 
         assert result.exit_code == 0
         # Verify the since date was shown in the progress output

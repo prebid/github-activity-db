@@ -10,7 +10,7 @@ Tests cover:
 """
 
 from datetime import UTC, datetime
-from unittest.mock import AsyncMock, MagicMock, call, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from githubkit.exception import RequestFailed

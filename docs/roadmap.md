@@ -873,6 +873,352 @@ tests/github/sync/
 
 ---
 
+## Phase 1.16: Code Quality & Technical Debt Reduction ✅ COMPLETE
+
+Systematic elimination of lazy engineering patterns that bypass proper solutions, improving type safety, reducing code duplication, and establishing better patterns for future development.
+
+### Problem Statement
+
+A code quality audit identified patterns that trade proper engineering for quick fixes:
+
+| Pattern | Count | Impact |
+|---------|-------|--------|
+| Duplicate `split("/", 1)` parsing | 7 | DRY violation, inconsistent error handling |
+| `type: ignore` comments | 10 | Bypasses type safety |
+| `noqa` lint suppressions | 4 | Hides code smells |
+| `Any` type aliases | 2 | Weakens type checking |
+| `except: pass` in tests | 3 | Silent test failures |
+
+### Architectural Improvements
+
+#### 1. Centralized Repository String Parsing
+
+**Problem:** `owner, name = repo.split("/", 1)` duplicated 7 times across CLI and service layers.
+
+**Solution:** Add `parse_repo_string()` function to `schemas/repository.py`:
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                     schemas/repository.py                                │
+│  ┌───────────────────────────────────────────────────────────────────┐  │
+│  │  def parse_repo_string(full_name: str) -> tuple[str, str]:        │  │
+│  │      """Parse 'owner/repo' into (owner, name) tuple."""           │  │
+│  │      if "/" not in full_name:                                     │  │
+│  │          raise ValueError(f"Invalid: {full_name}")                │  │
+│  │      return tuple(full_name.split("/", 1))                        │  │
+│  └───────────────────────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────────────────┘
+                                    │
+              ┌─────────────────────┼─────────────────────┐
+              │                     │                     │
+              ▼                     ▼                     ▼
+        cli/sync.py           cli/github.py       multi_repo_orchestrator.py
+```
+
+**Benefits:**
+- Single validation logic with consistent error messages
+- Easier to enhance (e.g., add organization validation)
+- Type-safe return value
+- Exported from `schemas/__init__.py` for easy access
+
+#### 2. CLI Option Factory Pattern
+
+**Problem:** Typer requires mutable defaults, triggering B008 lint rule. Same `noqa: B008` repeated 4 times.
+
+**Solution:** Create `cli/common.py` with reusable option factories:
+
+```python
+# cli/common.py (NEW FILE)
+def output_format_option() -> OutputFormat:  # noqa: B008
+    """Standard output format option."""
+    return typer.Option(OutputFormat.TEXT, "--format", "-f", help="Output format")
+
+# cli/sync.py - usage (no noqa needed at call site)
+def sync_pr(output_format: OutputFormat = output_format_option()):
+```
+
+**Benefits:**
+- Single `noqa` comment in factory, not scattered
+- Consistent option naming and help text across commands
+- Extensible for future common options
+
+#### 3. TYPE_CHECKING for Complex Types
+
+**Problem:** `GitHub = Any` alias used to avoid complex generic typing.
+
+**Solution:** Use `TYPE_CHECKING` block for proper typing:
+
+```python
+from __future__ import annotations
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from githubkit import GitHub
+
+class RateLimitMonitor:
+    def __init__(self, github: GitHub | None = None) -> None:
+        self._github: GitHub | None = github
+```
+
+**Benefits:**
+- Full type checking in IDE and mypy
+- No runtime overhead from complex imports
+- Aligns with project principle: "Type Safety - Strict mypy configuration"
+
+### Files to Modify
+
+| File | Changes |
+|------|---------|
+| `schemas/repository.py` | Add `parse_repo_string()` helper function |
+| `schemas/__init__.py` | Export `parse_repo_string` |
+| `cli/common.py` | **NEW**: Option factory functions |
+| `cli/sync.py` | Use helpers, fix type ignores, use option factories |
+| `cli/github.py` | Use helper, modernize async runner |
+| `github/sync/multi_repo_orchestrator.py` | Use `parse_repo_string()` helper |
+| `github/rate_limit/monitor.py` | Fix GitHub type alias with TYPE_CHECKING |
+| `github/sync/ingestion.py` | Fix type narrowing with assertions |
+| `github/pacing/batch.py` | Fix type narrowing with cast() |
+| `github/client.py` | Fix lazy init typing |
+| 2 test files | Replace `except: pass` with `pytest.raises()` |
+
+### Expected Outcome
+
+| Metric | Before | After |
+|--------|--------|-------|
+| `type: ignore` comments | 10 | 2-3 (unavoidable Pydantic) |
+| `noqa` comments in sync.py | 4 | 0 |
+| Duplicate parsing logic | 7 locations | 1 location |
+| `except: pass` in tests | 3 | 0 |
+
+### Configuration Enforcement
+
+Beyond code changes, this phase adds tooling to prevent regression:
+
+#### Ruff Rules (pyproject.toml)
+
+```toml
+[tool.ruff.lint]
+select = [
+    # ... existing rules ...
+    "ANN001", "ANN201", "ANN204",  # Type annotation enforcement
+    "TC001", "TC002", "TC003",     # TYPE_CHECKING best practices
+    "FA100",                        # Future annotations
+]
+ignore = ["ANN101", "ANN102", "ANN401"]  # self/cls/Any in dict patterns
+
+[tool.ruff.lint.flake8-type-checking]
+strict = true
+runtime-evaluated-base-classes = ["pydantic.BaseModel"]
+```
+
+#### Mypy Enhancement (pyproject.toml)
+
+```toml
+[tool.mypy]
+enable_error_code = ["ignore-without-code"]  # Require codes on type: ignore
+```
+
+#### Pre-commit Quality Gates (.pre-commit-config.yaml)
+
+```yaml
+- repo: local
+  hooks:
+    - id: audit-type-ignores
+      name: Audit type:ignore comments
+      entry: bash -c 'count=$(grep -r "type: ignore" src/ | wc -l); echo "type:ignore: $count (target ≤5)"'
+    - id: audit-noqa
+      name: Audit noqa comments
+      entry: bash -c 'count=$(grep -r "noqa:" src/ | wc -l); echo "noqa: $count (target ≤3)"'
+    - id: prevent-any-aliases
+      name: Prevent Any type aliases
+      entry: bash -c 'grep -rn "^[A-Z].* = Any" src/ && exit 1 || exit 0'
+```
+
+#### Type Safety Policy (CLAUDE.md)
+
+Document `Any` usage guidelines:
+- ✅ Allowed: `dict[str, Any]`, Pydantic validators, ORM factories, log context
+- ❌ Forbidden: Lazy initialization aliases, avoiding generics
+- Policy: `type: ignore` must include error codes, `noqa` should be centralized
+
+### Verification
+
+```bash
+# Verify metrics after implementation
+grep -r "type: ignore" src/ | wc -l  # Target: 2-3
+grep -r "noqa:" src/ | wc -l         # Target: 2 (in common.py only)
+grep -rn "split(\"/\", 1)" src/      # Target: 1 (in repository.py)
+
+# Standard verification
+uv run mypy src/
+uv run ruff check src/ tests/
+uv run pytest
+```
+
+### Phase 1.16.2: CLI Refactoring ✅ COMPLETE
+
+Building on the completed code quality work, this sub-phase focuses on:
+1. ✅ Consolidating CLI async execution patterns into a robust `run_async_command` helper
+2. ✅ Creating reusable repository argument/option factories
+
+#### Results
+
+| Metric | Before | After Phase 1.16.2 |
+|--------|--------|-------------------|
+| CLI async boilerplate | ~90 lines (6 commands) | ~6 lines |
+| Repo argument definitions | 4 duplicated | 3 centralized |
+| Async pattern consistency | 2 patterns | 1 pattern (`asyncio.run()`) |
+| PEP 561 compliance | No | Yes (`py.typed` marker) |
+
+#### Current State (Post Phase 1.16.1)
+
+| Metric | Before | After Phase 1.16.1 |
+|--------|--------|-------------------|
+| `type: ignore` comments | 10 | 2 (Pydantic-only) |
+| `noqa` comments | 4 | 0 |
+| Duplicate `split("/", 1)` | 7 | 1 |
+| `except: pass` in tests | 3 | 0 |
+
+#### CLI Async Execution Consolidation
+
+**Problem:** Two inconsistent async patterns exist:
+
+| File | Pattern | Issues |
+|------|---------|--------|
+| `cli/sync.py` | `asyncio.get_event_loop().run_until_complete()` | Legacy pattern, reuses event loop |
+| `cli/github.py` | `asyncio.run()` via `_run_async()` helper | Modern pattern, isolated event loop |
+
+**Solution:** Unified `run_async_command()` helper in `cli/common.py`:
+
+```python
+def run_async_command(
+    coro: Coroutine[object, object, T],
+    *,
+    error_prefix: str = "Error",
+) -> T:
+    """Execute async code from synchronous CLI command with unified error handling."""
+    try:
+        return asyncio.run(coro)
+    except typer.Exit:
+        raise  # Re-raise deliberate exits
+    except Exception as e:
+        console.print(f"[red]{error_prefix}:[/red] {e}")
+        raise typer.Exit(1) from None
+```
+
+**Impact:** Reduces ~90 lines of boilerplate across 6 CLI commands.
+
+#### Repository Argument Factories
+
+**Problem:** Three repo argument patterns exist with duplicated definitions:
+
+| Pattern | Usage | Definition |
+|---------|-------|------------|
+| Positional `Argument` | `sync pr`, `sync repo` | Required, `owner/name` format |
+| Optional `--repo` Option | `sync retry` | Filtering, `owner/name` format |
+| Comma-separated `--repos` | `sync all` | Override list |
+
+**Solution:** Annotated type aliases in `cli/common.py`:
+
+```python
+RepoArgument = Annotated[
+    str,
+    typer.Argument(help="Repository in owner/name format"),
+]
+
+RepoFilterOption = Annotated[
+    str | None,
+    typer.Option("--repo", "-r", help="Filter by repository"),
+]
+
+ReposListOption = Annotated[
+    str | None,
+    typer.Option("--repos", "-r", help="Comma-separated list of repos"),
+]
+```
+
+Plus validation helpers: `validate_repo()` and `validate_repo_list()`.
+
+#### Files Modified
+
+| File | Changes |
+|------|---------|
+| `cli/common.py` | Add `run_async_command`, repo types, validation helpers |
+| `cli/sync.py` | Use new helpers (4 async blocks, 4 repo definitions) |
+| `cli/github.py` | Remove `_run_async`, use `run_async_command` |
+| `src/github_activity_db/py.typed` | PEP 561 marker file |
+
+### Phase 1.16.3: Test Type Safety Enforcement ✅ COMPLETE
+
+Properly enabled mypy for tests by fixing all 230 type errors. Pre-commit now runs mypy on both `src/` and `tests/` directories.
+
+#### Results
+
+| Metric | Before | After |
+|--------|--------|-------|
+| Mypy errors in tests | 230 | 0 |
+| Pre-commit runs mypy on tests | No | Yes |
+| CI runs mypy on tests | No | Yes |
+| Factory `**overrides` usage | 2 functions | 0 |
+| `type: ignore` in src/ | - | 2 (target: ≤5) ✅ |
+| `noqa` comments in src/ | - | 0 (target: ≤3) ✅ |
+
+#### Fix Strategies Applied
+
+**1. Untyped Dict Unpacking (170+ errors)**
+
+Replaced `Model(**dict)` with Pydantic's `model_validate()`:
+
+```python
+# Before (causes arg-type errors)
+pr = GitHubPullRequest(**GITHUB_PR_RESPONSE)
+
+# After (uses Pydantic's built-in validation)
+pr = GitHubPullRequest.model_validate(GITHUB_PR_RESPONSE)
+```
+
+**2. Factory Dict Merging (16 errors)**
+
+Removed `**overrides` pattern, using explicit parameters instead.
+
+**3. Optional Access (37 errors)**
+
+Added null assertions before attribute access:
+
+```python
+result = await repo.get_by_number(...)
+assert result is not None  # Narrows type
+assert result.state == PRState.MERGED  # Works
+```
+
+#### Pre-commit Configuration
+
+```yaml
+- id: mypy
+  additional_dependencies:
+    - pydantic>=2.0
+    - pydantic-settings>=2.0
+    - sqlalchemy>=2.0
+    - pytest-asyncio>=0.24
+    - typer>=0.9.0
+    - rich>=13.0
+    - loguru>=0.7.0
+    - githubkit>=0.11.0
+  args: [--config-file=pyproject.toml, src, tests]
+  pass_filenames: false
+  files: ^(src|tests)/
+```
+
+#### Quality Gates
+
+Pre-commit now includes automated quality audits:
+
+- **Audit type:ignore comments** - Reports count, target ≤5
+- **Audit noqa comments** - Reports count, target ≤3
+- **Prevent Any type aliases** - Blocks `TypeName = Any` patterns
+
+---
+
 ## Phase 2: Enhanced Features (Future)
 
 ### 2.1 GitHub User Identity (Normalized)

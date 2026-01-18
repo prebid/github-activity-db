@@ -6,7 +6,7 @@ retry logic, and rate limit handling.
 
 import asyncio
 from datetime import UTC, datetime, timedelta
-from unittest.mock import AsyncMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -249,7 +249,7 @@ class TestPriorityOrdering:
 
         # Enqueue multiple NORMAL priority
         for i in range(5):
-            scheduler.enqueue(lambda n=i: make_task(n), RequestPriority.NORMAL)
+            scheduler.enqueue(lambda n=i: make_task(n), RequestPriority.NORMAL)  # type: ignore[misc]
 
         await scheduler.start()
         await scheduler.shutdown(wait=True, timeout=5.0)

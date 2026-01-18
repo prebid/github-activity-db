@@ -141,7 +141,7 @@ class TestKeyboardInterruptRecovery:
         repo_id = None
 
         # Act - Process PRs, interrupt after 2 full batches
-        try:
+        with pytest.raises(KeyboardInterrupt, match="Simulated Ctrl\\+C"):
             async with session_factory() as session:
                 write_lock = asyncio.Lock()
                 commit_manager = CommitManager(session, write_lock, batch_size=5)
@@ -160,14 +160,12 @@ class TestKeyboardInterruptRecovery:
                     if i == 11:
                         raise KeyboardInterrupt("Simulated Ctrl+C")
 
-        except KeyboardInterrupt:
-            pass  # Expected
-
         # Assert - Verify only complete batches persisted
         async with session_factory() as session:
             pr_repo = PullRequestRepository(session)
             # Should have 10 PRs (2 batches of 5)
             # PRs 11-12 should be lost (partial batch)
+            assert repo_id is not None
             existing_count = 0
             for i in range(1, 13):
                 pr = await pr_repo.get_by_number(repo_id, i)
@@ -185,9 +183,10 @@ class TestKeyboardInterruptRecovery:
         repo_id = None
 
         # Act - Process PRs, exception after some batches
-        try:
+        with pytest.raises(ValueError, match="Simulated error"):
             async with session_factory() as session:
-                commit_manager = CommitManager(session, batch_size=3)
+                write_lock = asyncio.Lock()
+                commit_manager = CommitManager(session, write_lock, batch_size=3)
 
                 repo = make_repository(session, owner="test", name="repo")
                 await session.flush()
@@ -202,12 +201,10 @@ class TestKeyboardInterruptRecovery:
                 # Simulate exception
                 raise ValueError("Simulated error")
 
-        except ValueError:
-            pass  # Expected
-
         # Assert - 6 PRs (2 batches of 3) should be saved
         async with session_factory() as session:
             pr_repo = PullRequestRepository(session)
+            assert repo_id is not None
             existing_count = 0
             for i in range(1, 8):
                 pr = await pr_repo.get_by_number(repo_id, i)

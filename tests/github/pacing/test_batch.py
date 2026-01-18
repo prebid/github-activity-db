@@ -69,7 +69,7 @@ class TestBatchExecutorInit:
     def test_init_with_scheduler(self) -> None:
         """Executor initializes with scheduler."""
         scheduler = create_scheduler()
-        executor = BatchExecutor(scheduler)
+        executor: BatchExecutor[int, int] = BatchExecutor(scheduler)
 
         assert executor._scheduler is scheduler
         assert executor._stop_on_error is False
@@ -78,7 +78,7 @@ class TestBatchExecutorInit:
         """Executor accepts options."""
         scheduler = create_scheduler()
         progress = ProgressTracker()
-        executor = BatchExecutor(
+        executor: BatchExecutor[int, int] = BatchExecutor(
             scheduler,
             progress=progress,
             stop_on_error=True,
@@ -99,8 +99,12 @@ class TestBatchExecutorExecute:
         scheduler = create_scheduler()
         await scheduler.start()
 
-        executor = BatchExecutor(scheduler)
-        result = await executor.execute([], lambda x: asyncio.sleep(0))
+        async def noop(x: int) -> int:
+            await asyncio.sleep(0)
+            return x
+
+        executor: BatchExecutor[int, int] = BatchExecutor(scheduler)
+        result = await executor.execute([], noop)
 
         assert result.total_count == 0
         assert result.all_succeeded is True
@@ -116,7 +120,7 @@ class TestBatchExecutorExecute:
         async def double(x: int) -> int:
             return x * 2
 
-        executor = BatchExecutor(scheduler)
+        executor: BatchExecutor[int, int] = BatchExecutor(scheduler)
         result = await executor.execute([1, 2, 3, 4, 5], double)
 
         assert result.success_count == 5
@@ -136,7 +140,7 @@ class TestBatchExecutorExecute:
                 raise ValueError(f"error on {x}")
             return x * 2
 
-        executor = BatchExecutor(scheduler)
+        executor: BatchExecutor[int, int] = BatchExecutor(scheduler)
         result = await executor.execute([1, 2, 3, 4, 5], sometimes_fail)
 
         assert result.success_count == 4
@@ -161,7 +165,9 @@ class TestBatchExecutorExecute:
             return x
 
         # Use max_batch_size=1 to ensure sequential processing
-        executor = BatchExecutor(scheduler, stop_on_error=True, max_batch_size=1)
+        executor: BatchExecutor[int, int] = BatchExecutor(
+            scheduler, stop_on_error=True, max_batch_size=1
+        )
         result = await executor.execute([1, 2, 3, 4, 5], track_and_fail)
 
         # Should have processed 1 and 2, then stopped
@@ -184,7 +190,7 @@ class TestBatchExecutorProgress:
         async def process(x: int) -> int:
             return x
 
-        executor = BatchExecutor(scheduler, progress=progress)
+        executor: BatchExecutor[int, int] = BatchExecutor(scheduler, progress=progress)
         await executor.execute([1, 2, 3, 4, 5], process)
 
         assert progress.state == ProgressState.COMPLETED
@@ -204,7 +210,7 @@ class TestBatchExecutorProgress:
         async def always_fail(x: int) -> int:
             raise ValueError("fail")
 
-        executor = BatchExecutor(scheduler, progress=progress)
+        executor: BatchExecutor[int, int] = BatchExecutor(scheduler, progress=progress)
         await executor.execute([1, 2, 3], always_fail)
 
         assert progress.completed == 0
@@ -226,7 +232,7 @@ class TestBatchExecutorProgress:
         async def process(x: int) -> int:
             return x
 
-        executor = BatchExecutor(scheduler, progress=progress)
+        executor: BatchExecutor[int, int] = BatchExecutor(scheduler, progress=progress)
         await executor.execute([1, 2, 3], process)
 
         # Should have updates for: start, 3 completions, final complete
@@ -252,7 +258,7 @@ class TestBatchExecutorCancel:
             return x
 
         # Use small batch size for more control
-        executor = BatchExecutor(scheduler, max_batch_size=1)
+        executor: BatchExecutor[int, int] = BatchExecutor(scheduler, max_batch_size=1)
 
         # Start execution in background
         task = asyncio.create_task(executor.execute(list(range(10)), slow_process))
@@ -281,7 +287,7 @@ class TestBatchExecutorPriority:
         async def process(x: int) -> int:
             return x
 
-        executor = BatchExecutor(scheduler)
+        executor: BatchExecutor[int, int] = BatchExecutor(scheduler)
         result = await executor.execute(
             [1, 2, 3],
             process,

@@ -179,15 +179,15 @@ class TestUpdateFromHeaders:
 
         # First update with core
         monitor.update_from_headers(HEADERS_HEALTHY)
+        assert monitor.snapshot is not None
         assert RateLimitPool.CORE in monitor.snapshot.pools
 
         # Second update with search
-        search_headers = make_rate_limit_headers(
-            remaining=28, limit=30, resource="search"
-        )
+        search_headers = make_rate_limit_headers(remaining=28, limit=30, resource="search")
         monitor.update_from_headers(search_headers)
 
         # Both should be present
+        assert monitor.snapshot is not None
         assert RateLimitPool.CORE in monitor.snapshot.pools
         assert RateLimitPool.SEARCH in monitor.snapshot.pools
 
@@ -452,6 +452,7 @@ class TestThresholdCallbacks:
 
         # Give async task time to run
         import asyncio
+
         await asyncio.sleep(0.1)
 
         assert callback_fired is True
@@ -581,10 +582,10 @@ class TestStateTransitionsIntegration:
         monitor.on_threshold_crossed(track_status)
 
         # Simulate heavy API usage pattern using predefined headers
-        monitor.update_from_headers(HEADERS_HEALTHY)   # 90% - HEALTHY
-        monitor.update_from_headers(HEADERS_WARNING)   # 30% - WARNING (callback)
+        monitor.update_from_headers(HEADERS_HEALTHY)  # 90% - HEALTHY
+        monitor.update_from_headers(HEADERS_WARNING)  # 30% - WARNING (callback)
         monitor.update_from_headers(HEADERS_CRITICAL)  # 5% - CRITICAL (callback)
-        monitor.update_from_headers(HEADERS_EXHAUSTED) # 0% - EXHAUSTED (callback)
+        monitor.update_from_headers(HEADERS_EXHAUSTED)  # 0% - EXHAUSTED (callback)
 
         # Should have recorded WARNING, CRITICAL, EXHAUSTED transitions
         assert RateLimitStatus.WARNING in statuses
@@ -658,3 +659,330 @@ class TestToDict:
         assert data["token"] is not None
         assert data["token"]["is_authenticated"] is True
         assert data["token"]["rate_limit"] == 5000
+
+
+# =============================================================================
+# HIGH PRIORITY: Error Handling Tests
+# =============================================================================
+
+
+class TestFetchRateLimitsErrors:
+    """Tests for _fetch_rate_limits() error handling."""
+
+    @pytest.mark.asyncio
+    async def test_fetch_rate_limits_api_exception_propagates(self) -> None:
+        """_fetch_rate_limits() propagates API exceptions."""
+        mock_github = MagicMock()
+        mock_github.rest.rate_limit.async_get = AsyncMock(
+            side_effect=Exception("API connection failed")
+        )
+
+        monitor = RateLimitMonitor(github=mock_github)
+
+        with pytest.raises(Exception, match="API connection failed"):
+            await monitor.initialize()
+
+    @pytest.mark.asyncio
+    async def test_fetch_rate_limits_network_error(self) -> None:
+        """_fetch_rate_limits() handles network errors."""
+        mock_github = MagicMock()
+        mock_github.rest.rate_limit.async_get = AsyncMock(
+            side_effect=ConnectionError("Network unreachable")
+        )
+
+        monitor = RateLimitMonitor(github=mock_github)
+
+        with pytest.raises(ConnectionError, match="Network unreachable"):
+            await monitor.initialize()
+
+        # Monitor should not be initialized after failure
+        assert monitor.is_initialized is False
+
+    @pytest.mark.asyncio
+    async def test_fetch_rate_limits_timeout_error(self) -> None:
+        """_fetch_rate_limits() handles timeout errors."""
+        mock_github = MagicMock()
+        mock_github.rest.rate_limit.async_get = AsyncMock(
+            side_effect=TimeoutError("Request timed out")
+        )
+
+        monitor = RateLimitMonitor(github=mock_github)
+
+        with pytest.raises(TimeoutError, match="Request timed out"):
+            await monitor.initialize()
+
+    @pytest.mark.asyncio
+    async def test_fetch_rate_limits_malformed_response(self) -> None:
+        """_fetch_rate_limits() handles malformed API response gracefully."""
+        mock_github = MagicMock()
+        mock_response = MagicMock()
+        # Response without 'resources' key - schema handles gracefully
+        mock_response.parsed_data.model_dump.return_value = {"invalid": "data"}
+        mock_github.rest.rate_limit.async_get = AsyncMock(return_value=mock_response)
+
+        monitor = RateLimitMonitor(github=mock_github)
+
+        # Should not raise - schema handles missing fields with defaults
+        await monitor.initialize()
+
+        # Monitor should be initialized but with empty pools
+        assert monitor.is_initialized is True
+        assert monitor.snapshot is not None
+
+
+class TestCallbackErrorHandling:
+    """Tests for callback exception handling."""
+
+    def test_sync_callback_exception_caught(self) -> None:
+        """Sync callback exceptions are caught, not propagated."""
+        monitor = RateLimitMonitor()
+
+        def failing_callback(limit: PoolRateLimit, status: RateLimitStatus) -> None:
+            raise ValueError("Callback exploded!")
+
+        monitor.on_threshold_crossed(failing_callback)
+
+        # Should not raise - exception should be caught
+        monitor.update_from_headers(HEADERS_WARNING)
+
+        # Monitor should still work
+        assert monitor.get_status() == RateLimitStatus.WARNING
+
+    def test_failing_callback_doesnt_prevent_other_callbacks(self) -> None:
+        """One failing callback doesn't block others."""
+        monitor = RateLimitMonitor()
+        success_called = []
+
+        def failing_callback(limit: PoolRateLimit, status: RateLimitStatus) -> None:
+            raise RuntimeError("First callback fails")
+
+        def success_callback(limit: PoolRateLimit, status: RateLimitStatus) -> None:
+            success_called.append(status)
+
+        # Register failing callback first, then success callback
+        monitor.on_threshold_crossed(failing_callback)
+        monitor.on_threshold_crossed(success_callback)
+
+        # Trigger degradation
+        monitor.update_from_headers(HEADERS_WARNING)
+
+        # Success callback should still have been called
+        assert len(success_called) == 1
+        assert success_called[0] == RateLimitStatus.WARNING
+
+    @pytest.mark.asyncio
+    async def test_async_callback_exception_handled(self) -> None:
+        """Async callback exceptions are handled gracefully."""
+        import asyncio
+
+        monitor = RateLimitMonitor()
+
+        async def failing_async_callback(limit: PoolRateLimit, status: RateLimitStatus) -> None:
+            raise RuntimeError("Async callback exploded!")
+
+        monitor.on_threshold_crossed(failing_async_callback)
+
+        # Should not raise
+        monitor.update_from_headers(HEADERS_WARNING)
+
+        # Give async task time to complete/fail
+        await asyncio.sleep(0.05)
+
+        # Monitor should still work
+        assert monitor.get_status() == RateLimitStatus.WARNING
+
+
+class TestRefreshErrorScenarios:
+    """Tests for refresh() error handling."""
+
+    @pytest.mark.asyncio
+    async def test_refresh_preserves_state_on_error(self) -> None:
+        """Refresh error should preserve existing snapshot state."""
+        mock_github = MagicMock()
+        mock_response = MagicMock()
+        mock_response.parsed_data.model_dump.return_value = RATE_LIMIT_RESPONSE_HEALTHY
+        mock_github.rest.rate_limit.async_get = AsyncMock(return_value=mock_response)
+
+        monitor = RateLimitMonitor(github=mock_github)
+        await monitor.initialize()
+
+        # Capture original state
+        pool_limit = monitor.get_pool_limit(RateLimitPool.CORE)
+        assert pool_limit is not None
+        original_remaining = pool_limit.remaining
+
+        # Now make refresh fail
+        mock_github.rest.rate_limit.async_get = AsyncMock(side_effect=Exception("Refresh failed"))
+
+        with pytest.raises(Exception, match="Refresh failed"):
+            await monitor.refresh()
+
+        # Original snapshot should still be accessible
+        assert monitor.snapshot is not None
+        pool_limit_after = monitor.get_pool_limit(RateLimitPool.CORE)
+        assert pool_limit_after is not None
+        assert pool_limit_after.remaining == original_remaining
+
+    @pytest.mark.asyncio
+    async def test_refresh_without_client_raises(self) -> None:
+        """Refresh without GitHub client raises RuntimeError."""
+        monitor = RateLimitMonitor()
+        await monitor.initialize()  # Initialize without client
+
+        with pytest.raises(RuntimeError, match="Cannot refresh without GitHub client"):
+            await monitor.refresh()
+
+    @pytest.mark.asyncio
+    async def test_multiple_refresh_failures_recoverable(self) -> None:
+        """Monitor recovers after multiple refresh failures."""
+        mock_github = MagicMock()
+        call_count = 0
+
+        async def flaky_get() -> MagicMock:
+            nonlocal call_count
+            call_count += 1
+            if call_count <= 2:
+                raise Exception(f"Failure #{call_count}")
+            mock_resp = MagicMock()
+            mock_resp.parsed_data.model_dump.return_value = RATE_LIMIT_RESPONSE_HEALTHY
+            return mock_resp
+
+        mock_github.rest.rate_limit.async_get = AsyncMock(side_effect=flaky_get)
+
+        monitor = RateLimitMonitor(github=mock_github)
+
+        # First two calls fail
+        with pytest.raises(Exception, match="Failure #1"):
+            await monitor.initialize()
+        with pytest.raises(Exception, match="Failure #2"):
+            await monitor.initialize()
+
+        # Reset initialized flag to allow retry
+        monitor._initialized = False
+
+        # Third call succeeds
+        await monitor.initialize()
+        assert monitor.is_initialized is True
+        assert monitor.snapshot is not None
+
+
+# =============================================================================
+# MEDIUM PRIORITY: Multi-Pool Tracking Tests
+# =============================================================================
+
+
+class TestMultiplePoolTracking:
+    """Tests for tracking multiple rate limit pools."""
+
+    def test_get_status_for_each_pool_type(self) -> None:
+        """get_status works for all RateLimitPool values."""
+        monitor = RateLimitMonitor()
+
+        # Update with core pool
+        monitor.update_from_headers(HEADERS_HEALTHY)
+
+        # Update with search pool (different remaining)
+        monitor.update_from_headers(
+            make_rate_limit_headers(remaining=5, limit=30, used=25, resource="search")
+        )
+
+        # Core should be healthy, search should be critical (5/30 = 16.7%)
+        assert monitor.get_status(RateLimitPool.CORE) == RateLimitStatus.HEALTHY
+        assert monitor.get_status(RateLimitPool.SEARCH) == RateLimitStatus.CRITICAL
+
+    def test_can_make_request_different_pools(self) -> None:
+        """can_make_request respects per-pool remaining counts."""
+        monitor = RateLimitMonitor()
+
+        # Core: healthy
+        monitor.update_from_headers(HEADERS_HEALTHY)
+
+        # Search: exhausted
+        monitor.update_from_headers(
+            make_rate_limit_headers(remaining=0, limit=30, used=30, resource="search")
+        )
+
+        assert monitor.can_make_request(RateLimitPool.CORE) is True
+        assert monitor.can_make_request(RateLimitPool.SEARCH) is False
+
+    def test_requests_available_per_pool(self) -> None:
+        """requests_available returns correct counts per pool."""
+        monitor = RateLimitMonitor()
+
+        monitor.update_from_headers(
+            make_rate_limit_headers(remaining=4500, limit=5000, resource="core")
+        )
+        monitor.update_from_headers(
+            make_rate_limit_headers(remaining=20, limit=30, resource="search")
+        )
+
+        # Default buffer is 100, so:
+        # Core: 4500 - 100 = 4400
+        # Search: 20 - 100 = -80 -> 0 (clamped)
+        assert monitor.requests_available(RateLimitPool.CORE) == 4400
+        assert monitor.requests_available(RateLimitPool.SEARCH) == 0
+
+    def test_time_until_reset_varies_by_pool(self) -> None:
+        """Different pools have different reset times."""
+        monitor = RateLimitMonitor()
+
+        # Core: reset in 1 hour
+        monitor.update_from_headers(
+            make_rate_limit_headers(
+                remaining=4500, limit=5000, reset_in_seconds=3600, resource="core"
+            )
+        )
+        # Search: reset in 1 minute
+        monitor.update_from_headers(
+            make_rate_limit_headers(remaining=20, limit=30, reset_in_seconds=60, resource="search")
+        )
+
+        core_reset = monitor.time_until_reset(RateLimitPool.CORE)
+        search_reset = monitor.time_until_reset(RateLimitPool.SEARCH)
+
+        # Allow 5 second tolerance for test execution time
+        assert 3590 <= core_reset <= 3605
+        assert 55 <= search_reset <= 65
+
+    def test_status_transitions_tracked_per_pool(self) -> None:
+        """Status transitions tracked independently per pool."""
+        monitor = RateLimitMonitor()
+        callbacks_received: list[tuple[str, RateLimitStatus]] = []
+
+        def track_callback(limit: PoolRateLimit, status: RateLimitStatus) -> None:
+            # Determine pool from limit value
+            pool_name = "search" if limit.limit == 30 else "core"
+            callbacks_received.append((pool_name, status))
+
+        monitor.on_threshold_crossed(track_callback)
+
+        # Degrade core to WARNING
+        monitor.update_from_headers(HEADERS_WARNING)
+        assert len(callbacks_received) == 1
+        assert callbacks_received[0] == ("core", RateLimitStatus.WARNING)
+
+        # Degrade search to CRITICAL (independent)
+        monitor.update_from_headers(
+            make_rate_limit_headers(remaining=2, limit=30, used=28, resource="search")
+        )
+        assert len(callbacks_received) == 2
+        assert callbacks_received[1] == ("search", RateLimitStatus.CRITICAL)
+
+    def test_to_dict_includes_all_pools(self) -> None:
+        """to_dict exports data for all tracked pools."""
+        monitor = RateLimitMonitor()
+
+        monitor.update_from_headers(HEADERS_HEALTHY)  # core
+        monitor.update_from_headers(
+            make_rate_limit_headers(remaining=25, limit=30, resource="search")
+        )
+        monitor.update_from_headers(
+            make_rate_limit_headers(remaining=4500, limit=5000, resource="graphql")
+        )
+
+        data = monitor.to_dict()
+
+        assert "core" in data["pools"]
+        assert "search" in data["pools"]
+        assert "graphql" in data["pools"]
+        assert len(data["pools"]) == 3

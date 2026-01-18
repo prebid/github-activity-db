@@ -1,6 +1,5 @@
 """Tests for FailureRetryService."""
 
-from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -73,6 +72,7 @@ class TestFailureRetryServiceBasic:
         # Verify failure was marked resolved
         failure_repo = SyncFailureRepository(db_session)
         updated_failure = await failure_repo.get_by_id(failure.id)
+        assert updated_failure is not None
         assert updated_failure.status == SyncFailureStatus.RESOLVED
 
     async def test_retry_single_failure(self, db_session, mock_ingestion_service):
@@ -104,6 +104,7 @@ class TestFailureRetryServiceBasic:
         # Verify failure was updated with incremented retry count
         failure_repo = SyncFailureRepository(db_session)
         updated_failure = await failure_repo.get_by_id(failure.id)
+        assert updated_failure is not None
         assert updated_failure.status == SyncFailureStatus.PENDING
         assert updated_failure.retry_count == 1
 
@@ -111,17 +112,13 @@ class TestFailureRetryServiceBasic:
 class TestFailureRetryServiceMaxRetries:
     """Tests for max retry limit handling."""
 
-    async def test_marks_permanent_after_max_retries(
-        self, db_session, mock_ingestion_service
-    ):
+    async def test_marks_permanent_after_max_retries(self, db_session, mock_ingestion_service):
         """Failure is marked permanent after max retries exceeded."""
         repo = make_repository(db_session, owner="prebid", name="prebid-server")
         await db_session.flush()
 
         # Create failure at max retry count (2, so next attempt is 3rd = max)
-        failure = make_sync_failure(
-            db_session, repo, pr_number=123, retry_count=2
-        )
+        failure = make_sync_failure(db_session, repo, pr_number=123, retry_count=2)
         await db_session.flush()
 
         # Mock failed ingestion
@@ -143,6 +140,7 @@ class TestFailureRetryServiceMaxRetries:
         # Verify failure was marked permanent
         failure_repo = SyncFailureRepository(db_session)
         updated_failure = await failure_repo.get_by_id(failure.id)
+        assert updated_failure is not None
         assert updated_failure.status == SyncFailureStatus.PERMANENT
 
 
@@ -209,9 +207,7 @@ class TestFailureRetryServiceFiltering:
 class TestFailureRetryServiceDryRun:
     """Tests for dry-run mode."""
 
-    async def test_dry_run_does_not_modify_database(
-        self, db_session, mock_ingestion_service
-    ):
+    async def test_dry_run_does_not_modify_database(self, db_session, mock_ingestion_service):
         """Dry run doesn't modify failure records."""
         repo = make_repository(db_session, owner="prebid", name="prebid-server")
         await db_session.flush()
@@ -239,6 +235,7 @@ class TestFailureRetryServiceDryRun:
         # Verify failure was NOT marked resolved
         failure_repo = SyncFailureRepository(db_session)
         updated_failure = await failure_repo.get_by_id(failure.id)
+        assert updated_failure is not None
         assert updated_failure.status == SyncFailureStatus.PENDING
 
         # Verify ingestion was called with dry_run=True

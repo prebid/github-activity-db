@@ -31,6 +31,7 @@ github-activity-db/
 │   ├── config.py               # Settings (pydantic-settings)
 │   ├── cli/                    # CLI commands
 │   │   ├── app.py              # Main typer app
+│   │   ├── common.py           # Shared helpers: run_async_command, option factories
 │   │   ├── github.py           # GitHub commands (rate-limit)
 │   │   ├── sync.py             # Sync commands (sync pr)
 │   │   ├── search.py           # Search commands [TODO]
@@ -63,7 +64,7 @@ github-activity-db/
 │   │   ├── base.py             # SchemaBase with factory pattern
 │   │   ├── enums.py            # ParticipantActionType enum
 │   │   ├── nested.py           # CommitBreakdown, ParticipantEntry
-│   │   ├── repository.py       # RepositoryCreate, RepositoryRead
+│   │   ├── repository.py       # RepositoryCreate, RepositoryRead, parse_repo_string()
 │   │   ├── pr.py               # PRCreate, PRSync, PRMerge, PRRead
 │   │   ├── tag.py              # UserTagCreate, UserTagRead
 │   │   └── github_api.py       # GitHub API response schemas

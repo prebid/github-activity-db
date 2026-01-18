@@ -22,7 +22,7 @@ from .nested import (
     participants_to_dict,
 )
 from .pr import PRCreate, PRMerge, PRRead, PRSync
-from .repository import RepositoryCreate, RepositoryRead
+from .repository import RepositoryCreate, RepositoryRead, parse_repo_string
 from .tag import UserTagCreate, UserTagRead
 
 __all__ = [
@@ -48,6 +48,7 @@ __all__ = [
     # Repository
     "RepositoryCreate",
     "RepositoryRead",
+    "parse_repo_string",
     # Base
     "SchemaBase",
     # Tags

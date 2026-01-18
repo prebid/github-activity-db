@@ -1,13 +1,12 @@
 """GitHub API verification commands."""
 
-import asyncio
 from datetime import datetime
 
 import typer
-from rich.console import Console
 from rich.progress import BarColumn, Progress, TextColumn
 from rich.table import Table
 
+from github_activity_db.cli.common import console, run_async_command
 from github_activity_db.config import get_settings
 from github_activity_db.github import (
     GitHubAuthenticationError,
@@ -18,14 +17,9 @@ from github_activity_db.github import (
     RateLimitPool,
     RateLimitStatus,
 )
+from github_activity_db.schemas import parse_repo_string
 
 app = typer.Typer(help="GitHub API commands")
-console = Console()
-
-
-def _run_async[T](coro: T) -> T:
-    """Run an async function in the event loop."""
-    return asyncio.get_event_loop().run_until_complete(coro)  # type: ignore[arg-type]
 
 
 @app.command("test")
@@ -70,20 +64,18 @@ def test_connection(
                 else:
                     reset_str = str(reset_time)
                 console.print(
-                    f"  Rate limit: {rate['remaining']}/{rate['limit']} "
-                    f"(resets at {reset_str})"
+                    f"  Rate limit: {rate['remaining']}/{rate['limit']} " f"(resets at {reset_str})"
                 )
 
                 if isinstance(rate["remaining"], int) and rate["remaining"] < 10:
                     console.print("[yellow]Warning:[/yellow] Low rate limit remaining")
 
                 # 2. Parse repo
-                if "/" not in repo:
-                    console.print(
-                        "[red]Error:[/red] Invalid repo format. Use owner/name"
-                    )
-                    raise typer.Exit(1)
-                owner, name = repo.split("/", 1)
+                try:
+                    owner, name = parse_repo_string(repo)
+                except ValueError:
+                    console.print("[red]Error:[/red] Invalid repo format. Use owner/name")
+                    raise typer.Exit(1) from None
 
                 # 3. List open PRs
                 console.print(f"\n[bold]Fetching PRs from {repo}...[/bold]")
@@ -99,9 +91,7 @@ def test_connection(
                     table.add_column("Updated")
 
                     for pr in prs[:5]:
-                        title = (
-                            pr.title[:47] + "..." if len(pr.title) > 50 else pr.title
-                        )
+                        title = pr.title[:47] + "..." if len(pr.title) > 50 else pr.title
                         table.add_row(
                             str(pr.number),
                             title,
@@ -124,8 +114,7 @@ def test_connection(
                     console.print(f"  Title: {pr.title}")
                     console.print(f"  State: {pr.state} (merged: {pr.merged})")
                     console.print(
-                        f"  Stats: +{pr.additions}/-{pr.deletions} "
-                        f"in {pr.changed_files} files"
+                        f"  Stats: +{pr.additions}/-{pr.deletions} " f"in {pr.changed_files} files"
                     )
                     console.print(f"  Commits: {len(commits)}")
                     console.print(f"  Reviews: {len(reviews)}")
@@ -153,7 +142,7 @@ def test_connection(
             console.print(f"[red]Error:[/red] {e}")
             raise typer.Exit(1) from None
 
-    _run_async(_test())  # type: ignore[unused-coroutine]
+    run_async_command(_test())
 
 
 def _get_status_style(status: RateLimitStatus) -> str:
@@ -225,12 +214,11 @@ def show_rate_limit(
                     console.print("[green]✓[/green] Authenticated with PAT (5,000 requests/hour)")
                 else:
                     console.print(
-                        "[yellow]⚠[/yellow] Unauthenticated or limited token "
-                        "(60 requests/hour)"
+                        "[yellow]⚠[/yellow] Unauthenticated or limited token " "(60 requests/hour)"
                     )
 
                 # Determine which pools to show
-                pools_to_show = (
+                pools_to_show: list[RateLimitPool] = (
                     list(RateLimitPool) if all_pools else [RateLimitPool.CORE]
                 )
 
@@ -324,4 +312,4 @@ def show_rate_limit(
             console.print(f"[red]Error:[/red] {e}")
             raise typer.Exit(1) from None
 
-    _run_async(_check())  # type: ignore[unused-coroutine]
+    run_async_command(_check())

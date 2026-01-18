@@ -308,9 +308,7 @@ HEADERS_PARTIAL = {
 }
 
 # Headers with zero limit (shouldn't happen but handle gracefully)
-HEADERS_ZERO_LIMIT = make_rate_limit_headers(
-    remaining=0, limit=0, used=0, reset_in_seconds=3600
-)
+HEADERS_ZERO_LIMIT = make_rate_limit_headers(remaining=0, limit=0, used=0, reset_in_seconds=3600)
 
 # Response with only core pool (minimal response)
 RATE_LIMIT_RESPONSE_MINIMAL = {
@@ -329,3 +327,79 @@ RATE_LIMIT_RESPONSE_MINIMAL = {
         "reset": future_reset_timestamp(3600),
     },
 }
+
+
+# -----------------------------------------------------------------------------
+# Boundary Testing Helpers
+# -----------------------------------------------------------------------------
+
+
+def make_boundary_headers(remaining_pct: float, limit: int = 5000) -> dict[str, str]:
+    """Create headers at exact percentage boundary.
+
+    Args:
+        remaining_pct: Percentage remaining (0-100)
+        limit: Maximum requests allowed
+
+    Returns:
+        Dict of header name -> value
+    """
+    remaining = int(limit * remaining_pct / 100)
+    used = limit - remaining
+    return make_rate_limit_headers(remaining=remaining, limit=limit, used=used)
+
+
+# Boundary condition headers
+HEADERS_BOUNDARY_50_PCT = make_boundary_headers(50.0)  # Exactly at healthy threshold
+HEADERS_BOUNDARY_49_PCT = make_boundary_headers(49.98)  # Just below healthy
+HEADERS_BOUNDARY_20_PCT = make_boundary_headers(20.0)  # Exactly at warning threshold
+HEADERS_BOUNDARY_19_PCT = make_boundary_headers(19.98)  # Just below warning
+HEADERS_BOUNDARY_5_PCT = make_boundary_headers(5.0)  # Exactly at critical threshold
+HEADERS_BOUNDARY_1_PCT = make_boundary_headers(0.02)  # Just above exhausted (1 remaining)
+HEADERS_BOUNDARY_100_PCT = make_boundary_headers(100.0)  # Full quota
+
+# Edge case headers for error handling tests
+HEADERS_EMPTY: dict[str, str] = {}
+HEADERS_NON_NUMERIC = {"x-ratelimit-limit": "not_a_number", "x-ratelimit-remaining": "abc"}
+HEADERS_WHITESPACE = {
+    "x-ratelimit-limit": " 5000 ",
+    "x-ratelimit-remaining": " 4500 ",
+    "x-ratelimit-used": " 500 ",
+}
+HEADERS_VERY_LARGE = make_rate_limit_headers(remaining=999999999999, limit=999999999999)
+HEADERS_FLOAT_VALUES = {"x-ratelimit-limit": "5000.5", "x-ratelimit-remaining": "4500.7"}
+
+
+# -----------------------------------------------------------------------------
+# Multi-Pool Response (all pools)
+# -----------------------------------------------------------------------------
+
+
+def make_all_pools_response() -> dict:
+    """Create response with all rate limit pools."""
+    from github_activity_db.github.rate_limit.schemas import RateLimitPool
+
+    pools = {}
+    for pool in RateLimitPool:
+        # Different limits per pool type
+        if pool == RateLimitPool.SEARCH:
+            limit, remaining = 30, 28
+        elif pool == RateLimitPool.CODE_SEARCH:
+            limit, remaining = 10, 8
+        else:
+            limit, remaining = 5000, 4500
+
+        pools[pool.value] = {
+            "limit": limit,
+            "remaining": remaining,
+            "used": limit - remaining,
+            "reset": future_reset_timestamp(3600),
+        }
+
+    return {
+        "resources": pools,
+        "rate": pools.get("core", pools[next(iter(pools.keys()))]),
+    }
+
+
+RATE_LIMIT_RESPONSE_ALL_POOLS = make_all_pools_response()

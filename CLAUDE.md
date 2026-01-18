@@ -18,15 +18,17 @@ uv run ghactivity sync repo owner/repo --since 2024-10-01  # Bulk sync
 uv run ghactivity sync all --since 2024-10-01     # Multi-repo sync
 
 # Development
-uv run mypy src/           # Type check
+uv run mypy src/ tests/    # Type check
 uv run ruff check src/     # Lint
-uv run pytest              # Test (533 tests)
+uv run pytest              # Test (573+ tests)
+uv run pre-commit run --all-files  # All quality checks
 ```
 
 ## Documentation
 
 | Document | Description |
 |----------|-------------|
+| [Contributing](CONTRIBUTING.md) | Quality standards, code style, PR process |
 | [Architecture](docs/architecture.md) | Project structure, tech stack, module overview |
 | [Database](docs/database.md) | Schema, tables, migrations, usage examples |
 | [Data Model](docs/data-model.md) | PR fields, sync behavior, tagging systems |
@@ -99,3 +101,45 @@ Async GitHub API client with integrated pacing and rate limit tracking. Every AP
 | `ENVIRONMENT` | No | `development` | App environment |
 | `SYNC__MERGE_GRACE_PERIOD_DAYS` | No | `14` | Days after merge before PR is frozen |
 | `SYNC__COMMIT_BATCH_SIZE` | No | `25` | PRs to commit per batch (limits data loss on failure) |
+
+## Type Safety Policy
+
+This project enforces strict type safety through mypy strict mode and custom quality gates.
+
+### Required Type Annotations
+
+- All public functions must have type annotations
+- All class attributes must have type annotations
+- Use `from __future__ import annotations` for forward references
+
+### `Any` Usage Guidelines
+
+| Use Case | Allowed | Alternative |
+|----------|---------|-------------|
+| JSON/dict serialization | `dict[str, Any]` | N/A |
+| Pydantic validators | `v: Any` | N/A |
+| ORM factories | `from_orm(obj: Any)` | N/A |
+| Log context | `**context: Any` | N/A |
+| **Lazy initialization** | Use `T \| None` with TYPE_CHECKING |
+| **Avoiding generics** | Use TYPE_CHECKING block |
+| **Third-party without types** | Document reason, add stub or TYPE_CHECKING |
+
+### `type: ignore` Policy
+
+1. **Must include error code:** `# type: ignore[arg-type]`
+2. **Must have justification comment** if not obvious
+3. **Prefer fixing** the underlying type issue
+4. **Tracked:** Pre-commit reports count (target: <=5)
+
+### `noqa` Policy
+
+1. **Centralize** in shared utility functions (e.g., `cli/common.py`)
+2. **Document** why the rule doesn't apply
+3. **Tracked:** Pre-commit reports count (target: <=3)
+
+### Quality Gates
+
+Pre-commit hooks track:
+- `type: ignore` count in src/ (target: <=5)
+- `noqa` count in src/ (target: <=3)
+- Blocks new `SomeName = Any` type aliases (use TYPE_CHECKING instead)

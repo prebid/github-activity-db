@@ -239,10 +239,7 @@ class SyncFailure(Base):
     # Unique constraint: only one pending failure per repo+PR
     # This allows multiple resolved/permanent records for history
     __table_args__ = (
-        UniqueConstraint(
-            "repository_id", "pr_number", "status",
-            name="uq_repo_pr_pending_status"
-        ),
+        UniqueConstraint("repository_id", "pr_number", "status", name="uq_repo_pr_pending_status"),
     )
 
     def __repr__(self) -> str:

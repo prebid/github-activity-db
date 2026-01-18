@@ -3,11 +3,20 @@
 import asyncio
 import json
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, Literal, cast
 
 import typer
-from rich.console import Console
 
+from github_activity_db.cli.common import (
+    OutputFormatOption,
+    RepoArgument,
+    RepoFilterOption,
+    ReposListOption,
+    console,
+    run_async_command,
+    validate_repo,
+    validate_repo_list,
+)
 from github_activity_db.config import get_settings
 from github_activity_db.db import (
     PullRequestRepository,
@@ -33,7 +42,6 @@ from github_activity_db.github.sync import (
 )
 
 app = typer.Typer(help="Sync PR data from GitHub")
-console = Console()
 
 
 def _parse_date(date_str: str | None) -> datetime | None:
@@ -74,17 +82,13 @@ def _parse_date(date_str: str | None) -> datetime | None:
             continue
 
     raise typer.BadParameter(
-        f"Invalid date format: {date_str}. "
-        "Use YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS format."
+        f"Invalid date format: {date_str}. " "Use YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS format."
     )
 
 
 @app.command("pr")
 def sync_single_pr(
-    repo: str = typer.Argument(
-        ...,
-        help="Repository in owner/name format (e.g., prebid/prebid-server)",
-    ),
+    repo: RepoArgument,
     pr_number: int = typer.Argument(
         ...,
         help="PR number to sync",
@@ -94,12 +98,7 @@ def sync_single_pr(
         "--dry-run",
         help="Don't write to database",
     ),
-    output_format: OutputFormat = typer.Option(  # noqa: B008
-        OutputFormat.TEXT,
-        "--format",
-        "-f",
-        help="Output format",
-    ),
+    output_format: OutputFormatOption = OutputFormat.TEXT,
 ) -> None:
     """Sync a single PR from GitHub to the database.
 
@@ -109,12 +108,7 @@ def sync_single_pr(
         ghactivity sync pr prebid/prebid-server 4663 --format json
         ghactivity -v sync pr prebid/prebid-server 4663  # Debug logging
     """
-    # Validate repo format
-    if "/" not in repo:
-        console.print("[red]Error:[/red] Repository must be in owner/name format")
-        raise typer.Exit(1)
-
-    owner, name = repo.split("/", 1)
+    owner, name = validate_repo(repo)
 
     async def _sync() -> dict[str, Any]:
         async with GitHubClient() as base_client:
@@ -124,9 +118,7 @@ def sync_single_pr(
             pacer = RequestPacer(monitor)
 
             # Create paced client
-            async with GitHubClient(
-                rate_monitor=monitor, pacer=pacer
-            ) as client:
+            async with GitHubClient(rate_monitor=monitor, pacer=pacer) as client:
                 async with get_session() as session:
                     service = PRIngestionService(
                         client=client,
@@ -134,17 +126,11 @@ def sync_single_pr(
                         pr_repository=PullRequestRepository(session),
                     )
 
-                    result = await service.ingest_pr(
-                        owner, name, pr_number, dry_run=dry_run
-                    )
+                    result = await service.ingest_pr(owner, name, pr_number, dry_run=dry_run)
 
                     return result.to_dict()
 
-    try:
-        result: dict[str, Any] = asyncio.get_event_loop().run_until_complete(_sync())
-    except Exception as e:
-        console.print(f"[red]Error:[/red] {e}")
-        raise typer.Exit(1) from None
+    result = run_async_command(_sync())
 
     # JSON output
     if output_format == OutputFormat.JSON:
@@ -170,10 +156,7 @@ def sync_single_pr(
 
 @app.command("repo")
 def sync_repository(
-    repo: str = typer.Argument(
-        ...,
-        help="Repository in owner/name format (e.g., prebid/prebid-server)",
-    ),
+    repo: RepoArgument,
     since: str | None = typer.Option(
         None,
         "--since",
@@ -206,12 +189,7 @@ def sync_repository(
         "--auto-retry",
         help="Retry any pending failures for this repo before syncing new PRs",
     ),
-    output_format: OutputFormat = typer.Option(  # noqa: B008
-        OutputFormat.TEXT,
-        "--format",
-        "-f",
-        help="Output format",
-    ),
+    output_format: OutputFormatOption = OutputFormat.TEXT,
 ) -> None:
     """Sync all PRs from a repository to the database.
 
@@ -227,12 +205,7 @@ def sync_repository(
         ghactivity sync repo prebid/prebid-server --max 10 --dry-run
         ghactivity sync repo prebid/prebid-server --auto-retry --since 2024-10-01
     """
-    # Validate repo format
-    if "/" not in repo:
-        console.print("[red]Error:[/red] Repository must be in owner/name format")
-        raise typer.Exit(1)
-
-    owner, name = repo.split("/", 1)
+    owner, name = validate_repo(repo)
 
     # Parse dates
     try:
@@ -251,11 +224,11 @@ def sync_repository(
         )
         raise typer.Exit(1)
 
-    # Create config
+    # Create config - state is validated above so cast is safe
     config = BulkIngestionConfig(
         since=since_dt,
         until=until_dt,
-        state=state,  # type: ignore[arg-type]
+        state=cast("Literal['open', 'merged', 'all']", state),
         max_prs=max_prs,
         dry_run=dry_run,
     )
@@ -270,9 +243,7 @@ def sync_repository(
             scheduler = RequestScheduler(pacer, max_concurrent=config.concurrency)
 
             # Create paced client with integrated rate limiting
-            async with GitHubClient(
-                rate_monitor=monitor, pacer=pacer
-            ) as client:
+            async with GitHubClient(rate_monitor=monitor, pacer=pacer) as client:
                 # Use auto_commit=False for manual commit control via CommitManager
                 async with get_session(auto_commit=False) as session:
                     # Create progress tracker
@@ -290,16 +261,12 @@ def sync_repository(
 
                     repo_repository = RepositoryRepository(session, write_lock=write_lock)
                     pr_repository = PullRequestRepository(session, write_lock=write_lock)
-                    failure_repository = SyncFailureRepository(
-                        session, write_lock=write_lock
-                    )
+                    failure_repository = SyncFailureRepository(session, write_lock=write_lock)
 
                     # Auto-retry pending failures before main sync
                     retry_dict: dict[str, Any] | None = None
                     if auto_retry:
-                        repository = await repo_repository.get_by_owner_and_name(
-                            owner, name
-                        )
+                        repository = await repo_repository.get_by_owner_and_name(owner, name)
                         if repository:
                             retry_service = FailureRetryService(
                                 ingestion_service=PRIngestionService(
@@ -351,11 +318,7 @@ def sync_repository(
             console.print("[dim]  Mode: dry-run (no database writes)[/dim]")
         console.print()
 
-    try:
-        result: dict[str, Any] = asyncio.get_event_loop().run_until_complete(_sync())
-    except Exception as e:
-        console.print(f"[red]Error:[/red] {e}")
-        raise typer.Exit(1) from None
+    result = run_async_command(_sync())
 
     # JSON output
     if output_format == OutputFormat.JSON:
@@ -381,12 +344,8 @@ def sync_repository(
     # Summary table
     console.print(f"  [green]Created:[/green]           {result.get('created', 0)}")
     console.print(f"  [blue]Updated:[/blue]            {result.get('updated', 0)}")
-    console.print(
-        f"  [dim]Skipped (frozen):[/dim]   {result.get('skipped_frozen', 0)}"
-    )
-    console.print(
-        f"  [dim]Skipped (unchanged):[/dim] {result.get('skipped_unchanged', 0)}"
-    )
+    console.print(f"  [dim]Skipped (frozen):[/dim]   {result.get('skipped_frozen', 0)}")
+    console.print(f"  [dim]Skipped (unchanged):[/dim] {result.get('skipped_unchanged', 0)}")
 
     failed = result.get("failed", 0)
     if failed > 0:
@@ -409,13 +368,7 @@ def sync_repository(
 
 @app.command("all")
 def sync_all_repositories(
-    repos: str | None = typer.Option(
-        None,
-        "--repos",
-        "-r",
-        help="Comma-separated list of repos to sync (owner/repo). "
-        "If not specified, syncs all tracked Prebid repositories.",
-    ),
+    repos: ReposListOption = None,
     since: str | None = typer.Option(
         None,
         "--since",
@@ -448,12 +401,7 @@ def sync_all_repositories(
         "--auto-retry",
         help="Retry any pending failures across all repos before syncing new PRs",
     ),
-    output_format: OutputFormat = typer.Option(  # noqa: B008
-        OutputFormat.TEXT,
-        "--format",
-        "-f",
-        help="Output format",
-    ),
+    output_format: OutputFormatOption = OutputFormat.TEXT,
 ) -> None:
     """Sync all tracked repositories to the database.
 
@@ -465,17 +413,8 @@ def sync_all_repositories(
         ghactivity sync all --max-per-repo 10 --dry-run
         ghactivity sync all --auto-retry --since 2024-10-01
     """
-    # Parse repos list
-    repo_list: list[str] | None = None
-    if repos:
-        repo_list = [r.strip() for r in repos.split(",") if r.strip()]
-        # Validate repo format
-        for r in repo_list:
-            if "/" not in r:
-                console.print(
-                    f"[red]Error:[/red] Repository '{r}' must be in owner/name format"
-                )
-                raise typer.Exit(1)
+    # Validate repos list
+    repo_list = validate_repo_list(repos)
 
     # Parse dates
     try:
@@ -494,11 +433,11 @@ def sync_all_repositories(
         )
         raise typer.Exit(1)
 
-    # Create config
+    # Create config - state is validated above so cast is safe
     config = BulkIngestionConfig(
         since=since_dt,
         until=until_dt,
-        state=state,  # type: ignore[arg-type]
+        state=cast("Literal['open', 'merged', 'all']", state),
         max_prs=max_per_repo,
         dry_run=dry_run,
     )
@@ -516,9 +455,7 @@ def sync_all_repositories(
             scheduler = RequestScheduler(pacer, max_concurrent=config.concurrency)
 
             # Create paced client with integrated rate limiting
-            async with GitHubClient(
-                rate_monitor=monitor, pacer=pacer
-            ) as client:
+            async with GitHubClient(rate_monitor=monitor, pacer=pacer) as client:
                 # Use auto_commit=False for manual commit control via CommitManager
                 async with get_session(auto_commit=False) as session:
                     # Shared lock to serialize database writes across concurrent operations
@@ -533,9 +470,7 @@ def sync_all_repositories(
 
                     repo_repository = RepositoryRepository(session, write_lock=write_lock)
                     pr_repository = PullRequestRepository(session, write_lock=write_lock)
-                    failure_repository = SyncFailureRepository(
-                        session, write_lock=write_lock
-                    )
+                    failure_repository = SyncFailureRepository(session, write_lock=write_lock)
 
                     # Auto-retry pending failures before main sync
                     retry_dict: dict[str, Any] | None = None
@@ -593,11 +528,7 @@ def sync_all_repositories(
             console.print(f"[dim]  - {r}[/dim]")
         console.print()
 
-    try:
-        result: dict[str, Any] = asyncio.get_event_loop().run_until_complete(_sync())
-    except Exception as e:
-        console.print(f"[red]Error:[/red] {e}")
-        raise typer.Exit(1) from None
+    result = run_async_command(_sync())
 
     # JSON output
     if output_format == OutputFormat.JSON:
@@ -647,9 +578,7 @@ def sync_all_repositories(
         duration = repo_data.get("duration_seconds", 0)
 
         status = "[green]OK[/green]" if failed == 0 else f"[red]{failed} failed[/red]"
-        console.print(
-            f"  {repo_name}: +{created} ~{updated} ({status}) [{duration:.1f}s]"
-        )
+        console.print(f"  {repo_name}: +{created} ~{updated} ({status}) [{duration:.1f}s]")
 
     # Show failed PRs if any (for retry guidance)
     total_failed = summary.get("total_failed", 0)
@@ -667,12 +596,7 @@ def sync_all_repositories(
 
 @app.command("retry")
 def sync_retry(
-    repo: str | None = typer.Option(
-        None,
-        "--repo",
-        "-r",
-        help="Filter by repository (owner/name format)",
-    ),
+    repo: RepoFilterOption = None,
     max_items: int | None = typer.Option(
         None,
         "--max",
@@ -684,12 +608,7 @@ def sync_retry(
         "--dry-run",
         help="Preview what would be retried without making changes",
     ),
-    output_format: OutputFormat = typer.Option(  # noqa: B008
-        OutputFormat.TEXT,
-        "--format",
-        "-f",
-        help="Output format",
-    ),
+    output_format: OutputFormatOption = OutputFormat.TEXT,
 ) -> None:
     """Retry previously failed PR syncs.
 
@@ -710,11 +629,7 @@ def sync_retry(
         if repo is None:
             return None
 
-        if "/" not in repo:
-            console.print("[red]Error:[/red] Repository must be in owner/name format")
-            raise typer.Exit(1)
-
-        owner, name = repo.split("/", 1)
+        owner, name = validate_repo(repo)
 
         async with get_session() as session:
             repo_repository = RepositoryRepository(session)
@@ -745,16 +660,10 @@ def sync_retry(
 
                 return result.to_dict()
 
-    try:
-        if repo is not None:
-            repository_id = asyncio.get_event_loop().run_until_complete(_get_repo_id())
+    if repo is not None:
+        repository_id = run_async_command(_get_repo_id())
 
-        result: dict[str, Any] = asyncio.get_event_loop().run_until_complete(_retry())
-    except typer.Exit:
-        raise
-    except Exception as e:
-        console.print(f"[red]Error:[/red] {e}")
-        raise typer.Exit(1) from None
+    result = run_async_command(_retry())
 
     # JSON output
     if output_format == OutputFormat.JSON:

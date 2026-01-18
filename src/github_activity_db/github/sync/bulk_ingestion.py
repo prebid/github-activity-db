@@ -126,9 +126,7 @@ class BulkIngestionResult:
             "skipped_unchanged": self.skipped_unchanged,
             "skipped_abandoned": self.skipped_abandoned,
             "failed": self.failed,
-            "failed_prs": [
-                {"pr_number": num, "error": msg} for num, msg in self.failed_prs
-            ],
+            "failed_prs": [{"pr_number": num, "error": msg} for num, msg in self.failed_prs],
             "duration_seconds": round(self.duration_seconds, 2),
             "success_rate": round(self.success_rate, 1),
         }
@@ -245,16 +243,12 @@ class BulkPRIngestionService:
                     # Date filtering - since
                     if config.since and pr.created_at < config.since:
                         # PRs are sorted by created desc, so we can stop early
-                        logger.debug(
-                            "PR #%d created before since date, stopping", pr.number
-                        )
+                        logger.debug("PR #%d created before since date, stopping", pr.number)
                         break
 
                     # Date filtering - until
                     if config.until and pr.created_at > config.until:
-                        logger.debug(
-                            "PR #%d created after until date, skipping", pr.number
-                        )
+                        logger.debug("PR #%d created after until date, skipping", pr.number)
                         continue
 
                     # State filtering
@@ -284,9 +278,7 @@ class BulkPRIngestionService:
 
             except GitHubRateLimitError as e:
                 if attempt == max_retries:
-                    logger.error(
-                        "Max retries (%d) exceeded during PR discovery", max_retries
-                    )
+                    logger.error("Max retries (%d) exceeded during PR discovery", max_retries)
                     raise
 
                 # Calculate wait time from reset_at, with a minimum of 60 seconds
@@ -348,9 +340,7 @@ class BulkPRIngestionService:
 
         # Step 3: Define processor function
         async def ingest_one(pr_number: int) -> PRIngestionResult:
-            return await ingestion_service.ingest_pr(
-                owner, repo, pr_number, dry_run=config.dry_run
-            )
+            return await ingestion_service.ingest_pr(owner, repo, pr_number, dry_run=config.dry_run)
 
         # Step 4: Execute batch
         # Create progress tracker if not provided

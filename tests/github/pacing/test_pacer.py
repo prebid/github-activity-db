@@ -493,7 +493,10 @@ class TestMathematicalProperties:
 
         for params in test_cases:
             monitor = RateLimitMonitor()
-            headers = make_rate_limit_headers(**params)
+            headers = make_rate_limit_headers(
+                remaining=params["remaining"],
+                reset_in_seconds=params["reset_in_seconds"],
+            )
             monitor.update_from_headers(headers)
             pacer = RequestPacer(monitor, config=config)
             delay = pacer.get_recommended_delay()

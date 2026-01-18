@@ -328,8 +328,7 @@ class PullRequestRepository(BaseRepository[PullRequest]):
         """
         # Convert commits_breakdown to JSON-serializable format
         commits_breakdown = [
-            {"date": cb.date.isoformat(), "author": cb.author}
-            for cb in sync_data.commits_breakdown
+            {"date": cb.date.isoformat(), "author": cb.author} for cb in sync_data.commits_breakdown
         ]
 
         # Convert participants list to dict format

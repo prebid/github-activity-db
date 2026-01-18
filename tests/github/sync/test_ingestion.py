@@ -30,12 +30,14 @@ def mock_client():
 @pytest.fixture
 def parse_real_pr():
     """Helper to parse real PR fixtures into schema objects."""
+
     def _parse(fixture):
         pr = GitHubPullRequest(**fixture["pr"])
         files = [GitHubFile(**f) for f in fixture["files"]]
         commits = [GitHubCommit(**c) for c in fixture["commits"]]
         reviews = [GitHubReview(**r) for r in fixture["reviews"]]
         return pr, files, commits, reviews
+
     return _parse
 
 
@@ -78,6 +80,7 @@ class TestPRIngestionServiceCreate:
         # Verify repository was created
         repo = await repo_repository.get_by_owner_and_name("prebid", "prebid-server")
         assert repo is not None
+        assert result.pr is not None
         assert result.pr.repository_id == repo.id
 
 
@@ -90,7 +93,8 @@ class TestPRIngestionServiceUpdate:
         repo = make_repository(db_session, owner="prebid", name="prebid-server")
         await db_session.flush()
         existing = make_pull_request(
-            db_session, repo,
+            db_session,
+            repo,
             number=4663,
             title="Old Title",
             state=PRState.OPEN,
@@ -110,6 +114,7 @@ class TestPRIngestionServiceUpdate:
         assert result.success is True
         assert result.created is False
         assert result.updated is True
+        assert result.pr is not None
         assert result.pr.id == existing.id
         assert result.pr.title == "Adverxo Bid Adapter: New alias alchemyx"
 
@@ -126,7 +131,8 @@ class TestPRIngestionServiceSkip:
         repo = make_repository(db_session, owner="prebid", name="prebid-server")
         await db_session.flush()
         make_pull_request(
-            db_session, repo,
+            db_session,
+            repo,
             number=4663,
             state=PRState.OPEN,
             last_update_date=gh_pr.updated_at,  # Same date
@@ -154,7 +160,8 @@ class TestPRIngestionServiceSkip:
         await db_session.flush()
         old_merge_date = datetime.now(UTC) - timedelta(days=30)
         make_merged_pr(
-            db_session, repo,
+            db_session,
+            repo,
             number=4646,
             close_date=old_merge_date,
         )
@@ -218,7 +225,8 @@ class TestPRIngestionServiceAbandoned:
         repo = make_repository(db_session, owner="prebid", name="prebid-server")
         await db_session.flush()
         existing = make_pull_request(
-            db_session, repo,
+            db_session,
+            repo,
             number=4663,
             state=PRState.OPEN,
         )
@@ -266,6 +274,7 @@ class TestPRIngestionServiceMerge:
 
         assert result.success is True
         assert result.created is True
+        assert result.pr is not None
         assert result.pr.state == PRState.MERGED
         assert result.pr.merged_by == "bsardo"
         assert result.pr.close_date is not None
@@ -276,7 +285,8 @@ class TestPRIngestionServiceMerge:
         repo = make_repository(db_session, owner="prebid", name="prebid-server")
         await db_session.flush()
         existing = make_pull_request(
-            db_session, repo,
+            db_session,
+            repo,
             number=4646,
             state=PRState.OPEN,
             last_update_date=datetime(2020, 1, 1, tzinfo=UTC),
@@ -294,6 +304,7 @@ class TestPRIngestionServiceMerge:
         result = await service.ingest_pr("prebid", "prebid-server", 4646)
 
         assert result.success is True
+        assert result.pr is not None
         assert result.pr.id == existing.id
         assert result.pr.state == PRState.MERGED
         assert result.pr.merged_by == "bsardo"
@@ -403,9 +414,7 @@ class TestPRIngestionServiceRateLimit:
         class CustomRetryableError(GitHubRetryableError):
             pass
 
-        mock_client.get_full_pull_request.side_effect = CustomRetryableError(
-            "Transient error"
-        )
+        mock_client.get_full_pull_request.side_effect = CustomRetryableError("Transient error")
 
         repo_repository = RepositoryRepository(db_session)
         pr_repository = PullRequestRepository(db_session)

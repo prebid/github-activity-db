@@ -1,6 +1,5 @@
 """Tests for GitHub API Pydantic schemas."""
 
-
 from github_activity_db.db.models import PRState
 from github_activity_db.schemas import ParticipantActionType
 from github_activity_db.schemas.github_api import (
@@ -28,7 +27,7 @@ class TestGitHubUser:
 
     def test_github_user_parse(self):
         """Test parsing user response."""
-        user = GitHubUser(**GITHUB_USER_RESPONSE)
+        user = GitHubUser.model_validate(GITHUB_USER_RESPONSE)
 
         assert user.login == "testuser"
         assert user.id == 12345
@@ -40,7 +39,7 @@ class TestGitHubLabel:
 
     def test_github_label_parse(self):
         """Test parsing label response."""
-        label = GitHubLabel(**GITHUB_LABEL_RESPONSE)
+        label = GitHubLabel.model_validate(GITHUB_LABEL_RESPONSE)
 
         assert label.id == 1
         assert label.name == "bug"
@@ -53,7 +52,7 @@ class TestGitHubPullRequest:
 
     def test_github_pr_parse(self):
         """Test parsing full PR response."""
-        pr = GitHubPullRequest(**GITHUB_PR_RESPONSE)
+        pr = GitHubPullRequest.model_validate(GITHUB_PR_RESPONSE)
 
         assert pr.number == 1234
         assert pr.title == "Add new bidder adapter for ExampleBidder"
@@ -65,7 +64,7 @@ class TestGitHubPullRequest:
 
     def test_github_pr_to_pr_create(self):
         """Test factory produces valid PRCreate."""
-        gh_pr = GitHubPullRequest(**GITHUB_PR_RESPONSE)
+        gh_pr = GitHubPullRequest.model_validate(GITHUB_PR_RESPONSE)
         pr_create = gh_pr.to_pr_create(repository_id=1)
 
         assert pr_create.number == 1234
@@ -75,7 +74,7 @@ class TestGitHubPullRequest:
 
     def test_github_pr_to_pr_sync(self):
         """Test factory produces valid PRSync."""
-        gh_pr = GitHubPullRequest(**GITHUB_PR_RESPONSE)
+        gh_pr = GitHubPullRequest.model_validate(GITHUB_PR_RESPONSE)
         pr_sync = gh_pr.to_pr_sync()
 
         assert pr_sync.title == "Add new bidder adapter for ExampleBidder"
@@ -89,8 +88,8 @@ class TestGitHubPullRequest:
 
     def test_github_pr_to_pr_sync_with_files(self):
         """Test filenames are extracted from files response."""
-        gh_pr = GitHubPullRequest(**GITHUB_PR_RESPONSE)
-        files = [GitHubFile(**f) for f in GITHUB_FILES_RESPONSE]
+        gh_pr = GitHubPullRequest.model_validate(GITHUB_PR_RESPONSE)
+        files = [GitHubFile.model_validate(f) for f in GITHUB_FILES_RESPONSE]
 
         pr_sync = gh_pr.to_pr_sync(files=files)
 
@@ -100,8 +99,8 @@ class TestGitHubPullRequest:
 
     def test_github_pr_to_pr_sync_with_commits(self):
         """Test CommitBreakdown is built from commits response."""
-        gh_pr = GitHubPullRequest(**GITHUB_PR_RESPONSE)
-        commits = [GitHubCommit(**c) for c in GITHUB_COMMITS_RESPONSE]
+        gh_pr = GitHubPullRequest.model_validate(GITHUB_PR_RESPONSE)
+        commits = [GitHubCommit.model_validate(c) for c in GITHUB_COMMITS_RESPONSE]
 
         pr_sync = gh_pr.to_pr_sync(commits=commits)
 
@@ -111,8 +110,8 @@ class TestGitHubPullRequest:
 
     def test_github_pr_to_pr_sync_with_reviews(self):
         """Test participants are built from reviews response."""
-        gh_pr = GitHubPullRequest(**GITHUB_PR_RESPONSE)
-        reviews = [GitHubReview(**r) for r in GITHUB_REVIEWS_RESPONSE]
+        gh_pr = GitHubPullRequest.model_validate(GITHUB_PR_RESPONSE)
+        reviews = [GitHubReview.model_validate(r) for r in GITHUB_REVIEWS_RESPONSE]
 
         pr_sync = gh_pr.to_pr_sync(reviews=reviews)
 
@@ -130,7 +129,7 @@ class TestGitHubPullRequest:
 
     def test_github_pr_merged_state(self):
         """Test merged PR sets correct state."""
-        gh_pr = GitHubPullRequest(**GITHUB_PR_MERGED_RESPONSE)
+        gh_pr = GitHubPullRequest.model_validate(GITHUB_PR_MERGED_RESPONSE)
         pr_sync = gh_pr.to_pr_sync()
 
         assert pr_sync.state == PRState.MERGED
@@ -144,7 +143,7 @@ class TestGitHubCommit:
 
     def test_github_commit_parse(self):
         """Test parsing commit response."""
-        commit = GitHubCommit(**GITHUB_COMMITS_RESPONSE[0])
+        commit = GitHubCommit.model_validate(GITHUB_COMMITS_RESPONSE[0])
 
         assert commit.sha == "commit1sha"
         assert commit.commit.author.name == "Test User"
@@ -157,7 +156,7 @@ class TestGitHubFile:
 
     def test_github_file_parse(self):
         """Test parsing file response."""
-        file = GitHubFile(**GITHUB_FILES_RESPONSE[0])
+        file = GitHubFile.model_validate(GITHUB_FILES_RESPONSE[0])
 
         assert file.sha == "abc123def456"
         assert file.filename == "adapters/examplebidder/examplebidder.go"
@@ -171,7 +170,7 @@ class TestGitHubReview:
 
     def test_github_review_parse(self):
         """Test parsing review response."""
-        review = GitHubReview(**GITHUB_REVIEWS_RESPONSE[0])
+        review = GitHubReview.model_validate(GITHUB_REVIEWS_RESPONSE[0])
 
         assert review.id == 1001
         assert review.user.login == "reviewer1"
@@ -179,6 +178,6 @@ class TestGitHubReview:
 
     def test_github_review_approved(self):
         """Test parsing approved review."""
-        review = GitHubReview(**GITHUB_REVIEWS_RESPONSE[1])
+        review = GitHubReview.model_validate(GITHUB_REVIEWS_RESPONSE[1])
 
         assert review.state == "APPROVED"

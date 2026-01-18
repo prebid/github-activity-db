@@ -89,6 +89,7 @@ class TestSetupLogging:
 
         # Give loguru a moment to flush
         import time
+
         time.sleep(0.1)
 
         assert log_file.exists()

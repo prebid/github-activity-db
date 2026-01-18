@@ -39,7 +39,6 @@ def make_repository(
     full_name: str | None = None,
     is_active: bool = True,
     last_synced_at: datetime | None = None,
-    **overrides: Any,
 ) -> Repository:
     """Create a Repository model instance.
 
@@ -50,7 +49,6 @@ def make_repository(
         full_name: Full path (defaults to "{owner}/{name}")
         is_active: Whether repo is active for syncing
         last_synced_at: Last sync timestamp
-        **overrides: Additional field overrides
 
     Returns:
         Repository instance (added to session, not flushed)
@@ -61,7 +59,6 @@ def make_repository(
         full_name=full_name or f"{owner}/{name}",
         is_active=is_active,
         last_synced_at=last_synced_at,
-        **overrides,
     )
     session.add(repo)
     return repo
@@ -95,7 +92,6 @@ def make_pull_request(
     commits_breakdown: list[dict[str, str]] | None = None,
     participants: dict[str, list[str]] | None = None,
     classify_tags: str | None = None,
-    **overrides: Any,
 ) -> PullRequest:
     """Create a PullRequest model instance.
 
@@ -123,7 +119,6 @@ def make_pull_request(
         commits_breakdown: List of {date, author} dicts
         participants: Dict of username -> actions
         classify_tags: AI classification tags
-        **overrides: Additional field overrides
 
     Returns:
         PullRequest instance (added to session, not flushed)
@@ -154,7 +149,6 @@ def make_pull_request(
         commits_breakdown=commits_breakdown or [],
         participants=participants or {},
         classify_tags=classify_tags,
-        **overrides,
     )
     session.add(pr)
     return pr
@@ -164,20 +158,57 @@ def make_merged_pr(
     session: AsyncSession,
     repository: Repository,
     *,
+    number: int = 1234,
+    title: str | None = None,
+    description: str | None = "Test PR description",
+    submitter: str = "testuser",
     merged_by: str = "maintainer",
-    **overrides: Any,
+    close_date: datetime | None = None,
+    open_date: datetime | None = None,
+    last_update_date: datetime | None = None,
+    files_changed: int = 1,
+    lines_added: int = 10,
+    lines_deleted: int = 2,
+    commits_count: int = 1,
+    github_labels: list[str] | None = None,
+    filenames: list[str] | None = None,
+    reviewers: list[str] | None = None,
+    assignees: list[str] | None = None,
+    commits_breakdown: list[dict[str, str]] | None = None,
+    participants: dict[str, list[str]] | None = None,
+    classify_tags: str | None = None,
+    ai_summary: str | None = None,
 ) -> PullRequest:
     """Create a merged PullRequest.
 
     Convenience wrapper around make_pull_request with merge defaults.
     """
     now = datetime.now(UTC)
-    defaults = {
-        "state": PRState.MERGED,
-        "close_date": now,
-        "merged_by": merged_by,
-    }
-    return make_pull_request(session, repository, **(defaults | overrides))
+    return make_pull_request(
+        session,
+        repository,
+        number=number,
+        title=title,
+        description=description,
+        submitter=submitter,
+        state=PRState.MERGED,
+        open_date=open_date,
+        last_update_date=last_update_date,
+        close_date=close_date or now,
+        merged_by=merged_by,
+        ai_summary=ai_summary,
+        files_changed=files_changed,
+        lines_added=lines_added,
+        lines_deleted=lines_deleted,
+        commits_count=commits_count,
+        github_labels=github_labels,
+        filenames=filenames,
+        reviewers=reviewers,
+        assignees=assignees,
+        commits_breakdown=commits_breakdown,
+        participants=participants,
+        classify_tags=classify_tags,
+    )
 
 
 def make_user_tag(
@@ -186,7 +217,6 @@ def make_user_tag(
     name: str = "test-tag",
     description: str | None = "Test tag description",
     color: str | None = "#ff9900",
-    **overrides: Any,
 ) -> UserTag:
     """Create a UserTag model instance.
 
@@ -195,7 +225,6 @@ def make_user_tag(
         name: Tag name (must be unique)
         description: Tag description
         color: Hex color code
-        **overrides: Additional field overrides
 
     Returns:
         UserTag instance (added to session, not flushed)
@@ -204,7 +233,6 @@ def make_user_tag(
         name=name,
         description=description,
         color=color,
-        **overrides,
     )
     session.add(tag)
     return tag
@@ -221,7 +249,6 @@ def make_sync_failure(
     status: SyncFailureStatus = SyncFailureStatus.PENDING,
     failed_at: datetime | None = None,
     resolved_at: datetime | None = None,
-    **overrides: Any,
 ) -> SyncFailure:
     """Create a SyncFailure model instance.
 
@@ -235,7 +262,6 @@ def make_sync_failure(
         status: Failure status (PENDING, RESOLVED, PERMANENT)
         failed_at: When the failure occurred
         resolved_at: When the failure was resolved (if applicable)
-        **overrides: Additional field overrides
 
     Returns:
         SyncFailure instance (added to session, not flushed)
@@ -249,7 +275,6 @@ def make_sync_failure(
         status=status,
         failed_at=failed_at or datetime.now(UTC),
         resolved_at=resolved_at,
-        **overrides,
     )
     session.add(failure)
     return failure
@@ -341,19 +366,47 @@ def make_github_pr(
 
 def make_github_merged_pr(
     *,
+    number: int = 1234,
+    owner: str = "prebid",
+    repo: str = "prebid-server",
+    title: str = "Test PR",
+    body: str | None = "Test PR description",
+    user: dict[str, Any] | None = None,
     merged_by: str = "maintainer",
     merged_at: str = JAN_20_ISO,
-    **overrides: Any,
+    created_at: str = JAN_15_ISO,
+    updated_at: str = JAN_16_ISO,
+    commits: int = 1,
+    additions: int = 10,
+    deletions: int = 2,
+    changed_files: int = 1,
+    labels: list[dict[str, Any]] | None = None,
+    requested_reviewers: list[dict[str, Any]] | None = None,
+    assignees: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Create a merged GitHub PR API response dict."""
-    defaults = {
-        "state": "closed",
-        "merged": True,
-        "merged_by": make_github_user(login=merged_by),
-        "merged_at": merged_at,
-        "closed_at": merged_at,
-    }
-    return make_github_pr(**(defaults | overrides))
+    return make_github_pr(
+        number=number,
+        owner=owner,
+        repo=repo,
+        state="closed",
+        title=title,
+        body=body,
+        user=user,
+        merged=True,
+        merged_by=make_github_user(login=merged_by),
+        created_at=created_at,
+        updated_at=updated_at,
+        closed_at=merged_at,
+        merged_at=merged_at,
+        commits=commits,
+        additions=additions,
+        deletions=deletions,
+        changed_files=changed_files,
+        labels=labels,
+        requested_reviewers=requested_reviewers,
+        assignees=assignees,
+    )
 
 
 def make_github_file(

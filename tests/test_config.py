@@ -1,6 +1,5 @@
 """Tests for configuration settings."""
 
-
 import pytest
 
 from github_activity_db.config import Settings, get_settings

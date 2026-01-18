@@ -90,9 +90,7 @@ class PRIngestionService:
 
         try:
             # Step 1: Ensure repository exists
-            repository, repo_created = await self._repo_repository.get_or_create(
-                owner, repo
-            )
+            repository, repo_created = await self._repo_repository.get_or_create(owner, repo)
             if repo_created:
                 pr_logger.info("Created repository record", repo_id=repository.id)
 
@@ -135,12 +133,8 @@ class PRIngestionService:
                 pr_logger.info("Dry run: would {action} PR", action=action)
                 # Return what would happen without writing
                 if existing is None:
-                    return PRIngestionResult(
-                        pr=None, created=True
-                    )
-                return PRIngestionResult(
-                    pr=existing, updated=True
-                )
+                    return PRIngestionResult(pr=None, created=True)
+                return PRIngestionResult(pr=existing, updated=True)
 
             # Step 6: Store via repository
             pr, created = await self._pr_repository.create_or_update(
@@ -150,11 +144,16 @@ class PRIngestionService:
             # Step 7: Handle merge if applicable
             # Apply merge data if GitHub says it's merged and we don't have merge fields yet
             if gh_pr.merged and pr.merged_by is None:
+                # A merged PR always has merged_at set by GitHub
+                assert gh_pr.merged_at is not None, "Merged PR must have merged_at timestamp"
                 merge_data = PRMerge(
-                    close_date=gh_pr.merged_at or gh_pr.closed_at,  # type: ignore[arg-type]
+                    close_date=gh_pr.merged_at,
                     merged_by=gh_pr.merged_by.login if gh_pr.merged_by else None,
                 )
-                pr = await self._pr_repository.apply_merge(pr.id, merge_data)  # type: ignore[assignment]
+                updated_pr = await self._pr_repository.apply_merge(pr.id, merge_data)
+                # PR exists since we just created/updated it
+                assert updated_pr is not None, "apply_merge should return PR for existing ID"
+                pr = updated_pr
                 pr_logger.info("Applied merge data")
 
             # Return appropriate result

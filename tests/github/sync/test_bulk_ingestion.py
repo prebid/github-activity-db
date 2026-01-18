@@ -127,16 +127,13 @@ class TestBulkIngestionResult:
     def test_total_processed(self):
         """Total processed includes created, updated, and failed."""
         result = BulkIngestionResult(
-            created=5, updated=3, failed=2,
-            skipped_frozen=10, skipped_unchanged=5
+            created=5, updated=3, failed=2, skipped_frozen=10, skipped_unchanged=5
         )
         assert result.total_processed == 10  # 5 + 3 + 2
 
     def test_total_skipped(self):
         """Total skipped includes frozen and unchanged."""
-        result = BulkIngestionResult(
-            skipped_frozen=10, skipped_unchanged=5
-        )
+        result = BulkIngestionResult(skipped_frozen=10, skipped_unchanged=5)
         assert result.total_skipped == 15  # 10 + 5
 
     def test_success_rate_all_succeeded(self):
@@ -227,9 +224,9 @@ class TestDiscoverPRs:
         open_pr_data,
     ):
         """Open PRs are included in discovery."""
-        mock_github_client.iter_pull_requests.return_value = async_iter([
-            GitHubPullRequest.model_validate(open_pr_data)
-        ])
+        mock_github_client.iter_pull_requests.return_value = async_iter(
+            [GitHubPullRequest.model_validate(open_pr_data)]
+        )
 
         service = BulkPRIngestionService(
             client=mock_github_client,
@@ -253,9 +250,9 @@ class TestDiscoverPRs:
         merged_hot_pr_data,
     ):
         """Merged PRs are included in discovery."""
-        mock_github_client.iter_pull_requests.return_value = async_iter([
-            GitHubPullRequest.model_validate(merged_hot_pr_data)
-        ])
+        mock_github_client.iter_pull_requests.return_value = async_iter(
+            [GitHubPullRequest.model_validate(merged_hot_pr_data)]
+        )
 
         service = BulkPRIngestionService(
             client=mock_github_client,
@@ -285,10 +282,12 @@ class TestDiscoverPRs:
         We cannot filter abandoned PRs during discovery - we include all closed PRs and
         filter them during ingestion when we have the full PR data.
         """
-        mock_github_client.iter_pull_requests.return_value = async_iter([
-            GitHubPullRequest.model_validate(open_pr_data),
-            GitHubPullRequest.model_validate(abandoned_pr_data),
-        ])
+        mock_github_client.iter_pull_requests.return_value = async_iter(
+            [
+                GitHubPullRequest.model_validate(open_pr_data),
+                GitHubPullRequest.model_validate(abandoned_pr_data),
+            ]
+        )
 
         service = BulkPRIngestionService(
             client=mock_github_client,
@@ -325,10 +324,12 @@ class TestDiscoverPRs:
             created_at=(now - timedelta(days=30)).isoformat(),
         )
 
-        mock_github_client.iter_pull_requests.return_value = async_iter([
-            GitHubPullRequest.model_validate(recent_pr),
-            GitHubPullRequest.model_validate(old_pr),
-        ])
+        mock_github_client.iter_pull_requests.return_value = async_iter(
+            [
+                GitHubPullRequest.model_validate(recent_pr),
+                GitHubPullRequest.model_validate(old_pr),
+            ]
+        )
 
         service = BulkPRIngestionService(
             client=mock_github_client,
@@ -364,10 +365,12 @@ class TestDiscoverPRs:
             created_at=(now - timedelta(days=10)).isoformat(),
         )
 
-        mock_github_client.iter_pull_requests.return_value = async_iter([
-            GitHubPullRequest.model_validate(recent_pr),
-            GitHubPullRequest.model_validate(older_pr),
-        ])
+        mock_github_client.iter_pull_requests.return_value = async_iter(
+            [
+                GitHubPullRequest.model_validate(recent_pr),
+                GitHubPullRequest.model_validate(older_pr),
+            ]
+        )
 
         service = BulkPRIngestionService(
             client=mock_github_client,
@@ -393,10 +396,12 @@ class TestDiscoverPRs:
     ):
         """Max limit is respected."""
         prs = [
-            GitHubPullRequest.model_validate(make_github_pr(
-                number=i,
-                created_at=(now - timedelta(days=i)).isoformat(),
-            ))
+            GitHubPullRequest.model_validate(
+                make_github_pr(
+                    number=i,
+                    created_at=(now - timedelta(days=i)).isoformat(),
+                )
+            )
             for i in range(1, 11)  # 10 PRs
         ]
         mock_github_client.iter_pull_requests.return_value = async_iter(prs)
@@ -424,10 +429,12 @@ class TestDiscoverPRs:
         merged_hot_pr_data,
     ):
         """State filter 'open' only returns open PRs."""
-        mock_github_client.iter_pull_requests.return_value = async_iter([
-            GitHubPullRequest.model_validate(open_pr_data),
-            GitHubPullRequest.model_validate(merged_hot_pr_data),
-        ])
+        mock_github_client.iter_pull_requests.return_value = async_iter(
+            [
+                GitHubPullRequest.model_validate(open_pr_data),
+                GitHubPullRequest.model_validate(merged_hot_pr_data),
+            ]
+        )
 
         service = BulkPRIngestionService(
             client=mock_github_client,
@@ -452,10 +459,12 @@ class TestDiscoverPRs:
         merged_hot_pr_data,
     ):
         """State filter 'merged' only returns merged PRs."""
-        mock_github_client.iter_pull_requests.return_value = async_iter([
-            GitHubPullRequest.model_validate(open_pr_data),
-            GitHubPullRequest.model_validate(merged_hot_pr_data),
-        ])
+        mock_github_client.iter_pull_requests.return_value = async_iter(
+            [
+                GitHubPullRequest.model_validate(open_pr_data),
+                GitHubPullRequest.model_validate(merged_hot_pr_data),
+            ]
+        )
 
         service = BulkPRIngestionService(
             client=mock_github_client,
@@ -564,6 +573,7 @@ class TestDiscoveryRateLimit:
         mock_sleep,
     ):
         """Discovery fails after max retries exceeded."""
+
         async def mock_iter(*args, **kwargs):
             raise GitHubRateLimitError("Rate limited", reset_at=None)
             yield  # Make it a generator

@@ -149,9 +149,11 @@ class TestSyncPRIntegration:
 
         # Setup: Create tables first using sync SQLite (more reliable for setup)
         import sqlite3
+
         conn = sqlite3.connect(temp_db_path)
         # Create tables via SQLAlchemy's DDL
         from sqlalchemy import create_engine
+
         sync_engine = create_engine(f"sqlite:///{temp_db_path}")
         Base.metadata.create_all(sync_engine)
         sync_engine.dispose()
@@ -176,6 +178,7 @@ class TestSyncPRIntegration:
         # Verify database record was created (using sync SQLite for reliability)
         from sqlalchemy import create_engine
         from sqlalchemy.orm import Session
+
         sync_engine = create_engine(f"sqlite:///{temp_db_path}")
         with Session(sync_engine) as session:
             # Check repository was created
@@ -195,6 +198,7 @@ class TestSyncPRIntegration:
 
         # Setup: Create tables using sync SQLite
         from sqlalchemy import create_engine
+
         sync_engine = create_engine(f"sqlite:///{temp_db_path}")
         Base.metadata.create_all(sync_engine)
         sync_engine.dispose()
@@ -208,9 +212,7 @@ class TestSyncPRIntegration:
             patch("github_activity_db.db.engine._engine", None),
             patch("github_activity_db.db.engine._async_session_factory", None),
         ):
-            result = runner.invoke(
-                app, ["sync", "pr", "prebid/prebid-server", "123", "--dry-run"]
-            )
+            result = runner.invoke(app, ["sync", "pr", "prebid/prebid-server", "123", "--dry-run"])
 
         assert result.exit_code == 0
         assert "dry-run" in result.output.lower() or "DRY RUN" in result.output
@@ -218,6 +220,7 @@ class TestSyncPRIntegration:
         # Verify NO database record was created (using sync SQLite for reliability)
         from sqlalchemy import create_engine
         from sqlalchemy.orm import Session
+
         sync_engine = create_engine(f"sqlite:///{temp_db_path}")
         with Session(sync_engine) as session:
             pr = session.query(PullRequest).filter_by(number=123).first()
@@ -230,6 +233,7 @@ class TestSyncPRIntegration:
 
         # Setup: Create tables using sync SQLite
         from sqlalchemy import create_engine
+
         sync_engine = create_engine(f"sqlite:///{temp_db_path}")
         Base.metadata.create_all(sync_engine)
         sync_engine.dispose()
@@ -279,6 +283,7 @@ class TestSyncRepoIntegration:
 
         # Setup: Create tables using sync SQLite
         from sqlalchemy import create_engine
+
         sync_engine = create_engine(f"sqlite:///{temp_db_path}")
         Base.metadata.create_all(sync_engine)
         sync_engine.dispose()
@@ -319,17 +324,19 @@ class TestSyncRepoIntegration:
                 )
             ]
             commits = [
-                GitHubCommit.model_validate({
-                    "sha": f"sha{number}",
-                    "commit": {
-                        "message": "test",
-                        "author": {
-                            "name": "test",
-                            "email": "test@example.com",
-                            "date": "2024-01-15T10:00:00Z",
+                GitHubCommit.model_validate(
+                    {
+                        "sha": f"sha{number}",
+                        "commit": {
+                            "message": "test",
+                            "author": {
+                                "name": "test",
+                                "email": "test@example.com",
+                                "date": "2024-01-15T10:00:00Z",
+                            },
                         },
-                    },
-                })
+                    }
+                )
             ]
             return pr, files, commits, []
 

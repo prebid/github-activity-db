@@ -1,6 +1,7 @@
 """Tests for PR Pydantic schemas."""
 
 from datetime import UTC, datetime
+from typing import Any
 
 import pytest
 from pydantic import ValidationError
@@ -82,13 +83,15 @@ class TestPRSync:
 
     def test_pr_sync_parses_commits_breakdown(self):
         """Test that dict format is converted to CommitBreakdown objects."""
+        # Test validator converts dicts to CommitBreakdown objects
+        commits_as_dicts: Any = [
+            {"date": JAN_15, "author": "user1"},
+            {"date": JAN_16, "author": "user2"},
+        ]
         pr = PRSync(
             title="Test",
             last_update_date=datetime.now(UTC),
-            commits_breakdown=[
-                {"date": JAN_15, "author": "user1"},
-                {"date": JAN_16, "author": "user2"},
-            ],
+            commits_breakdown=commits_as_dicts,
         )
         assert len(pr.commits_breakdown) == 2
         assert isinstance(pr.commits_breakdown[0], CommitBreakdown)
@@ -96,13 +99,15 @@ class TestPRSync:
 
     def test_pr_sync_parses_participants(self):
         """Test that dict format is converted to ParticipantEntry objects."""
+        # Test validator converts dict to ParticipantEntry objects
+        participants_as_dict: Any = {
+            "reviewer1": ["comment", "approval"],
+            "reviewer2": ["changes_requested"],
+        }
         pr = PRSync(
             title="Test",
             last_update_date=datetime.now(UTC),
-            participants={
-                "reviewer1": ["comment", "approval"],
-                "reviewer2": ["changes_requested"],
-            },
+            participants=participants_as_dict,
         )
         assert len(pr.participants) == 2
         assert isinstance(pr.participants[0], ParticipantEntry)

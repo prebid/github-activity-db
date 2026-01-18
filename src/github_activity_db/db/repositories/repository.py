@@ -45,9 +45,7 @@ class RepositoryRepository(BaseRepository[Repository]):
         """
         return await self._get_by_field("full_name", full_name)
 
-    async def get_by_owner_and_name(
-        self, owner: str, name: str
-    ) -> Repository | None:
+    async def get_by_owner_and_name(self, owner: str, name: str) -> Repository | None:
         """Get a repository by owner and name.
 
         Args:

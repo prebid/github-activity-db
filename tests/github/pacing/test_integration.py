@@ -33,12 +33,14 @@ from github_activity_db.github.rate_limit.monitor import RateLimitMonitor
 def monitor_healthy() -> RateLimitMonitor:
     """Create a monitor with healthy rate limits."""
     monitor = RateLimitMonitor()
-    monitor.update_from_headers({
-        "x-ratelimit-limit": "5000",
-        "x-ratelimit-remaining": "4000",
-        "x-ratelimit-reset": str(int(datetime.now(UTC).timestamp()) + 3600),
-        "x-ratelimit-resource": "core",
-    })
+    monitor.update_from_headers(
+        {
+            "x-ratelimit-limit": "5000",
+            "x-ratelimit-remaining": "4000",
+            "x-ratelimit-reset": str(int(datetime.now(UTC).timestamp()) + 3600),
+            "x-ratelimit-resource": "core",
+        }
+    )
     return monitor
 
 
@@ -46,12 +48,14 @@ def monitor_healthy() -> RateLimitMonitor:
 def monitor_low() -> RateLimitMonitor:
     """Create a monitor with low rate limits (should trigger throttling)."""
     monitor = RateLimitMonitor()
-    monitor.update_from_headers({
-        "x-ratelimit-limit": "5000",
-        "x-ratelimit-remaining": "100",  # Only 2% remaining
-        "x-ratelimit-reset": str(int(datetime.now(UTC).timestamp()) + 3600),
-        "x-ratelimit-resource": "core",
-    })
+    monitor.update_from_headers(
+        {
+            "x-ratelimit-limit": "5000",
+            "x-ratelimit-remaining": "100",  # Only 2% remaining
+            "x-ratelimit-reset": str(int(datetime.now(UTC).timestamp()) + 3600),
+            "x-ratelimit-resource": "core",
+        }
+    )
     return monitor
 
 
@@ -104,10 +108,7 @@ class TestSchedulerPacerIntegration:
             return ts
 
         # Submit multiple tasks
-        futures = [
-            scheduler.submit(record_time, priority=RequestPriority.NORMAL)
-            for _ in range(5)
-        ]
+        futures = [scheduler.submit(record_time, priority=RequestPriority.NORMAL) for _ in range(5)]
 
         # Wait for all to complete
         await asyncio.gather(*futures)
@@ -183,8 +184,7 @@ class TestSchedulerPacerIntegration:
 
         # Submit more tasks than concurrent limit
         futures = [
-            scheduler.submit(track_concurrency, priority=RequestPriority.NORMAL)
-            for _ in range(10)
+            scheduler.submit(track_concurrency, priority=RequestPriority.NORMAL) for _ in range(10)
         ]
 
         await asyncio.gather(*futures)
@@ -207,7 +207,7 @@ class TestBatchExecutorIntegration:
         """BatchExecutor processes all items in a batch."""
         pacer = RequestPacer(monitor_healthy, config=fast_config)
         scheduler = RequestScheduler(pacer, max_concurrent=3)
-        executor = BatchExecutor(scheduler)
+        executor: BatchExecutor[int, int] = BatchExecutor(scheduler)
 
         await scheduler.start()
 
@@ -233,7 +233,7 @@ class TestBatchExecutorIntegration:
         pacer = RequestPacer(monitor_healthy, config=fast_config)
         # Use max_retries=0 to avoid slow exponential backoff delays
         scheduler = RequestScheduler(pacer, max_concurrent=3, max_retries=0)
-        executor = BatchExecutor(scheduler, stop_on_error=False)
+        executor: BatchExecutor[int, int] = BatchExecutor(scheduler, stop_on_error=False)
 
         await scheduler.start()
 
@@ -260,7 +260,7 @@ class TestBatchExecutorIntegration:
         pacer = RequestPacer(monitor_healthy, config=fast_config)
         scheduler = RequestScheduler(pacer, max_concurrent=3)
         progress = ProgressTracker(total=5)
-        executor = BatchExecutor(scheduler, progress=progress)
+        executor: BatchExecutor[int, int] = BatchExecutor(scheduler, progress=progress)
 
         await scheduler.start()
 
@@ -284,7 +284,7 @@ class TestBatchExecutorIntegration:
         """BatchExecutor respects max_batch_size option."""
         pacer = RequestPacer(monitor_healthy, config=fast_config)
         scheduler = RequestScheduler(pacer, max_concurrent=10)
-        executor = BatchExecutor(scheduler, max_batch_size=3)
+        executor: BatchExecutor[int, int] = BatchExecutor(scheduler, max_batch_size=3)
 
         await scheduler.start()
 
@@ -308,9 +308,7 @@ class TestRateLimitThrottling:
     """Tests for rate limit-based throttling behavior."""
 
     @pytest.mark.asyncio
-    async def test_low_rate_limit_affects_delay(
-        self, monitor_low: RateLimitMonitor
-    ) -> None:
+    async def test_low_rate_limit_affects_delay(self, monitor_low: RateLimitMonitor) -> None:
         """Pacer provides delay when rate limit is low."""
         config = PacingConfig(
             min_request_interval_ms=10,
@@ -332,18 +330,18 @@ class TestRateLimitThrottling:
         assert delay2 >= 0
 
     @pytest.mark.asyncio
-    async def test_scheduler_adapts_to_rate_limit_changes(
-        self, fast_config: PacingConfig
-    ) -> None:
+    async def test_scheduler_adapts_to_rate_limit_changes(self, fast_config: PacingConfig) -> None:
         """Scheduler adapts when rate limit status changes."""
         monitor = RateLimitMonitor()
         # Start healthy
-        monitor.update_from_headers({
-            "x-ratelimit-limit": "5000",
-            "x-ratelimit-remaining": "4000",
-            "x-ratelimit-reset": str(int(datetime.now(UTC).timestamp()) + 3600),
-            "x-ratelimit-resource": "core",
-        })
+        monitor.update_from_headers(
+            {
+                "x-ratelimit-limit": "5000",
+                "x-ratelimit-remaining": "4000",
+                "x-ratelimit-reset": str(int(datetime.now(UTC).timestamp()) + 3600),
+                "x-ratelimit-resource": "core",
+            }
+        )
 
         pacer = RequestPacer(monitor, config=fast_config)
         scheduler = RequestScheduler(pacer, max_concurrent=2)
@@ -357,24 +355,30 @@ class TestRateLimitThrottling:
             return n
 
         # Process some requests
-        await asyncio.gather(*[
-            scheduler.submit(lambda n=i: task(n), priority=RequestPriority.NORMAL)
-            for i in range(3)
-        ])
+        await asyncio.gather(
+            *[
+                scheduler.submit(lambda n=i: task(n), priority=RequestPriority.NORMAL)  # type: ignore[misc]
+                for i in range(3)
+            ]
+        )
 
         # Simulate rate limit dropping
-        monitor.update_from_headers({
-            "x-ratelimit-limit": "5000",
-            "x-ratelimit-remaining": "50",  # Very low
-            "x-ratelimit-reset": str(int(datetime.now(UTC).timestamp()) + 3600),
-            "x-ratelimit-resource": "core",
-        })
+        monitor.update_from_headers(
+            {
+                "x-ratelimit-limit": "5000",
+                "x-ratelimit-remaining": "50",  # Very low
+                "x-ratelimit-reset": str(int(datetime.now(UTC).timestamp()) + 3600),
+                "x-ratelimit-resource": "core",
+            }
+        )
 
         # Process more requests (pacer should adapt)
-        await asyncio.gather(*[
-            scheduler.submit(lambda n=i: task(n), priority=RequestPriority.NORMAL)
-            for i in range(3, 6)
-        ])
+        await asyncio.gather(
+            *[
+                scheduler.submit(lambda n=i: task(n), priority=RequestPriority.NORMAL)  # type: ignore[misc]
+                for i in range(3, 6)
+            ]
+        )
 
         await scheduler.shutdown(wait=True)
 

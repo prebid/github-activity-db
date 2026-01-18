@@ -162,9 +162,7 @@ class FailureRetryService:
         repo_cache: dict[int, tuple[str, str]] = {}
 
         for failure in pending:
-            pr_result = await self._retry_single_failure(
-                failure, repo_cache, dry_run
-            )
+            pr_result = await self._retry_single_failure(failure, repo_cache, dry_run)
             result.results.append((failure.pr_number, pr_result))
 
             if dry_run:

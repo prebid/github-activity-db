@@ -22,7 +22,7 @@ from github_activity_db.db.models import Base, PRState
 # -----------------------------------------------------------------------------
 
 # Base dates (datetime objects for Pydantic/ORM)
-JAN_10 = datetime(2024, 1, 10, 9, 0, 0, tzinfo=UTC)   # Merged PR opened
+JAN_10 = datetime(2024, 1, 10, 9, 0, 0, tzinfo=UTC)  # Merged PR opened
 JAN_12 = datetime(2024, 1, 12, 16, 0, 0, tzinfo=UTC)  # Merged PR closed
 JAN_15 = datetime(2024, 1, 15, 10, 0, 0, tzinfo=UTC)  # Open PR opened, first commit
 JAN_16 = datetime(2024, 1, 16, 14, 0, 0, tzinfo=UTC)  # Open PR updated
@@ -33,12 +33,12 @@ JAN_10_ISO = "2024-01-10T09:00:00Z"
 JAN_12_ISO = "2024-01-12T16:00:00Z"
 JAN_15_ISO = "2024-01-15T10:00:00Z"
 JAN_15_AFTERNOON_ISO = "2024-01-15T14:00:00Z"  # Second commit same day
-JAN_15_EVENING_ISO = "2024-01-15T16:00:00Z"    # First review
-JAN_16_MORNING_ISO = "2024-01-16T09:00:00Z"    # Third commit
-JAN_16_MID_ISO = "2024-01-16T10:00:00Z"        # Second review
-JAN_16_LATE_ISO = "2024-01-16T11:00:00Z"       # Third review
+JAN_15_EVENING_ISO = "2024-01-15T16:00:00Z"  # First review
+JAN_16_MORNING_ISO = "2024-01-16T09:00:00Z"  # Third commit
+JAN_16_MID_ISO = "2024-01-16T10:00:00Z"  # Second review
+JAN_16_LATE_ISO = "2024-01-16T11:00:00Z"  # Third review
 JAN_16_ISO = "2024-01-16T14:00:00Z"
-JAN_16_UPDATED_ISO = "2024-01-16T14:30:00Z"    # PR updated_at
+JAN_16_UPDATED_ISO = "2024-01-16T14:30:00Z"  # PR updated_at
 JAN_20_ISO = "2024-01-20T16:00:00Z"
 
 

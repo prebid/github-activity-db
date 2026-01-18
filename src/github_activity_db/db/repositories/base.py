@@ -83,9 +83,7 @@ class BaseRepository(Generic[ModelT]):
         Returns:
             First matching entity or None
         """
-        stmt = select(self._model_class).where(
-            getattr(self._model_class, field_name) == value
-        )
+        stmt = select(self._model_class).where(getattr(self._model_class, field_name) == value)
         result = await self._session.execute(stmt)
         return result.scalar_one_or_none()
 

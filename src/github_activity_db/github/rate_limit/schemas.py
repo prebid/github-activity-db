@@ -179,11 +179,7 @@ class RateLimitSnapshot(BaseModel):
         used = int(headers.get("x-ratelimit-used", "0"))
         reset_ts = int(headers.get("x-ratelimit-reset", "0"))
 
-        reset_at = (
-            datetime.fromtimestamp(reset_ts, tz=UTC)
-            if reset_ts > 0
-            else datetime.now(UTC)
-        )
+        reset_at = datetime.fromtimestamp(reset_ts, tz=UTC) if reset_ts > 0 else datetime.now(UTC)
 
         pool_limit = PoolRateLimit(
             pool=actual_pool,

@@ -81,12 +81,12 @@ class GitHubClient:
             raise GitHubAuthenticationError(
                 "GitHub token required. Set GITHUB_TOKEN environment variable."
             )
-        self._client: Any = None
+        self._client: GitHub[Any] | None = None
         self._rate_monitor = rate_monitor
         self._pacer = pacer
 
     @property
-    def _github(self) -> Any:
+    def _github(self) -> GitHub[Any]:
         """Get or create the githubkit client instance."""
         if self._client is None:
             self._client = GitHub(self._token)
@@ -102,9 +102,7 @@ class GitHubClient:
         """Access the request pacer (if configured)."""
         return self._pacer
 
-    async def _apply_pacing(
-        self, pool: RateLimitPool = RateLimitPool.CORE
-    ) -> None:
+    async def _apply_pacing(self, pool: RateLimitPool = RateLimitPool.CORE) -> None:
         """Apply rate limit pacing before making a request.
 
         If a pacer is configured, this method calculates the recommended
@@ -226,6 +224,7 @@ class GitHubClient:
             await self._apply_pacing()
             prs: list[GitHubPullRequest] = []
 
+            pr_data: Any
             async for pr_data in self._github.paginate(
                 self._github.rest.pulls.async_list,
                 owner=owner,
@@ -274,6 +273,7 @@ class GitHubClient:
         """
         try:
             await self._apply_pacing()
+            pr_data: Any
             async for pr_data in self._github.paginate(
                 self._github.rest.pulls.async_list,
                 owner=owner,
@@ -324,9 +324,7 @@ class GitHubClient:
             return GitHubPullRequest.model_validate(resp.parsed_data.model_dump())
         except RequestFailed as e:
             if e.response.status_code == 404:
-                raise GitHubNotFoundError(
-                    f"PR #{number} not found in {owner}/{repo}"
-                ) from e
+                raise GitHubNotFoundError(f"PR #{number} not found in {owner}/{repo}") from e
             raise self._handle_error(e) from e
 
     async def get_pull_request_files(
@@ -352,6 +350,7 @@ class GitHubClient:
             await self._apply_pacing()
             files: list[GitHubFile] = []
 
+            file_data: Any
             async for file_data in self._github.paginate(
                 self._github.rest.pulls.async_list_files,
                 owner=owner,
@@ -367,9 +366,7 @@ class GitHubClient:
             return files
         except RequestFailed as e:
             if e.response.status_code == 404:
-                raise GitHubNotFoundError(
-                    f"PR #{number} not found in {owner}/{repo}"
-                ) from e
+                raise GitHubNotFoundError(f"PR #{number} not found in {owner}/{repo}") from e
             raise self._handle_error(e) from e
 
     async def get_pull_request_commits(
@@ -395,6 +392,7 @@ class GitHubClient:
             await self._apply_pacing()
             commits: list[GitHubCommit] = []
 
+            commit_data: Any
             async for commit_data in self._github.paginate(
                 self._github.rest.pulls.async_list_commits,
                 owner=owner,
@@ -410,9 +408,7 @@ class GitHubClient:
             return commits
         except RequestFailed as e:
             if e.response.status_code == 404:
-                raise GitHubNotFoundError(
-                    f"PR #{number} not found in {owner}/{repo}"
-                ) from e
+                raise GitHubNotFoundError(f"PR #{number} not found in {owner}/{repo}") from e
             raise self._handle_error(e) from e
 
     async def get_pull_request_reviews(
@@ -438,6 +434,7 @@ class GitHubClient:
             await self._apply_pacing()
             reviews: list[GitHubReview] = []
 
+            review_data: Any
             async for review_data in self._github.paginate(
                 self._github.rest.pulls.async_list_reviews,
                 owner=owner,
@@ -453,9 +450,7 @@ class GitHubClient:
             return reviews
         except RequestFailed as e:
             if e.response.status_code == 404:
-                raise GitHubNotFoundError(
-                    f"PR #{number} not found in {owner}/{repo}"
-                ) from e
+                raise GitHubNotFoundError(f"PR #{number} not found in {owner}/{repo}") from e
             raise self._handle_error(e) from e
 
     # -------------------------------------------------------------------------
@@ -466,9 +461,7 @@ class GitHubClient:
         owner: str,
         repo: str,
         number: int,
-    ) -> tuple[
-        GitHubPullRequest, list[GitHubFile], list[GitHubCommit], list[GitHubReview]
-    ]:
+    ) -> tuple[GitHubPullRequest, list[GitHubFile], list[GitHubCommit], list[GitHubReview]]:
         """Get complete PR data including files, commits, and reviews.
 
         This makes 4 API calls. Use when you need all PR data for sync.
@@ -506,9 +499,7 @@ class GitHubClient:
                 remaining = int(headers.get("x-ratelimit-remaining", "0"))
                 if remaining == 0:
                     reset_ts = int(headers.get("x-ratelimit-reset", "0"))
-                    reset_at = (
-                        datetime.fromtimestamp(reset_ts, tz=UTC) if reset_ts else None
-                    )
+                    reset_at = datetime.fromtimestamp(reset_ts, tz=UTC) if reset_ts else None
                     return GitHubRateLimitError(
                         "GitHub rate limit exceeded",
                         reset_at=reset_at,

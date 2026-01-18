@@ -4,6 +4,7 @@ Tests the full flow: GitHub API data → Transform → Store → Read back
 """
 
 from datetime import UTC, datetime, timedelta
+from typing import Any, cast
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -24,12 +25,14 @@ from tests.fixtures import MERGED_PR_METADATA, OPEN_PR_METADATA, REAL_MERGED_PR,
 @pytest.fixture
 def parse_fixture():
     """Helper to parse PR fixtures into schema objects."""
+
     def _parse(fixture):
-        pr = GitHubPullRequest(**fixture["pr"])
-        files = [GitHubFile(**f) for f in fixture["files"]]
-        commits = [GitHubCommit(**c) for c in fixture["commits"]]
-        reviews = [GitHubReview(**r) for r in fixture["reviews"]]
+        pr = GitHubPullRequest.model_validate(fixture["pr"])
+        files = [GitHubFile.model_validate(f) for f in fixture["files"]]
+        commits = [GitHubCommit.model_validate(c) for c in fixture["commits"]]
+        reviews = [GitHubReview.model_validate(r) for r in fixture["reviews"]]
         return pr, files, commits, reviews
+
     return _parse
 
 
@@ -101,6 +104,7 @@ class TestOpenPRIngestionE2E:
         pr_repository = PullRequestRepository(db_session)
 
         repo = await repo_repository.get_by_owner_and_name("prebid", "prebid-server")
+        assert repo is not None
         pr = await pr_repository.get_by_number(repo.id, 4663)
 
         assert pr is not None
@@ -189,15 +193,18 @@ class TestIdempotencyE2E:
         result1 = await ingestion_service.ingest_pr("prebid", "prebid-server", 4663)
 
         # Modify the fixture to simulate an update
-        gh_pr_updated = GitHubPullRequest(
-            **{
-                **REAL_OPEN_PR["pr"],
+        gh_pr_updated = GitHubPullRequest.model_validate(
+            {
+                **cast(dict[str, Any], REAL_OPEN_PR["pr"]),
                 "title": "Updated Title",
                 "updated_at": "2030-01-01T00:00:00Z",
             }
         )
         mock_github_client.get_full_pull_request.return_value = (
-            gh_pr_updated, files, commits, reviews
+            gh_pr_updated,
+            files,
+            commits,
+            reviews,
         )
 
         # Second ingestion with updated data
@@ -220,16 +227,19 @@ class TestGracePeriodE2E:
 
         # Set merge date to now (within grace period)
         now_iso = datetime.now(UTC).isoformat().replace("+00:00", "Z")
-        gh_pr_recent = GitHubPullRequest(
-            **{
-                **REAL_MERGED_PR["pr"],
+        gh_pr_recent = GitHubPullRequest.model_validate(
+            {
+                **cast(dict[str, Any], REAL_MERGED_PR["pr"]),
                 "merged_at": now_iso,
                 "closed_at": now_iso,
                 "updated_at": now_iso,
             }
         )
         mock_github_client.get_full_pull_request.return_value = (
-            gh_pr_recent, files, commits, reviews
+            gh_pr_recent,
+            files,
+            commits,
+            reviews,
         )
 
         repo_repository = RepositoryRepository(db_session)
@@ -243,9 +253,9 @@ class TestGracePeriodE2E:
         # Modify and re-ingest (should update because within grace period)
         updated_at_iso = (datetime.now(UTC) + timedelta(hours=1)).isoformat()
         updated_at_iso = updated_at_iso.replace("+00:00", "Z")
-        gh_pr_updated = GitHubPullRequest(
-            **{
-                **REAL_MERGED_PR["pr"],
+        gh_pr_updated = GitHubPullRequest.model_validate(
+            {
+                **cast(dict[str, Any], REAL_MERGED_PR["pr"]),
                 "title": "Updated Merged PR",
                 "merged_at": now_iso,
                 "closed_at": now_iso,
@@ -253,11 +263,15 @@ class TestGracePeriodE2E:
             }
         )
         mock_github_client.get_full_pull_request.return_value = (
-            gh_pr_updated, files, commits, reviews
+            gh_pr_updated,
+            files,
+            commits,
+            reviews,
         )
 
         result2 = await service.ingest_pr("prebid", "prebid-server", 4646)
         assert result2.updated is True
+        assert result2.pr is not None
         assert result2.pr.title == "Updated Merged PR"
 
 
@@ -338,7 +352,9 @@ class TestRepositoryCreation:
         result1 = await ingestion_service.ingest_pr("prebid", "prebid-server", 4663)
 
         # Second PR (different number, same repo)
-        gh_pr2 = GitHubPullRequest(**{**REAL_OPEN_PR["pr"], "number": 4664})
+        gh_pr2 = GitHubPullRequest.model_validate(
+            {**cast(dict[str, Any], REAL_OPEN_PR["pr"]), "number": 4664}
+        )
         mock_github_client.get_full_pull_request.return_value = (gh_pr2, files, commits, reviews)
         result2 = await ingestion_service.ingest_pr("prebid", "prebid-server", 4664)
 

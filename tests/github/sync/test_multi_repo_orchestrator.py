@@ -59,9 +59,7 @@ def mock_scheduler():
 
 
 @pytest.fixture
-def orchestrator(
-    mock_github_client, mock_repo_repository, mock_pr_repository, mock_scheduler
-):
+def orchestrator(mock_github_client, mock_repo_repository, mock_pr_repository, mock_scheduler):
     """Create orchestrator with mocked dependencies."""
     return MultiRepoOrchestrator(
         client=mock_github_client,
@@ -435,9 +433,7 @@ class TestSyncAll:
             )
 
             config = BulkIngestionConfig()
-            result = await orchestrator.sync_all(
-                config, repos=["custom/repo1", "custom/repo2"]
-            )
+            result = await orchestrator.sync_all(config, repos=["custom/repo1", "custom/repo2"])
 
             # Should only sync the 2 specified repos
             assert len(result.repo_results) == 2
