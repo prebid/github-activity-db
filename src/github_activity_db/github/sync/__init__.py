@@ -7,9 +7,11 @@ Services:
 - PRIngestionService: Single PR ingestion (fetch → transform → store)
 - BulkPRIngestionService: Multi-PR ingestion with batch execution
 - MultiRepoOrchestrator: Multi-repository sync orchestration
+- CommitManager: Batch commit boundaries for database resilience
 """
 
 from .bulk_ingestion import BulkIngestionConfig, BulkIngestionResult, BulkPRIngestionService
+from .commit_manager import CommitManager
 from .enums import OutputFormat, SyncStrategy
 from .ingestion import PRIngestionService
 from .multi_repo_orchestrator import (
@@ -37,4 +39,6 @@ __all__ = [
     # Failure retry (Phase 1.13)
     "FailureRetryService",
     "RetryResult",
+    # Commit management (Phase 1.15)
+    "CommitManager",
 ]

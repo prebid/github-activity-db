@@ -49,18 +49,31 @@ def get_session_factory() -> async_sessionmaker[AsyncSession]:
 
 
 @asynccontextmanager
-async def get_session() -> AsyncGenerator[AsyncSession, None]:
+async def get_session(auto_commit: bool = True) -> AsyncGenerator[AsyncSession, None]:
     """Get an async database session with automatic cleanup.
 
+    Args:
+        auto_commit: If True (default), commits on successful exit.
+                     Set to False when using CommitManager for manual commits.
+                     When False, uncommitted changes are rolled back on exit.
+
     Usage:
+        # Standard usage - auto-commits on exit
         async with get_session() as session:
             result = await session.execute(select(PullRequest))
+
+        # With CommitManager - manual commits
+        async with get_session(auto_commit=False) as session:
+            commit_manager = CommitManager(session, batch_size=25)
+            # ... operations with commit_manager.record_success() ...
+            await commit_manager.finalize()
     """
     session_factory = get_session_factory()
     async with session_factory() as session:
         try:
             yield session
-            await session.commit()
+            if auto_commit:
+                await session.commit()
         except Exception:
             await session.rollback()
             raise

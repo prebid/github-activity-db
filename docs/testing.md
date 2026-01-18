@@ -87,12 +87,12 @@ Test complete workflows from input to output.
 
 ## Current Coverage
 
-### Test Statistics (502 tests)
+### Test Statistics (533 tests)
 
 | Module | Tests | Coverage |
 |--------|-------|----------|
 | `github/pacing/` | 113 | ✅ Comprehensive |
-| `github/sync/` | 60 | ✅ Good |
+| `github/sync/` | 78 | ✅ Comprehensive |
 | `github/rate_limit/` | 15 | ⚠️ Partial |
 | `db/repositories/` | 62 | ✅ Good |
 | `schemas/` | 150+ | ✅ Comprehensive |

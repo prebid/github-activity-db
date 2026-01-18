@@ -99,13 +99,20 @@ class SyncConfig(BaseModel):
     """Configuration for PR sync behavior.
 
     Controls how PRs are synced from GitHub to the database,
-    including grace periods for merged PRs.
+    including grace periods for merged PRs and commit batch sizes.
     """
 
     merge_grace_period_days: int = Field(
         default=14,
         ge=0,
         description="Days after merge before PR is frozen (0 = freeze immediately)",
+    )
+
+    commit_batch_size: int = Field(
+        default=25,
+        ge=1,
+        le=100,
+        description="PRs to commit per batch (limits data loss on failure)",
     )
 
     @property

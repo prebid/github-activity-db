@@ -20,7 +20,7 @@ uv run ghactivity sync all --since 2024-10-01     # Multi-repo sync
 # Development
 uv run mypy src/           # Type check
 uv run ruff check src/     # Lint
-uv run pytest              # Test (515 tests)
+uv run pytest              # Test (533 tests)
 ```
 
 ## Documentation
@@ -44,6 +44,7 @@ uv run pytest              # Test (515 tests)
 - Request pacing with token bucket algorithm and priority queue scheduler
 - Single and bulk PR ingestion pipelines with 2-week grace period for merged PRs
 - Multi-repository sync orchestration for all tracked Prebid repositories
+- Batch commit resilience to prevent data loss during sync failures
 - CLI commands: `ghactivity sync pr`, `ghactivity sync repo`, and `ghactivity sync all`
 
 **Out of Scope (Future):**
@@ -81,6 +82,7 @@ Async GitHub API client with integrated pacing and rate limit tracking. Every AP
 - `PRIngestionService`: Single PR fetch → transform → store pipeline
 - `BulkPRIngestionService`: Multi-PR import using lazy iteration for efficient date filtering
 - `MultiRepoOrchestrator`: Coordinates syncing all tracked Prebid repositories
+- `CommitManager`: Batch commit boundaries for database resilience
 - `PRIngestionResult` / `BulkIngestionResult` / `MultiRepoSyncResult`: Structured results
 
 ### Repository Layer (`db/repositories/`)
@@ -96,3 +98,4 @@ Async GitHub API client with integrated pacing and rate limit tracking. Every AP
 | `LOG_LEVEL` | No | `INFO` | Logging level |
 | `ENVIRONMENT` | No | `development` | App environment |
 | `SYNC__MERGE_GRACE_PERIOD_DAYS` | No | `14` | Days after merge before PR is frozen |
+| `SYNC__COMMIT_BATCH_SIZE` | No | `25` | PRs to commit per batch (limits data loss on failure) |

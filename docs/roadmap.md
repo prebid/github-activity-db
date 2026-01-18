@@ -756,6 +756,123 @@ As quota depletes to WARNING (20% remaining = 1000 requests):
 
 ---
 
+## Phase 1.15: Database Write Resilience ✅ COMPLETE
+
+Implements batch commit boundaries to prevent data loss during sync failures. Previously, all writes happened in a single transaction that only committed on session exit—any failure caused complete rollback of all work.
+
+### The Problem
+
+```
+Before (all-or-nothing):
+PR #1 → flush → PR #2 → flush → ... → PR #200 → flush → [context exit] → COMMIT ALL
+[Any failure at PR #150] → ROLLBACK ALL → 0 PRs saved
+```
+
+**Impact by operation type:**
+- Single PR sync: Loss of 1 PR (acceptable)
+- Bulk repo sync: Loss of 100+ PRs if failure near end
+- Multi-repo sync: Loss of 1000+ PRs across all repos if any failure
+
+### Solution: CommitManager
+
+The `CommitManager` class commits in configurable batches (default: 25 PRs), limiting data loss to the last uncommitted batch.
+
+```
+After (batched with batch_size=25):
+PR #1-25 → flush each → COMMIT BATCH → 25 PRs saved
+PR #26-50 → flush each → COMMIT BATCH → 50 PRs saved
+...
+PR #126-150 → flush each → [FAILURE at #150]
+→ ROLLBACK current batch only → 125 PRs saved (5 batches)
+```
+
+### Architecture Integration
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                         CLI: ghactivity sync                             │
+│                                                                          │
+│  async with get_session(auto_commit=False) as session:                   │
+│      write_lock = asyncio.Lock()                                         │
+│      commit_manager = CommitManager(session, write_lock, batch_size=25)  │
+│      ...                                                                 │
+│      await commit_manager.finalize()                                     │
+└───────────────────────────────────┬─────────────────────────────────────┘
+                                    │
+              ┌─────────────────────┼─────────────────────┐
+              │                     │                     │
+              ▼                     ▼                     ▼
+    BulkPRIngestionService   MultiRepoOrchestrator   PullRequestRepository
+    (calls record_success)   (passes commit_manager)  (uses write_lock)
+```
+
+### CommitManager API
+
+```python
+class CommitManager:
+    def __init__(
+        self,
+        session: AsyncSession,
+        write_lock: asyncio.Lock | None = None,
+        batch_size: int = 25,
+    ) -> None: ...
+
+    async def record_success(self) -> int:
+        """Record successful operation, auto-commit at batch_size."""
+
+    async def commit(self) -> int:
+        """Force commit of pending changes."""
+
+    async def finalize(self) -> int:
+        """Commit any remaining uncommitted changes."""
+
+    @property
+    def uncommitted_count(self) -> int: ...
+    @property
+    def total_committed(self) -> int: ...
+    @property
+    def batch_size(self) -> int: ...
+```
+
+### Configuration
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `SYNC__COMMIT_BATCH_SIZE` | `25` | PRs to commit per batch (1-100) |
+
+### CLI Integration
+
+All sync commands automatically use CommitManager:
+
+```bash
+# Default batch size (25)
+ghactivity sync repo prebid/prebid-server --since 2024-10-01
+
+# Custom batch size via environment
+SYNC__COMMIT_BATCH_SIZE=50 ghactivity sync all --since 2024-10-01
+```
+
+### File Structure
+
+```
+src/github_activity_db/
+├── config.py                          # + commit_batch_size in SyncConfig
+├── db/
+│   └── engine.py                      # + auto_commit param to get_session()
+└── github/
+    └── sync/
+        ├── __init__.py                # + export CommitManager
+        ├── commit_manager.py          # NEW: CommitManager class
+        ├── bulk_ingestion.py          # + CommitManager integration
+        └── multi_repo_orchestrator.py # + CommitManager integration
+
+tests/github/sync/
+├── test_commit_manager.py             # Unit tests (13 tests)
+└── test_commit_manager_integration.py # Integration tests (5 tests)
+```
+
+---
+
 ## Phase 2: Enhanced Features (Future)
 
 ### 2.1 GitHub User Identity (Normalized)

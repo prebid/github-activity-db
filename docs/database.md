@@ -254,3 +254,64 @@ async with get_session() as session:
     print(pr.repository.full_name)
     print([tag.name for tag in pr.user_tags])
 ```
+
+## Transaction Management
+
+### Default Behavior
+
+By default, `get_session()` auto-commits on successful exit and rolls back on exception:
+
+```python
+async with get_session() as session:
+    # All operations here...
+    pass
+# Auto-commits on exit
+```
+
+### Batch Commits with CommitManager
+
+For bulk operations, use `CommitManager` to commit in batches and prevent data loss on failure:
+
+```python
+import asyncio
+from github_activity_db.db import get_session
+from github_activity_db.github.sync import CommitManager
+
+async with get_session(auto_commit=False) as session:
+    write_lock = asyncio.Lock()
+    commit_manager = CommitManager(session, write_lock, batch_size=25)
+
+    for pr in prs_to_process:
+        # Process PR...
+        await session.flush()
+        await commit_manager.record_success()  # Auto-commits at batch_size
+
+    await commit_manager.finalize()  # Commit any remaining
+```
+
+**Key parameters:**
+- `auto_commit=False`: Disables auto-commit on session exit (CommitManager handles it)
+- `write_lock`: Serializes commits with concurrent flush operations
+- `batch_size`: Number of items per commit batch (default: 25)
+
+### Configuration
+
+The batch size is configurable via environment variable:
+
+```bash
+# Set batch size to 50 PRs per commit
+SYNC__COMMIT_BATCH_SIZE=50 uv run ghactivity sync all --since 2024-10-01
+```
+
+### Failure Recovery
+
+With CommitManager, only the current uncommitted batch is lost on failure:
+
+```
+Processing 100 PRs with batch_size=25:
+- PRs 1-25: Committed ✅
+- PRs 26-50: Committed ✅
+- PRs 51-75: Committed ✅
+- PRs 76-85: [FAILURE] → Rolled back ❌
+- Result: 75 PRs saved (3 complete batches)
+```

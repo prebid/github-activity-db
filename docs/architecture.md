@@ -212,8 +212,8 @@ config.py ←── db/engine.py ←── db/models.py
 | `github/client.py` | ✅ Complete | API wrapper with integrated pacing and rate limit tracking |
 | `github/rate_limit/` | ✅ Complete | Monitor, schemas, state machine |
 | `github/pacing/` | ✅ Complete | Pacer, scheduler, batch, progress |
-| `github/sync/` | ✅ Complete | PRIngestionService, BulkPRIngestionService, results, enums |
-| `tests/` | ✅ Complete | 515+ tests, factory pattern |
+| `github/sync/` | ✅ Complete | PRIngestionService, BulkPRIngestionService, CommitManager, results, enums |
+| `tests/` | ✅ Complete | 533+ tests, factory pattern |
 | `search/query.py` | 🔲 TODO | Search builder |
 
 ## Test Infrastructure

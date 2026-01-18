@@ -33,6 +33,8 @@ from .results import PRIngestionResult
 if TYPE_CHECKING:
     from github_activity_db.github.client import GitHubClient
 
+    from .commit_manager import CommitManager
+
 logger = get_logger(__name__)
 
 
@@ -166,6 +168,7 @@ class BulkPRIngestionService:
         scheduler: RequestScheduler,
         progress: ProgressTracker | None = None,
         failure_repository: SyncFailureRepository | None = None,
+        commit_manager: CommitManager | None = None,
     ) -> None:
         """Initialize the bulk ingestion service.
 
@@ -176,6 +179,9 @@ class BulkPRIngestionService:
             scheduler: RequestScheduler for rate-limited execution
             progress: Optional ProgressTracker for progress reporting
             failure_repository: Optional repository for tracking failed PRs
+            commit_manager: Optional CommitManager for batch commits.
+                            When provided, commits are made in batches to limit
+                            data loss on failure.
         """
         self._client = client
         self._repo_repository = repo_repository
@@ -183,6 +189,7 @@ class BulkPRIngestionService:
         self._scheduler = scheduler
         self._progress = progress
         self._failure_repository = failure_repository
+        self._commit_manager = commit_manager
 
     async def discover_prs(
         self,
@@ -365,12 +372,18 @@ class BulkPRIngestionService:
             item_name=lambda n: f"PR #{n}",
         )
 
-        # Step 5: Aggregate results
+        # Step 5: Aggregate results and record commits
         for pr_result in batch_result.succeeded:
             if pr_result.created:
                 result.created += 1
+                # Record success for batch commits
+                if self._commit_manager and not config.dry_run:
+                    await self._commit_manager.record_success()
             elif pr_result.updated:
                 result.updated += 1
+                # Record success for batch commits
+                if self._commit_manager and not config.dry_run:
+                    await self._commit_manager.record_success()
             elif pr_result.skipped_frozen:
                 result.skipped_frozen += 1
             elif pr_result.skipped_unchanged:
@@ -404,6 +417,10 @@ class BulkPRIngestionService:
                     owner,
                     repo,
                 )
+
+        # Finalize any pending commits
+        if self._commit_manager and not config.dry_run:
+            await self._commit_manager.finalize()
 
         result.duration_seconds = time.monotonic() - start_time
 

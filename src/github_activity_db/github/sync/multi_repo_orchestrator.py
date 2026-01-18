@@ -25,6 +25,8 @@ if TYPE_CHECKING:
     from github_activity_db.github.client import GitHubClient
     from github_activity_db.github.pacing import RequestScheduler
 
+    from .commit_manager import CommitManager
+
 logger = get_logger(__name__)
 
 
@@ -152,6 +154,7 @@ class MultiRepoOrchestrator:
         pr_repository: PullRequestRepository,
         scheduler: RequestScheduler,
         failure_repository: SyncFailureRepository | None = None,
+        commit_manager: CommitManager | None = None,
     ) -> None:
         """Initialize the multi-repo orchestrator.
 
@@ -161,12 +164,16 @@ class MultiRepoOrchestrator:
             pr_repository: Repository for PullRequest model
             scheduler: RequestScheduler for rate-limited execution
             failure_repository: Optional repository for tracking sync failures
+            commit_manager: Optional CommitManager for batch commits.
+                            When provided, commits are made per repository
+                            and in batches within each repository.
         """
         self._client = client
         self._repo_repository = repo_repository
         self._pr_repository = pr_repository
         self._scheduler = scheduler
         self._failure_repository = failure_repository
+        self._commit_manager = commit_manager
         self._settings = get_settings()
 
     async def initialize_repositories(
@@ -233,6 +240,7 @@ class MultiRepoOrchestrator:
             pr_repository=self._pr_repository,
             scheduler=self._scheduler,
             failure_repository=self._failure_repository,
+            commit_manager=self._commit_manager,
         )
 
         # Sync each repository

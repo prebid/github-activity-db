@@ -26,7 +26,11 @@ from github_activity_db.github import (
 )
 from github_activity_db.github.pacing import ProgressTracker
 from github_activity_db.github.rate_limit import RateLimitMonitor
-from github_activity_db.github.sync import FailureRetryService, MultiRepoOrchestrator
+from github_activity_db.github.sync import (
+    CommitManager,
+    FailureRetryService,
+    MultiRepoOrchestrator,
+)
 
 app = typer.Typer(help="Sync PR data from GitHub")
 console = Console()
@@ -257,6 +261,7 @@ def sync_repository(
     )
 
     async def _sync() -> dict[str, Any]:
+        settings = get_settings()
         async with GitHubClient() as base_client:
             # Set up rate limiting infrastructure
             monitor = RateLimitMonitor(base_client._github)
@@ -268,12 +273,20 @@ def sync_repository(
             async with GitHubClient(
                 rate_monitor=monitor, pacer=pacer
             ) as client:
-                async with get_session() as session:
+                # Use auto_commit=False for manual commit control via CommitManager
+                async with get_session(auto_commit=False) as session:
                     # Create progress tracker
                     progress_tracker = ProgressTracker(name="PR Import")
 
                     # Shared lock to serialize database writes across concurrent operations
                     write_lock = asyncio.Lock()
+
+                    # Create commit manager for batch commits (limits data loss on failure)
+                    commit_manager = CommitManager(
+                        session=session,
+                        write_lock=write_lock,
+                        batch_size=settings.sync.commit_batch_size,
+                    )
 
                     repo_repository = RepositoryRepository(session, write_lock=write_lock)
                     pr_repository = PullRequestRepository(session, write_lock=write_lock)
@@ -310,6 +323,7 @@ def sync_repository(
                         scheduler=scheduler,
                         progress=progress_tracker,
                         failure_repository=failure_repository,
+                        commit_manager=commit_manager,
                     )
 
                     # Start scheduler
@@ -493,6 +507,7 @@ def sync_all_repositories(
     display_repos = repo_list if repo_list else get_settings().tracked_repos
 
     async def _sync() -> dict[str, Any]:
+        settings = get_settings()
         async with GitHubClient() as base_client:
             # Set up rate limiting infrastructure
             monitor = RateLimitMonitor(base_client._github)
@@ -504,9 +519,17 @@ def sync_all_repositories(
             async with GitHubClient(
                 rate_monitor=monitor, pacer=pacer
             ) as client:
-                async with get_session() as session:
+                # Use auto_commit=False for manual commit control via CommitManager
+                async with get_session(auto_commit=False) as session:
                     # Shared lock to serialize database writes across concurrent operations
                     write_lock = asyncio.Lock()
+
+                    # Create commit manager for batch commits (limits data loss on failure)
+                    commit_manager = CommitManager(
+                        session=session,
+                        write_lock=write_lock,
+                        batch_size=settings.sync.commit_batch_size,
+                    )
 
                     repo_repository = RepositoryRepository(session, write_lock=write_lock)
                     pr_repository = PullRequestRepository(session, write_lock=write_lock)
@@ -538,6 +561,7 @@ def sync_all_repositories(
                         pr_repository=pr_repository,
                         scheduler=scheduler,
                         failure_repository=failure_repository,
+                        commit_manager=commit_manager,
                     )
 
                     # Start scheduler
