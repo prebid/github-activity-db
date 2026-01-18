@@ -77,105 +77,17 @@ Foundation layer providing database models, GitHub client, and CLI scaffold.
 
 ## Phase 1.5: Rate Limiting & Request Pacing ✅ COMPLETE
 
-Internal layers within the GitHub module for request control. These components are internal to the GitHub layer - higher layers don't interact with them directly.
+Internal layers within the GitHub module for request control using a token bucket algorithm with adaptive throttling. These components are internal to the GitHub layer - higher layers don't interact with them directly.
 
-### Architecture
+**Components:** `RateLimitMonitor` (track state from headers), `RequestPacer` (calculate delays), `RequestScheduler` (priority queue), `BatchExecutor` (coordinate batches), `ProgressTracker` (observe progress).
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                     GitHub Layer (github/)                       │
-│  ┌───────────────────────────────────────────────────────────┐  │
-│  │                      GitHubClient                          │  │
-│  │              (public API for callers)                      │  │
-│  └─────────────────────────┬─────────────────────────────────┘  │
-│                            │ uses internally                     │
-│  ┌─────────────────────────▼─────────────────────────────────┐  │
-│  │                  Orchestration Layer                       │  │
-│  │    BatchExecutor │ RequestScheduler │ ProgressTracker      │  │
-│  └─────────────────────────┬─────────────────────────────────┘  │
-│                            │ delegates to                        │
-│  ┌─────────────────────────▼─────────────────────────────────┐  │
-│  │                    Control Layer                           │  │
-│  │         RequestPacer │ RateLimitMonitor                    │  │
-│  └─────────────────────────┬─────────────────────────────────┘  │
-│                            │                                     │
-└────────────────────────────┼─────────────────────────────────────┘
-                             ▼
-                       GitHub API
-```
-
-### Component Responsibilities
-
-| Component | Responsibility | Does NOT |
-|-----------|----------------|----------|
-| `RateLimitMonitor` | Track rate limit state from headers | Make pacing decisions |
-| `RequestPacer` | Calculate optimal delays | Queue or execute requests |
-| `RequestScheduler` | Queue and prioritize requests | Calculate delays |
-| `BatchExecutor` | Coordinate batch operations | Implement queueing |
-| `ProgressTracker` | Observe and report progress | Affect execution |
-
-### Token Bucket Algorithm
-
-```
-INPUTS:
-  remaining   = requests left in window
-  reset_time  = when window resets (UTC)
-  buffer_pct  = reserve percentage (default 10%)
-
-CALCULATION:
-  time_left   = reset_time - now()
-  buffer      = limit * buffer_pct
-  effective   = max(1, remaining - buffer)
-  base_delay  = time_left / effective
-
-ADAPTIVE THROTTLE (multiplier by health status):
-  > 50% remaining:  1.0x (healthy)
-  20-50% remaining: 1.5x (warning)
-  5-20% remaining:  2.0x (critical)
-  < 5% remaining:   4.0x (exhausted soon)
-
-OUTPUT:
-  delay = clamp(base_delay * multiplier, min=0.05s, max=60s)
-```
-
-### Rate Limit State Machine
-
-```
-HEALTHY (>50%) ─────┐
-    ▲               │ remaining drops
-    │               ▼
-    │         WARNING (20-50%)
-    │               │
-    │               ▼
-    │         CRITICAL (5-20%)
-    │               │
-    │               ▼
-    └───────── EXHAUSTED (0) ─── wait for reset
-```
-
-### File Structure
-
-```
-src/github_activity_db/github/
-├── rate_limit/
-│   ├── __init__.py         # Public exports
-│   ├── schemas.py          # RateLimitPool, PoolRateLimit, RateLimitSnapshot
-│   └── monitor.py          # RateLimitMonitor
-└── pacing/
-    ├── __init__.py         # Public exports
-    ├── pacer.py            # RequestPacer (token bucket)
-    ├── scheduler.py        # RequestScheduler (priority queue)
-    ├── batch.py            # BatchExecutor
-    └── progress.py         # ProgressTracker
-```
-
-### CLI Commands
-
+**CLI Commands:**
 ```bash
 ghactivity github rate-limit           # Check core rate limit
 ghactivity github rate-limit --all     # Show all pools
-ghactivity github rate-limit --all -v  # Verbose with reset times
 ```
+
+See [Rate Limit Handling](rate-limit-handling.md) for algorithm details, retry logic, and testing patterns.
 
 ---
 
@@ -641,373 +553,71 @@ src/github_activity_db/
 
 ## Phase 1.10: Bugfix - GitHub List API Missing Merged Status ✅ COMPLETE
 
-### Problem Discovery
+Fixed critical bug where all merged PRs were incorrectly excluded during discovery. The GitHub list API always returns `merged=False`; the actual merge status is only available from the full PR endpoint.
 
-During production sync of all 2025 PRs, only 204 PRs were imported across 8 repositories. Investigation revealed a critical bug: **the GitHub list API does NOT include the `merged` status** - it always returns `False`.
+**Fix:** Discovery phase now includes ALL closed PRs. The ingestion phase (which fetches full PR data) determines if closed PRs are merged or abandoned. Added `skipped_abandoned` field to result types.
 
-**Evidence from live debugging:**
-```python
-# Same PRs, different endpoints
-PR #4549: list_api.merged=False, full_api.merged=True  ← Actually merged!
-PR #4615: list_api.merged=False, full_api.merged=True  ← Actually merged!
-PR #4532: list_api.merged=False, full_api.merged=True  ← Actually merged!
-```
+**Trade-off:** Slightly increased API calls (4 per closed PR) but ensures correctness.
 
-### Impact
-
-The `discover_prs()` function in `bulk_ingestion.py` filters PRs using `pr.merged` from the list API. Since this is always `False`, **all merged PRs are incorrectly excluded as "abandoned"**.
-
-```python
-# Current broken code (lines 228-243)
-is_merged = pr.merged  # ALWAYS FALSE FROM LIST API!
-
-if config.state == "all":
-    if not is_open and not is_merged:  # Excludes ALL closed PRs!
-        continue  # WRONG - merged PRs filtered out here
-```
-
-### Root Cause
-
-GitHub's REST API has different response schemas for list vs single endpoints:
-
-| Field | List API (`/repos/{owner}/{repo}/pulls`) | Full API (`/repos/{owner}/{repo}/pulls/{number}`) |
-|-------|------------------------------------------|---------------------------------------------------|
-| `merged` | **Always `False`** (not included) | Actual merge status |
-| `merged_by` | Not included | Merge author |
-| `merged_at` | Not included | Merge timestamp |
-
-This is documented GitHub API behavior, but our code incorrectly assumed the list API includes merge status.
-
-### Fix Implementation
-
-#### 1. Update Discovery Logic (`bulk_ingestion.py`)
-
-**File:** `src/github_activity_db/github/sync/bulk_ingestion.py`
-
-**Before:**
-```python
-is_open = pr.state == "open"
-is_merged = pr.merged
-
-if config.state == "open" and not is_open:
-    continue
-elif config.state == "merged" and not is_merged:
-    continue
-elif config.state == "all":
-    if not is_open and not is_merged:
-        continue
-```
-
-**After:**
-```python
-# NOTE: List API does NOT include merge status (pr.merged always False).
-# We cannot filter out "abandoned" PRs here - must do it during ingestion
-# when we fetch full PR details.
-is_open = pr.state == "open"
-is_closed = pr.state == "closed"
-
-if config.state == "open" and not is_open:
-    continue
-elif config.state == "merged" and is_open:
-    # Can only skip open PRs for "merged" filter; closed might be merged
-    continue
-# For state="all", include both open and closed PRs
-# Ingestion step determines if closed PRs are merged or abandoned
-```
-
-#### 2. Add Abandoned PR Filtering in Ingestion (`ingestion.py`)
-
-**File:** `src/github_activity_db/github/sync/ingestion.py`
-
-After fetching full PR data, check if abandoned:
-
-```python
-async def ingest_pr(self, owner: str, repo: str, pr_number: int) -> PRIngestionResult:
-    # ... fetch full PR ...
-
-    # Skip abandoned PRs (closed but not merged)
-    if gh_pr.state == "closed" and not gh_pr.merged:
-        pr_logger.debug("PR is abandoned (closed without merge), skipping")
-        return PRIngestionResult.from_skipped_abandoned(existing)
-
-    # ... continue with ingestion ...
-```
-
-#### 3. Update Result Types (`results.py`)
-
-**File:** `src/github_activity_db/github/sync/results.py`
-
-```python
-@dataclass
-class PRIngestionResult:
-    pr: PullRequest | None
-    created: bool = False
-    updated: bool = False
-    skipped_frozen: bool = False
-    skipped_unchanged: bool = False
-    skipped_abandoned: bool = False  # NEW
-    error: Exception | None = None
-
-    @classmethod
-    def from_skipped_abandoned(cls, pr: "PullRequest | None") -> "PRIngestionResult":
-        return cls(pr=pr, skipped_abandoned=True)
-```
-
-#### 4. Update Bulk Result Tracking (`bulk_ingestion.py`)
-
-```python
-@dataclass
-class BulkIngestionResult:
-    # ... existing fields ...
-    skipped_abandoned: int = 0  # NEW
-```
-
-### Architecture Notes
-
-- Discovery phase now includes ALL closed PRs (not just merged)
-- Filtering for abandoned PRs moves to ingestion phase (where we have full data)
-- This increases API calls slightly (4 calls per closed PR instead of 0)
-- Trade-off is acceptable: correctness over efficiency
-
-### Verification
-
-```bash
-# After fix, re-sync and verify merged PRs are included
-sqlite3 github_activity.db "DELETE FROM pull_requests WHERE repository_id = 1;"
-uv run ghactivity sync repo prebid/prebid-server --since 2025-01-01
-
-# Check state distribution - should have MERGED PRs now
-sqlite3 github_activity.db "SELECT state, COUNT(*) FROM pull_requests GROUP BY state;"
-```
+See [GitHub API Quirks](github-api-quirks.md) for detailed documentation of list vs full API differences.
 
 ---
 
-## Phase 1.11: Testing Strategy Improvements ⚠️ PENDING
+## Phase 1.11: Testing Strategy Improvements ✅ COMPLETE
 
-### Problem Analysis
+Improved test infrastructure following the GitHub list API bug (Phase 1.10). Added API contract tests to verify assumptions about GitHub API responses, sleep mocking patterns for fast test execution, and improved mock accuracy validation.
 
-The GitHub list API bug (Phase 1.10) was not caught by tests because:
+**Key improvements:**
+- Real API response fixtures (`tests/fixtures/real_pr_*.py`)
+- Sleep mocking patterns (targeted mock, complete mock, disable retries)
+- Test suite optimized from 281s to ~18s (94% reduction)
+- 502 tests with comprehensive coverage
 
-1. **Mocks didn't reflect real API behavior** - Test mocks set `merged=True` on list API responses, which doesn't match reality
-2. **No contract tests between list and full API** - We assumed fields work the same across endpoints
-3. **No API behavior verification** - We didn't test what the actual API returns for shared fields
+See [Testing Guide](testing.md) for sleep mocking patterns, API contract testing, and mock accuracy guidelines.
 
-### Testing Gaps Identified
+---
 
-| Gap | Why It Matters | Priority |
-|-----|----------------|----------|
-| API response contract tests | Verify our assumptions about API structure | HIGH |
-| List vs Full API field comparison | Catch discrepancies in shared fields | HIGH |
-| Mock accuracy validation | Ensure mocks reflect real API behavior | MEDIUM |
-| Production smoke tests | Verify real API calls work as expected | MEDIUM |
+## Phase 1.12: Rate Limit Retry Handling Fix ✅ COMPLETE
 
-### New Test Categories
+Fixed rate limit errors being swallowed by the ingestion pipeline instead of propagating to the scheduler for proper retry handling.
 
-#### 1. API Contract Tests
+**Fix:** Added `GitHubRetryableError` base class for errors that should be retried. Modified `ingest_pr()` to re-raise retryable errors. Added explicit retry loop in discovery phase with exponential backoff.
 
-Verify that our schema expectations match real GitHub API responses.
+**Result:** Rate limit errors now trigger proper wait-and-retry behavior with scheduler priority boosting.
 
-**File:** `tests/github/test_api_contracts.py`
+See [Rate Limit Handling](rate-limit-handling.md) for retry flow details and exponential backoff tables.
 
-```python
-class TestGitHubAPIContracts:
-    """Tests verifying our assumptions about GitHub API behavior.
+---
 
-    These tests document known API behaviors and catch if our
-    assumptions become invalid due to API changes.
-    """
+## Phase 1.13: Sync Failure Management System ✅ COMPLETE
 
-    def test_list_api_does_not_include_merged_status(self):
-        """Document that list API merged field is always False.
+Persistent tracking of failed PR ingestion attempts with automatic and manual retry capabilities. Failed PRs are now recorded in the database with error details and retry state, enabling recovery from transient failures.
 
-        The list endpoint (/repos/{owner}/{repo}/pulls) does NOT include
-        the actual merge status. We must fetch the full PR to get it.
-        """
-        from tests.fixtures.real_list_pr import REAL_LIST_PR_DATA
+### Components
 
-        # List API always returns merged=False
-        assert REAL_LIST_PR_DATA.get("merged") is False or "merged" not in REAL_LIST_PR_DATA
+**Database Layer:**
+- `SyncFailure` model with status tracking (PENDING, RESOLVED, PERMANENT)
+- `SyncFailureRepository` for CRUD operations and status transitions
+- Alembic migration for `sync_failures` table
 
-        # But the full API has the real value
-        from tests.fixtures.real_pr_merged import REAL_MERGED_PR_DATA
-        assert REAL_MERGED_PR_DATA["merged"] is True
+**Service Layer:**
+- `FailureRetryService` orchestrates retry operations with max retry limits
+- `BulkPRIngestionService` integration for automatic failure persistence
 
-    def test_list_api_fields_available(self):
-        """Document which fields ARE available from list API."""
-        from tests.fixtures.real_list_pr import REAL_LIST_PR_DATA
+**CLI Commands:**
+```bash
+ghactivity sync retry                      # Retry all pending failures
+ghactivity sync retry -r owner/repo        # Retry for specific repository
+ghactivity sync retry --max 10             # Limit retries
+ghactivity sync retry --dry-run            # Preview mode
 
-        required_fields = ["number", "state", "title", "created_at", "updated_at"]
-        for field in required_fields:
-            assert field in REAL_LIST_PR_DATA, f"List API should include {field}"
-
-    def test_full_api_fields_available(self):
-        """Document fields only available from full API."""
-        from tests.fixtures.real_pr_merged import REAL_MERGED_PR_DATA
-
-        full_only_fields = ["merged", "merged_by", "merged_at", "mergeable"]
-        for field in full_only_fields:
-            assert field in REAL_MERGED_PR_DATA, f"Full API should include {field}"
+ghactivity sync repo owner/repo --auto-retry  # Auto-retry before main sync
+ghactivity sync all --auto-retry              # Auto-retry across all repos
 ```
 
-#### 2. Mock Accuracy Tests
-
-Ensure test mocks accurately reflect real API behavior.
-
-**File:** `tests/fixtures/test_fixture_accuracy.py`
-
-```python
-class TestFixtureAccuracy:
-    """Verify test fixtures match real API response structure."""
-
-    def test_mock_list_pr_matches_real_structure(self):
-        """Ensure mock list PRs have same fields as real API."""
-        from tests.factories import make_github_list_pr
-        from tests.fixtures.real_list_pr import REAL_LIST_PR_DATA
-
-        mock = make_github_list_pr(number=123)
-
-        # Mock should NOT have merged=True if list API doesn't
-        assert mock.get("merged", False) is False, \
-            "Mock list PR should not have merged=True (matches real API)"
-
-    def test_mock_full_pr_has_merge_fields(self):
-        """Ensure mock full PRs include merge-related fields."""
-        from tests.factories import make_github_pr
-
-        mock = make_github_pr(number=123, merged=True)
-
-        assert "merged" in mock
-        assert "merged_by" in mock or mock["state"] == "open"
-```
-
-#### 3. Integration Tests with Real-like Mocks
-
-Test the full discovery → ingestion flow with accurate mocks.
-
-**File:** `tests/github/sync/test_discovery_ingestion_integration.py`
-
-```python
-class TestDiscoveryIngestionIntegration:
-    """Test that discovery and ingestion work together correctly."""
-
-    async def test_merged_pr_discovered_via_closed_state(self):
-        """Merged PRs should be discovered (state=closed) then identified in ingestion."""
-        # List API returns merged PR as state="closed", merged=False
-        list_pr = make_github_list_pr(number=100, state="closed", merged=False)
-
-        # Full API returns the truth
-        full_pr = make_github_pr(number=100, state="closed", merged=True)
-
-        mock_client.iter_pull_requests.return_value = async_iter([list_pr])
-        mock_client.get_full_pull_request.return_value = full_pr
-
-        result = await bulk_service.ingest_repository("prebid", "prebid-server", config)
-
-        # PR should be created with MERGED state
-        assert result.created == 1
-        pr = await pr_repo.get_by_number(repo_id, 100)
-        assert pr.state == PRState.MERGED
-
-    async def test_abandoned_pr_skipped_in_ingestion(self):
-        """Abandoned PRs (closed, not merged) should be skipped during ingestion."""
-        # List API returns abandoned PR as state="closed", merged=False
-        list_pr = make_github_list_pr(number=200, state="closed", merged=False)
-
-        # Full API confirms it's NOT merged
-        full_pr = make_github_pr(number=200, state="closed", merged=False)
-
-        mock_client.iter_pull_requests.return_value = async_iter([list_pr])
-        mock_client.get_full_pull_request.return_value = full_pr
-
-        result = await bulk_service.ingest_repository("prebid", "prebid-server", config)
-
-        # PR should be skipped
-        assert result.skipped_abandoned == 1
-        assert result.created == 0
-```
-
-### New Fixtures Required
-
-#### Real List API Response
-
-**File:** `tests/fixtures/real_list_pr.py`
-
-Capture actual response from `/repos/{owner}/{repo}/pulls` endpoint:
-
-```python
-# Captured from: GET /repos/prebid/prebid-server/pulls?state=closed
-REAL_LIST_PR_DATA = {
-    "number": 4549,
-    "state": "closed",
-    "title": "Fix bid caching issue",
-    "merged": False,  # NOTE: Always False from list API!
-    # ... other fields ...
-}
-```
-
-### Updated Factory Functions
-
-**File:** `tests/factories.py`
-
-Add factory for list API responses (distinct from full API):
-
-```python
-def make_github_list_pr(
-    number: int = 1,
-    state: str = "open",
-    **kwargs
-) -> dict:
-    """Create a mock GitHub list API PR response.
-
-    NOTE: List API does NOT include accurate merged status.
-    Always returns merged=False to match real API behavior.
-    """
-    return {
-        "number": number,
-        "state": state,
-        "merged": False,  # Always False from list API
-        "title": kwargs.get("title", f"Test PR #{number}"),
-        # ... minimal fields from list API ...
-    }
-
-def make_github_pr(
-    number: int = 1,
-    state: str = "open",
-    merged: bool = False,
-    **kwargs
-) -> dict:
-    """Create a mock GitHub full API PR response.
-
-    Full API includes accurate merged status and additional fields.
-    """
-    return {
-        "number": number,
-        "state": state,
-        "merged": merged,
-        "merged_by": kwargs.get("merged_by") if merged else None,
-        "merged_at": kwargs.get("merged_at") if merged else None,
-        # ... all fields from full API ...
-    }
-```
-
-### Documentation Updates
-
-Update `docs/testing.md` to include:
-
-1. **API Contract Testing** section explaining the pattern
-2. **Mock Accuracy Guidelines** for creating realistic test data
-3. **Known API Behaviors** documenting list vs full API differences
-
-### Verification Checklist
-
-- [ ] Capture real list API response fixture
-- [ ] Update `make_github_list_pr` factory to return `merged=False`
-- [ ] Add API contract tests
-- [ ] Add mock accuracy tests
-- [ ] Add discovery → ingestion integration tests
-- [ ] Update testing.md documentation
-- [ ] Run full test suite
-- [ ] Re-sync 2025 PRs and verify counts
+**Result Objects:**
+- `RetryResult` with succeeded/failed/marked_permanent counts
+- Integration with existing `BulkIngestionResult` for unified reporting
 
 ---
 

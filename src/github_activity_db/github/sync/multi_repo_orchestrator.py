@@ -12,7 +12,11 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
 from github_activity_db.config import get_settings
-from github_activity_db.db.repositories import PullRequestRepository, RepositoryRepository
+from github_activity_db.db.repositories import (
+    PullRequestRepository,
+    RepositoryRepository,
+    SyncFailureRepository,
+)
 from github_activity_db.logging import get_logger
 
 from .bulk_ingestion import BulkIngestionConfig, BulkIngestionResult, BulkPRIngestionService
@@ -147,6 +151,7 @@ class MultiRepoOrchestrator:
         repo_repository: RepositoryRepository,
         pr_repository: PullRequestRepository,
         scheduler: RequestScheduler,
+        failure_repository: SyncFailureRepository | None = None,
     ) -> None:
         """Initialize the multi-repo orchestrator.
 
@@ -155,11 +160,13 @@ class MultiRepoOrchestrator:
             repo_repository: Repository for Repository model
             pr_repository: Repository for PullRequest model
             scheduler: RequestScheduler for rate-limited execution
+            failure_repository: Optional repository for tracking sync failures
         """
         self._client = client
         self._repo_repository = repo_repository
         self._pr_repository = pr_repository
         self._scheduler = scheduler
+        self._failure_repository = failure_repository
         self._settings = get_settings()
 
     async def initialize_repositories(
@@ -225,6 +232,7 @@ class MultiRepoOrchestrator:
             repo_repository=self._repo_repository,
             pr_repository=self._pr_repository,
             scheduler=self._scheduler,
+            failure_repository=self._failure_repository,
         )
 
         # Sync each repository

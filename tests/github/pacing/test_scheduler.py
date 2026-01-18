@@ -6,6 +6,7 @@ retry logic, and rate limit handling.
 
 import asyncio
 from datetime import UTC, datetime, timedelta
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -287,11 +288,36 @@ class TestConcurrencyControl:
         assert max_concurrent_seen <= 2
 
 
+@pytest.fixture
+def mock_scheduler_sleep():
+    """Mock asyncio.sleep in scheduler to avoid real exponential backoff delays.
+
+    The scheduler uses exponential backoff (2, 4, 8... seconds) for retries.
+    This fixture replaces long sleeps with minimal ones, keeping tests fast
+    while still allowing the event loop to yield properly.
+    """
+    original_sleep = asyncio.sleep
+
+    async def fast_sleep(delay: float) -> None:
+        # For short internal delays (0.01, 0.1), use original
+        # For long backoff delays (2+), use minimal sleep
+        if delay >= 1.0:
+            await original_sleep(0.001)  # Minimal yield
+        else:
+            await original_sleep(delay)
+
+    with patch(
+        "github_activity_db.github.pacing.scheduler.asyncio.sleep",
+        side_effect=fast_sleep,
+    ) as mock:
+        yield mock
+
+
 class TestRetryLogic:
     """Tests for retry with exponential backoff."""
 
     @pytest.mark.asyncio
-    async def test_retries_on_failure(self) -> None:
+    async def test_retries_on_failure(self, mock_scheduler_sleep) -> None:
         """Requests are retried on failure."""
         pacer = create_pacer()
         scheduler = RequestScheduler(pacer, max_retries=3)
@@ -310,11 +336,17 @@ class TestRetryLogic:
 
         assert result == "success"
         assert attempt_count == 3
+        # Verify exponential backoff was used (2s, then 4s)
+        # The mock is called for all sleeps, so filter to backoff delays
+        backoff_calls = [c for c in mock_scheduler_sleep.call_args_list if c[0][0] >= 1.0]
+        assert len(backoff_calls) == 2
+        assert backoff_calls[0][0][0] == 2  # First retry: 2^1 = 2s
+        assert backoff_calls[1][0][0] == 4  # Second retry: 2^2 = 4s
 
         await scheduler.shutdown(wait=False)
 
     @pytest.mark.asyncio
-    async def test_max_retries_exceeded(self) -> None:
+    async def test_max_retries_exceeded(self, mock_scheduler_sleep) -> None:
         """Request fails after max retries exceeded."""
         pacer = create_pacer()
         scheduler = RequestScheduler(pacer, max_retries=2)
@@ -332,6 +364,12 @@ class TestRetryLogic:
         # Should have recorded failure
         stats = scheduler.get_stats()
         assert stats["total_failed"] == 1
+        # Verify backoff was applied for each retry
+        # The mock is called for all sleeps, so filter to backoff delays
+        backoff_calls = [c for c in mock_scheduler_sleep.call_args_list if c[0][0] >= 1.0]
+        assert len(backoff_calls) == 2
+        assert backoff_calls[0][0][0] == 2  # First retry: 2^1 = 2s
+        assert backoff_calls[1][0][0] == 4  # Second retry: 2^2 = 4s
 
 
 class TestRateLimitHandling:

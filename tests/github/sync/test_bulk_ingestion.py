@@ -9,10 +9,11 @@ Tests cover:
 """
 
 from datetime import UTC, datetime, timedelta
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from github_activity_db.github.exceptions import GitHubRateLimitError
 from github_activity_db.github.sync.bulk_ingestion import (
     BulkIngestionConfig,
     BulkIngestionResult,
@@ -490,6 +491,144 @@ class TestDiscoverPRs:
         pr_numbers = await service.discover_prs("owner", "repo", config)
 
         assert pr_numbers == []
+
+
+# -----------------------------------------------------------------------------
+# Discovery Rate Limit Tests
+# -----------------------------------------------------------------------------
+@pytest.fixture
+def mock_sleep():
+    """Mock asyncio.sleep to avoid real delays in rate limit retry tests.
+
+    The bulk_ingestion module sleeps for 60+ seconds when retrying after
+    rate limit errors. This fixture patches sleep to return immediately,
+    keeping tests fast while still exercising the retry logic.
+    """
+    with patch(
+        "github_activity_db.github.sync.bulk_ingestion.asyncio.sleep",
+        new_callable=AsyncMock,
+    ) as mock:
+        yield mock
+
+
+class TestDiscoveryRateLimit:
+    """Tests for rate limit handling during PR discovery."""
+
+    @pytest.mark.asyncio
+    async def test_discovery_retries_on_rate_limit(
+        self,
+        mock_github_client,
+        mock_repo_repository,
+        mock_pr_repository,
+        mock_scheduler,
+        mock_sleep,
+        now,
+    ):
+        """Discovery retries after rate limit error."""
+        pr_data = make_github_pr(number=100, created_at=now.isoformat())
+
+        call_count = 0
+
+        async def mock_iter(*args, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                raise GitHubRateLimitError("Rate limited", reset_at=None)
+            # Second call succeeds
+            yield GitHubPullRequest.model_validate(pr_data)
+
+        mock_github_client.iter_pull_requests = mock_iter
+
+        service = BulkPRIngestionService(
+            client=mock_github_client,
+            repo_repository=mock_repo_repository,
+            pr_repository=mock_pr_repository,
+            scheduler=mock_scheduler,
+        )
+
+        config = BulkIngestionConfig()
+        pr_numbers = await service.discover_prs("owner", "repo", config)
+
+        assert pr_numbers == [100]
+        assert call_count == 2  # Retried once
+        # Verify sleep was called with default 60s (reset_at=None)
+        mock_sleep.assert_called_once_with(60.0)
+
+    @pytest.mark.asyncio
+    async def test_discovery_fails_after_max_retries(
+        self,
+        mock_github_client,
+        mock_repo_repository,
+        mock_pr_repository,
+        mock_scheduler,
+        mock_sleep,
+    ):
+        """Discovery fails after max retries exceeded."""
+        async def mock_iter(*args, **kwargs):
+            raise GitHubRateLimitError("Rate limited", reset_at=None)
+            yield  # Make it a generator
+
+        mock_github_client.iter_pull_requests = mock_iter
+
+        service = BulkPRIngestionService(
+            client=mock_github_client,
+            repo_repository=mock_repo_repository,
+            pr_repository=mock_pr_repository,
+            scheduler=mock_scheduler,
+        )
+
+        config = BulkIngestionConfig()
+        with pytest.raises(GitHubRateLimitError):
+            await service.discover_prs("owner", "repo", config)
+
+        # Should have slept 2 times (attempts 1 and 2 sleep, attempt 3 raises)
+        assert mock_sleep.call_count == 2
+
+    @pytest.mark.asyncio
+    async def test_discovery_uses_reset_time_for_wait(
+        self,
+        mock_github_client,
+        mock_repo_repository,
+        mock_pr_repository,
+        mock_scheduler,
+        mock_sleep,
+        now,
+    ):
+        """Discovery uses reset_at time to calculate wait duration."""
+        pr_data = make_github_pr(number=100, created_at=now.isoformat())
+        reset_time = now + timedelta(seconds=2)
+
+        call_count = 0
+
+        async def mock_iter(*args, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                raise GitHubRateLimitError("Rate limited", reset_at=reset_time)
+            yield GitHubPullRequest.model_validate(pr_data)
+
+        mock_github_client.iter_pull_requests = mock_iter
+
+        service = BulkPRIngestionService(
+            client=mock_github_client,
+            repo_repository=mock_repo_repository,
+            pr_repository=mock_pr_repository,
+            scheduler=mock_scheduler,
+        )
+
+        config = BulkIngestionConfig()
+        # This should wait based on reset_time and then succeed
+        pr_numbers = await service.discover_prs("owner", "repo", config)
+
+        assert pr_numbers == [100]
+        assert call_count == 2
+        # Verify sleep was called once with calculated wait time
+        # reset_time is 2 seconds in future, plus 5 second buffer = 7 seconds
+        # But time passes between setting reset_time and the sleep call,
+        # so we just verify it was called once with a reasonable value
+        mock_sleep.assert_called_once()
+        wait_time = mock_sleep.call_args[0][0]
+        assert 5.0 <= wait_time <= 10.0  # Should be around 7 seconds
 
 
 # -----------------------------------------------------------------------------

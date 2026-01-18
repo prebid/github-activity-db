@@ -14,6 +14,7 @@ from .exceptions import (
     GitHubClientError,
     GitHubNotFoundError,
     GitHubRateLimitError,
+    GitHubRetryableError,
 )
 from .pacing import (
     RequestPacer,
@@ -47,6 +48,7 @@ __all__ = [
     "GitHubClientError",
     "GitHubNotFoundError",
     "GitHubRateLimitError",
+    "GitHubRetryableError",
     # Rate limit monitoring
     "PoolRateLimit",
     "RateLimitMonitor",

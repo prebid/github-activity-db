@@ -13,8 +13,13 @@ from github_activity_db.github.rate_limit.monitor import RateLimitMonitor
 from tests.fixtures.rate_limit_responses import HEADERS_HEALTHY
 
 
-def create_scheduler() -> RequestScheduler:
-    """Helper to create a scheduler with minimal delays for testing."""
+def create_scheduler(max_retries: int = 0) -> RequestScheduler:
+    """Helper to create a scheduler with minimal delays for testing.
+
+    Args:
+        max_retries: Max retry attempts. Default is 0 to avoid slow exponential
+                     backoff delays. Set higher if testing retry behavior.
+    """
     monitor = RateLimitMonitor()
     monitor.update_from_headers(HEADERS_HEALTHY)
     config = PacingConfig(
@@ -24,7 +29,7 @@ def create_scheduler() -> RequestScheduler:
         burst_allowance=1000,
     )
     pacer = RequestPacer(monitor, config=config)
-    return RequestScheduler(pacer, max_concurrent=5)
+    return RequestScheduler(pacer, max_concurrent=5, max_retries=max_retries)
 
 
 class TestBatchResult:

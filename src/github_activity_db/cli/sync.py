@@ -9,7 +9,12 @@ import typer
 from rich.console import Console
 
 from github_activity_db.config import get_settings
-from github_activity_db.db import PullRequestRepository, RepositoryRepository, get_session
+from github_activity_db.db import (
+    PullRequestRepository,
+    RepositoryRepository,
+    SyncFailureRepository,
+    get_session,
+)
 from github_activity_db.github import (
     BulkIngestionConfig,
     BulkPRIngestionService,
@@ -21,7 +26,7 @@ from github_activity_db.github import (
 )
 from github_activity_db.github.pacing import ProgressTracker
 from github_activity_db.github.rate_limit import RateLimitMonitor
-from github_activity_db.github.sync import MultiRepoOrchestrator
+from github_activity_db.github.sync import FailureRetryService, MultiRepoOrchestrator
 
 app = typer.Typer(help="Sync PR data from GitHub")
 console = Console()
@@ -183,6 +188,11 @@ def sync_repository(
         "--dry-run",
         help="Don't write to database, just show what would happen",
     ),
+    auto_retry: bool = typer.Option(
+        False,
+        "--auto-retry",
+        help="Retry any pending failures for this repo before syncing new PRs",
+    ),
     output_format: OutputFormat = typer.Option(  # noqa: B008
         OutputFormat.TEXT,
         "--format",
@@ -202,7 +212,7 @@ def sync_repository(
         ghactivity sync repo prebid/prebid-server --since 2024-10-01
         ghactivity sync repo prebid/prebid-server --state open
         ghactivity sync repo prebid/prebid-server --max 10 --dry-run
-        ghactivity sync repo prebid/prebid-server --since 2024-10-01 --format json
+        ghactivity sync repo prebid/prebid-server --auto-retry --since 2024-10-01
     """
     # Validate repo format
     if "/" not in repo:
@@ -251,12 +261,37 @@ def sync_repository(
                 # Shared lock to serialize database writes across concurrent operations
                 write_lock = asyncio.Lock()
 
+                repo_repository = RepositoryRepository(session, write_lock=write_lock)
+                pr_repository = PullRequestRepository(session, write_lock=write_lock)
+                failure_repository = SyncFailureRepository(session, write_lock=write_lock)
+
+                # Auto-retry pending failures before main sync
+                retry_dict: dict[str, Any] | None = None
+                if auto_retry:
+                    repository = await repo_repository.get_by_owner_and_name(owner, name)
+                    if repository:
+                        retry_service = FailureRetryService(
+                            ingestion_service=PRIngestionService(
+                                client=client,
+                                repo_repository=repo_repository,
+                                pr_repository=pr_repository,
+                            ),
+                            failure_repository=failure_repository,
+                            repo_repository=repo_repository,
+                        )
+                        retry_svc_result = await retry_service.retry_failures(
+                            repository_id=repository.id,
+                            dry_run=dry_run,
+                        )
+                        retry_dict = retry_svc_result.to_dict()
+
                 service = BulkPRIngestionService(
                     client=client,
-                    repo_repository=RepositoryRepository(session, write_lock=write_lock),
-                    pr_repository=PullRequestRepository(session, write_lock=write_lock),
+                    repo_repository=repo_repository,
+                    pr_repository=pr_repository,
                     scheduler=scheduler,
                     progress=progress_tracker,
+                    failure_repository=failure_repository,
                 )
 
                 # Start scheduler
@@ -264,7 +299,10 @@ def sync_repository(
 
                 try:
                     result = await service.ingest_repository(owner, name, config)
-                    return result.to_dict()
+                    sync_result = result.to_dict()
+                    if retry_dict:
+                        sync_result["retry_result"] = retry_dict
+                    return sync_result
                 finally:
                     await scheduler.shutdown(wait=True)
 
@@ -294,6 +332,16 @@ def sync_repository(
 
     # Text output
     prefix = "[dim](dry-run)[/dim] " if dry_run else ""
+
+    # Show retry results if auto-retry was enabled
+    retry_result = result.get("retry_result")
+    if retry_result:
+        console.print(f"{prefix}[bold]Auto-Retry Results[/bold]")
+        console.print()
+        console.print(f"  [green]Resolved:[/green]       {retry_result.get('succeeded', 0)}")
+        console.print(f"  [yellow]Failed again:[/yellow]  {retry_result.get('failed_again', 0)}")
+        console.print(f"  [red]Permanent:[/red]      {retry_result.get('marked_permanent', 0)}")
+        console.print()
 
     console.print(f"{prefix}[bold]Sync Complete[/bold]")
     console.print()
@@ -363,6 +411,11 @@ def sync_all_repositories(
         "--dry-run",
         help="Don't write to database, just show what would happen",
     ),
+    auto_retry: bool = typer.Option(
+        False,
+        "--auto-retry",
+        help="Retry any pending failures across all repos before syncing new PRs",
+    ),
     output_format: OutputFormat = typer.Option(  # noqa: B008
         OutputFormat.TEXT,
         "--format",
@@ -378,7 +431,7 @@ def sync_all_repositories(
         ghactivity sync all --since 2024-10-01
         ghactivity sync all --repos prebid/prebid-server,prebid/Prebid.js
         ghactivity sync all --max-per-repo 10 --dry-run
-        ghactivity sync all --state open --format json
+        ghactivity sync all --auto-retry --since 2024-10-01
     """
     # Parse repos list
     repo_list: list[str] | None = None
@@ -432,11 +485,34 @@ def sync_all_repositories(
                 # Shared lock to serialize database writes across concurrent operations
                 write_lock = asyncio.Lock()
 
+                repo_repository = RepositoryRepository(session, write_lock=write_lock)
+                pr_repository = PullRequestRepository(session, write_lock=write_lock)
+                failure_repository = SyncFailureRepository(session, write_lock=write_lock)
+
+                # Auto-retry pending failures before main sync
+                retry_dict: dict[str, Any] | None = None
+                if auto_retry:
+                    retry_service = FailureRetryService(
+                        ingestion_service=PRIngestionService(
+                            client=client,
+                            repo_repository=repo_repository,
+                            pr_repository=pr_repository,
+                        ),
+                        failure_repository=failure_repository,
+                        repo_repository=repo_repository,
+                    )
+                    # Retry ALL pending failures across all repos
+                    retry_svc_result = await retry_service.retry_failures(
+                        dry_run=dry_run,
+                    )
+                    retry_dict = retry_svc_result.to_dict()
+
                 orchestrator = MultiRepoOrchestrator(
                     client=client,
-                    repo_repository=RepositoryRepository(session, write_lock=write_lock),
-                    pr_repository=PullRequestRepository(session, write_lock=write_lock),
+                    repo_repository=repo_repository,
+                    pr_repository=pr_repository,
                     scheduler=scheduler,
+                    failure_repository=failure_repository,
                 )
 
                 # Start scheduler
@@ -444,7 +520,10 @@ def sync_all_repositories(
 
                 try:
                     result = await orchestrator.sync_all(config, repo_list)
-                    return result.to_dict()
+                    sync_result = result.to_dict()
+                    if retry_dict:
+                        sync_result["retry_result"] = retry_dict
+                    return sync_result
                 finally:
                     await scheduler.shutdown(wait=True)
 
@@ -527,7 +606,7 @@ def sync_all_repositories(
     total_failed = summary.get("total_failed", 0)
     if total_failed > 0:
         console.print()
-        console.print("[bold red]Failed PRs (retry with: ghactivity sync pr <repo> <number>):[/bold red]")
+        console.print("[bold red]Failed PRs (retry with: ghactivity sync retry):[/bold red]")
         for repo_data in result.get("repositories", []):
             repo_name = repo_data.get("repository", "?")
             failed_prs = repo_data.get("failed_prs", [])
@@ -535,3 +614,137 @@ def sync_all_repositories(
                 pr_num = failed_pr.get("pr_number", "?")
                 error = failed_pr.get("error", "Unknown error")[:80]
                 console.print(f"  {repo_name} #{pr_num}: {error}")
+
+
+@app.command("retry")
+def sync_retry(
+    repo: str | None = typer.Option(
+        None,
+        "--repo",
+        "-r",
+        help="Filter by repository (owner/name format)",
+    ),
+    max_items: int | None = typer.Option(
+        None,
+        "--max",
+        "-m",
+        help="Maximum number of failures to retry",
+    ),
+    dry_run: bool = typer.Option(
+        False,
+        "--dry-run",
+        help="Preview what would be retried without making changes",
+    ),
+    output_format: OutputFormat = typer.Option(  # noqa: B008
+        OutputFormat.TEXT,
+        "--format",
+        "-f",
+        help="Output format",
+    ),
+) -> None:
+    """Retry previously failed PR syncs.
+
+    Retrieves pending failures from the database and attempts to re-sync them.
+    Failures are tracked automatically during sync operations.
+
+    Examples:
+        ghactivity sync retry                         # Retry all pending failures
+        ghactivity sync retry --repo prebid/Prebid.js # Retry failures for specific repo
+        ghactivity sync retry --max 10                # Retry up to 10 failures
+        ghactivity sync retry --dry-run               # Preview without changes
+        ghactivity sync retry --format json           # JSON output
+    """
+    # Get repository ID if filtering by repo
+    repository_id: int | None = None
+
+    async def _get_repo_id() -> int | None:
+        if repo is None:
+            return None
+
+        if "/" not in repo:
+            console.print("[red]Error:[/red] Repository must be in owner/name format")
+            raise typer.Exit(1)
+
+        owner, name = repo.split("/", 1)
+
+        async with get_session() as session:
+            repo_repository = RepositoryRepository(session)
+            repository = await repo_repository.get_by_owner_and_name(owner, name)
+            if repository is None:
+                console.print(f"[red]Error:[/red] Repository {repo} not found in database")
+                raise typer.Exit(1)
+            return repository.id
+
+    async def _retry() -> dict[str, Any]:
+        async with GitHubClient() as client:
+            async with get_session() as session:
+                service = FailureRetryService(
+                    ingestion_service=PRIngestionService(
+                        client=client,
+                        repo_repository=RepositoryRepository(session),
+                        pr_repository=PullRequestRepository(session),
+                    ),
+                    failure_repository=SyncFailureRepository(session),
+                    repo_repository=RepositoryRepository(session),
+                )
+
+                result = await service.retry_failures(
+                    repository_id=repository_id,
+                    max_items=max_items,
+                    dry_run=dry_run,
+                )
+
+                return result.to_dict()
+
+    try:
+        if repo is not None:
+            repository_id = asyncio.get_event_loop().run_until_complete(_get_repo_id())
+
+        result: dict[str, Any] = asyncio.get_event_loop().run_until_complete(_retry())
+    except typer.Exit:
+        raise
+    except Exception as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1) from None
+
+    # JSON output
+    if output_format == OutputFormat.JSON:
+        console.print_json(json.dumps(result))
+        return
+
+    # Text output
+    total_pending = result.get("total_pending", 0)
+
+    if total_pending == 0:
+        console.print("[dim]No pending failures to retry[/dim]")
+        return
+
+    prefix = "[dim](dry-run)[/dim] " if dry_run else ""
+    console.print(f"{prefix}[bold]Retry Results[/bold]")
+    console.print()
+    console.print(f"  Pending failures:   {total_pending}")
+    console.print(f"  [green]Succeeded:[/green]          {result.get('succeeded', 0)}")
+    console.print(f"  [yellow]Failed again:[/yellow]       {result.get('failed_again', 0)}")
+    console.print(f"  [red]Marked permanent:[/red]   {result.get('marked_permanent', 0)}")
+    console.print()
+    console.print(f"  Duration: {result.get('duration_seconds', 0):.1f}s")
+
+    # Show individual results
+    results = result.get("results", [])
+    if results:
+        console.print()
+        console.print("[bold]Individual Results:[/bold]")
+        for item in results[:20]:  # Limit to first 20
+            pr_num = item.get("pr_number", "?")
+            success = item.get("success", False)
+            action = item.get("action", "unknown")
+            error = item.get("error")
+
+            if success:
+                console.print(f"  [green]✓[/green] PR #{pr_num}: {action}")
+            else:
+                error_msg = error[:60] + "..." if error and len(error) > 60 else error
+                console.print(f"  [red]✗[/red] PR #{pr_num}: {error_msg}")
+
+        if len(results) > 20:
+            console.print(f"  ... and {len(results) - 20} more")

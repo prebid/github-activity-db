@@ -36,6 +36,14 @@ class PRState(str, Enum):
     CLOSED = "closed"  # closed without merge
 
 
+class SyncFailureStatus(str, Enum):
+    """Status of a sync failure for retry tracking."""
+
+    PENDING = "pending"  # Waiting for retry
+    RESOLVED = "resolved"  # Successfully retried
+    PERMANENT = "permanent"  # Max retries exceeded or non-retryable error
+
+
 # ------------------------------------------------------------------------------
 # Junction table for many-to-many: PullRequest <-> UserTag
 # ------------------------------------------------------------------------------
@@ -188,3 +196,57 @@ class UserTag(Base):
 
     def __repr__(self) -> str:
         return f"<UserTag(id={self.id}, name='{self.name}')>"
+
+
+# ------------------------------------------------------------------------------
+# SyncFailure model
+# ------------------------------------------------------------------------------
+class SyncFailure(Base):
+    """Track failed PR ingestion attempts for retry.
+
+    Records failures during sync operations, enabling:
+    - Manual retry via `ghactivity sync retry`
+    - Automatic retry on subsequent syncs
+    - Failure analysis and metrics
+    """
+
+    __tablename__ = "sync_failures"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+
+    # Foreign key to repository
+    repository_id: Mapped[int] = mapped_column(ForeignKey("repositories.id", ondelete="CASCADE"))
+
+    # PR that failed (set for PR-level failures)
+    pr_number: Mapped[int] = mapped_column()
+
+    # Error details
+    error_message: Mapped[str] = mapped_column(Text)
+    error_type: Mapped[str] = mapped_column(String(100))  # e.g., "GitHubAPIError", "ValueError"
+
+    # Retry tracking
+    retry_count: Mapped[int] = mapped_column(default=0)
+    status: Mapped[SyncFailureStatus] = mapped_column(default=SyncFailureStatus.PENDING)
+
+    # Timestamps
+    failed_at: Mapped[datetime] = mapped_column(DateTime)
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=func.now())
+
+    # Relationships
+    repository: Mapped["Repository"] = relationship()
+
+    # Unique constraint: only one pending failure per repo+PR
+    # This allows multiple resolved/permanent records for history
+    __table_args__ = (
+        UniqueConstraint(
+            "repository_id", "pr_number", "status",
+            name="uq_repo_pr_pending_status"
+        ),
+    )
+
+    def __repr__(self) -> str:
+        return (
+            f"<SyncFailure(id={self.id}, repo_id={self.repository_id}, "
+            f"pr={self.pr_number}, status={self.status.value})>"
+        )

@@ -7,6 +7,7 @@ import pytest
 
 from github_activity_db.db.models import PRState
 from github_activity_db.db.repositories import PullRequestRepository, RepositoryRepository
+from github_activity_db.github.exceptions import GitHubRateLimitError, GitHubRetryableError
 from github_activity_db.github.sync import PRIngestionService
 from github_activity_db.schemas import (
     GitHubCommit,
@@ -371,3 +372,58 @@ class TestPRIngestionResult:
         result = await service.ingest_pr("prebid", "prebid-server", 4663)
 
         assert result.action == "created"
+
+
+class TestPRIngestionServiceRateLimit:
+    """Tests for rate limit error propagation.
+
+    Rate limit errors should propagate to the scheduler for proper retry
+    handling, rather than being caught and wrapped in the result.
+    """
+
+    async def test_rate_limit_error_propagates(self, db_session, mock_client):
+        """GitHubRateLimitError propagates (is NOT caught by ingest_pr)."""
+        reset_time = datetime.now(UTC) + timedelta(minutes=5)
+        mock_client.get_full_pull_request.side_effect = GitHubRateLimitError(
+            "Rate limited", reset_at=reset_time
+        )
+
+        repo_repository = RepositoryRepository(db_session)
+        pr_repository = PullRequestRepository(db_session)
+        service = PRIngestionService(mock_client, repo_repository, pr_repository)
+
+        with pytest.raises(GitHubRateLimitError) as exc_info:
+            await service.ingest_pr("prebid", "prebid-server", 9999)
+
+        assert exc_info.value.reset_at == reset_time
+
+    async def test_retryable_error_base_class_propagates(self, db_session, mock_client):
+        """Any GitHubRetryableError subclass propagates."""
+
+        class CustomRetryableError(GitHubRetryableError):
+            pass
+
+        mock_client.get_full_pull_request.side_effect = CustomRetryableError(
+            "Transient error"
+        )
+
+        repo_repository = RepositoryRepository(db_session)
+        pr_repository = PullRequestRepository(db_session)
+        service = PRIngestionService(mock_client, repo_repository, pr_repository)
+
+        with pytest.raises(CustomRetryableError):
+            await service.ingest_pr("prebid", "prebid-server", 9999)
+
+    async def test_non_retryable_error_captured_in_result(self, db_session, mock_client):
+        """Non-retryable errors are captured in result (not raised)."""
+        mock_client.get_full_pull_request.side_effect = ValueError("Not retryable")
+
+        repo_repository = RepositoryRepository(db_session)
+        pr_repository = PullRequestRepository(db_session)
+        service = PRIngestionService(mock_client, repo_repository, pr_repository)
+
+        result = await service.ingest_pr("prebid", "prebid-server", 9999)
+
+        assert result.success is False
+        assert result.error is not None
+        assert "Not retryable" in str(result.error)

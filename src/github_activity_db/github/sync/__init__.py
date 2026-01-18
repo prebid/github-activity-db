@@ -18,6 +18,7 @@ from .multi_repo_orchestrator import (
     RepoSyncResult,
 )
 from .results import PRIngestionResult
+from .retry_service import FailureRetryService, RetryResult
 
 __all__ = [
     # Multi-repo orchestration (Phase 1.8)
@@ -33,4 +34,7 @@ __all__ = [
     "PRIngestionResult",
     "PRIngestionService",
     "SyncStrategy",
+    # Failure retry (Phase 1.13)
+    "FailureRetryService",
+    "RetryResult",
 ]

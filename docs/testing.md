@@ -87,17 +87,19 @@ Test complete workflows from input to output.
 
 ## Current Coverage
 
-### Test Statistics (403+ tests)
+### Test Statistics (502 tests)
 
 | Module | Tests | Coverage |
 |--------|-------|----------|
-| `github/pacing/` | 104 | ✅ Comprehensive |
-| `github/sync/` | 31 | ✅ Good |
+| `github/pacing/` | 113 | ✅ Comprehensive |
+| `github/sync/` | 60 | ✅ Good |
 | `github/rate_limit/` | 15 | ⚠️ Partial |
-| `db/repositories/` | 42 | ✅ Good |
+| `db/repositories/` | 62 | ✅ Good |
 | `schemas/` | 150+ | ✅ Comprehensive |
-| `cli/` | 27 | ⚠️ Mocked only |
+| `cli/` | 38 | ⚠️ Mocked only |
 | E2E | 11 | ✅ Core paths |
+
+**Test Suite Performance:** ~18 seconds (optimized from 280+ seconds)
 
 ### Known Gaps
 
@@ -235,6 +237,87 @@ def test_parse_real_open_pr():
     pr = GitHubPullRequest.model_validate(REAL_OPEN_PR_DATA)
     assert pr.state == "open"
 ```
+
+#### Mocking Sleep/Delays
+
+Production code uses `asyncio.sleep` for rate limit handling, retry backoff, and pacing. These delays must be mocked in tests to avoid slow test execution.
+
+**Pattern 1: Targeted Sleep Mock (for backoff delays)**
+
+Use when testing retry logic where you need to verify backoff timing:
+
+```python
+from unittest.mock import AsyncMock, patch
+
+@pytest.fixture
+def mock_scheduler_sleep():
+    """Mock asyncio.sleep to avoid real exponential backoff delays.
+
+    Replaces long sleeps (>=1s) with minimal yields while preserving
+    short internal sleeps for proper event loop behavior.
+    """
+    original_sleep = asyncio.sleep
+
+    async def fast_sleep(delay: float) -> None:
+        if delay >= 1.0:
+            await original_sleep(0.001)  # Minimal yield
+        else:
+            await original_sleep(delay)  # Keep small delays
+
+    with patch(
+        "github_activity_db.github.pacing.scheduler.asyncio.sleep",
+        side_effect=fast_sleep,
+    ) as mock:
+        yield mock
+
+# In test: verify backoff calls
+backoff_calls = [c for c in mock_scheduler_sleep.call_args_list if c[0][0] >= 1.0]
+assert len(backoff_calls) == 2
+assert backoff_calls[0][0][0] == 2  # First retry: 2s
+assert backoff_calls[1][0][0] == 4  # Second retry: 4s
+```
+
+**Pattern 2: Complete Sleep Mock (for rate limit waits)**
+
+Use when sleep timing isn't part of what you're testing:
+
+```python
+@pytest.fixture
+def mock_sleep():
+    """Mock asyncio.sleep to avoid real delays in rate limit retry tests."""
+    with patch(
+        "github_activity_db.github.sync.bulk_ingestion.asyncio.sleep",
+        new_callable=AsyncMock,
+    ) as mock:
+        yield mock
+
+# In test: verify sleep was called with expected wait time
+mock_sleep.assert_called_once_with(60.0)
+```
+
+**Pattern 3: Disable Retries (simplest approach)**
+
+When retry behavior isn't relevant to the test:
+
+```python
+def create_scheduler(max_retries: int = 0) -> RequestScheduler:
+    """Helper to create a scheduler with minimal delays for testing.
+
+    Default max_retries=0 avoids slow exponential backoff delays.
+    Set higher if testing retry behavior.
+    """
+    return RequestScheduler(pacer, max_concurrent=5, max_retries=max_retries)
+```
+
+**Sleep Locations in Production Code:**
+
+| Location | Delay | Purpose | Test Strategy |
+|----------|-------|---------|---------------|
+| `scheduler.py:363` | 2^n seconds | Exponential backoff | Mock or `max_retries=0` |
+| `bulk_ingestion.py:296` | 60+ seconds | Rate limit wait | Mock with AsyncMock |
+| `scheduler.py:164` | 0.1s | Shutdown poll | Leave alone (minimal) |
+| `scheduler.py:274` | 0.01s | Worker yield | Leave alone (minimal) |
+| `pacer.py:315` | Variable | Request pacing | Configure fast pacing |
 
 ---
 

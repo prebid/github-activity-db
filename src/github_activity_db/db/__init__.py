@@ -13,6 +13,8 @@ from github_activity_db.db.models import (
     PRState,
     PullRequest,
     Repository,
+    SyncFailure,
+    SyncFailureStatus,
     UserTag,
     pr_user_tags,
 )
@@ -20,6 +22,7 @@ from github_activity_db.db.repositories import (
     BaseRepository,
     PullRequestRepository,
     RepositoryRepository,
+    SyncFailureRepository,
 )
 
 __all__ = [
@@ -28,6 +31,8 @@ __all__ = [
     "PRState",
     "PullRequest",
     "Repository",
+    "SyncFailure",
+    "SyncFailureStatus",
     "UserTag",
     "pr_user_tags",
     # Engine
@@ -41,4 +46,5 @@ __all__ = [
     "BaseRepository",
     "PullRequestRepository",
     "RepositoryRepository",
+    "SyncFailureRepository",
 ]

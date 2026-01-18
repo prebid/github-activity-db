@@ -231,7 +231,8 @@ class TestBatchExecutorIntegration:
     ) -> None:
         """BatchExecutor continues on failures by default."""
         pacer = RequestPacer(monitor_healthy, config=fast_config)
-        scheduler = RequestScheduler(pacer, max_concurrent=3)
+        # Use max_retries=0 to avoid slow exponential backoff delays
+        scheduler = RequestScheduler(pacer, max_concurrent=3, max_retries=0)
         executor = BatchExecutor(scheduler, stop_on_error=False)
 
         await scheduler.start()

@@ -15,7 +15,14 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from github_activity_db.db.models import PRState, PullRequest, Repository, UserTag
+from github_activity_db.db.models import (
+    PRState,
+    PullRequest,
+    Repository,
+    SyncFailure,
+    SyncFailureStatus,
+    UserTag,
+)
 
 # Import test timeline constants
 from tests.conftest import JAN_15_ISO, JAN_16_ISO, JAN_20_ISO
@@ -201,6 +208,51 @@ def make_user_tag(
     )
     session.add(tag)
     return tag
+
+
+def make_sync_failure(
+    session: AsyncSession,
+    repository: Repository,
+    *,
+    pr_number: int = 123,
+    error_message: str = "Test error message",
+    error_type: str = "TestError",
+    retry_count: int = 0,
+    status: SyncFailureStatus = SyncFailureStatus.PENDING,
+    failed_at: datetime | None = None,
+    resolved_at: datetime | None = None,
+    **overrides: Any,
+) -> SyncFailure:
+    """Create a SyncFailure model instance.
+
+    Args:
+        session: Async database session (model will be added but not flushed)
+        repository: Repository the failure belongs to
+        pr_number: PR number that failed
+        error_message: Error message text
+        error_type: Error class name
+        retry_count: Number of retry attempts
+        status: Failure status (PENDING, RESOLVED, PERMANENT)
+        failed_at: When the failure occurred
+        resolved_at: When the failure was resolved (if applicable)
+        **overrides: Additional field overrides
+
+    Returns:
+        SyncFailure instance (added to session, not flushed)
+    """
+    failure = SyncFailure(
+        repository_id=repository.id,
+        pr_number=pr_number,
+        error_message=error_message,
+        error_type=error_type,
+        retry_count=retry_count,
+        status=status,
+        failed_at=failed_at or datetime.now(UTC),
+        resolved_at=resolved_at,
+        **overrides,
+    )
+    session.add(failure)
+    return failure
 
 
 # -----------------------------------------------------------------------------

@@ -15,7 +15,18 @@ class GitHubAuthenticationError(GitHubClientError):
     pass
 
 
-class GitHubRateLimitError(GitHubClientError):
+class GitHubRetryableError(GitHubClientError):
+    """Base class for errors that should be retried by the scheduler.
+
+    Subclasses of this exception will propagate through the ingestion
+    pipeline to the scheduler, which will handle retry logic with
+    appropriate backoff.
+    """
+
+    pass
+
+
+class GitHubRateLimitError(GitHubRetryableError):
     """Raised when rate limit is exceeded (403 with rate limit headers)."""
 
     def __init__(self, message: str, reset_at: datetime | None = None) -> None:

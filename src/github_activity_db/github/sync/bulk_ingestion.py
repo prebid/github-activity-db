@@ -7,12 +7,18 @@ infrastructure for efficient rate-limited imports.
 
 from __future__ import annotations
 
+import asyncio
 import time
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, Literal
 
-from github_activity_db.db.repositories import PullRequestRepository, RepositoryRepository
+from github_activity_db.db.repositories import (
+    PullRequestRepository,
+    RepositoryRepository,
+    SyncFailureRepository,
+)
+from github_activity_db.github.exceptions import GitHubRateLimitError
 from github_activity_db.github.pacing import (
     BatchExecutor,
     ProgressTracker,
@@ -159,6 +165,7 @@ class BulkPRIngestionService:
         pr_repository: PullRequestRepository,
         scheduler: RequestScheduler,
         progress: ProgressTracker | None = None,
+        failure_repository: SyncFailureRepository | None = None,
     ) -> None:
         """Initialize the bulk ingestion service.
 
@@ -168,12 +175,14 @@ class BulkPRIngestionService:
             pr_repository: Repository for PullRequest model
             scheduler: RequestScheduler for rate-limited execution
             progress: Optional ProgressTracker for progress reporting
+            failure_repository: Optional repository for tracking failed PRs
         """
         self._client = client
         self._repo_repository = repo_repository
         self._pr_repository = pr_repository
         self._scheduler = scheduler
         self._progress = progress
+        self._failure_repository = failure_repository
 
     async def discover_prs(
         self,
@@ -187,6 +196,8 @@ class BulkPRIngestionService:
         - Date range (since/until)
         - State (open, merged, or both - always excludes abandoned)
         - Max count limit
+
+        Includes retry logic for rate limit errors.
 
         Args:
             owner: Repository owner
@@ -206,51 +217,85 @@ class BulkPRIngestionService:
             config.max_prs,
         )
 
-        # Iterate PRs lazily, sorted by created date descending
-        # Using iter_pull_requests allows early termination when we hit PRs
-        # older than the since date - saves API calls on large repos
+        max_retries = 3
         pr_numbers: list[int] = []
 
-        async for pr in self._client.iter_pull_requests(
-            owner,
-            repo,
-            state="all",
-            sort="created",
-            direction="desc",
-        ):
-            # Date filtering - since
-            if config.since and pr.created_at < config.since:
-                # PRs are sorted by created desc, so we can stop early
-                logger.debug("PR #%d created before since date, stopping", pr.number)
-                break
+        for attempt in range(1, max_retries + 1):
+            try:
+                # Reset for each attempt (in case partial progress was made)
+                pr_numbers = []
 
-            # Date filtering - until
-            if config.until and pr.created_at > config.until:
-                logger.debug("PR #%d created after until date, skipping", pr.number)
-                continue
+                # Iterate PRs lazily, sorted by created date descending
+                # Using iter_pull_requests allows early termination when we hit PRs
+                # older than the since date - saves API calls on large repos
+                async for pr in self._client.iter_pull_requests(
+                    owner,
+                    repo,
+                    state="all",
+                    sort="created",
+                    direction="desc",
+                ):
+                    # Date filtering - since
+                    if config.since and pr.created_at < config.since:
+                        # PRs are sorted by created desc, so we can stop early
+                        logger.debug(
+                            "PR #%d created before since date, stopping", pr.number
+                        )
+                        break
 
-            # State filtering
-            # NOTE: The list API does NOT include merge status (pr.merged is always False).
-            # We cannot filter out "abandoned" PRs here - that must happen during ingestion
-            # when we fetch the full PR details which include actual merge status.
-            is_open = pr.state == "open"
+                    # Date filtering - until
+                    if config.until and pr.created_at > config.until:
+                        logger.debug(
+                            "PR #%d created after until date, skipping", pr.number
+                        )
+                        continue
 
-            if config.state == "open" and not is_open:
-                continue
-            elif config.state == "merged" and is_open:
-                # Can only skip open PRs for "merged" filter; closed PRs might be merged
-                continue
-            # For state="all", include both open and closed PRs
-            # The ingestion step will determine if closed PRs are merged or abandoned
+                    # State filtering
+                    # NOTE: The list API does NOT include merge status (pr.merged is always False).
+                    # We cannot filter out "abandoned" PRs here - that must happen during ingestion
+                    # when we fetch the full PR details which include actual merge status.
+                    is_open = pr.state == "open"
 
-            pr_numbers.append(pr.number)
+                    if config.state == "open" and not is_open:
+                        continue
+                    elif config.state == "merged" and is_open:
+                        # Can only skip open PRs for "merged" filter; closed PRs might be merged
+                        continue
+                    # For state="all", include both open and closed PRs
+                    # The ingestion step will determine if closed PRs are merged or abandoned
 
-            # Max limit check
-            if config.max_prs and len(pr_numbers) >= config.max_prs:
-                logger.info("Reached max PR limit (%d)", config.max_prs)
-                break
+                    pr_numbers.append(pr.number)
 
-        logger.info("Discovered %d PRs matching filters", len(pr_numbers))
+                    # Max limit check
+                    if config.max_prs and len(pr_numbers) >= config.max_prs:
+                        logger.info("Reached max PR limit (%d)", config.max_prs)
+                        break
+
+                # Success - exit retry loop
+                logger.info("Discovered %d PRs matching filters", len(pr_numbers))
+                return pr_numbers
+
+            except GitHubRateLimitError as e:
+                if attempt == max_retries:
+                    logger.error(
+                        "Max retries (%d) exceeded during PR discovery", max_retries
+                    )
+                    raise
+
+                # Calculate wait time from reset_at, with a minimum of 60 seconds
+                wait_time = 60.0
+                if e.reset_at:
+                    wait_time = max(5.0, (e.reset_at - datetime.now(UTC)).total_seconds() + 5)
+
+                logger.warning(
+                    "Rate limit hit during discovery (attempt %d/%d), waiting %.1f seconds",
+                    attempt,
+                    max_retries,
+                    wait_time,
+                )
+                await asyncio.sleep(wait_time)
+
+        # Should not reach here, but return empty list as fallback
         return pr_numbers
 
     async def ingest_repository(
@@ -343,6 +388,22 @@ class BulkPRIngestionService:
             result.failed += 1
             pr_number = pr_numbers[index] if index < len(pr_numbers) else -1
             result.failed_prs.append((pr_number, str(error)))
+
+        # Persist failures if failure repository is provided
+        if self._failure_repository and result.failed_prs and not config.dry_run:
+            repository = await self._repo_repository.get_by_owner_and_name(owner, repo)
+            if repository:
+                for pr_number, error_msg in result.failed_prs:
+                    if pr_number > 0:  # Skip invalid PR numbers (-1)
+                        await self._failure_repository.record_failure(
+                            repository.id, pr_number, Exception(error_msg)
+                        )
+                logger.debug(
+                    "Persisted %d failures for %s/%s",
+                    len([p for p, _ in result.failed_prs if p > 0]),
+                    owner,
+                    repo,
+                )
 
         result.duration_seconds = time.monotonic() - start_time
 

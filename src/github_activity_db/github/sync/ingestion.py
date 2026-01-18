@@ -7,6 +7,7 @@ to the database.
 
 from github_activity_db.db.repositories import PullRequestRepository, RepositoryRepository
 from github_activity_db.github.client import GitHubClient
+from github_activity_db.github.exceptions import GitHubRetryableError
 from github_activity_db.logging import bind_pr, get_logger
 from github_activity_db.schemas import PRMerge
 
@@ -164,6 +165,10 @@ class PRIngestionService:
                 pr_logger.info("Updated PR", title=pr.title[:50])
                 return PRIngestionResult.from_updated(pr)
 
+        except GitHubRetryableError:
+            # Re-raise retryable errors so the scheduler can retry with proper backoff
+            pr_logger.warning("Retryable error during PR ingestion, will retry")
+            raise
         except Exception as e:
             pr_logger.error("Failed to ingest PR", error=str(e))
             return PRIngestionResult.from_error(e)
