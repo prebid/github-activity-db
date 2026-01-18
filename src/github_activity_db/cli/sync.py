@@ -113,19 +113,28 @@ def sync_single_pr(
     owner, name = repo.split("/", 1)
 
     async def _sync() -> dict[str, Any]:
-        async with GitHubClient() as client:
-            async with get_session() as session:
-                service = PRIngestionService(
-                    client=client,
-                    repo_repository=RepositoryRepository(session),
-                    pr_repository=PullRequestRepository(session),
-                )
+        async with GitHubClient() as base_client:
+            # Initialize pacing infrastructure for rate limit protection
+            monitor = RateLimitMonitor(base_client._github)
+            await monitor.initialize()
+            pacer = RequestPacer(monitor)
 
-                result = await service.ingest_pr(
-                    owner, name, pr_number, dry_run=dry_run
-                )
+            # Create paced client
+            async with GitHubClient(
+                rate_monitor=monitor, pacer=pacer
+            ) as client:
+                async with get_session() as session:
+                    service = PRIngestionService(
+                        client=client,
+                        repo_repository=RepositoryRepository(session),
+                        pr_repository=PullRequestRepository(session),
+                    )
 
-                return result.to_dict()
+                    result = await service.ingest_pr(
+                        owner, name, pr_number, dry_run=dry_run
+                    )
+
+                    return result.to_dict()
 
     try:
         result: dict[str, Any] = asyncio.get_event_loop().run_until_complete(_sync())
@@ -248,63 +257,72 @@ def sync_repository(
     )
 
     async def _sync() -> dict[str, Any]:
-        async with GitHubClient() as client:
-            async with get_session() as session:
-                # Set up rate limiting infrastructure
-                monitor = RateLimitMonitor(client._github)
-                pacer = RequestPacer(monitor)
-                scheduler = RequestScheduler(pacer, max_concurrent=config.concurrency)
+        async with GitHubClient() as base_client:
+            # Set up rate limiting infrastructure
+            monitor = RateLimitMonitor(base_client._github)
+            await monitor.initialize()  # Fetch initial rate limit state
+            pacer = RequestPacer(monitor)
+            scheduler = RequestScheduler(pacer, max_concurrent=config.concurrency)
 
-                # Create progress tracker
-                progress_tracker = ProgressTracker(name="PR Import")
+            # Create paced client with integrated rate limiting
+            async with GitHubClient(
+                rate_monitor=monitor, pacer=pacer
+            ) as client:
+                async with get_session() as session:
+                    # Create progress tracker
+                    progress_tracker = ProgressTracker(name="PR Import")
 
-                # Shared lock to serialize database writes across concurrent operations
-                write_lock = asyncio.Lock()
+                    # Shared lock to serialize database writes across concurrent operations
+                    write_lock = asyncio.Lock()
 
-                repo_repository = RepositoryRepository(session, write_lock=write_lock)
-                pr_repository = PullRequestRepository(session, write_lock=write_lock)
-                failure_repository = SyncFailureRepository(session, write_lock=write_lock)
+                    repo_repository = RepositoryRepository(session, write_lock=write_lock)
+                    pr_repository = PullRequestRepository(session, write_lock=write_lock)
+                    failure_repository = SyncFailureRepository(
+                        session, write_lock=write_lock
+                    )
 
-                # Auto-retry pending failures before main sync
-                retry_dict: dict[str, Any] | None = None
-                if auto_retry:
-                    repository = await repo_repository.get_by_owner_and_name(owner, name)
-                    if repository:
-                        retry_service = FailureRetryService(
-                            ingestion_service=PRIngestionService(
-                                client=client,
+                    # Auto-retry pending failures before main sync
+                    retry_dict: dict[str, Any] | None = None
+                    if auto_retry:
+                        repository = await repo_repository.get_by_owner_and_name(
+                            owner, name
+                        )
+                        if repository:
+                            retry_service = FailureRetryService(
+                                ingestion_service=PRIngestionService(
+                                    client=client,
+                                    repo_repository=repo_repository,
+                                    pr_repository=pr_repository,
+                                ),
+                                failure_repository=failure_repository,
                                 repo_repository=repo_repository,
-                                pr_repository=pr_repository,
-                            ),
-                            failure_repository=failure_repository,
-                            repo_repository=repo_repository,
-                        )
-                        retry_svc_result = await retry_service.retry_failures(
-                            repository_id=repository.id,
-                            dry_run=dry_run,
-                        )
-                        retry_dict = retry_svc_result.to_dict()
+                            )
+                            retry_svc_result = await retry_service.retry_failures(
+                                repository_id=repository.id,
+                                dry_run=dry_run,
+                            )
+                            retry_dict = retry_svc_result.to_dict()
 
-                service = BulkPRIngestionService(
-                    client=client,
-                    repo_repository=repo_repository,
-                    pr_repository=pr_repository,
-                    scheduler=scheduler,
-                    progress=progress_tracker,
-                    failure_repository=failure_repository,
-                )
+                    service = BulkPRIngestionService(
+                        client=client,
+                        repo_repository=repo_repository,
+                        pr_repository=pr_repository,
+                        scheduler=scheduler,
+                        progress=progress_tracker,
+                        failure_repository=failure_repository,
+                    )
 
-                # Start scheduler
-                await scheduler.start()
+                    # Start scheduler
+                    await scheduler.start()
 
-                try:
-                    result = await service.ingest_repository(owner, name, config)
-                    sync_result = result.to_dict()
-                    if retry_dict:
-                        sync_result["retry_result"] = retry_dict
-                    return sync_result
-                finally:
-                    await scheduler.shutdown(wait=True)
+                    try:
+                        result = await service.ingest_repository(owner, name, config)
+                        sync_result = result.to_dict()
+                        if retry_dict:
+                            sync_result["retry_result"] = retry_dict
+                        return sync_result
+                    finally:
+                        await scheduler.shutdown(wait=True)
 
     # Show progress info
     if output_format == OutputFormat.TEXT:
@@ -475,57 +493,64 @@ def sync_all_repositories(
     display_repos = repo_list if repo_list else get_settings().tracked_repos
 
     async def _sync() -> dict[str, Any]:
-        async with GitHubClient() as client:
-            async with get_session() as session:
-                # Set up rate limiting infrastructure
-                monitor = RateLimitMonitor(client._github)
-                pacer = RequestPacer(monitor)
-                scheduler = RequestScheduler(pacer, max_concurrent=config.concurrency)
+        async with GitHubClient() as base_client:
+            # Set up rate limiting infrastructure
+            monitor = RateLimitMonitor(base_client._github)
+            await monitor.initialize()  # Fetch initial rate limit state
+            pacer = RequestPacer(monitor)
+            scheduler = RequestScheduler(pacer, max_concurrent=config.concurrency)
 
-                # Shared lock to serialize database writes across concurrent operations
-                write_lock = asyncio.Lock()
+            # Create paced client with integrated rate limiting
+            async with GitHubClient(
+                rate_monitor=monitor, pacer=pacer
+            ) as client:
+                async with get_session() as session:
+                    # Shared lock to serialize database writes across concurrent operations
+                    write_lock = asyncio.Lock()
 
-                repo_repository = RepositoryRepository(session, write_lock=write_lock)
-                pr_repository = PullRequestRepository(session, write_lock=write_lock)
-                failure_repository = SyncFailureRepository(session, write_lock=write_lock)
+                    repo_repository = RepositoryRepository(session, write_lock=write_lock)
+                    pr_repository = PullRequestRepository(session, write_lock=write_lock)
+                    failure_repository = SyncFailureRepository(
+                        session, write_lock=write_lock
+                    )
 
-                # Auto-retry pending failures before main sync
-                retry_dict: dict[str, Any] | None = None
-                if auto_retry:
-                    retry_service = FailureRetryService(
-                        ingestion_service=PRIngestionService(
-                            client=client,
+                    # Auto-retry pending failures before main sync
+                    retry_dict: dict[str, Any] | None = None
+                    if auto_retry:
+                        retry_service = FailureRetryService(
+                            ingestion_service=PRIngestionService(
+                                client=client,
+                                repo_repository=repo_repository,
+                                pr_repository=pr_repository,
+                            ),
+                            failure_repository=failure_repository,
                             repo_repository=repo_repository,
-                            pr_repository=pr_repository,
-                        ),
-                        failure_repository=failure_repository,
+                        )
+                        # Retry ALL pending failures across all repos
+                        retry_svc_result = await retry_service.retry_failures(
+                            dry_run=dry_run,
+                        )
+                        retry_dict = retry_svc_result.to_dict()
+
+                    orchestrator = MultiRepoOrchestrator(
+                        client=client,
                         repo_repository=repo_repository,
+                        pr_repository=pr_repository,
+                        scheduler=scheduler,
+                        failure_repository=failure_repository,
                     )
-                    # Retry ALL pending failures across all repos
-                    retry_svc_result = await retry_service.retry_failures(
-                        dry_run=dry_run,
-                    )
-                    retry_dict = retry_svc_result.to_dict()
 
-                orchestrator = MultiRepoOrchestrator(
-                    client=client,
-                    repo_repository=repo_repository,
-                    pr_repository=pr_repository,
-                    scheduler=scheduler,
-                    failure_repository=failure_repository,
-                )
+                    # Start scheduler
+                    await scheduler.start()
 
-                # Start scheduler
-                await scheduler.start()
-
-                try:
-                    result = await orchestrator.sync_all(config, repo_list)
-                    sync_result = result.to_dict()
-                    if retry_dict:
-                        sync_result["retry_result"] = retry_dict
-                    return sync_result
-                finally:
-                    await scheduler.shutdown(wait=True)
+                    try:
+                        result = await orchestrator.sync_all(config, repo_list)
+                        sync_result = result.to_dict()
+                        if retry_dict:
+                            sync_result["retry_result"] = retry_dict
+                        return sync_result
+                    finally:
+                        await scheduler.shutdown(wait=True)
 
     # Show progress info
     if output_format == OutputFormat.TEXT:

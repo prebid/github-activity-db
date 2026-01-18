@@ -12,6 +12,23 @@ from github_activity_db.db.models import PRState
 runner = CliRunner()
 
 
+@pytest.fixture(autouse=True)
+def mock_rate_limit_monitor():
+    """Auto-mock RateLimitMonitor.initialize to avoid async issues in tests.
+
+    The CLI now initializes RateLimitMonitor and calls await monitor.initialize(),
+    which requires async support. This fixture mocks the entire RateLimitMonitor
+    class so tests don't need to set up the full async call chain.
+    """
+    with patch(
+        "github_activity_db.cli.sync.RateLimitMonitor"
+    ) as mock_monitor_class:
+        mock_monitor = MagicMock()
+        mock_monitor.initialize = AsyncMock()
+        mock_monitor_class.return_value = mock_monitor
+        yield mock_monitor
+
+
 class TestGlobalFlags:
     """Tests for global CLI flags (--verbose, --quiet)."""
 
@@ -410,6 +427,7 @@ class TestSyncRepoFlags:
     ):
         """--format json outputs valid JSON."""
         # Setup mocks
+        mock_monitor_class.return_value.initialize = AsyncMock()
         mock_result = MagicMock()
         mock_result.to_dict.return_value = mock_bulk_ingestion_result
         mock_service_instance = MagicMock()
@@ -457,6 +475,7 @@ class TestSyncRepoFlags:
     ):
         """Global --quiet flag works with sync repo (controls log level)."""
         # Setup mocks
+        mock_monitor_class.return_value.initialize = AsyncMock()
         mock_result = MagicMock()
         mock_result.to_dict.return_value = mock_bulk_ingestion_result
         mock_service_instance = MagicMock()
@@ -502,6 +521,7 @@ class TestSyncRepoFlags:
     ):
         """--dry-run shows (dry-run) prefix in output."""
         # Setup mocks
+        mock_monitor_class.return_value.initialize = AsyncMock()
         mock_result = MagicMock()
         mock_result.to_dict.return_value = mock_bulk_ingestion_result
         mock_service_instance = MagicMock()
@@ -545,6 +565,7 @@ class TestSyncRepoFlags:
     ):
         """--since date is parsed and passed to service."""
         # Setup mocks
+        mock_monitor_class.return_value.initialize = AsyncMock()
         mock_result = MagicMock()
         mock_result.to_dict.return_value = mock_bulk_ingestion_result
         mock_service_instance = MagicMock()
@@ -591,6 +612,7 @@ class TestSyncRepoFlags:
     ):
         """--max value is passed to BulkIngestionConfig."""
         # Setup mocks
+        mock_monitor_class.return_value.initialize = AsyncMock()
         mock_result = MagicMock()
         mock_result.to_dict.return_value = mock_bulk_ingestion_result
         mock_service_instance = MagicMock()
@@ -634,6 +656,7 @@ class TestSyncRepoFlags:
     ):
         """Failed PRs are always shown when there are failures."""
         # Setup mocks with failures
+        mock_monitor_class.return_value.initialize = AsyncMock()
         result_with_failures = {
             "total_discovered": 10,
             "created": 5,
@@ -699,6 +722,7 @@ class TestSyncRepoOutput:
     ):
         """Text output shows summary statistics."""
         # Setup mocks
+        mock_monitor_class.return_value.initialize = AsyncMock()
         mock_result = MagicMock()
         mock_result.to_dict.return_value = mock_bulk_ingestion_result
         mock_service_instance = MagicMock()
@@ -760,6 +784,7 @@ class TestSyncRepoShortFlags:
     ):
         """-f json works same as --format json."""
         # Setup mocks
+        mock_monitor_class.return_value.initialize = AsyncMock()
         mock_result = MagicMock()
         mock_result.to_dict.return_value = mock_bulk_ingestion_result
         mock_service_instance = MagicMock()

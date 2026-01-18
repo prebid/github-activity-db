@@ -20,7 +20,7 @@ uv run ghactivity sync all --since 2024-10-01     # Multi-repo sync
 # Development
 uv run mypy src/           # Type check
 uv run ruff check src/     # Lint
-uv run pytest              # Test (445 tests)
+uv run pytest              # Test (515 tests)
 ```
 
 ## Documentation
@@ -66,15 +66,15 @@ uv run pytest              # Test (445 tests)
 ## Key Modules
 
 ### GitHub Client (`github/client.py`)
-Async GitHub API client with integrated rate limit tracking. Provides both eager (`list_pull_requests`) and lazy (`iter_pull_requests`) iteration for efficient pagination.
+Async GitHub API client with integrated pacing and rate limit tracking. Every API method automatically applies pacing delays before requests and feeds response headers back to the pacer for adaptive throttling. Provides both eager (`list_pull_requests`) and lazy (`iter_pull_requests`) iteration for efficient pagination.
 
 ### Rate Limiting (`github/rate_limit/`)
 - `RateLimitMonitor`: Tracks rate limit state from response headers (zero API cost)
 - `RateLimitStatus`: State machine (HEALTHY → WARNING → CRITICAL → EXHAUSTED)
 
 ### Request Pacing (`github/pacing/`)
-- `RequestPacer`: Token bucket algorithm with adaptive throttling
-- `RequestScheduler`: Priority queue with semaphore-controlled concurrency
+- `RequestPacer`: Token bucket algorithm with adaptive throttling (integrated into GitHubClient)
+- `RequestScheduler`: Priority queue with semaphore-controlled concurrency for bulk operations
 - `BatchExecutor`: Coordinates batch operations with progress tracking
 
 ### PR Ingestion (`github/sync/`)

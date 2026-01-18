@@ -10,7 +10,6 @@ import time
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
-from github_activity_db.db.models import SyncFailureStatus
 from github_activity_db.db.repositories import (
     RepositoryRepository,
     SyncFailureRepository,

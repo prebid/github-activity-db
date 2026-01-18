@@ -6,6 +6,7 @@ for pull request data retrieval with integrated rate limit monitoring.
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, Literal
@@ -29,8 +30,10 @@ from .exceptions import (
     GitHubNotFoundError,
     GitHubRateLimitError,
 )
+from .rate_limit.schemas import RateLimitPool
 
 if TYPE_CHECKING:
+    from .pacing.pacer import RequestPacer
     from .rate_limit.monitor import RateLimitMonitor
 
 logger = get_logger(__name__)
@@ -57,6 +60,7 @@ class GitHubClient:
         self,
         token: str | None = None,
         rate_monitor: RateLimitMonitor | None = None,
+        pacer: RequestPacer | None = None,
     ) -> None:
         """Initialize the GitHub client.
 
@@ -65,6 +69,9 @@ class GitHubClient:
             rate_monitor: Optional RateLimitMonitor for tracking rate limits.
                          When provided, response headers are automatically
                          used to update the monitor's state.
+            pacer: Optional RequestPacer for rate limit pacing. When provided,
+                   the client will automatically apply delays before each API
+                   call based on current rate limit state.
 
         Raises:
             GitHubAuthenticationError: If no token is available.
@@ -76,6 +83,7 @@ class GitHubClient:
             )
         self._client: Any = None
         self._rate_monitor = rate_monitor
+        self._pacer = pacer
 
     @property
     def _github(self) -> Any:
@@ -89,13 +97,38 @@ class GitHubClient:
         """Access the rate limit monitor (if configured)."""
         return self._rate_monitor
 
+    @property
+    def pacer(self) -> RequestPacer | None:
+        """Access the request pacer (if configured)."""
+        return self._pacer
+
+    async def _apply_pacing(
+        self, pool: RateLimitPool = RateLimitPool.CORE
+    ) -> None:
+        """Apply rate limit pacing before making a request.
+
+        If a pacer is configured, this method calculates the recommended
+        delay based on current rate limit state and waits before proceeding.
+
+        Args:
+            pool: The rate limit pool to check (default: CORE)
+        """
+        if self._pacer is None:
+            return
+
+        delay = self._pacer.get_recommended_delay(pool)
+        if delay > 0:
+            logger.debug("Pacing: waiting %.2fs before request", delay)
+            await asyncio.sleep(delay)
+        self._pacer.on_request_start()
+
     def _update_rate_limit_from_response(self, response: Any) -> None:
-        """Extract rate limit headers from response and update monitor.
+        """Extract rate limit headers from response and update monitor/pacer.
 
         Args:
             response: A githubkit Response object with headers attribute.
         """
-        if self._rate_monitor is None:
+        if self._rate_monitor is None and self._pacer is None:
             return
 
         try:
@@ -110,7 +143,14 @@ class GitHubClient:
             else:
                 header_dict = dict(headers)
 
-            self._rate_monitor.update_from_headers(header_dict)
+            # Update monitor with rate limit headers
+            if self._rate_monitor is not None:
+                self._rate_monitor.update_from_headers(header_dict)
+
+            # Notify pacer of request completion with headers
+            # This allows the pacer to update its state for next delay calculation
+            if self._pacer is not None:
+                self._pacer.on_request_complete(header_dict)
         except Exception as e:
             # Don't let rate limit tracking failures break API calls
             logger.debug("Failed to update rate limit from headers: %s", e)
@@ -142,6 +182,7 @@ class GitHubClient:
         Returns:
             Dict with 'limit', 'remaining', 'reset' (datetime), 'used' keys.
         """
+        await self._apply_pacing()
         resp = await self._github.rest.rate_limit.async_get()
         self._update_rate_limit_from_response(resp)
         core = resp.parsed_data.resources.core
@@ -182,6 +223,7 @@ class GitHubClient:
             List of GitHubPullRequest objects (partial data - stats may be 0)
         """
         try:
+            await self._apply_pacing()
             prs: list[GitHubPullRequest] = []
 
             async for pr_data in self._github.paginate(
@@ -231,6 +273,7 @@ class GitHubClient:
             GitHubPullRequest objects (partial data - stats may be 0)
         """
         try:
+            await self._apply_pacing()
             async for pr_data in self._github.paginate(
                 self._github.rest.pulls.async_list,
                 owner=owner,
@@ -271,6 +314,7 @@ class GitHubClient:
             GitHubNotFoundError: If PR doesn't exist
         """
         try:
+            await self._apply_pacing()
             resp = await self._github.rest.pulls.async_get(
                 owner=owner,
                 repo=repo,
@@ -305,6 +349,7 @@ class GitHubClient:
             List of GitHubFile objects
         """
         try:
+            await self._apply_pacing()
             files: list[GitHubFile] = []
 
             async for file_data in self._github.paginate(
@@ -347,6 +392,7 @@ class GitHubClient:
             List of GitHubCommit objects
         """
         try:
+            await self._apply_pacing()
             commits: list[GitHubCommit] = []
 
             async for commit_data in self._github.paginate(
@@ -389,6 +435,7 @@ class GitHubClient:
             List of GitHubReview objects
         """
         try:
+            await self._apply_pacing()
             reviews: list[GitHubReview] = []
 
             async for review_data in self._github.paginate(

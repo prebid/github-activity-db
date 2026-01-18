@@ -271,7 +271,7 @@ Comprehensive testing guide covering:
 |---------|---------|
 | Philosophy | Test pyramid, mocking strategy, coverage goals |
 | Test Categories | Unit vs Integration vs E2E with examples |
-| Current Coverage | 403+ tests, breakdown by module, known gaps |
+| Current Coverage | 515+ tests, breakdown by module, known gaps |
 | Infrastructure | Fixtures, factories, async patterns |
 | Mocking Patterns | AsyncMock, async_iter helper, response fixtures |
 | Running Tests | Commands, filtering, coverage reports |
@@ -280,7 +280,7 @@ Comprehensive testing guide covering:
 
 ### Test Expansion
 
-#### Current State (445 tests)
+#### Current State (515 tests)
 
 | Module | Tests | Status |
 |--------|-------|--------|
@@ -336,6 +336,20 @@ File: `tests/github/rate_limit/test_monitor.py`
 | `test_state_healthy_to_warning_transition` | State machine correctness |
 | `test_state_warning_to_critical_transition` | State machine correctness |
 | `test_state_recovery_after_reset` | Recovery behavior |
+
+**5. GitHubClient Pacer Integration** ✅
+
+File: `tests/github/test_client.py` (TestGitHubClientPacerIntegration class)
+
+| Test | Purpose |
+|------|---------|
+| `test_init_with_pacer` | Client accepts pacer parameter |
+| `test_apply_pacing_calls_get_recommended_delay` | Verify pacer delay hook called |
+| `test_apply_pacing_calls_on_request_start` | Verify request start hook called |
+| `test_apply_pacing_sleeps_when_delay_positive` | Verify asyncio.sleep called |
+| `test_update_calls_pacer_on_request_complete` | Verify completion hook called |
+| `test_update_passes_headers_to_pacer` | Verify headers passed correctly |
+| `test_get_pull_request_calls_apply_pacing` | Verify pacing before API calls |
 
 ---
 
@@ -618,6 +632,127 @@ ghactivity sync all --auto-retry              # Auto-retry across all repos
 **Result Objects:**
 - `RetryResult` with succeeded/failed/marked_permanent counts
 - Integration with existing `BulkIngestionResult` for unified reporting
+
+---
+
+## Phase 1.14: Pacing Integration at GitHubClient Layer ✅ COMPLETE
+
+Fixed critical architecture gap where pacing infrastructure existed but was disconnected from actual API calls.
+
+### The Problem
+
+The pacing infrastructure (Phase 1.5) only controlled PR-level concurrency via the scheduler, but **individual API calls were uncontrolled**:
+
+```
+BEFORE (Broken):
+┌─────────────────────────────────────────────────────────────────────────┐
+│  Scheduler controls: "Start next PR ingestion" (max 5 concurrent)       │
+│                                                                          │
+│  BUT each PR makes 4+ API calls with ZERO pacing:                       │
+│    get_pull_request() → get_files() → get_commits() → get_reviews()    │
+│                                                                          │
+│  5 concurrent PRs × 4 calls = 20 rapid requests                         │
+│  With 50ms fallback delay = ~20 requests/second                         │
+│  GitHub limit = 5000/hour = 1.39 requests/second                        │
+│  Result: Rate limit exhausted in ~4 minutes                             │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+### The Fix
+
+Integrated pacing directly into `GitHubClient` so **every API call** is automatically paced:
+
+```
+AFTER (Fixed):
+┌─────────────────────────────────────────────────────────────────────────┐
+│                         GitHubClient                                     │
+│  ┌───────────────────────────────────────────────────────────────────┐  │
+│  │  Every API method now:                                             │  │
+│  │    1. await self._apply_pacing()  ← Calculate and apply delay     │  │
+│  │    2. Make API request                                             │  │
+│  │    3. _update_rate_limit_from_response() → Notify pacer           │  │
+│  └───────────────────────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+### Implementation Details
+
+**File: `src/github_activity_db/github/client.py`**
+
+1. **Constructor accepts optional `RequestPacer`**:
+   ```python
+   def __init__(
+       self,
+       token: str | None = None,
+       rate_monitor: RateLimitMonitor | None = None,
+       pacer: RequestPacer | None = None,  # NEW
+   ) -> None:
+   ```
+
+2. **New `_apply_pacing()` method**:
+   ```python
+   async def _apply_pacing(self, pool: RateLimitPool = RateLimitPool.CORE) -> None:
+       if self._pacer is None:
+           return
+       delay = self._pacer.get_recommended_delay(pool)
+       if delay > 0:
+           await asyncio.sleep(delay)
+       self._pacer.on_request_start()
+   ```
+
+3. **Response headers feed back to pacer**:
+   ```python
+   def _update_rate_limit_from_response(self, response: Any) -> None:
+       # ... extract headers ...
+       if self._pacer is not None:
+           self._pacer.on_request_complete(header_dict)
+   ```
+
+4. **All API methods call `_apply_pacing()` before requests**:
+   - `get_rate_limit()`
+   - `get_pull_request()`
+   - `list_pull_requests()` / `iter_pull_requests()`
+   - `get_pull_request_files()`
+   - `get_pull_request_commits()`
+   - `get_pull_request_reviews()`
+
+**File: `src/github_activity_db/cli/sync.py`**
+
+CLI commands now properly initialize the pacing infrastructure:
+
+```python
+async with GitHubClient() as base_client:
+    # Initialize monitor and fetch current rate limit state
+    monitor = RateLimitMonitor(base_client._github)
+    await monitor.initialize()  # Fetches current rate limit from API
+
+    # Create pacer with monitor state
+    pacer = RequestPacer(monitor)
+
+    # Create paced client for actual API calls
+    async with GitHubClient(rate_monitor=monitor, pacer=pacer) as client:
+        # All API calls through this client are now paced
+```
+
+### Expected Behavior After Fix
+
+| Aspect | Before | After |
+|--------|--------|-------|
+| API call pacing | None (scheduler only) | Every call paced |
+| Header feedback | Monitor updated, pacer ignored | Both updated |
+| Monitor initialization | Never called | Called at CLI startup |
+| Rate limit exhaustion | ~4 minutes | Adaptive (never exhausted) |
+
+### Delay Calculation Example
+
+With 5,000 requests/hour and 60 minutes until reset:
+- `base_delay = 3600 seconds / 5000 requests = 0.72 seconds per request`
+- With 10% reserve buffer: `effective = 4500 requests`
+- `base_delay = 3600 / 4500 = 0.8 seconds per request`
+
+As quota depletes to WARNING (20% remaining = 1000 requests):
+- `base_delay = remaining_time / 1000`
+- Multiplied by 1.5x throttle = **~1.2+ seconds per request**
 
 ---
 

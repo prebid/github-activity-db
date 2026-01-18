@@ -26,6 +26,40 @@ from github_activity_db.db.models import Base, PRState, PullRequest, Repository
 runner = CliRunner()
 
 
+@pytest.fixture(autouse=True)
+def mock_rate_limit_infrastructure():
+    """Auto-mock rate limiting infrastructure to avoid async issues in tests.
+
+    The CLI now initializes RateLimitMonitor, RequestPacer, and RequestScheduler.
+    This fixture mocks all of them to avoid async complications and background tasks.
+    """
+    with (
+        patch("github_activity_db.cli.sync.RateLimitMonitor") as mock_monitor_class,
+        patch("github_activity_db.cli.sync.RequestPacer") as mock_pacer_class,
+        patch("github_activity_db.cli.sync.RequestScheduler") as mock_scheduler_class,
+    ):
+        # Mock RateLimitMonitor
+        mock_monitor = MagicMock()
+        mock_monitor.initialize = AsyncMock()
+        mock_monitor_class.return_value = mock_monitor
+
+        # Mock RequestPacer
+        mock_pacer = MagicMock()
+        mock_pacer_class.return_value = mock_pacer
+
+        # Mock RequestScheduler with async methods
+        mock_scheduler = MagicMock()
+        mock_scheduler.start = AsyncMock()
+        mock_scheduler.shutdown = AsyncMock()
+        mock_scheduler_class.return_value = mock_scheduler
+
+        yield {
+            "monitor": mock_monitor,
+            "pacer": mock_pacer,
+            "scheduler": mock_scheduler,
+        }
+
+
 # -----------------------------------------------------------------------------
 # Fixtures
 # -----------------------------------------------------------------------------
@@ -98,6 +132,7 @@ def mock_github_client():
 
     client.get_full_pull_request = AsyncMock(return_value=(pr, files, commits, reviews))
     client.rate_monitor = None
+    client.pacer = None
 
     return client
 

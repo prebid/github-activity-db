@@ -43,7 +43,7 @@ github-activity-db/
 │   │       ├── repository.py   # RepositoryRepository
 │   │       └── pull_request.py # PullRequestRepository
 │   ├── github/                 # GitHub integration
-│   │   ├── client.py           # githubkit wrapper with rate limit tracking
+│   │   ├── client.py           # githubkit wrapper with integrated pacing
 │   │   ├── exceptions.py       # Custom GitHub exceptions
 │   │   ├── rate_limit/         # Rate limit monitoring
 │   │   │   ├── schemas.py      # RateLimitPool, PoolRateLimit, RateLimitSnapshot
@@ -209,11 +209,11 @@ config.py ←── db/engine.py ←── db/models.py
 | `cli/sync.py` | ✅ Complete | Single PR sync with --dry-run, --format, etc. |
 | `alembic/` | ✅ Complete | Initial migration applied |
 | `schemas/` | ✅ Complete | 8 files, factory pattern, GitHub API schemas |
-| `github/client.py` | ✅ Complete | API wrapper with rate limit tracking |
+| `github/client.py` | ✅ Complete | API wrapper with integrated pacing and rate limit tracking |
 | `github/rate_limit/` | ✅ Complete | Monitor, schemas, state machine |
 | `github/pacing/` | ✅ Complete | Pacer, scheduler, batch, progress |
 | `github/sync/` | ✅ Complete | PRIngestionService, BulkPRIngestionService, results, enums |
-| `tests/` | ✅ Complete | 403+ tests, factory pattern |
+| `tests/` | ✅ Complete | 515+ tests, factory pattern |
 | `search/query.py` | 🔲 TODO | Search builder |
 
 ## Test Infrastructure

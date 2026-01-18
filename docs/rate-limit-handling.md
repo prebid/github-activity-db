@@ -11,17 +11,24 @@ This document describes the rate limiting strategy, pacing algorithm, and retry 
 │                     GitHub Layer (github/)                       │
 │  ┌───────────────────────────────────────────────────────────┐  │
 │  │                      GitHubClient                          │  │
-│  │              (public API for callers)                      │  │
+│  │     (public API for callers, with integrated pacing)       │  │
+│  │                                                            │  │
+│  │  Every API method:                                         │  │
+│  │    1. _apply_pacing() → delay if needed                    │  │
+│  │    2. Make GitHub API request                              │  │
+│  │    3. _update_rate_limit_from_response() → notify pacer    │  │
 │  └─────────────────────────┬─────────────────────────────────┘  │
 │                            │ uses internally                     │
 │  ┌─────────────────────────▼─────────────────────────────────┐  │
 │  │                  Orchestration Layer                       │  │
 │  │    BatchExecutor │ RequestScheduler │ ProgressTracker      │  │
+│  │    (Controls concurrency and batch operations)             │  │
 │  └─────────────────────────┬─────────────────────────────────┘  │
 │                            │ delegates to                        │
 │  ┌─────────────────────────▼─────────────────────────────────┐  │
 │  │                    Control Layer                           │  │
 │  │         RequestPacer │ RateLimitMonitor                    │  │
+│  │    (Calculates delays, tracks state from headers)          │  │
 │  └─────────────────────────┬─────────────────────────────────┘  │
 │                            │                                     │
 └────────────────────────────┼─────────────────────────────────────┘
@@ -35,11 +42,81 @@ This document describes the rate limiting strategy, pacing algorithm, and retry 
 
 | Component | Responsibility | Does NOT |
 |-----------|----------------|----------|
+| `GitHubClient` | Apply pacing before each request, update monitor/pacer after | Calculate delays (delegates to pacer) |
 | `RateLimitMonitor` | Track rate limit state from headers | Make pacing decisions |
 | `RequestPacer` | Calculate optimal delays | Queue or execute requests |
 | `RequestScheduler` | Queue and prioritize requests | Calculate delays |
 | `BatchExecutor` | Coordinate batch operations | Implement queueing |
 | `ProgressTracker` | Observe and report progress | Affect execution |
+
+---
+
+## Client-Level Pacing Integration
+
+The `GitHubClient` integrates pacing at the lowest level, ensuring **every API call** is automatically paced. This is critical because:
+
+1. **Scheduler only controls PR-level concurrency** - it manages when to start a new PR ingestion (max 5 concurrent)
+2. **Each PR makes 4+ API calls** - `get_full_pull_request()` calls 4 methods sequentially
+3. **Without client-level pacing**: 5 PRs × 4 calls = 20 rapid requests, exhausting rate limits quickly
+
+### Client Initialization
+
+CLI commands initialize the pacing infrastructure before making requests:
+
+```python
+async with GitHubClient() as base_client:
+    # Initialize monitor and fetch current rate limit state
+    monitor = RateLimitMonitor(base_client._github)
+    await monitor.initialize()  # Fetches current rate limit from API
+
+    # Create pacer with monitor state
+    pacer = RequestPacer(monitor)
+
+    # Create paced client for actual API calls
+    async with GitHubClient(rate_monitor=monitor, pacer=pacer) as client:
+        # All API calls through this client are now paced
+```
+
+### Request Flow
+
+```
+┌──────────────────────────────────────────────────────────────────┐
+│  client.get_pull_request(owner, repo, number)                     │
+└──────────────────────────┬───────────────────────────────────────┘
+                           │
+                           ▼
+┌──────────────────────────────────────────────────────────────────┐
+│  _apply_pacing()                                                  │
+│    delay = pacer.get_recommended_delay(RateLimitPool.CORE)       │
+│    if delay > 0: await asyncio.sleep(delay)                      │
+│    pacer.on_request_start()                                       │
+└──────────────────────────┬───────────────────────────────────────┘
+                           │
+                           ▼
+┌──────────────────────────────────────────────────────────────────┐
+│  Make GitHub API Request                                          │
+│    response = await github.rest.pulls.get(...)                   │
+└──────────────────────────┬───────────────────────────────────────┘
+                           │
+                           ▼
+┌──────────────────────────────────────────────────────────────────┐
+│  _update_rate_limit_from_response(response)                       │
+│    Extract: x-ratelimit-remaining, x-ratelimit-reset, etc.       │
+│    monitor.update_from_headers(headers)                          │
+│    pacer.on_request_complete(headers)  ← Closes feedback loop    │
+└──────────────────────────────────────────────────────────────────┘
+```
+
+### Header Feedback Loop
+
+The feedback loop ensures the pacer always has current rate limit state:
+
+1. **Request completes** → response headers contain `x-ratelimit-*` values
+2. **Monitor updates** → tracks remaining quota and reset time
+3. **Pacer notified** → adjusts next delay calculation
+4. **Next request** → uses updated delay based on current state
+
+This zero-cost tracking (no extra API calls) keeps the system responsive to quota changes.
 
 ---
 
