@@ -83,7 +83,7 @@ class TestOpenPRIngestionE2E:
         assert pr.commits_count == 1
 
         # Verify lists
-        assert len(pr.filenames) == OPEN_PR_METADATA["expected_file_count"]
+        assert len(pr.file_changes) == OPEN_PR_METADATA["expected_file_count"]
         assert len(pr.commits_breakdown) == OPEN_PR_METADATA["expected_commit_count"]
 
         # Verify merge fields are None
@@ -151,7 +151,7 @@ class TestMergedPRIngestionE2E:
         result = await ingestion_service.ingest_pr("prebid", "prebid-server", 4646)
         pr = result.pr
 
-        assert len(pr.filenames) == MERGED_PR_METADATA["expected_file_count"]
+        assert len(pr.file_changes) == MERGED_PR_METADATA["expected_file_count"]
         assert len(pr.commits_breakdown) == MERGED_PR_METADATA["expected_commit_count"]
         assert len(pr.participants) == MERGED_PR_METADATA["expected_review_count"]
 

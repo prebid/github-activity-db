@@ -98,6 +98,10 @@ def mock_github_client():
 def mock_repo_repository():
     """Mock repository repository."""
     repo = MagicMock()
+    mock_repo_obj = MagicMock()
+    mock_repo_obj.id = 1
+    repo.get_by_owner_and_name = AsyncMock(return_value=mock_repo_obj)
+    repo.update_last_synced = AsyncMock(return_value=mock_repo_obj)
     return repo
 
 

@@ -88,7 +88,7 @@ Stores all PR data with 26 columns total.
 | lines_deleted | INTEGER | DEFAULT 0 | Until merged |
 | commits_count | INTEGER | DEFAULT 0 | Until merged |
 | github_labels | JSON | DEFAULT [] | Until merged |
-| filenames | JSON | DEFAULT [] | Until merged |
+| file_changes | JSON | DEFAULT [] | Until merged |
 | commits_breakdown | JSON | DEFAULT [] | Until merged |
 | reviewers | JSON | DEFAULT [] | Until merged |
 | assignees | JSON | DEFAULT [] | Until merged |
@@ -167,7 +167,34 @@ Dictionary mapping usernames to their actions:
 - `review` - Left a review (without approval/rejection)
 - `commit` - Pushed commits
 
-### github_labels, filenames, reviewers, assignees
+### file_changes
+
+Array of per-file change statistics:
+
+```json
+[
+    {
+        "filename": "adapters/newbidder.go",
+        "status": "added",
+        "additions": 200,
+        "deletions": 0,
+        "changes": 200
+    },
+    {
+        "filename": "exchange/adapter_builders.go",
+        "status": "modified",
+        "additions": 5,
+        "deletions": 0,
+        "changes": 5
+    }
+]
+```
+
+**Possible statuses:** `added`, `modified`, `removed`, `renamed`, `copied`, `changed`, `unchanged`, `unknown`
+
+> **Note:** Legacy data (migrated from the old `filenames` column) uses `status: "unknown"` with zero line counts.
+
+### github_labels, reviewers, assignees
 
 Simple string arrays:
 
@@ -205,6 +232,7 @@ Located in `alembic/versions/`:
 | Migration | Description |
 |-----------|-------------|
 | `01421d8dfaeb_initial_pr_schema.py` | Creates all 4 tables |
+| `b3c4d5e6f7g8_rename_filenames_to_file_changes.py` | Renames `filenames` → `file_changes` with per-file stats migration |
 
 ## Usage Examples
 

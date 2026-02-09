@@ -86,7 +86,7 @@ def make_pull_request(
     commits_count: int = 1,
     # Lists
     github_labels: list[str] | None = None,
-    filenames: list[str] | None = None,
+    file_changes: list[dict[str, str | int]] | None = None,
     reviewers: list[str] | None = None,
     assignees: list[str] | None = None,
     commits_breakdown: list[dict[str, str]] | None = None,
@@ -113,7 +113,7 @@ def make_pull_request(
         lines_deleted: Lines deleted
         commits_count: Number of commits
         github_labels: List of label names
-        filenames: List of changed files
+        file_changes: List of per-file change dicts
         reviewers: List of reviewer usernames
         assignees: List of assignee usernames
         commits_breakdown: List of {date, author} dicts
@@ -143,7 +143,7 @@ def make_pull_request(
         lines_deleted=lines_deleted,
         commits_count=commits_count,
         github_labels=github_labels or [],
-        filenames=filenames or [],
+        file_changes=file_changes or [],
         reviewers=reviewers or [],
         assignees=assignees or [],
         commits_breakdown=commits_breakdown or [],
@@ -171,7 +171,7 @@ def make_merged_pr(
     lines_deleted: int = 2,
     commits_count: int = 1,
     github_labels: list[str] | None = None,
-    filenames: list[str] | None = None,
+    file_changes: list[dict[str, str | int]] | None = None,
     reviewers: list[str] | None = None,
     assignees: list[str] | None = None,
     commits_breakdown: list[dict[str, str]] | None = None,
@@ -202,7 +202,7 @@ def make_merged_pr(
         lines_deleted=lines_deleted,
         commits_count=commits_count,
         github_labels=github_labels,
-        filenames=filenames,
+        file_changes=file_changes,
         reviewers=reviewers,
         assignees=assignees,
         commits_breakdown=commits_breakdown,

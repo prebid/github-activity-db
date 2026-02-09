@@ -8,8 +8,8 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field
 
-from .enums import ParticipantActionType
-from .nested import CommitBreakdown, ParticipantEntry
+from .enums import FileChangeStatus, ParticipantActionType
+from .nested import CommitBreakdown, FileChange, ParticipantEntry
 from .pr import PRCreate, PRSync
 
 
@@ -159,8 +159,22 @@ class GitHubPullRequest(BaseModel):
         else:
             state = PRState.OPEN
 
-        # Extract filenames
-        filenames = [f.filename for f in (files or [])]
+        # Build per-file change details
+        file_changes: list[FileChange] = []
+        for f in files or []:
+            try:
+                status = FileChangeStatus(f.status)
+            except ValueError:
+                status = FileChangeStatus.UNKNOWN
+            file_changes.append(
+                FileChange(
+                    filename=f.filename,
+                    status=status,
+                    additions=f.additions,
+                    deletions=f.deletions,
+                    changes=f.changes,
+                )
+            )
 
         # Build commits breakdown (prefer GitHub username, fall back to git author name)
         commits_breakdown = []
@@ -207,7 +221,7 @@ class GitHubPullRequest(BaseModel):
             lines_deleted=self.deletions,
             commits_count=self.commits,
             github_labels=[label.name for label in self.labels],
-            filenames=filenames,
+            file_changes=file_changes,
             reviewers=[r.login for r in self.requested_reviewers],
             assignees=[a.login for a in self.assignees],
             commits_breakdown=commits_breakdown,

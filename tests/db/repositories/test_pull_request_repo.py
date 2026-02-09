@@ -5,6 +5,8 @@ from datetime import UTC, datetime, timedelta
 from github_activity_db.db.models import PRState
 from github_activity_db.db.repositories import PullRequestRepository
 from github_activity_db.schemas import PRCreate, PRMerge, PRSync
+from github_activity_db.schemas.enums import FileChangeStatus
+from github_activity_db.schemas.nested import FileChange
 from tests.conftest import JAN_10, JAN_12, JAN_15, JAN_16
 from tests.factories import make_merged_pr, make_pull_request, make_repository
 
@@ -154,7 +156,10 @@ class TestPullRequestRepositoryCreate:
             lines_deleted=50,
             commits_count=5,
             github_labels=["enhancement", "adapter"],
-            filenames=["file1.go", "file2.go"],
+            file_changes=[
+                FileChange(filename="file1.go", status=FileChangeStatus.MODIFIED, additions=50, deletions=10, changes=60),
+                FileChange(filename="file2.go", status=FileChangeStatus.ADDED, additions=100, deletions=0, changes=100),
+            ],
             reviewers=["reviewer1"],
             assignees=["assignee1"],
             commits_breakdown=[
@@ -173,7 +178,9 @@ class TestPullRequestRepositoryCreate:
         pr = await pr_repository.create(repo.id, pr_create, pr_sync)
 
         assert pr.github_labels == ["enhancement", "adapter"]
-        assert pr.filenames == ["file1.go", "file2.go"]
+        assert len(pr.file_changes) == 2
+        assert pr.file_changes[0]["filename"] == "file1.go"
+        assert pr.file_changes[1]["filename"] == "file2.go"
         assert pr.reviewers == ["reviewer1"]
         assert len(pr.commits_breakdown) == 2
         assert "reviewer1" in pr.participants

@@ -100,6 +100,9 @@ site/
 *.sqlite
 *.sqlite3
 
+# Exception: include the main PR database for data sharing
+!github_activity.db
+
 # Alembic
 alembic/versions/*.pyc
 

@@ -328,6 +328,18 @@ class BulkPRIngestionService:
 
         if not pr_numbers:
             logger.info("No PRs to ingest for %s/%s", owner, repo)
+            # Still update last_synced_at - an empty sync is still a sync
+            if not config.dry_run:
+                repository = await self._repo_repository.get_by_owner_and_name(
+                    owner, repo
+                )
+                if repository:
+                    await self._repo_repository.update_last_synced(
+                        repository.id, datetime.now(UTC)
+                    )
+                    if self._commit_manager:
+                        await self._commit_manager.record_success()
+                        await self._commit_manager.finalize()
             result.duration_seconds = time.monotonic() - start_time
             return result
 
@@ -411,6 +423,18 @@ class BulkPRIngestionService:
         # Finalize any pending commits
         if self._commit_manager and not config.dry_run:
             await self._commit_manager.finalize()
+
+        # Update last_synced_at timestamp for the repository
+        if not config.dry_run:
+            repository = await self._repo_repository.get_by_owner_and_name(owner, repo)
+            if repository:
+                await self._repo_repository.update_last_synced(
+                    repository.id, datetime.now(UTC)
+                )
+                # Ensure the timestamp is committed via commit manager
+                if self._commit_manager:
+                    await self._commit_manager.record_success()
+                    await self._commit_manager.finalize()
 
         result.duration_seconds = time.monotonic() - start_time
 

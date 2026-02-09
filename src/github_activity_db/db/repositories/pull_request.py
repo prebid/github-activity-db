@@ -319,6 +319,7 @@ class PullRequestRepository(BaseRepository[PullRequest]):
         Handles special conversions:
         - CommitBreakdown → dict format for JSON column
         - ParticipantEntry list → dict format for JSON column
+        - FileChange list → dict format for JSON column
 
         Args:
             sync_data: PRSync schema
@@ -336,6 +337,18 @@ class PullRequestRepository(BaseRepository[PullRequest]):
         for entry in sync_data.participants:
             participants[entry.username] = [a.value for a in entry.actions]
 
+        # Convert file_changes to JSON-serializable format
+        file_changes: list[dict[str, str | int]] = [
+            {
+                "filename": fc.filename,
+                "status": fc.status.value,
+                "additions": fc.additions,
+                "deletions": fc.deletions,
+                "changes": fc.changes,
+            }
+            for fc in sync_data.file_changes
+        ]
+
         return {
             "title": sync_data.title,
             "description": sync_data.description,
@@ -346,7 +359,7 @@ class PullRequestRepository(BaseRepository[PullRequest]):
             "lines_deleted": sync_data.lines_deleted,
             "commits_count": sync_data.commits_count,
             "github_labels": sync_data.github_labels,
-            "filenames": sync_data.filenames,
+            "file_changes": file_changes,
             "reviewers": sync_data.reviewers,
             "assignees": sync_data.assignees,
             "commits_breakdown": commits_breakdown,

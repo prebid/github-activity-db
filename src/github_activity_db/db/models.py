@@ -120,7 +120,9 @@ class PullRequest(Base):
 
     # JSON columns for complex data
     github_labels: Mapped[list[str]] = mapped_column(JSON, default=list)
-    filenames: Mapped[list[str]] = mapped_column(JSON, default=list)
+    file_changes: Mapped[list[dict[str, str | int]]] = mapped_column(
+        JSON, default=list
+    )  # [{filename, status, additions, deletions, changes}]
     commits_breakdown: Mapped[list[dict[str, str]]] = mapped_column(
         JSON, default=list
     )  # [{date, author}]

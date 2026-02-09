@@ -8,7 +8,13 @@ from pydantic import Field, HttpUrl, field_validator
 from github_activity_db.db.models import PRState
 
 from .base import SchemaBase
-from .nested import CommitBreakdown, ParticipantEntry, participants_from_dict
+from .nested import (
+    CommitBreakdown,
+    FileChange,
+    ParticipantEntry,
+    file_changes_from_list,
+    participants_from_dict,
+)
 
 
 class PRCreate(SchemaBase):
@@ -45,7 +51,10 @@ class PRSync(SchemaBase):
 
     # List fields
     github_labels: list[str] = Field(default_factory=list, description="GitHub labels")
-    filenames: list[str] = Field(default_factory=list, description="Changed file paths")
+    file_changes: list[FileChange] = Field(
+        default_factory=list,
+        description="Per-file change details (filename, status, additions, deletions, changes)",
+    )
     reviewers: list[str] = Field(default_factory=list, description="Requested reviewers")
     assignees: list[str] = Field(default_factory=list, description="Assignees")
 
@@ -82,6 +91,16 @@ class PRSync(SchemaBase):
             return []
         if isinstance(v, dict):
             return participants_from_dict(v)
+        return v
+
+    @field_validator("file_changes", mode="before")
+    @classmethod
+    def parse_file_changes(cls, v: Any) -> list[FileChange] | Any:
+        """Convert raw list-of-dict format to FileChange objects."""
+        if not v:
+            return []
+        if isinstance(v, list) and v and isinstance(v[0], dict):
+            return file_changes_from_list(v)
         return v
 
 
@@ -122,7 +141,7 @@ class PRRead(SchemaBase):
 
     # List fields (kept as raw types for simplicity in output)
     github_labels: list[str]
-    filenames: list[str]
+    file_changes: list[dict[str, str | int]]
     reviewers: list[str]
     assignees: list[str]
 
@@ -165,3 +184,15 @@ class PRRead(SchemaBase):
     def get_participants_typed(self) -> list[ParticipantEntry]:
         """Get participants as typed ParticipantEntry objects."""
         return participants_from_dict(self.participants)
+
+    def get_file_changes_typed(self) -> list[FileChange]:
+        """Get file_changes as typed FileChange objects."""
+        return file_changes_from_list(self.file_changes)
+
+    @property
+    def filenames(self) -> list[str]:
+        """Backward-compatible accessor: extract just filenames from file_changes."""
+        return [
+            str(fc.get("filename", "")) if isinstance(fc, dict) else ""
+            for fc in self.file_changes
+        ]

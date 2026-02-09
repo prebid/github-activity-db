@@ -38,7 +38,7 @@ These fields are updated on each sync while the PR remains open.
 | `last_update_date` | datetime | `pull.updated_at` |
 | `github_labels` | list[str] | `pull.labels[].name` |
 | `files_changed` | int | `pull.changed_files` |
-| `filenames` | list[str] | Files endpoint |
+| `file_changes` | list[dict] | Files endpoint (filename, status, additions, deletions, changes) |
 | `lines_added` | int | `pull.additions` |
 | `lines_deleted` | int | `pull.deletions` |
 | `commits_count` | int | `pull.commits` |
@@ -101,7 +101,7 @@ To populate all fields, the sync process needs:
 |----------|------------------|
 | `GET /repos/{owner}/{repo}/pulls` | Basic PR data (number, title, state, etc.) |
 | `GET /repos/{owner}/{repo}/pulls/{number}` | Full PR details |
-| `GET /repos/{owner}/{repo}/pulls/{number}/files` | `filenames` |
+| `GET /repos/{owner}/{repo}/pulls/{number}/files` | `file_changes` |
 | `GET /repos/{owner}/{repo}/pulls/{number}/commits` | `commits_breakdown` |
 | `GET /repos/{owner}/{repo}/pulls/{number}/reviews` | Part of `participants` |
 | `GET /repos/{owner}/{repo}/pulls/{number}/comments` | Part of `participants` |
@@ -159,7 +159,7 @@ TRACKED_REPOS = [
 
 ### JSON Fields
 - `github_labels`: Array of strings
-- `filenames`: Array of file paths
+- `file_changes`: Array of `{filename: string, status: string, additions: int, deletions: int, changes: int}`
 - `reviewers`, `assignees`: Array of GitHub usernames
 - `commits_breakdown`: Array of `{date: ISO8601, author: string}`
 - `participants`: Object mapping username → array of action strings

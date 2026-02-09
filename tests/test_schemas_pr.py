@@ -154,7 +154,9 @@ class TestPRRead:
             number=1234,
             title="Add new bidder adapter",
             github_labels=["enhancement", "needs-review"],
-            filenames=["adapters/newbidder.go"],
+            file_changes=[
+                {"filename": "adapters/newbidder.go", "status": "added", "additions": 100, "deletions": 0, "changes": 100},
+            ],
         )
         await db_session.flush()
 

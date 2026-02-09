@@ -87,15 +87,16 @@ class TestGitHubPullRequest:
         assert "reviewer1" in pr_sync.reviewers
 
     def test_github_pr_to_pr_sync_with_files(self):
-        """Test filenames are extracted from files response."""
+        """Test file_changes are extracted from files response."""
         gh_pr = GitHubPullRequest.model_validate(GITHUB_PR_RESPONSE)
         files = [GitHubFile.model_validate(f) for f in GITHUB_FILES_RESPONSE]
 
         pr_sync = gh_pr.to_pr_sync(files=files)
 
-        assert len(pr_sync.filenames) == 3
-        assert "adapters/examplebidder/examplebidder.go" in pr_sync.filenames
-        assert "exchange/adapter_builders.go" in pr_sync.filenames
+        assert len(pr_sync.file_changes) == 3
+        filenames = [fc.filename for fc in pr_sync.file_changes]
+        assert "adapters/examplebidder/examplebidder.go" in filenames
+        assert "exchange/adapter_builders.go" in filenames
 
     def test_github_pr_to_pr_sync_with_commits(self):
         """Test CommitBreakdown is built from commits response."""

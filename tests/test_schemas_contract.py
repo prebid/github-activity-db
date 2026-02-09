@@ -220,7 +220,7 @@ class TestPRSyncFactory:
         assert pr_sync.commits_count == 1
         assert pr_sync.github_labels == []
         assert pr_sync.participants == []  # No reviews
-        assert len(pr_sync.filenames) == 1
+        assert len(pr_sync.file_changes) == 1
         assert len(pr_sync.commits_breakdown) == 1
 
     def test_to_pr_sync_merged_pr(self) -> None:
@@ -241,7 +241,7 @@ class TestPRSyncFactory:
         assert pr_sync.commits_count == 12
         assert pr_sync.github_labels == ["adapter"]
         assert len(pr_sync.participants) == 2  # 2 reviewers
-        assert len(pr_sync.filenames) == 1
+        assert len(pr_sync.file_changes) == 1
         assert len(pr_sync.commits_breakdown) == 12
 
     def test_to_pr_sync_handles_empty_collections(self) -> None:
@@ -251,7 +251,7 @@ class TestPRSyncFactory:
 
         assert pr_sync.participants == []
         assert pr_sync.commits_breakdown == []
-        assert pr_sync.filenames == []
+        assert pr_sync.file_changes == []
 
     def test_to_pr_sync_reviewers_mapped_correctly(self) -> None:
         """Review states are mapped to correct participant actions."""
