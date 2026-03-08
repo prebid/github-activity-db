@@ -21,11 +21,11 @@ class TestSettings:
         assert settings.log_level == "INFO"
 
     def test_settings_tracked_repos(self):
-        """Test tracked_repos property returns 8 Prebid repos."""
+        """Test tracked_repos property returns 9 Prebid repos."""
         settings = Settings(_env_file=None)
         repos = settings.tracked_repos
 
-        assert len(repos) == 8
+        assert len(repos) == 9
         assert "prebid/prebid-server" in repos
         assert "prebid/prebid-server-java" in repos
         assert "prebid/Prebid.js" in repos
@@ -34,6 +34,7 @@ class TestSettings:
         assert "prebid/prebid-mobile-ios" in repos
         assert "prebid/prebid-universal-creative" in repos
         assert "prebid/professor-prebid" in repos
+        assert "prebid/salesagent" in repos
 
     def test_settings_from_env(self, monkeypatch):
         """Test environment variables override defaults."""

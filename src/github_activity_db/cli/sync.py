@@ -405,7 +405,7 @@ def sync_all_repositories(
 ) -> None:
     """Sync all tracked repositories to the database.
 
-    By default, syncs all 8 Prebid repositories. Use --repos to override.
+    By default, syncs all 9 Prebid repositories. Use --repos to override.
 
     Examples:
         ghactivity sync all --since 2024-10-01

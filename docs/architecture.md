@@ -202,7 +202,7 @@ config.py ←── db/engine.py ←── db/models.py
 
 | Module | Status | Notes |
 |--------|--------|-------|
-| `config.py` | ✅ Complete | 8 repos, rate limit, pacing & sync configs |
+| `config.py` | ✅ Complete | 9 repos, rate limit, pacing & sync configs |
 | `db/models.py` | ✅ Complete | 4 tables, 26 columns |
 | `db/engine.py` | ✅ Complete | Async session factory |
 | `db/repositories/` | ✅ Complete | Repository, PullRequest repositories |

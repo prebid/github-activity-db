@@ -226,6 +226,7 @@ class Settings(BaseSettings):
             "prebid/prebid-mobile-ios",
             "prebid/prebid-universal-creative",
             "prebid/professor-prebid",
+            "prebid/salesagent",
         ]
 
 

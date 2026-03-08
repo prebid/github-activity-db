@@ -39,7 +39,7 @@ uv run pre-commit run --all-files  # All quality checks
 ## Current Scope
 
 **Implemented:**
-- Pull Request data from 8 Prebid repositories
+- Pull Request data from 9 Prebid repositories
 - Custom user tags via CLI
 - Agent-generated classifications (`classify_tags`) and summaries (`ai_summary`)
 - Rate limit monitoring with proactive tracking

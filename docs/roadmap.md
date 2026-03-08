@@ -355,7 +355,7 @@ File: `tests/github/test_client.py` (TestGitHubClientPacerIntegration class)
 
 ## Phase 1.8: Multi-Repository Sync Orchestration ✅ COMPLETE
 
-Extends bulk PR ingestion to support syncing all 8 Prebid repositories in a single command, verifying the implementation scales and is composable.
+Extends bulk PR ingestion to support syncing all 9 Prebid repositories in a single command, verifying the implementation scales and is composable.
 
 ### Architecture
 
@@ -380,7 +380,7 @@ Extends bulk PR ingestion to support syncing all 8 Prebid repositories in a sing
               │                     │                     │
               ▼                     ▼                     ▼
     RepositoryRepository   BulkPRIngestionService   Settings.tracked_repos
-    (get_or_create)        (per-repo ingestion)     (8 Prebid repos)
+    (get_or_create)        (per-repo ingestion)     (9 Prebid repos)
 ```
 
 ### Tracked Repositories
@@ -395,6 +395,7 @@ tracked_repos = [
     "prebid/prebid-mobile-ios",
     "prebid/prebid-universal-creative",
     "prebid/professor-prebid",
+    "prebid/salesagent",
 ]
 ```
 
@@ -422,7 +423,7 @@ class MultiRepoSyncResult:
 ### CLI Commands
 
 ```bash
-ghactivity sync all                                    # Sync all 8 repos
+ghactivity sync all                                    # Sync all 9 repos
 ghactivity sync all --since 2024-10-01                 # With date filter
 ghactivity sync all --state merged                     # Only merged PRs
 ghactivity sync all --repos prebid/Prebid.js,prebid/prebid-server  # Specific repos
@@ -434,12 +435,12 @@ ghactivity sync all --format json                      # JSON output
 ### Progress Output
 
 ```
-Syncing 8 repositories...
+Syncing 9 repositories...
 
-[1/8] prebid/prebid-server
+[1/9] prebid/prebid-server
       Discovered: 150 | Created: 45 | Updated: 80 | Skipped: 20 | Failed: 5
 
-[2/8] prebid/Prebid.js
+[2/9] prebid/Prebid.js
       Discovered: 230 | Created: 100 | Updated: 110 | Skipped: 15 | Failed: 5
 ...
 
