@@ -30,9 +30,7 @@ def upgrade() -> None:
 
     # Migrate existing data from list[str] to list[dict]
     conn = op.get_bind()
-    rows = conn.execute(
-        sa.text("SELECT id, file_changes FROM pull_requests")
-    ).fetchall()
+    rows = conn.execute(sa.text("SELECT id, file_changes FROM pull_requests")).fetchall()
 
     for row in rows:
         pr_id = row[0]
@@ -65,9 +63,7 @@ def upgrade() -> None:
 def downgrade() -> None:
     """Revert to filenames column with list of strings."""
     conn = op.get_bind()
-    rows = conn.execute(
-        sa.text("SELECT id, file_changes FROM pull_requests")
-    ).fetchall()
+    rows = conn.execute(sa.text("SELECT id, file_changes FROM pull_requests")).fetchall()
 
     for row in rows:
         pr_id = row[0]

@@ -61,6 +61,7 @@ def run_async_command(
         console.print(f"[red]{error_prefix}:[/red] {e}")
         raise typer.Exit(1) from None
 
+
 # Typer requires function calls as default arguments, which triggers B008.
 # Using Annotated with a centralized type alias keeps the noqa in one place.
 
@@ -186,9 +187,7 @@ def validate_repo_list(repos_str: str | None) -> list[str] | None:
         try:
             parse_repo_string(repo)
         except ValueError:
-            console.print(
-                f"[red]Error:[/red] Repository '{repo}' must be in owner/name format"
-            )
+            console.print(f"[red]Error:[/red] Repository '{repo}' must be in owner/name format")
             raise typer.Exit(1) from None
 
     return repo_list

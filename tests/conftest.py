@@ -113,8 +113,20 @@ def sample_pr_open() -> dict:
         "commits_count": 3,
         "github_labels": ["enhancement", "needs-review"],
         "file_changes": [
-            {"filename": "adapters/newbidder.go", "status": "added", "additions": 200, "deletions": 0, "changes": 200},
-            {"filename": "adapters/newbidder_test.go", "status": "added", "additions": 50, "deletions": 10, "changes": 60},
+            {
+                "filename": "adapters/newbidder.go",
+                "status": "added",
+                "additions": 200,
+                "deletions": 0,
+                "changes": 200,
+            },
+            {
+                "filename": "adapters/newbidder_test.go",
+                "status": "added",
+                "additions": 50,
+                "deletions": 10,
+                "changes": 60,
+            },
         ],
         "reviewers": ["reviewer1", "reviewer2"],
         "assignees": ["testuser"],
@@ -150,7 +162,13 @@ def sample_pr_merged() -> dict:
         "commits_count": 2,
         "github_labels": ["bug"],
         "file_changes": [
-            {"filename": "exchange/auction.go", "status": "modified", "additions": 40, "deletions": 12, "changes": 52},
+            {
+                "filename": "exchange/auction.go",
+                "status": "modified",
+                "additions": 40,
+                "deletions": 12,
+                "changes": 52,
+            },
         ],
         "reviewers": [],
         "assignees": [],

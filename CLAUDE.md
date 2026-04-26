@@ -76,8 +76,9 @@ Async GitHub API client with integrated pacing and rate limit tracking. Every AP
 - `RateLimitStatus`: State machine (HEALTHY → WARNING → CRITICAL → EXHAUSTED)
 
 ### Request Pacing (`github/pacing/`)
-- `RequestPacer`: Token bucket algorithm with adaptive throttling (integrated into GitHubClient)
-- `RequestScheduler`: Priority queue with semaphore-controlled concurrency for bulk operations
+- `AsyncTokenBucket`: Concurrency-safe shared admission gate (the primitive that holds the rate)
+- `RequestPacer`: Façade over the token bucket; exposes `acquire()`, `force_wait*`, `get_stats()`
+- `RequestScheduler`: Priority queue with semaphore-bounded dispatch (acquires the slot before popping so retried HIGH-priority requests jump the queue)
 - `BatchExecutor`: Coordinates batch operations with progress tracking
 
 ### PR Ingestion (`github/sync/`)

@@ -109,6 +109,8 @@ def mock_repo_repository():
 def mock_pr_repository():
     """Mock PR repository."""
     repo = MagicMock()
+    # OPEN-PR sweep calls this; default to empty so it's a no-op.
+    repo.get_numbers_by_state = AsyncMock(return_value=[])
     return repo
 
 
@@ -316,16 +318,22 @@ class TestDiscoverPRs:
         mock_scheduler,
         now,
     ):
-        """PRs before since date are excluded."""
-        # PR created 5 days ago
+        """PRs before since date are excluded.
+
+        --since now filters on ``updated_at`` (not ``created_at``), so we
+        set both fields to the same date to exercise the cutoff.
+        """
+        # PR updated 5 days ago
         recent_pr = make_github_pr(
             number=1,
             created_at=(now - timedelta(days=5)).isoformat(),
+            updated_at=(now - timedelta(days=5)).isoformat(),
         )
-        # PR created 30 days ago
+        # PR updated 30 days ago
         old_pr = make_github_pr(
             number=2,
             created_at=(now - timedelta(days=30)).isoformat(),
+            updated_at=(now - timedelta(days=30)).isoformat(),
         )
 
         mock_github_client.iter_pull_requests.return_value = async_iter(
@@ -357,16 +365,21 @@ class TestDiscoverPRs:
         mock_scheduler,
         now,
     ):
-        """PRs after until date are excluded."""
-        # PR created yesterday
+        """PRs after until date are excluded.
+
+        --until filters on ``updated_at`` (not ``created_at``).
+        """
+        # PR updated yesterday
         recent_pr = make_github_pr(
             number=1,
             created_at=(now - timedelta(days=1)).isoformat(),
+            updated_at=(now - timedelta(days=1)).isoformat(),
         )
-        # PR created 10 days ago
+        # PR updated 10 days ago
         older_pr = make_github_pr(
             number=2,
             created_at=(now - timedelta(days=10)).isoformat(),
+            updated_at=(now - timedelta(days=10)).isoformat(),
         )
 
         mock_github_client.iter_pull_requests.return_value = async_iter(
@@ -504,6 +517,209 @@ class TestDiscoverPRs:
         pr_numbers = await service.discover_prs("owner", "repo", config)
 
         assert pr_numbers == []
+
+    @pytest.mark.asyncio
+    async def test_discover_filters_by_updated_at_not_created_at(
+        self,
+        mock_github_client,
+        mock_repo_repository,
+        mock_pr_repository,
+        mock_scheduler,
+        now,
+    ):
+        """A PR opened long ago but recently updated must be discovered.
+
+        Regression test for the drift bug: previously discovery filtered on
+        ``created_at`` and would skip a PR opened months ago even when its
+        state had just transitioned. The new semantic filters on
+        ``updated_at`` so a state transition is always picked up.
+        """
+        # Created 90 days ago but UPDATED yesterday — state likely changed
+        long_lived_active_pr = make_github_pr(
+            number=42,
+            created_at=(now - timedelta(days=90)).isoformat(),
+            updated_at=(now - timedelta(days=1)).isoformat(),
+        )
+        # Created yesterday but stale (updated 90 days ago) — must be skipped
+        recently_created_stale_pr = make_github_pr(
+            number=43,
+            created_at=(now - timedelta(days=1)).isoformat(),
+            updated_at=(now - timedelta(days=90)).isoformat(),
+        )
+
+        mock_github_client.iter_pull_requests.return_value = async_iter(
+            [
+                GitHubPullRequest.model_validate(long_lived_active_pr),
+                GitHubPullRequest.model_validate(recently_created_stale_pr),
+            ]
+        )
+
+        service = BulkPRIngestionService(
+            client=mock_github_client,
+            repo_repository=mock_repo_repository,
+            pr_repository=mock_pr_repository,
+            scheduler=mock_scheduler,
+        )
+
+        # Window of "the last 7 days, by updated_at"
+        config = BulkIngestionConfig(since=now - timedelta(days=7))
+        pr_numbers = await service.discover_prs("owner", "repo", config)
+
+        assert pr_numbers == [42], (
+            "long-lived but recently-updated PR should be discovered; "
+            "stale-created PR should not"
+        )
+
+    @pytest.mark.asyncio
+    async def test_discover_calls_iter_with_updated_sort(
+        self,
+        mock_github_client,
+        mock_repo_repository,
+        mock_pr_repository,
+        mock_scheduler,
+    ):
+        """The discovery iterator must request sort=updated, direction=desc.
+
+        Sorting by ``updated`` (rather than ``created``) is what makes the
+        early-``break`` correct under the new ``updated_at`` semantics.
+        """
+        mock_github_client.iter_pull_requests.return_value = async_iter([])
+
+        service = BulkPRIngestionService(
+            client=mock_github_client,
+            repo_repository=mock_repo_repository,
+            pr_repository=mock_pr_repository,
+            scheduler=mock_scheduler,
+        )
+
+        await service.discover_prs("owner", "repo", BulkIngestionConfig())
+
+        kwargs = mock_github_client.iter_pull_requests.call_args.kwargs
+        assert kwargs["sort"] == "updated"
+        assert kwargs["direction"] == "desc"
+        assert kwargs["state"] == "all"
+
+
+# -----------------------------------------------------------------------------
+# OPEN-PR Sweep Tests (drift-fix safety net)
+# -----------------------------------------------------------------------------
+class TestOpenPRSweep:
+    """Tests for the defensive OPEN-PR sweep in :meth:`ingest_repository`.
+
+    The sweep guarantees historical drift is auto-healed: any PR that the DB
+    still records as OPEN gets re-fetched on every sync, even if it falls
+    outside the ``--since`` window. This catches state transitions that
+    discovery alone could miss for any reason.
+    """
+
+    @pytest.mark.asyncio
+    async def test_sweep_unions_db_open_prs_with_discovered(
+        self,
+        mock_github_client,
+        mock_repo_repository,
+        mock_pr_repository,
+        mock_scheduler,
+        now,
+    ):
+        """DB-OPEN PRs outside the discovery window are added to ingestion."""
+        # Discovery finds only one fresh PR
+        fresh_pr = make_github_pr(
+            number=999,
+            created_at=(now - timedelta(days=1)).isoformat(),
+            updated_at=(now - timedelta(days=1)).isoformat(),
+        )
+        mock_github_client.iter_pull_requests.return_value = async_iter(
+            [GitHubPullRequest.model_validate(fresh_pr)]
+        )
+        # …but the DB still has three older PRs marked OPEN.
+        mock_pr_repository.get_numbers_by_state = AsyncMock(return_value=[42, 100, 999])
+
+        # Capture the PR numbers actually submitted for ingestion
+        submitted: list[int] = []
+
+        async def fake_submit(coro_factory, **_):
+            # The factory closes over a PR number; we can't easily extract it,
+            # so we instead spy via the processor passed to the executor.
+            return await coro_factory()
+
+        mock_scheduler.submit = AsyncMock(side_effect=fake_submit)
+
+        # Patch the per-PR processor to capture numbers and return success
+        from github_activity_db.github.sync.results import PRIngestionResult
+
+        async def fake_ingest(owner, repo, pr_number, **_):
+            submitted.append(pr_number)
+            return PRIngestionResult.from_skipped_unchanged(MagicMock(number=pr_number))
+
+        with patch(
+            "github_activity_db.github.sync.bulk_ingestion.PRIngestionService"
+        ) as mock_svc_cls:
+            mock_svc = MagicMock()
+            mock_svc.ingest_pr = AsyncMock(side_effect=fake_ingest)
+            mock_svc_cls.return_value = mock_svc
+
+            service = BulkPRIngestionService(
+                client=mock_github_client,
+                repo_repository=mock_repo_repository,
+                pr_repository=mock_pr_repository,
+                scheduler=mock_scheduler,
+            )
+            config = BulkIngestionConfig(since=now - timedelta(days=7))
+            result = await service.ingest_repository("owner", "repo", config)
+
+        # 999 was discovered AND in DB-open (deduped); 42 and 100 were
+        # only in DB-open. All three should be ingested exactly once.
+        assert sorted(submitted) == [42, 100, 999]
+        assert result.total_discovered == 3
+
+    @pytest.mark.asyncio
+    async def test_sweep_with_no_open_prs_is_noop(
+        self,
+        mock_github_client,
+        mock_repo_repository,
+        mock_pr_repository,
+        mock_scheduler,
+        now,
+    ):
+        """When DB has zero open PRs the sweep does not change discovery."""
+        fresh_pr = make_github_pr(
+            number=1,
+            created_at=(now - timedelta(days=1)).isoformat(),
+            updated_at=(now - timedelta(days=1)).isoformat(),
+        )
+        mock_github_client.iter_pull_requests.return_value = async_iter(
+            [GitHubPullRequest.model_validate(fresh_pr)]
+        )
+        mock_pr_repository.get_numbers_by_state = AsyncMock(return_value=[])
+
+        from github_activity_db.github.sync.results import PRIngestionResult
+
+        async def fake_ingest(owner, repo, pr_number, **_):
+            return PRIngestionResult.from_skipped_unchanged(MagicMock(number=pr_number))
+
+        # Override scheduler.submit to actually await the coroutine factory
+        # (the default fixture's lambda returns a coroutine without awaiting).
+        async def fake_submit(coro_factory, **_):
+            return await coro_factory()
+
+        mock_scheduler.submit = AsyncMock(side_effect=fake_submit)
+
+        with patch(
+            "github_activity_db.github.sync.bulk_ingestion.PRIngestionService"
+        ) as mock_svc_cls:
+            mock_svc = MagicMock()
+            mock_svc.ingest_pr = AsyncMock(side_effect=fake_ingest)
+            mock_svc_cls.return_value = mock_svc
+
+            service = BulkPRIngestionService(
+                client=mock_github_client,
+                repo_repository=mock_repo_repository,
+                pr_repository=mock_pr_repository,
+                scheduler=mock_scheduler,
+            )
+            result = await service.ingest_repository("owner", "repo", BulkIngestionConfig())
+
+        assert result.total_discovered == 1
 
 
 # -----------------------------------------------------------------------------

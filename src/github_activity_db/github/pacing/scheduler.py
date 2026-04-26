@@ -268,61 +268,72 @@ class RequestScheduler:
     # Worker Loop
     # -------------------------------------------------------------------------
     async def _worker_loop(self) -> None:
-        """Main worker loop that processes the queue."""
+        """Main worker loop that processes the queue.
+
+        The shared :class:`AsyncTokenBucket` inside the pacer gates the
+        request rate; the worker loop only pops a queued request once the
+        concurrency semaphore has free capacity. Acquiring the semaphore
+        *before* popping ensures that error-handling retries (which may
+        boost a failed request's priority to HIGH and requeue it) get a
+        chance to land before the next normal-priority pop — preserving
+        the priority-queue contract under retry.
+        """
         while self._running or self._queue:
             if not self._queue:
                 await asyncio.sleep(0.01)
                 continue
 
-            # Get recommended delay from pacer
-            delay = self._pacer.get_recommended_delay()
-            if delay > 0:
-                await asyncio.sleep(delay)
+            # Reserve a concurrency slot before popping. If we popped first,
+            # we'd dispatch eagerly and a HIGH-priority retry from a failing
+            # task could land *behind* an already-popped normal task.
+            await self._semaphore.acquire()
 
-            # Get next request (if available)
             async with self._queue_lock:
                 if not self._queue:
+                    self._semaphore.release()
                     continue
                 request = heapq.heappop(self._queue)
 
-            # Execute with concurrency control
-            task = asyncio.create_task(self._execute_request(request))
+            # Fire-and-forget; the wrapper releases the semaphore on completion.
+            task = asyncio.create_task(self._execute_and_release(request))
             self._active_tasks.add(task)
             task.add_done_callback(self._active_tasks.discard)
 
+    async def _execute_and_release(self, request: QueuedRequest[Any]) -> None:
+        """Execute the request, then release the concurrency slot."""
+        try:
+            await self._execute_request(request)
+        finally:
+            self._semaphore.release()
+
     async def _execute_request(self, request: QueuedRequest[Any]) -> None:
-        """Execute a single request with semaphore control."""
-        async with self._semaphore:
-            request.state = RequestState.IN_FLIGHT
-            request.started_at = datetime.now(UTC)
+        """Execute a single request. Caller holds the semaphore slot."""
+        request.state = RequestState.IN_FLIGHT
+        request.started_at = datetime.now(UTC)
 
-            logger.debug("Executing request %s", request.id[:8])
+        logger.debug("Executing request %s", request.id[:8])
 
-            try:
-                # Record request start for velocity tracking
-                self._pacer.on_request_start()
+        try:
+            # The pacer's bucket gates each individual API call inside
+            # the coroutine (via GitHubClient._apply_pacing), so the
+            # scheduler does not need its own pacing layer.
+            result = await request.coro_factory()
 
-                # Execute the coroutine
-                result = await request.coro_factory()
+            request.result = result
+            request.state = RequestState.COMPLETED
+            request.completed_at = datetime.now(UTC)
+            self._total_completed += 1
 
-                # Record completion
-                self._pacer.on_request_complete()
+            logger.debug("Request %s completed successfully", request.id[:8])
 
-                request.result = result
-                request.state = RequestState.COMPLETED
-                request.completed_at = datetime.now(UTC)
-                self._total_completed += 1
+            # Resolve pending future if any
+            if request.id in self._pending_futures:
+                future = self._pending_futures[request.id]
+                if not future.done():
+                    future.set_result(result)
 
-                logger.debug("Request %s completed successfully", request.id[:8])
-
-                # Resolve pending future if any
-                if request.id in self._pending_futures:
-                    future = self._pending_futures[request.id]
-                    if not future.done():
-                        future.set_result(result)
-
-            except Exception as e:
-                await self._handle_request_error(request, e)
+        except Exception as e:
+            await self._handle_request_error(request, e)
 
     async def _handle_request_error(
         self,

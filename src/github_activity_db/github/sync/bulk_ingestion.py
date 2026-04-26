@@ -13,6 +13,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, Literal
 
+from github_activity_db.db.models import PRState
 from github_activity_db.db.repositories import (
     PullRequestRepository,
     RepositoryRepository,
@@ -46,10 +47,17 @@ class BulkIngestionConfig:
     """
 
     since: datetime | None = None
-    """Only import PRs created after this datetime."""
+    """Only import PRs whose ``updated_at`` is after this datetime.
+
+    Filtering on ``updated_at`` (rather than ``created_at``) is essential:
+    a PR opened months ago can change state (open → merged) at any time,
+    and a created-date filter would silently miss those updates. Combined
+    with the OPEN-PR sweep in :meth:`ingest_repository`, this guarantees
+    state transitions are picked up regardless of when the PR was opened.
+    """
 
     until: datetime | None = None
-    """Only import PRs created before this datetime."""
+    """Only import PRs whose ``updated_at`` is before this datetime."""
 
     state: Literal["open", "merged", "all"] = "all"
     """Filter PRs by state. 'all' includes both open and merged (excludes abandoned)."""
@@ -158,6 +166,11 @@ class BulkPRIngestionService:
                 await scheduler.shutdown()
     """
 
+    # Upper bound for the OPEN-PR sweep to prevent a runaway sync on a repo
+    # with thousands of stale-open PRs. Picked to leave headroom in a 5000/hr
+    # quota: 500 PRs x ~4 calls each = 2000 calls, ~40% of an hour's budget.
+    _OPEN_SWEEP_CAP = 500
+
     def __init__(
         self,
         client: GitHubClient,
@@ -230,25 +243,29 @@ class BulkPRIngestionService:
                 # Reset for each attempt (in case partial progress was made)
                 pr_numbers = []
 
-                # Iterate PRs lazily, sorted by created date descending
-                # Using iter_pull_requests allows early termination when we hit PRs
-                # older than the since date - saves API calls on large repos
+                # Iterate PRs lazily, sorted by updated date descending.
+                # Sorting and filtering on `updated_at` ensures we discover
+                # any PR whose state has changed since the cutoff, even if it
+                # was opened long before. Early termination is still valid
+                # because GitHub returns the list in monotonic descending
+                # order of the sort key.
                 async for pr in self._client.iter_pull_requests(
                     owner,
                     repo,
                     state="all",
-                    sort="created",
+                    sort="updated",
                     direction="desc",
                 ):
-                    # Date filtering - since
-                    if config.since and pr.created_at < config.since:
-                        # PRs are sorted by created desc, so we can stop early
-                        logger.debug("PR #%d created before since date, stopping", pr.number)
+                    pr_updated = pr.updated_at
+
+                    # Date filtering - since (compares against updated_at)
+                    if config.since and pr_updated < config.since:
+                        logger.debug("PR #%d updated before since date, stopping", pr.number)
                         break
 
-                    # Date filtering - until
-                    if config.until and pr.created_at > config.until:
-                        logger.debug("PR #%d created after until date, skipping", pr.number)
+                    # Date filtering - until (compares against updated_at)
+                    if config.until and pr_updated > config.until:
+                        logger.debug("PR #%d updated after until date, skipping", pr.number)
                         continue
 
                     # State filtering
@@ -322,24 +339,50 @@ class BulkPRIngestionService:
         start_time = time.monotonic()
         result = BulkIngestionResult()
 
-        # Step 1: Discover PRs
-        pr_numbers = await self.discover_prs(owner, repo, config)
+        # Hoisted once so we don't re-fetch the same row 3-4 times below.
+        repository = await self._repo_repository.get_by_owner_and_name(owner, repo)
+
+        # Step 1: Discover PRs from GitHub
+        discovered = await self.discover_prs(owner, repo, config)
+
+        # Step 1b: Defensive sweep — re-fetch every PR currently OPEN in the
+        # DB. Discovery alone can miss state transitions on PRs whose latest
+        # GitHub `updated_at` is unchanged from when we last saw them (rare
+        # but possible) or whose state changed before any header change we
+        # observed. The OPEN sweep guarantees historical drift is auto-healed
+        # on every sync at a bounded cost — capped to keep runaway repos
+        # (thousands of stale-open PRs) from monopolizing a sync.
+        if repository is not None:
+            open_in_db = await self._pr_repository.get_numbers_by_state(repository.id, PRState.OPEN)
+            if open_in_db:
+                discovered_set = set(discovered)
+                extra = [n for n in open_in_db if n not in discovered_set]
+                if len(extra) > self._OPEN_SWEEP_CAP:
+                    logger.warning(
+                        "OPEN-PR sweep had %d candidates; capping to %d. "
+                        "Run a wider --since to drain the rest.",
+                        len(extra),
+                        self._OPEN_SWEEP_CAP,
+                    )
+                    extra = extra[: self._OPEN_SWEEP_CAP]
+                if extra:
+                    logger.info(
+                        "OPEN-PR sweep added %d previously-known open PRs to ingestion",
+                        len(extra),
+                    )
+                    discovered = discovered + extra
+
+        pr_numbers = discovered
         result.total_discovered = len(pr_numbers)
 
         if not pr_numbers:
             logger.info("No PRs to ingest for %s/%s", owner, repo)
             # Still update last_synced_at - an empty sync is still a sync
-            if not config.dry_run:
-                repository = await self._repo_repository.get_by_owner_and_name(
-                    owner, repo
-                )
-                if repository:
-                    await self._repo_repository.update_last_synced(
-                        repository.id, datetime.now(UTC)
-                    )
-                    if self._commit_manager:
-                        await self._commit_manager.record_success()
-                        await self._commit_manager.finalize()
+            if not config.dry_run and repository is not None:
+                await self._repo_repository.update_last_synced(repository.id, datetime.now(UTC))
+                if self._commit_manager:
+                    await self._commit_manager.record_success()
+                    await self._commit_manager.finalize()
             result.duration_seconds = time.monotonic() - start_time
             return result
 
@@ -405,36 +448,35 @@ class BulkPRIngestionService:
             result.failed_prs.append((pr_number, str(error)))
 
         # Persist failures if failure repository is provided
-        if self._failure_repository and result.failed_prs and not config.dry_run:
-            repository = await self._repo_repository.get_by_owner_and_name(owner, repo)
-            if repository:
-                for pr_number, error_msg in result.failed_prs:
-                    if pr_number > 0:  # Skip invalid PR numbers (-1)
-                        await self._failure_repository.record_failure(
-                            repository.id, pr_number, Exception(error_msg)
-                        )
-                logger.debug(
-                    "Persisted %d failures for %s/%s",
-                    len([p for p, _ in result.failed_prs if p > 0]),
-                    owner,
-                    repo,
-                )
+        if (
+            self._failure_repository
+            and result.failed_prs
+            and not config.dry_run
+            and repository is not None
+        ):
+            for pr_number, error_msg in result.failed_prs:
+                if pr_number > 0:  # Skip invalid PR numbers (-1)
+                    await self._failure_repository.record_failure(
+                        repository.id, pr_number, Exception(error_msg)
+                    )
+            logger.debug(
+                "Persisted %d failures for %s/%s",
+                len([p for p, _ in result.failed_prs if p > 0]),
+                owner,
+                repo,
+            )
 
         # Finalize any pending commits
         if self._commit_manager and not config.dry_run:
             await self._commit_manager.finalize()
 
         # Update last_synced_at timestamp for the repository
-        if not config.dry_run:
-            repository = await self._repo_repository.get_by_owner_and_name(owner, repo)
-            if repository:
-                await self._repo_repository.update_last_synced(
-                    repository.id, datetime.now(UTC)
-                )
-                # Ensure the timestamp is committed via commit manager
-                if self._commit_manager:
-                    await self._commit_manager.record_success()
-                    await self._commit_manager.finalize()
+        if not config.dry_run and repository is not None:
+            await self._repo_repository.update_last_synced(repository.id, datetime.now(UTC))
+            # Ensure the timestamp is committed via commit manager
+            if self._commit_manager:
+                await self._commit_manager.record_success()
+                await self._commit_manager.finalize()
 
         result.duration_seconds = time.monotonic() - start_time
 

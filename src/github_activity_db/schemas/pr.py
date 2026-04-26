@@ -193,6 +193,5 @@ class PRRead(SchemaBase):
     def filenames(self) -> list[str]:
         """Backward-compatible accessor: extract just filenames from file_changes."""
         return [
-            str(fc.get("filename", "")) if isinstance(fc, dict) else ""
-            for fc in self.file_changes
+            str(fc.get("filename", "")) if isinstance(fc, dict) else "" for fc in self.file_changes
         ]

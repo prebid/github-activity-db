@@ -160,12 +160,12 @@ def sync_repository(
     since: str | None = typer.Option(
         None,
         "--since",
-        help="Only sync PRs created after this date (YYYY-MM-DD or ISO format)",
+        help="Only sync PRs updated after this date (YYYY-MM-DD or ISO format)",
     ),
     until: str | None = typer.Option(
         None,
         "--until",
-        help="Only sync PRs created before this date (YYYY-MM-DD or ISO format)",
+        help="Only sync PRs updated before this date (YYYY-MM-DD or ISO format)",
     ),
     state: str = typer.Option(
         "all",
@@ -372,12 +372,12 @@ def sync_all_repositories(
     since: str | None = typer.Option(
         None,
         "--since",
-        help="Only sync PRs created after this date (YYYY-MM-DD or ISO format)",
+        help="Only sync PRs updated after this date (YYYY-MM-DD or ISO format)",
     ),
     until: str | None = typer.Option(
         None,
         "--until",
-        help="Only sync PRs created before this date (YYYY-MM-DD or ISO format)",
+        help="Only sync PRs updated before this date (YYYY-MM-DD or ISO format)",
     ),
     state: str = typer.Option(
         "all",

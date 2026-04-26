@@ -3,22 +3,28 @@
 Tests cover:
 - Lazy iteration via iter_pull_requests
 - Early termination of pagination
-- Full PR fetch
-- 404 error handling
-- Rate limit header extraction
-- Pacing integration (pacer hook calls)
+- Per-page pacing (every page gates through the pacer/bucket)
+- Full PR fetch and 404 handling
+- Rate-limit header extraction (per page, including paginated calls)
+- Primary/Secondary rate-limit error mapping
+- Context manager protocol
 """
 
 from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from githubkit.exception import RequestFailed
+from githubkit.exception import (
+    PrimaryRateLimitExceeded,
+    RequestFailed,
+    SecondaryRateLimitExceeded,
+)
 
 from github_activity_db.github.client import GitHubClient
 from github_activity_db.github.exceptions import (
     GitHubAuthenticationError,
     GitHubNotFoundError,
+    GitHubRateLimitError,
 )
 from github_activity_db.github.pacing import RequestPacer
 from github_activity_db.github.rate_limit import RateLimitMonitor, RateLimitPool
@@ -26,20 +32,27 @@ from tests.factories import make_github_pr
 
 
 # -----------------------------------------------------------------------------
-# Helper: Async Iterator Mock
+# Helpers
 # -----------------------------------------------------------------------------
-async def async_iter(items):
-    """Convert a list to an async iterator for mocking paginate."""
-    for item in items:
-        yield item
-
-
 def make_mock_pr_data(number: int, **overrides):
-    """Create a MagicMock that behaves like githubkit PR response."""
+    """Create a MagicMock that behaves like a githubkit PR response item."""
     pr_dict = make_github_pr(number=number, **overrides)
     mock = MagicMock()
     mock.model_dump.return_value = pr_dict
     return mock
+
+
+def make_paginated_response(items, headers=None):
+    """Build a mock githubkit Response for a single page of a list endpoint."""
+    resp = MagicMock()
+    resp.parsed_data = list(items)
+    resp.headers = headers or {
+        "x-ratelimit-limit": "5000",
+        "x-ratelimit-remaining": "4999",
+        "x-ratelimit-reset": str(int(datetime.now(UTC).timestamp()) + 3600),
+        "x-ratelimit-resource": "core",
+    }
+    return resp
 
 
 # -----------------------------------------------------------------------------
@@ -47,7 +60,7 @@ def make_mock_pr_data(number: int, **overrides):
 # -----------------------------------------------------------------------------
 @pytest.fixture
 def mock_github():
-    """Create a mock githubkit GitHub client."""
+    """Patch the githubkit GitHub class so the client wraps a MagicMock."""
     with patch("github_activity_db.github.client.GitHub") as mock_class:
         mock_instance = MagicMock()
         mock_class.return_value = mock_instance
@@ -56,7 +69,7 @@ def mock_github():
 
 @pytest.fixture
 def rate_monitor():
-    """Create a RateLimitMonitor for testing header extraction."""
+    """Fresh RateLimitMonitor for header-extraction tests."""
     return RateLimitMonitor()
 
 
@@ -78,10 +91,10 @@ class TestGitHubClientInit:
         with patch("github_activity_db.github.client.get_settings") as mock_settings:
             mock_settings.return_value.github_token = None
             with pytest.raises(GitHubAuthenticationError):
-                GitHubClient(token=None)
+                GitHubClient()
 
     def test_init_with_rate_monitor(self, rate_monitor):
-        """Client accepts optional rate monitor."""
+        """Client accepts rate_monitor parameter."""
         with patch("github_activity_db.github.client.get_settings") as mock_settings:
             mock_settings.return_value.github_token = "test-token"
             client = GitHubClient(rate_monitor=rate_monitor)
@@ -92,57 +105,81 @@ class TestGitHubClientInit:
 # Test: iter_pull_requests (Lazy Iteration)
 # -----------------------------------------------------------------------------
 class TestIterPullRequests:
-    """Tests for lazy PR iteration."""
+    """Tests for lazy PR iteration over the paged ``async_list`` endpoint."""
 
     async def test_iter_yields_prs_lazily(self, mock_github):
-        """iter_pull_requests yields PRs one at a time."""
-        # Setup mock pagination
-        pr_data = [make_mock_pr_data(i) for i in [100, 101, 102]]
-        mock_github.paginate.return_value = async_iter(pr_data)
+        """iter_pull_requests yields PRs one at a time, single page."""
+        page1 = [make_mock_pr_data(i) for i in [100, 101, 102]]
+        mock_github.rest.pulls.async_list = AsyncMock(return_value=make_paginated_response(page1))
 
         with patch("github_activity_db.github.client.get_settings") as mock_settings:
             mock_settings.return_value.github_token = "test-token"
             client = GitHubClient()
 
-            # Collect yielded PRs
             prs = []
-            async for pr in client.iter_pull_requests("owner", "repo"):
+            async for pr in client.iter_pull_requests("owner", "repo", per_page=100):
                 prs.append(pr)
 
-            assert len(prs) == 3
-            assert prs[0].number == 100
-            assert prs[1].number == 101
-            assert prs[2].number == 102
+            assert [pr.number for pr in prs] == [100, 101, 102]
 
-    async def test_iter_early_termination(self, mock_github):
-        """Breaking from iteration stops fetching pages."""
-        # Setup mock pagination with many PRs
-        pr_data = [make_mock_pr_data(i) for i in range(100, 200)]
-        mock_github.paginate.return_value = async_iter(pr_data)
+    async def test_iter_early_termination_stops_fetching(self, mock_github):
+        """Breaking out of the iterator avoids fetching subsequent pages."""
+        # Page 1 is full (100 items) so the paginator would request page 2.
+        page1 = [make_mock_pr_data(i) for i in range(100, 200)]
+
+        async_list = AsyncMock(return_value=make_paginated_response(page1))
+        mock_github.rest.pulls.async_list = async_list
 
         with patch("github_activity_db.github.client.get_settings") as mock_settings:
             mock_settings.return_value.github_token = "test-token"
             client = GitHubClient()
 
-            # Only consume first 3
             count = 0
-            async for _pr in client.iter_pull_requests("owner", "repo"):
+            async for _ in client.iter_pull_requests("owner", "repo", per_page=100):
                 count += 1
                 if count >= 3:
                     break
 
-            # Should have stopped after 3
             assert count == 3
+            # Only the first page should have been fetched
+            assert async_list.call_count == 1
 
-    async def test_iter_passes_parameters(self, mock_github):
-        """iter_pull_requests passes correct parameters to API."""
-        mock_github.paginate.return_value = async_iter([])
+    async def test_iter_paginates_until_short_page(self, mock_github):
+        """Multi-page: keeps fetching until a page returns fewer than per_page."""
+        page1 = [make_mock_pr_data(i) for i in range(100, 200)]  # 100 → full
+        page2 = [make_mock_pr_data(i) for i in range(200, 250)]  # 50 → short, stop
+
+        async_list = AsyncMock(
+            side_effect=[
+                make_paginated_response(page1),
+                make_paginated_response(page2),
+            ]
+        )
+        mock_github.rest.pulls.async_list = async_list
 
         with patch("github_activity_db.github.client.get_settings") as mock_settings:
             mock_settings.return_value.github_token = "test-token"
             client = GitHubClient()
 
-            # Consume iterator to trigger the call
+            count = 0
+            async for _ in client.iter_pull_requests("o", "r", per_page=100):
+                count += 1
+
+            assert count == 150
+            assert async_list.call_count == 2
+            # Page numbers should be 1 then 2
+            assert async_list.call_args_list[0].kwargs["page"] == 1
+            assert async_list.call_args_list[1].kwargs["page"] == 2
+
+    async def test_iter_passes_parameters(self, mock_github):
+        """iter_pull_requests forwards owner/repo/state/sort/direction."""
+        async_list = AsyncMock(return_value=make_paginated_response([]))
+        mock_github.rest.pulls.async_list = async_list
+
+        with patch("github_activity_db.github.client.get_settings") as mock_settings:
+            mock_settings.return_value.github_token = "test-token"
+            client = GitHubClient()
+
             async for _ in client.iter_pull_requests(
                 "prebid",
                 "prebid-server",
@@ -153,15 +190,13 @@ class TestIterPullRequests:
             ):
                 pass
 
-            # Verify parameters
-            mock_github.paginate.assert_called_once()
-            call_kwargs = mock_github.paginate.call_args[1]
-            assert call_kwargs["owner"] == "prebid"
-            assert call_kwargs["repo"] == "prebid-server"
-            assert call_kwargs["state"] == "all"
-            assert call_kwargs["sort"] == "updated"
-            assert call_kwargs["direction"] == "asc"
-            assert call_kwargs["per_page"] == 50
+            kwargs = async_list.call_args.kwargs
+            assert kwargs["owner"] == "prebid"
+            assert kwargs["repo"] == "prebid-server"
+            assert kwargs["state"] == "all"
+            assert kwargs["sort"] == "updated"
+            assert kwargs["direction"] == "asc"
+            assert kwargs["per_page"] == 50
 
 
 # -----------------------------------------------------------------------------
@@ -170,22 +205,14 @@ class TestIterPullRequests:
 class TestGetPullRequest:
     """Tests for fetching single PR data."""
 
-    async def test_get_pr_success(self):
+    async def test_get_pr_success(self, mock_github):
         """get_pull_request returns PR with full details."""
-        with (
-            patch("github_activity_db.github.client.get_settings") as mock_settings,
-            patch("github_activity_db.github.client.GitHub") as mock_github_class,
-        ):
+        pr_response = MagicMock()
+        pr_response.parsed_data.model_dump.return_value = make_github_pr(number=123)
+        mock_github.rest.pulls.async_get = AsyncMock(return_value=pr_response)
+
+        with patch("github_activity_db.github.client.get_settings") as mock_settings:
             mock_settings.return_value.github_token = "test-token"
-            mock_github = MagicMock()
-            mock_github_class.return_value = mock_github
-
-            # Setup mock response
-            pr_response = MagicMock()
-            pr_response.parsed_data.model_dump.return_value = make_github_pr(number=123)
-
-            mock_github.rest.pulls.async_get = AsyncMock(return_value=pr_response)
-
             client = GitHubClient()
             pr = await client.get_pull_request("owner", "repo", 123)
 
@@ -194,24 +221,16 @@ class TestGetPullRequest:
                 owner="owner", repo="repo", pull_number=123
             )
 
-    async def test_get_pr_not_found(self):
+    async def test_get_pr_not_found(self, mock_github):
         """get_pull_request raises GitHubNotFoundError for 404."""
-        with (
-            patch("github_activity_db.github.client.get_settings") as mock_settings,
-            patch("github_activity_db.github.client.GitHub") as mock_github_class,
-        ):
+        mock_response = MagicMock()
+        mock_response.status_code = 404
+        mock_response.headers = {}
+        error = RequestFailed(mock_response)
+        mock_github.rest.pulls.async_get = AsyncMock(side_effect=error)
+
+        with patch("github_activity_db.github.client.get_settings") as mock_settings:
             mock_settings.return_value.github_token = "test-token"
-            mock_github = MagicMock()
-            mock_github_class.return_value = mock_github
-
-            # Setup 404 response
-            mock_response = MagicMock()
-            mock_response.status_code = 404
-            mock_response.headers = {}
-            error = RequestFailed(mock_response)
-
-            mock_github.rest.pulls.async_get = AsyncMock(side_effect=error)
-
             client = GitHubClient()
             with pytest.raises(GitHubNotFoundError) as exc_info:
                 await client.get_pull_request("owner", "repo", 99999)
@@ -224,84 +243,90 @@ class TestGetPullRequest:
 # Test: Rate Limit Header Extraction
 # -----------------------------------------------------------------------------
 class TestRateLimitHeaderExtraction:
-    """Tests for extracting rate limit info from response headers."""
+    """Tests for extracting rate-limit info from response headers."""
 
-    async def test_updates_monitor_from_response(self, rate_monitor):
+    async def test_updates_monitor_from_response(self, rate_monitor, mock_github):
         """Response headers update the rate monitor."""
-        with (
-            patch("github_activity_db.github.client.get_settings") as mock_settings,
-            patch("github_activity_db.github.client.GitHub") as mock_github_class,
-        ):
+        response = MagicMock()
+        response.headers = {
+            "x-ratelimit-limit": "5000",
+            "x-ratelimit-remaining": "4999",
+            "x-ratelimit-reset": str(int(datetime.now(UTC).timestamp()) + 3600),
+            "x-ratelimit-resource": "core",
+        }
+        response.parsed_data.model_dump.return_value = make_github_pr(number=123)
+        mock_github.rest.pulls.async_get = AsyncMock(return_value=response)
+
+        with patch("github_activity_db.github.client.get_settings") as mock_settings:
             mock_settings.return_value.github_token = "test-token"
-            mock_github = MagicMock()
-            mock_github_class.return_value = mock_github
-
-            # Setup response with rate limit headers
-            mock_response = MagicMock()
-            mock_response.headers = {
-                "x-ratelimit-limit": "5000",
-                "x-ratelimit-remaining": "4999",
-                "x-ratelimit-reset": str(int(datetime.now(UTC).timestamp()) + 3600),
-                "x-ratelimit-resource": "core",
-            }
-            mock_response.parsed_data.model_dump.return_value = make_github_pr(number=123)
-
-            mock_github.rest.pulls.async_get = AsyncMock(return_value=mock_response)
-
             client = GitHubClient(rate_monitor=rate_monitor)
             await client.get_pull_request("owner", "repo", 123)
 
-            # Verify monitor was updated
-            from github_activity_db.github.rate_limit import RateLimitPool
+        pool_limit = rate_monitor.get_pool_limit(RateLimitPool.CORE)
+        assert pool_limit is not None
+        assert pool_limit.remaining == 4999
+        assert pool_limit.limit == 5000
 
-            pool_limit = rate_monitor.get_pool_limit(RateLimitPool.CORE)
-            assert pool_limit is not None
-            assert pool_limit.remaining == 4999
-            assert pool_limit.limit == 5000
-
-    async def test_no_monitor_no_error(self):
+    async def test_no_monitor_no_error(self, mock_github):
         """No rate monitor configured doesn't cause errors."""
-        with (
-            patch("github_activity_db.github.client.get_settings") as mock_settings,
-            patch("github_activity_db.github.client.GitHub") as mock_github_class,
-        ):
+        response = MagicMock()
+        response.headers = {"x-ratelimit-remaining": "4999"}
+        response.parsed_data.model_dump.return_value = make_github_pr(number=123)
+        mock_github.rest.pulls.async_get = AsyncMock(return_value=response)
+
+        with patch("github_activity_db.github.client.get_settings") as mock_settings:
             mock_settings.return_value.github_token = "test-token"
-            mock_github = MagicMock()
-            mock_github_class.return_value = mock_github
-
-            mock_response = MagicMock()
-            mock_response.headers = {"x-ratelimit-remaining": "4999"}
-            mock_response.parsed_data.model_dump.return_value = make_github_pr(number=123)
-
-            mock_github.rest.pulls.async_get = AsyncMock(return_value=mock_response)
-
             client = GitHubClient(rate_monitor=None)
-            # Should not raise
             await client.get_pull_request("owner", "repo", 123)
 
-    async def test_error_response_does_not_crash_header_extraction(self, rate_monitor):
-        """Error responses don't crash even if header extraction fails."""
-        with (
-            patch("github_activity_db.github.client.get_settings") as mock_settings,
-            patch("github_activity_db.github.client.GitHub") as mock_github_class,
-        ):
+    async def test_error_response_does_not_crash_header_extraction(self, rate_monitor, mock_github):
+        """Error responses with missing headers don't crash the handler."""
+        mock_response = MagicMock()
+        mock_response.status_code = 404
+        mock_response.headers = {}
+        error = RequestFailed(mock_response)
+        mock_github.rest.pulls.async_get = AsyncMock(side_effect=error)
+
+        with patch("github_activity_db.github.client.get_settings") as mock_settings:
             mock_settings.return_value.github_token = "test-token"
-            mock_github = MagicMock()
-            mock_github_class.return_value = mock_github
-
-            # Setup 404 response without proper headers
-            mock_response = MagicMock()
-            mock_response.status_code = 404
-            mock_response.headers = {}
-            error = RequestFailed(mock_response)
-
-            mock_github.rest.pulls.async_get = AsyncMock(side_effect=error)
-
             client = GitHubClient(rate_monitor=rate_monitor)
-
-            # Should raise NotFoundError but not crash during header extraction
             with pytest.raises(GitHubNotFoundError):
                 await client.get_pull_request("owner", "repo", 99999)
+
+    async def test_paginated_call_updates_monitor_per_page(self, rate_monitor, mock_github):
+        """Each page of a paginated request feeds headers back to the monitor.
+
+        This regression-tests a prior gap where ``githubkit.paginate`` was
+        used directly and only the first page's headers reached the monitor.
+        """
+        page1_response = MagicMock()
+        page1_response.parsed_data = [make_mock_pr_data(i) for i in range(100, 200)]
+        page1_response.headers = {
+            "x-ratelimit-limit": "5000",
+            "x-ratelimit-remaining": "4900",
+            "x-ratelimit-reset": str(int(datetime.now(UTC).timestamp()) + 3600),
+            "x-ratelimit-resource": "core",
+        }
+        page2_response = MagicMock()
+        page2_response.parsed_data = [make_mock_pr_data(i) for i in range(200, 220)]
+        page2_response.headers = {
+            "x-ratelimit-limit": "5000",
+            "x-ratelimit-remaining": "4800",  # decreased
+            "x-ratelimit-reset": str(int(datetime.now(UTC).timestamp()) + 3600),
+            "x-ratelimit-resource": "core",
+        }
+        mock_github.rest.pulls.async_list = AsyncMock(side_effect=[page1_response, page2_response])
+
+        with patch("github_activity_db.github.client.get_settings") as mock_settings:
+            mock_settings.return_value.github_token = "test-token"
+            client = GitHubClient(rate_monitor=rate_monitor)
+            async for _ in client.iter_pull_requests("o", "r", per_page=100):
+                pass
+
+        # Final state must reflect page-2 headers
+        pool_limit = rate_monitor.get_pool_limit(RateLimitPool.CORE)
+        assert pool_limit is not None
+        assert pool_limit.remaining == 4800
 
 
 # -----------------------------------------------------------------------------
@@ -314,7 +339,6 @@ class TestContextManager:
         """Async context manager returns the client instance."""
         with patch("github_activity_db.github.client.get_settings") as mock_settings:
             mock_settings.return_value.github_token = "test-token"
-
             async with GitHubClient() as client:
                 assert isinstance(client, GitHubClient)
 
@@ -322,15 +346,12 @@ class TestContextManager:
         """Async context manager closes client on exit."""
         with patch("github_activity_db.github.client.get_settings") as mock_settings:
             mock_settings.return_value.github_token = "test-token"
-
             client = GitHubClient()
-            # Trigger client creation
             _ = client._github
 
             async with client:
                 assert client._client is not None
 
-            # After exit, client should be cleaned up
             assert client._client is None
 
 
@@ -338,24 +359,23 @@ class TestContextManager:
 # Test: Pacer Integration
 # -----------------------------------------------------------------------------
 class TestGitHubClientPacerIntegration:
-    """Tests for pacer hook integration in GitHubClient.
+    """Verify GitHubClient drives the pacer correctly.
 
-    Verifies that GitHubClient correctly calls pacer methods:
-    - get_recommended_delay() before each request
-    - on_request_start() after delay applied
-    - on_request_complete() after each response
+    With the shared-bucket model the contract is: every API call ``await``s
+    ``pacer.acquire()`` first, and every response (including each paginated
+    page) feeds headers back via ``pacer.on_request_complete(headers)``.
     """
 
     @pytest.fixture
     def mock_pacer(self):
-        """Create a mock RequestPacer for testing hook calls."""
+        """Mock RequestPacer with the new acquire-based API."""
         pacer = MagicMock(spec=RequestPacer)
-        pacer.get_recommended_delay.return_value = 0.0  # No delay by default
+        pacer.acquire = AsyncMock()
+        pacer.on_request_complete = MagicMock()
+        pacer.force_wait = MagicMock()
+        pacer.force_wait_until = MagicMock()
         return pacer
 
-    # -------------------------------------------------------------------------
-    # Initialization Tests
-    # -------------------------------------------------------------------------
     def test_init_with_pacer(self, mock_pacer):
         """Client accepts pacer parameter."""
         with patch("github_activity_db.github.client.get_settings") as mock_settings:
@@ -370,178 +390,236 @@ class TestGitHubClientPacerIntegration:
             client = GitHubClient(pacer=mock_pacer)
             assert client.pacer is mock_pacer
 
-    # -------------------------------------------------------------------------
-    # _apply_pacing() Tests
-    # -------------------------------------------------------------------------
-    async def test_apply_pacing_calls_get_recommended_delay(self, mock_pacer):
-        """_apply_pacing calls pacer.get_recommended_delay()."""
+    async def test_apply_pacing_calls_acquire(self, mock_pacer):
+        """_apply_pacing delegates to pacer.acquire()."""
         with patch("github_activity_db.github.client.get_settings") as mock_settings:
             mock_settings.return_value.github_token = "test-token"
             client = GitHubClient(pacer=mock_pacer)
-
             await client._apply_pacing()
-
-            mock_pacer.get_recommended_delay.assert_called_once_with(RateLimitPool.CORE)
-
-    async def test_apply_pacing_calls_on_request_start(self, mock_pacer):
-        """_apply_pacing calls pacer.on_request_start()."""
-        with patch("github_activity_db.github.client.get_settings") as mock_settings:
-            mock_settings.return_value.github_token = "test-token"
-            client = GitHubClient(pacer=mock_pacer)
-
-            await client._apply_pacing()
-
-            mock_pacer.on_request_start.assert_called_once()
-
-    async def test_apply_pacing_sleeps_when_delay_positive(self, mock_pacer):
-        """_apply_pacing sleeps when pacer returns positive delay."""
-        mock_pacer.get_recommended_delay.return_value = 0.5
-
-        with (
-            patch("github_activity_db.github.client.get_settings") as mock_settings,
-            patch("github_activity_db.github.client.asyncio.sleep") as mock_sleep,
-        ):
-            mock_settings.return_value.github_token = "test-token"
-            mock_sleep.return_value = None  # Make it awaitable
-
-            client = GitHubClient(pacer=mock_pacer)
-            await client._apply_pacing()
-
-            mock_sleep.assert_called_once_with(0.5)
-
-    async def test_apply_pacing_skips_sleep_when_delay_zero(self, mock_pacer):
-        """_apply_pacing doesn't sleep when delay is 0."""
-        mock_pacer.get_recommended_delay.return_value = 0.0
-
-        with (
-            patch("github_activity_db.github.client.get_settings") as mock_settings,
-            patch("github_activity_db.github.client.asyncio.sleep") as mock_sleep,
-        ):
-            mock_settings.return_value.github_token = "test-token"
-            client = GitHubClient(pacer=mock_pacer)
-
-            await client._apply_pacing()
-
-            mock_sleep.assert_not_called()
+            mock_pacer.acquire.assert_awaited_once()
 
     async def test_apply_pacing_noop_when_no_pacer(self):
-        """_apply_pacing doesn't error when pacer is None."""
+        """_apply_pacing is a no-op when no pacer is configured."""
         with patch("github_activity_db.github.client.get_settings") as mock_settings:
             mock_settings.return_value.github_token = "test-token"
             client = GitHubClient(pacer=None)
+            await client._apply_pacing()  # must not raise
 
-            # Should not raise
-            await client._apply_pacing()
-
-    # -------------------------------------------------------------------------
-    # _update_rate_limit_from_response() Tests
-    # -------------------------------------------------------------------------
     def test_update_calls_pacer_on_request_complete(self, mock_pacer):
-        """_update_rate_limit_from_response calls pacer.on_request_complete()."""
+        """_update_rate_limit_from_response forwards headers to the pacer."""
         with patch("github_activity_db.github.client.get_settings") as mock_settings:
             mock_settings.return_value.github_token = "test-token"
             client = GitHubClient(pacer=mock_pacer)
 
             response = MagicMock()
             response.headers = {"x-ratelimit-remaining": "4999"}
-
             client._update_rate_limit_from_response(response)
-
             mock_pacer.on_request_complete.assert_called_once()
+            (headers,) = mock_pacer.on_request_complete.call_args.args
+            assert headers["x-ratelimit-remaining"] == "4999"
 
-    def test_update_passes_headers_to_pacer(self, mock_pacer):
-        """_update_rate_limit_from_response passes headers dict to pacer."""
-        with patch("github_activity_db.github.client.get_settings") as mock_settings:
-            mock_settings.return_value.github_token = "test-token"
-            client = GitHubClient(pacer=mock_pacer)
-
-            response = MagicMock()
-            response.headers = {
-                "x-ratelimit-limit": "5000",
-                "x-ratelimit-remaining": "4999",
-                "x-ratelimit-reset": "1234567890",
-            }
-
-            client._update_rate_limit_from_response(response)
-
-            # Verify headers were passed
-            call_args = mock_pacer.on_request_complete.call_args
-            headers_passed = call_args[0][0]
-            assert headers_passed["x-ratelimit-remaining"] == "4999"
-            assert headers_passed["x-ratelimit-limit"] == "5000"
-
-    def test_update_noop_when_no_pacer(self):
-        """_update_rate_limit_from_response doesn't error when pacer is None."""
+    def test_update_noop_when_no_pacer_or_monitor(self):
+        """_update_rate_limit_from_response doesn't error when nothing configured."""
         with patch("github_activity_db.github.client.get_settings") as mock_settings:
             mock_settings.return_value.github_token = "test-token"
             client = GitHubClient(pacer=None)
 
             response = MagicMock()
             response.headers = {"x-ratelimit-remaining": "4999"}
-
-            # Should not raise
             client._update_rate_limit_from_response(response)
 
-    # -------------------------------------------------------------------------
-    # API Method Integration Tests
-    # -------------------------------------------------------------------------
-    async def test_get_pull_request_calls_apply_pacing(self, mock_pacer):
-        """get_pull_request calls _apply_pacing before making request."""
-        with (
-            patch("github_activity_db.github.client.get_settings") as mock_settings,
-            patch("github_activity_db.github.client.GitHub") as mock_github_class,
-        ):
+    async def test_get_pull_request_acquires_token(self, mock_pacer, mock_github):
+        """Single-PR fetch acquires a token before issuing the request."""
+        response = MagicMock()
+        response.headers = {"x-ratelimit-remaining": "4999"}
+        response.parsed_data.model_dump.return_value = make_github_pr(number=123)
+        mock_github.rest.pulls.async_get = AsyncMock(return_value=response)
+
+        with patch("github_activity_db.github.client.get_settings") as mock_settings:
             mock_settings.return_value.github_token = "test-token"
-            mock_github = MagicMock()
-            mock_github_class.return_value = mock_github
-
-            # Setup mock response
-            mock_response = MagicMock()
-            mock_response.headers = {"x-ratelimit-remaining": "4999"}
-            mock_response.parsed_data.model_dump.return_value = make_github_pr(number=123)
-            mock_github.rest.pulls.async_get = AsyncMock(return_value=mock_response)
-
             client = GitHubClient(pacer=mock_pacer)
             await client.get_pull_request("owner", "repo", 123)
 
-            # Verify pacer hooks were called
-            mock_pacer.get_recommended_delay.assert_called()
-            mock_pacer.on_request_start.assert_called()
-            mock_pacer.on_request_complete.assert_called()
+        mock_pacer.acquire.assert_awaited()
+        mock_pacer.on_request_complete.assert_called()
 
-    async def test_iter_pull_requests_calls_apply_pacing(self, mock_pacer, mock_github):
-        """iter_pull_requests calls _apply_pacing before iteration."""
-        pr_data = [make_mock_pr_data(100)]
-        mock_github.paginate.return_value = async_iter(pr_data)
+    async def test_iter_pull_requests_acquires_token_per_page(self, mock_pacer, mock_github):
+        """Paginated iteration acquires once per page, not just per call."""
+        page1 = [make_mock_pr_data(i) for i in range(100, 200)]  # 100 → full
+        page2 = [make_mock_pr_data(i) for i in range(200, 220)]  # 20 → short, stop
+        mock_github.rest.pulls.async_list = AsyncMock(
+            side_effect=[
+                make_paginated_response(page1),
+                make_paginated_response(page2),
+            ]
+        )
 
         with patch("github_activity_db.github.client.get_settings") as mock_settings:
             mock_settings.return_value.github_token = "test-token"
             client = GitHubClient(pacer=mock_pacer)
-
-            # Consume iterator
-            async for _ in client.iter_pull_requests("owner", "repo"):
+            async for _ in client.iter_pull_requests("o", "r", per_page=100):
                 pass
 
-            # Verify pacer hooks were called
-            mock_pacer.get_recommended_delay.assert_called()
-            mock_pacer.on_request_start.assert_called()
+        # Two pages → two acquires AND two on_request_complete calls.
+        assert mock_pacer.acquire.await_count == 2
+        assert mock_pacer.on_request_complete.call_count == 2
 
-    async def test_get_pull_request_files_calls_apply_pacing(self, mock_pacer):
-        """get_pull_request_files calls _apply_pacing before request."""
-        with (
-            patch("github_activity_db.github.client.get_settings") as mock_settings,
-            patch("github_activity_db.github.client.GitHub") as mock_github_class,
-        ):
+
+# -----------------------------------------------------------------------------
+# Test: Error Mapping (rate-limit subclasses)
+# -----------------------------------------------------------------------------
+class TestRateLimitErrorMapping:
+    """Primary/Secondary rate-limit exceptions map to GitHubRateLimitError."""
+
+    def _make_response(self, status: int = 403) -> MagicMock:
+        resp = MagicMock()
+        resp.status_code = status
+        resp.headers = {
+            "x-ratelimit-limit": "5000",
+            "x-ratelimit-remaining": "0",
+            "x-ratelimit-reset": str(int(datetime.now(UTC).timestamp()) + 600),
+        }
+        return resp
+
+    async def test_primary_rate_limit_maps_to_rate_limit_error(self, mock_github):
+        """PrimaryRateLimitExceeded → GitHubRateLimitError + pacer.force_wait."""
+        from datetime import timedelta
+
+        from github_activity_db.config import PacingConfig
+
+        resp = self._make_response()
+        err = PrimaryRateLimitExceeded(resp, timedelta(seconds=60))
+        mock_github.rest.pulls.async_get = AsyncMock(side_effect=err)
+
+        # Use a real pacer wrapping a real monitor so we can assert on its state.
+        monitor = RateLimitMonitor()
+        pacer = RequestPacer(monitor, config=PacingConfig())
+
+        with patch("github_activity_db.github.client.get_settings") as mock_settings:
             mock_settings.return_value.github_token = "test-token"
-            mock_github = MagicMock()
-            mock_github_class.return_value = mock_github
+            client = GitHubClient(pacer=pacer, rate_monitor=monitor)
+            with pytest.raises(GitHubRateLimitError):
+                await client.get_pull_request("owner", "repo", 1)
 
-            # Setup mock paginator that returns empty
-            mock_github.paginate.return_value = async_iter([])
+        # force_wait engaged → bucket reports forced wait active.
+        assert pacer.is_forced_wait_active is True
+        assert pacer.forced_wait_remaining > 50  # ~60s + 5s buffer
 
-            client = GitHubClient(pacer=mock_pacer)
-            await client.get_pull_request_files("owner", "repo", 123)
+    async def test_secondary_rate_limit_maps_to_rate_limit_error(self, mock_github):
+        """SecondaryRateLimitExceeded → GitHubRateLimitError + pacer.force_wait."""
+        from datetime import timedelta
 
-            # Verify pacer hooks were called
-            mock_pacer.get_recommended_delay.assert_called()
-            mock_pacer.on_request_start.assert_called()
+        from github_activity_db.config import PacingConfig
+
+        resp = self._make_response()
+        err = SecondaryRateLimitExceeded(resp, timedelta(seconds=30))
+        mock_github.rest.pulls.async_get = AsyncMock(side_effect=err)
+
+        monitor = RateLimitMonitor()
+        pacer = RequestPacer(monitor, config=PacingConfig())
+
+        with patch("github_activity_db.github.client.get_settings") as mock_settings:
+            mock_settings.return_value.github_token = "test-token"
+            client = GitHubClient(pacer=pacer, rate_monitor=monitor)
+            with pytest.raises(GitHubRateLimitError):
+                await client.get_pull_request("owner", "repo", 1)
+
+        assert pacer.is_forced_wait_active is True
+
+    async def test_rate_limit_with_no_pacer_does_not_crash(self, mock_github):
+        """A primary/secondary rate-limit error must be safe with pacer=None.
+
+        The error-handling path tries to forward the wait to the pacer; a
+        guard prevents NPE when no pacer is configured.
+        """
+        from datetime import timedelta
+
+        resp = self._make_response()
+        err = PrimaryRateLimitExceeded(resp, timedelta(seconds=10))
+        mock_github.rest.pulls.async_get = AsyncMock(side_effect=err)
+
+        with patch("github_activity_db.github.client.get_settings") as mock_settings:
+            mock_settings.return_value.github_token = "test-token"
+            client = GitHubClient(pacer=None)
+            with pytest.raises(GitHubRateLimitError) as exc_info:
+                await client.get_pull_request("owner", "repo", 1)
+            # The exception should still surface its reset_at for callers
+            assert exc_info.value.reset_at is not None
+
+    async def test_rate_limit_double_deadline_takes_longer(self, mock_github):
+        """When the bucket already has a forced-wait and an error adds another,
+        the longer deadline is preserved (monotonic guard).
+
+        Order matters: first the response headers (with remaining=0) update
+        the bucket via on_request_complete → forced_wait_until reset_at;
+        then the explicit force_wait(retry_after + 5) runs. Whichever yields
+        the later deadline is the one we keep.
+        """
+        from datetime import timedelta
+
+        from github_activity_db.config import PacingConfig
+
+        # Construct a 403 with a far-future reset (1 hour) but a short
+        # Retry-After (5 seconds). The bucket should keep the 1-hour wait.
+        resp = MagicMock()
+        resp.status_code = 403
+        far_reset = int(datetime.now(UTC).timestamp()) + 3600
+        resp.headers = {
+            "x-ratelimit-limit": "5000",
+            "x-ratelimit-remaining": "0",
+            "x-ratelimit-reset": str(far_reset),
+        }
+        err = PrimaryRateLimitExceeded(resp, timedelta(seconds=5))
+        mock_github.rest.pulls.async_get = AsyncMock(side_effect=err)
+
+        monitor = RateLimitMonitor()
+        pacer = RequestPacer(monitor, config=PacingConfig())
+
+        with patch("github_activity_db.github.client.get_settings") as mock_settings:
+            mock_settings.return_value.github_token = "test-token"
+            client = GitHubClient(pacer=pacer, rate_monitor=monitor)
+            with pytest.raises(GitHubRateLimitError):
+                await client.get_pull_request("owner", "repo", 1)
+
+        # Forced wait should reflect the 1-hour reset_at, not the 5-second
+        # Retry-After, because the monotonic guard keeps the later deadline.
+        assert pacer.is_forced_wait_active is True
+        assert pacer.forced_wait_remaining > 600
+
+
+class TestPaginatorPerPageDefault:
+    """Regression tests for ``_paginate_paced`` per_page semantics."""
+
+    async def test_no_per_page_defaults_to_github_default(self, mock_github):
+        """When the caller omits ``per_page``, paginator must not truncate.
+
+        GitHub's documented default is 30. If the helper assumed 100, a
+        full-30-item response would look "short" and we'd stop after page 1
+        even when more data exists.
+        """
+        # Two full pages of 30 items each, then a short third page.
+        page1 = [make_mock_pr_data(i) for i in range(1, 31)]  # 30 items, full
+        page2 = [make_mock_pr_data(i) for i in range(31, 61)]  # 30 items, full
+        page3 = [make_mock_pr_data(i) for i in range(61, 75)]  # 14 items, short
+        async_list = AsyncMock(
+            side_effect=[
+                make_paginated_response(page1),
+                make_paginated_response(page2),
+                make_paginated_response(page3),
+            ]
+        )
+        mock_github.rest.pulls.async_list = async_list
+
+        with patch("github_activity_db.github.client.get_settings") as mock_settings:
+            mock_settings.return_value.github_token = "test-token"
+            client = GitHubClient()
+
+            # Manually drive _paginate_paced WITHOUT passing per_page
+            count = 0
+            async for _ in client._paginate_paced(
+                mock_github.rest.pulls.async_list, owner="o", repo="r"
+            ):
+                count += 1
+
+            assert count == 74
+            assert async_list.call_count == 3
