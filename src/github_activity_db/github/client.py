@@ -519,7 +519,7 @@ class GitHubClient:
         # Primary and secondary rate-limit exceptions carry an explicit
         # retry_after — handle them before generic 403 logic. Forward the
         # wait to the pacer so concurrent in-flight callers also block.
-        if isinstance(error, (PrimaryRateLimitExceeded, SecondaryRateLimitExceeded)):
+        if isinstance(error, PrimaryRateLimitExceeded | SecondaryRateLimitExceeded):
             retry_after_seconds = max(0.0, error.retry_after.total_seconds())
             reset_at = datetime.now(UTC) + timedelta(seconds=retry_after_seconds)
             if self._pacer is not None:
