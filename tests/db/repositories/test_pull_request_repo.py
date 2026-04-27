@@ -157,8 +157,20 @@ class TestPullRequestRepositoryCreate:
             commits_count=5,
             github_labels=["enhancement", "adapter"],
             file_changes=[
-                FileChange(filename="file1.go", status=FileChangeStatus.MODIFIED, additions=50, deletions=10, changes=60),
-                FileChange(filename="file2.go", status=FileChangeStatus.ADDED, additions=100, deletions=0, changes=100),
+                FileChange(
+                    filename="file1.go",
+                    status=FileChangeStatus.MODIFIED,
+                    additions=50,
+                    deletions=10,
+                    changes=60,
+                ),
+                FileChange(
+                    filename="file2.go",
+                    status=FileChangeStatus.ADDED,
+                    additions=100,
+                    deletions=0,
+                    changes=100,
+                ),
             ],
             reviewers=["reviewer1"],
             assignees=["assignee1"],

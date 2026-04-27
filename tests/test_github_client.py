@@ -121,20 +121,18 @@ class TestGitHubClientPullRequests:
         """List PRs returns list of GitHubPullRequest schemas."""
         client = GitHubClient(token="test-token")
 
-        # Create mock PR data items
         mock_pr1 = MagicMock()
         mock_pr1.model_dump.return_value = GITHUB_PR_RESPONSE
-
         mock_pr2 = MagicMock()
         mock_pr2.model_dump.return_value = {**GITHUB_PR_RESPONSE, "number": 1235}
 
-        async def mock_paginate(*args, **kwargs):
-            """Async generator that yields mock PRs."""
-            yield mock_pr1
-            yield mock_pr2
+        # Single short page → paginator stops after one fetch
+        page_response = MagicMock()
+        page_response.parsed_data = [mock_pr1, mock_pr2]
+        page_response.headers = {"x-ratelimit-remaining": "4999"}
 
         mock_internal = MagicMock()
-        mock_internal.paginate = mock_paginate
+        mock_internal.rest.pulls.async_list = AsyncMock(return_value=page_response)
         mock_internal.aclose = AsyncMock()
         client._client = mock_internal
 
@@ -151,19 +149,18 @@ class TestGitHubClientPullRequests:
         """Get PR files returns list of GitHubFile schemas."""
         client = GitHubClient(token="test-token")
 
-        # Create mock file items
         mock_files = []
         for file_data in GITHUB_FILES_RESPONSE:
             mock_file = MagicMock()
             mock_file.model_dump.return_value = file_data
             mock_files.append(mock_file)
 
-        async def mock_paginate(*args, **kwargs):
-            for f in mock_files:
-                yield f
+        page_response = MagicMock()
+        page_response.parsed_data = mock_files
+        page_response.headers = {"x-ratelimit-remaining": "4999"}
 
         mock_internal = MagicMock()
-        mock_internal.paginate = mock_paginate
+        mock_internal.rest.pulls.async_list_files = AsyncMock(return_value=page_response)
         mock_internal.aclose = AsyncMock()
         client._client = mock_internal
 
@@ -186,12 +183,12 @@ class TestGitHubClientPullRequests:
             mock_commit.model_dump.return_value = commit_data
             mock_commits.append(mock_commit)
 
-        async def mock_paginate(*args, **kwargs):
-            for c in mock_commits:
-                yield c
+        page_response = MagicMock()
+        page_response.parsed_data = mock_commits
+        page_response.headers = {"x-ratelimit-remaining": "4999"}
 
         mock_internal = MagicMock()
-        mock_internal.paginate = mock_paginate
+        mock_internal.rest.pulls.async_list_commits = AsyncMock(return_value=page_response)
         mock_internal.aclose = AsyncMock()
         client._client = mock_internal
 
@@ -214,12 +211,12 @@ class TestGitHubClientPullRequests:
             mock_review.model_dump.return_value = review_data
             mock_reviews.append(mock_review)
 
-        async def mock_paginate(*args, **kwargs):
-            for r in mock_reviews:
-                yield r
+        page_response = MagicMock()
+        page_response.parsed_data = mock_reviews
+        page_response.headers = {"x-ratelimit-remaining": "4999"}
 
         mock_internal = MagicMock()
-        mock_internal.paginate = mock_paginate
+        mock_internal.rest.pulls.async_list_reviews = AsyncMock(return_value=page_response)
         mock_internal.aclose = AsyncMock()
         client._client = mock_internal
 

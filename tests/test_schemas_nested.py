@@ -177,7 +177,13 @@ class TestFileChangeConversion:
         """Test converting DB list format to FileChange objects."""
         data: list[dict[str, str | int]] = [
             {"filename": "a.go", "status": "added", "additions": 50, "deletions": 0, "changes": 50},
-            {"filename": "b.go", "status": "modified", "additions": 10, "deletions": 5, "changes": 15},
+            {
+                "filename": "b.go",
+                "status": "modified",
+                "additions": 10,
+                "deletions": 5,
+                "changes": 15,
+            },
         ]
         result = file_changes_from_list(data)
 
@@ -192,7 +198,13 @@ class TestFileChangeConversion:
     def test_file_changes_from_list_unknown_status(self):
         """Test that unknown status falls back to UNKNOWN."""
         data: list[dict[str, str | int]] = [
-            {"filename": "x.go", "status": "some_future_status", "additions": 1, "deletions": 0, "changes": 1},
+            {
+                "filename": "x.go",
+                "status": "some_future_status",
+                "additions": 1,
+                "deletions": 0,
+                "changes": 1,
+            },
         ]
         result = file_changes_from_list(data)
 
@@ -217,14 +229,32 @@ class TestFileChangeConversion:
     def test_file_changes_to_list(self):
         """Test converting FileChange objects to DB list format."""
         entries = [
-            FileChange(filename="a.go", status=FileChangeStatus.ADDED, additions=50, deletions=0, changes=50),
-            FileChange(filename="b.go", status=FileChangeStatus.REMOVED, additions=0, deletions=30, changes=30),
+            FileChange(
+                filename="a.go",
+                status=FileChangeStatus.ADDED,
+                additions=50,
+                deletions=0,
+                changes=50,
+            ),
+            FileChange(
+                filename="b.go",
+                status=FileChangeStatus.REMOVED,
+                additions=0,
+                deletions=30,
+                changes=30,
+            ),
         ]
         result = file_changes_to_list(entries)
 
         assert result == [
             {"filename": "a.go", "status": "added", "additions": 50, "deletions": 0, "changes": 50},
-            {"filename": "b.go", "status": "removed", "additions": 0, "deletions": 30, "changes": 30},
+            {
+                "filename": "b.go",
+                "status": "removed",
+                "additions": 0,
+                "deletions": 30,
+                "changes": 30,
+            },
         ]
 
     def test_file_changes_to_list_empty(self):

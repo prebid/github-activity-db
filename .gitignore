@@ -99,6 +99,10 @@ site/
 *.db
 *.sqlite
 *.sqlite3
+# SQLite transient files (rollback journal, WAL, shared-memory)
+*.db-journal
+*.db-wal
+*.db-shm
 
 # Exception: include the main PR database for data sharing
 !github_activity.db

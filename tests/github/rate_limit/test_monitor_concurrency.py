@@ -175,9 +175,7 @@ class TestRateLimitMonitorConcurrency:
         monitor = RateLimitMonitor()
         callback_count = 0
 
-        def track_callback(
-            limit: PoolRateLimit, status: RateLimitStatus
-        ) -> None:
+        def track_callback(limit: PoolRateLimit, status: RateLimitStatus) -> None:
             nonlocal callback_count
             # Note: This is sync, but we track to verify it's called correctly
             callback_count += 1

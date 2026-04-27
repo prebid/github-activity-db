@@ -17,11 +17,11 @@ from .exceptions import (
     GitHubRetryableError,
 )
 from .pacing import (
+    AsyncTokenBucket,
     RequestPacer,
     RequestPriority,
     RequestScheduler,
     RequestState,
-    wait_with_pacer,
 )
 from .rate_limit import (
     PoolRateLimit,
@@ -56,11 +56,11 @@ __all__ = [
     "RateLimitSnapshot",
     "RateLimitStatus",
     # Request pacing
+    "AsyncTokenBucket",
     "RequestPacer",
     "RequestPriority",
     "RequestScheduler",
     "RequestState",
-    "wait_with_pacer",
     # PR Sync (single)
     "OutputFormat",
     "PRIngestionResult",

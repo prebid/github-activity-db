@@ -6,13 +6,16 @@ for pull request data retrieval with integrated rate limit monitoring.
 
 from __future__ import annotations
 
-import asyncio
-from collections.abc import AsyncIterator
-from datetime import UTC, datetime
+from collections.abc import AsyncIterator, Awaitable, Callable
+from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any, Literal
 
 from githubkit import GitHub
-from githubkit.exception import RequestFailed
+from githubkit.exception import (
+    PrimaryRateLimitExceeded,
+    RequestFailed,
+    SecondaryRateLimitExceeded,
+)
 from pydantic import ValidationError
 
 from github_activity_db.config import get_settings
@@ -30,7 +33,6 @@ from .exceptions import (
     GitHubNotFoundError,
     GitHubRateLimitError,
 )
-from .rate_limit.schemas import RateLimitPool
 
 if TYPE_CHECKING:
     from .pacing.pacer import RequestPacer
@@ -102,23 +104,54 @@ class GitHubClient:
         """Access the request pacer (if configured)."""
         return self._pacer
 
-    async def _apply_pacing(self, pool: RateLimitPool = RateLimitPool.CORE) -> None:
-        """Apply rate limit pacing before making a request.
+    async def _apply_pacing(self) -> None:
+        """Acquire one token from the pacer before making a request.
 
-        If a pacer is configured, this method calculates the recommended
-        delay based on current rate limit state and waits before proceeding.
-
-        Args:
-            pool: The rate limit pool to check (default: CORE)
+        If a pacer is configured, this blocks via the shared admission gate
+        until a request slot is available. The pacer tracks the core pool
+        only; search and graphql have separate budgets that this client
+        does not currently exercise.
         """
         if self._pacer is None:
             return
+        await self._pacer.acquire()
 
-        delay = self._pacer.get_recommended_delay(pool)
-        if delay > 0:
-            logger.debug("Pacing: waiting %.2fs before request", delay)
-            await asyncio.sleep(delay)
-        self._pacer.on_request_start()
+    async def _paginate_paced(
+        self,
+        method: Callable[..., Awaitable[Any]],
+        **kwargs: Any,
+    ) -> AsyncIterator[Any]:
+        """Manually paginate a githubkit list method, pacing per page.
+
+        Each page fetch is gated by ``_apply_pacing()`` and feeds response
+        headers back to the monitor — closing the gap that ``githubkit``'s
+        built-in paginator left open (only the first page was paced and
+        only the first page's headers reached the monitor).
+
+        Termination uses the GitHub convention that a short page (fewer
+        items than ``per_page``) is the last page. ``per_page`` defaults to
+        GitHub's own default (30) so we don't truncate when callers omit it.
+
+        Yields:
+            Each item from each page, in order.
+        """
+        # GitHub's documented default for `per_page` is 30. If a caller
+        # doesn't pass one, GitHub returns 30 — mirroring that here keeps
+        # the short-page termination correct.
+        per_page = int(kwargs.get("per_page", 30))
+        page = 1
+        while True:
+            await self._apply_pacing()
+            resp = await method(page=page, **kwargs)
+            self._update_rate_limit_from_response(resp)
+
+            items = list(resp.parsed_data)
+            for item in items:
+                yield item
+
+            if len(items) < per_page:
+                return
+            page += 1
 
     def _update_rate_limit_from_response(self, response: Any) -> None:
         """Extract rate limit headers from response and update monitor/pacer.
@@ -221,11 +254,10 @@ class GitHubClient:
             List of GitHubPullRequest objects (partial data - stats may be 0)
         """
         try:
-            await self._apply_pacing()
             prs: list[GitHubPullRequest] = []
 
             pr_data: Any
-            async for pr_data in self._github.paginate(
+            async for pr_data in self._paginate_paced(
                 self._github.rest.pulls.async_list,
                 owner=owner,
                 repo=repo,
@@ -272,9 +304,8 @@ class GitHubClient:
             GitHubPullRequest objects (partial data - stats may be 0)
         """
         try:
-            await self._apply_pacing()
             pr_data: Any
-            async for pr_data in self._github.paginate(
+            async for pr_data in self._paginate_paced(
                 self._github.rest.pulls.async_list,
                 owner=owner,
                 repo=repo,
@@ -347,11 +378,10 @@ class GitHubClient:
             List of GitHubFile objects
         """
         try:
-            await self._apply_pacing()
             files: list[GitHubFile] = []
 
             file_data: Any
-            async for file_data in self._github.paginate(
+            async for file_data in self._paginate_paced(
                 self._github.rest.pulls.async_list_files,
                 owner=owner,
                 repo=repo,
@@ -389,11 +419,10 @@ class GitHubClient:
             List of GitHubCommit objects
         """
         try:
-            await self._apply_pacing()
             commits: list[GitHubCommit] = []
 
             commit_data: Any
-            async for commit_data in self._github.paginate(
+            async for commit_data in self._paginate_paced(
                 self._github.rest.pulls.async_list_commits,
                 owner=owner,
                 repo=repo,
@@ -431,11 +460,10 @@ class GitHubClient:
             List of GitHubReview objects
         """
         try:
-            await self._apply_pacing()
             reviews: list[GitHubReview] = []
 
             review_data: Any
-            async for review_data in self._github.paginate(
+            async for review_data in self._paginate_paced(
                 self._github.rest.pulls.async_list_reviews,
                 owner=owner,
                 repo=repo,
@@ -488,21 +516,39 @@ class GitHubClient:
         # Update rate limit from error response headers (they still count)
         self._update_rate_limit_from_response(error.response)
 
+        # Primary and secondary rate-limit exceptions carry an explicit
+        # retry_after — handle them before generic 403 logic. Forward the
+        # wait to the pacer so concurrent in-flight callers also block.
+        if isinstance(error, PrimaryRateLimitExceeded | SecondaryRateLimitExceeded):
+            retry_after_seconds = max(0.0, error.retry_after.total_seconds())
+            reset_at = datetime.now(UTC) + timedelta(seconds=retry_after_seconds)
+            if self._pacer is not None:
+                # +5s jitter buffer so we don't retry at the exact moment of reset
+                self._pacer.force_wait(retry_after_seconds + 5.0)
+            return GitHubRateLimitError(
+                f"GitHub rate limit exceeded ({type(error).__name__})",
+                reset_at=reset_at,
+            )
+
         status = error.response.status_code
 
         if status == 401:
             return GitHubAuthenticationError("Invalid GitHub token")
         elif status == 403:
-            # Check for rate limit
+            # Generic 403 fallback: classic rate-limit shape (remaining=0)
             headers = error.response.headers
             if "x-ratelimit-remaining" in headers:
                 remaining = int(headers.get("x-ratelimit-remaining", "0"))
                 if remaining == 0:
                     reset_ts = int(headers.get("x-ratelimit-reset", "0"))
-                    reset_at = datetime.fromtimestamp(reset_ts, tz=UTC) if reset_ts else None
+                    reset_from_header = (
+                        datetime.fromtimestamp(reset_ts, tz=UTC) if reset_ts else None
+                    )
+                    if self._pacer is not None and reset_from_header is not None:
+                        self._pacer.force_wait_until(reset_from_header)
                     return GitHubRateLimitError(
                         "GitHub rate limit exceeded",
-                        reset_at=reset_at,
+                        reset_at=reset_from_header,
                     )
             return GitHubClientError(f"Access forbidden: {error}")
         elif status == 404:

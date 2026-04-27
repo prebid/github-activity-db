@@ -308,8 +308,13 @@ class TestRateLimitThrottling:
     """Tests for rate limit-based throttling behavior."""
 
     @pytest.mark.asyncio
-    async def test_low_rate_limit_affects_delay(self, monitor_low: RateLimitMonitor) -> None:
-        """Pacer provides delay when rate limit is low."""
+    async def test_low_rate_limit_engages_hard_floor(self, monitor_low: RateLimitMonitor) -> None:
+        """When remaining drops below the bucket's hard_floor, acquires block.
+
+        ``monitor_low`` reports remaining=100 — below the default hard_floor
+        derived from reserve_buffer_pct, so the bucket should enter a forced
+        wait until reset.
+        """
         config = PacingConfig(
             min_request_interval_ms=10,
             max_request_interval_ms=500,
@@ -318,16 +323,16 @@ class TestRateLimitThrottling:
         )
         pacer = RequestPacer(monitor_low, config=config)
 
-        # First call may use burst allowance
-        _ = pacer.get_recommended_delay()
-        pacer.on_request_complete()
+        # Feed monitor headers through to the pacer's bucket explicitly
+        # (the monitor fixture only updates the monitor; the new bucket
+        # adapts via on_request_complete).
+        from tests.fixtures.rate_limit_responses import make_rate_limit_headers
 
-        # Second call should see some delay recommendation
-        delay2 = pacer.get_recommended_delay()
+        pacer.on_request_complete(make_rate_limit_headers(remaining=100, reset_in_seconds=600))
 
-        # With low remaining quota, pacer should recommend some delay
-        # (actual value depends on algorithm, but should be non-negative)
-        assert delay2 >= 0
+        # 100 ≤ default hard_floor=500 → forced wait should be active.
+        assert pacer.is_forced_wait_active is True
+        assert pacer.forced_wait_remaining > 0
 
     @pytest.mark.asyncio
     async def test_scheduler_adapts_to_rate_limit_changes(self, fast_config: PacingConfig) -> None:
