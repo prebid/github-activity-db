@@ -263,6 +263,31 @@ class TestRateLimitSnapshot:
         assert RateLimitPool.CORE in snapshot.pools
         assert len(snapshot.pools) == 1  # Only core
 
+    def test_from_api_response_skips_unset_pool_value(self) -> None:
+        """Pools whose value is None/UNSET are skipped, not subscripted.
+
+        GitHub's /rate_limit response includes keys such as
+        ``code_scanning_upload`` whose value githubkit models as UNSET
+        (``None`` after ``model_dump``). The key is present but the value is
+        not a dict, which previously raised ``'Unset' object is not
+        subscriptable``.
+        """
+        data = {
+            "resources": {
+                "core": {"limit": 5000, "remaining": 4975, "used": 25, "reset": 1783700047},
+                # Present key with a non-dict value must be ignored gracefully.
+                "code_scanning_upload": None,
+            }
+        }
+
+        snapshot = RateLimitSnapshot.from_api_response(data)
+
+        assert RateLimitPool.CORE in snapshot.pools
+        assert RateLimitPool.CODE_SCANNING_UPLOAD not in snapshot.pools
+        core = snapshot.get_core()
+        assert core is not None
+        assert core.remaining == 4975
+
     def test_from_response_headers_healthy(self) -> None:
         """Parse healthy rate limit headers."""
         snapshot = RateLimitSnapshot.from_response_headers(HEADERS_HEALTHY)

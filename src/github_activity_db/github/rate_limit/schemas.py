@@ -132,8 +132,10 @@ class RateLimitSnapshot(BaseModel):
 
         for pool in RateLimitPool:
             pool_key = pool.value
-            if pool_key in resources:
-                r = resources[pool_key]
+            r = resources.get(pool_key)
+            # GitHub may include a pool key with an UNSET/None value (e.g.
+            # code_scanning_upload); skip anything that isn't a populated dict.
+            if isinstance(r, dict):
                 pools[pool] = PoolRateLimit(
                     pool=pool,
                     limit=r["limit"],
