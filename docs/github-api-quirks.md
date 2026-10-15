@@ -88,7 +88,10 @@ The ingestion phase fetches full PR data and can accurately filter:
 # After fetching full PR
 if gh_pr.state == "closed" and not gh_pr.merged:
     # This is an abandoned PR (closed without merge)
-    return PRIngestionResult.from_skipped_abandoned(existing)
+    if existing is None or existing.state != PRState.OPEN:
+        return PRIngestionResult.from_skipped_abandoned(existing)
+    # Tracked while open: move the row to CLOSED so it doesn't stay OPEN forever
+    await pr_repository.apply_close(pr.id, gh_pr.closed_at)
 ```
 
 ### API Cost Trade-off
@@ -134,7 +137,7 @@ Test fixtures captured from actual API responses:
 |-----------|--------|-----------|-------------|
 | `open` | - | `OPEN` | Work in progress |
 | `closed` | `True` | `MERGED` | Successfully merged |
-| `closed` | `False` | `CLOSED` | Abandoned (not imported) |
+| `closed` | `False` | `CLOSED` | Abandoned (not imported; tracked OPEN rows move to `CLOSED`) |
 
 ### State Detection
 
