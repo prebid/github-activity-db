@@ -227,6 +227,15 @@ class Settings(BaseSettings):
             "prebid/prebid-universal-creative",
             "prebid/professor-prebid",
             "prebid/salesagent",
+            "prebid/prebid-agent-skills",
+            "prebid/line-item-manager",
+            "prebid/go-gdpr",
+            "prebid/prebid-cache-java",
+            "prebid/repo-activity-dashboard",
+            "prebid/prebid-mobile-ios-sdk",
+            "prebid/openrtb",
+            "prebid/github-activity-db",
+            "prebid/prebid-integration-monitor",
         ]
 
 
