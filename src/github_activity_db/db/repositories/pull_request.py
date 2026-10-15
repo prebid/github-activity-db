@@ -28,7 +28,8 @@ class PullRequestRepository(BaseRepository[PullRequest]):
         - OPEN PRs can be updated with sync data
         - MERGED PRs within grace period can be updated
         - MERGED PRs past grace period are frozen (no updates)
-        - We don't care about CLOSED (without merge) PRs
+        - PRs closed without merge are only stored if previously tracked
+          as OPEN, which moves them to CLOSED (reopening clears close_date)
     """
 
     def __init__(
@@ -226,6 +227,10 @@ class PullRequestRepository(BaseRepository[PullRequest]):
         for key, value in self._sync_data_to_dict(sync_data).items():
             setattr(existing, key, value)
 
+        # A reopened PR (CLOSED -> OPEN) no longer has a close date
+        if sync_data.state == PRState.OPEN:
+            existing.close_date = None
+
         await self.flush()
         return existing, False
 
@@ -254,6 +259,32 @@ class PullRequestRepository(BaseRepository[PullRequest]):
         pr.merged_by = merge_data.merged_by
         if merge_data.ai_summary is not None:
             pr.ai_summary = merge_data.ai_summary
+
+        await self.flush()
+        return pr
+
+    async def apply_close(
+        self,
+        pr_id: int,
+        close_date: datetime,
+    ) -> PullRequest | None:
+        """Mark a PR as closed without merge.
+
+        Sets state to CLOSED and populates close_date. merged_by stays None.
+
+        Args:
+            pr_id: PR ID
+            close_date: When the PR was closed (UTC)
+
+        Returns:
+            Updated PR or None if not found
+        """
+        pr = await self.get_by_id(pr_id)
+        if pr is None:
+            return None
+
+        pr.state = PRState.CLOSED
+        pr.close_date = close_date
 
         await self.flush()
         return pr

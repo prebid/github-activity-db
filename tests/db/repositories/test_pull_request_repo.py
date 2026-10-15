@@ -339,6 +339,56 @@ class TestPullRequestRepositoryMerge:
         assert result.ai_summary == "This PR fixes a bug."
 
 
+class TestPullRequestRepositoryClose:
+    """Close-without-merge handling tests for PullRequestRepository."""
+
+    async def test_apply_close(self, db_session):
+        """Apply close data to an OPEN PR."""
+        repo = make_repository(db_session)
+        await db_session.flush()
+        pr = make_pull_request(db_session, repo, number=1234, state=PRState.OPEN)
+        await db_session.flush()
+
+        pr_repository = PullRequestRepository(db_session)
+        result = await pr_repository.apply_close(pr.id, JAN_12)
+
+        assert result is not None
+        assert result.state == PRState.CLOSED
+        assert result.close_date == JAN_12
+        assert result.merged_by is None
+
+    async def test_apply_close_not_found(self, db_session):
+        """Closing a nonexistent PR returns None."""
+        pr_repository = PullRequestRepository(db_session)
+        assert await pr_repository.apply_close(99999, JAN_12) is None
+
+    async def test_reopen_clears_close_date(self, db_session):
+        """A CLOSED PR synced as OPEN again (reopened) drops its close_date."""
+        repo = make_repository(db_session)
+        await db_session.flush()
+        pr = make_pull_request(
+            db_session, repo, number=1234, state=PRState.CLOSED, close_date=JAN_12
+        )
+        await db_session.flush()
+
+        pr_create = PRCreate(
+            number=1234,
+            link="https://github.com/prebid/prebid-server/pull/1234",
+            open_date=JAN_10,
+            submitter="testuser",
+            repository_id=repo.id,
+        )
+        pr_sync = PRSync(title="Reopened", last_update_date=JAN_15, state=PRState.OPEN)
+
+        pr_repository = PullRequestRepository(db_session)
+        result, created = await pr_repository.create_or_update(repo.id, pr_create, pr_sync)
+
+        assert created is False
+        assert result.id == pr.id
+        assert result.state == PRState.OPEN
+        assert result.close_date is None
+
+
 class TestPullRequestRepositoryFrozen:
     """Frozen PR (grace period) tests for PullRequestRepository."""
 

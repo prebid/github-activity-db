@@ -184,7 +184,20 @@ class TestPRIngestionServiceAbandoned:
 
     Abandoned PRs are closed without being merged. They are filtered out
     during ingestion because the list API doesn't include merge status.
+    PRs already tracked as OPEN transition to CLOSED instead.
     """
+
+    @staticmethod
+    def _abandoned(gh_pr: GitHubPullRequest) -> GitHubPullRequest:
+        return GitHubPullRequest(
+            **{
+                **gh_pr.model_dump(),
+                "state": "closed",
+                "merged": False,
+                "closed_at": "2025-01-15T10:00:00Z",
+                "updated_at": "2025-01-15T10:00:00Z",
+            }
+        )
 
     async def test_ingest_skips_abandoned_pr(self, db_session, mock_client, parse_real_pr):
         """Ingesting an abandoned PR (closed but not merged) skips it.
@@ -217,11 +230,10 @@ class TestPRIngestionServiceAbandoned:
         assert result.updated is False
         assert result.action == "skipped (abandoned)"
 
-    async def test_ingest_abandoned_returns_existing_if_present(
+    async def test_ingest_abandoned_closes_tracked_open_pr(
         self, db_session, mock_client, parse_real_pr
     ):
-        """If an abandoned PR was previously tracked, return the existing record."""
-        # Create existing PR (maybe it was tracked when open)
+        """A PR tracked while OPEN that is now closed without merge becomes CLOSED."""
         repo = make_repository(db_session, owner="prebid", name="prebid-server")
         await db_session.flush()
         existing = make_pull_request(
@@ -229,20 +241,56 @@ class TestPRIngestionServiceAbandoned:
             repo,
             number=4663,
             state=PRState.OPEN,
+            last_update_date=datetime(2025, 1, 1, tzinfo=UTC),
         )
         await db_session.flush()
 
         gh_pr, files, commits, reviews = parse_real_pr(REAL_OPEN_PR)
-        # Modify the PR to be closed but not merged (abandoned)
-        gh_pr = GitHubPullRequest(
-            **{
-                **gh_pr.model_dump(),
-                "state": "closed",
-                "merged": False,
-                "closed_at": "2025-01-15T10:00:00Z",
-            }
+        mock_client.get_full_pull_request.return_value = (
+            self._abandoned(gh_pr),
+            files,
+            commits,
+            reviews,
         )
-        mock_client.get_full_pull_request.return_value = (gh_pr, files, commits, reviews)
+
+        repo_repository = RepositoryRepository(db_session)
+        pr_repository = PullRequestRepository(db_session)
+        service = PRIngestionService(mock_client, repo_repository, pr_repository)
+
+        result = await service.ingest_pr("prebid", "prebid-server", 4663)
+
+        assert result.success is True
+        assert result.updated is True
+        assert result.skipped_abandoned is False
+        assert result.pr is not None
+        assert result.pr.id == existing.id
+        assert result.pr.state == PRState.CLOSED
+        assert result.pr.close_date == datetime(2025, 1, 15, 10, 0, tzinfo=UTC)
+        assert result.pr.last_update_date == datetime(2025, 1, 15, 10, 0, tzinfo=UTC)
+        assert result.pr.merged_by is None
+
+    async def test_ingest_abandoned_skips_already_closed_pr(
+        self, db_session, mock_client, parse_real_pr
+    ):
+        """A PR already stored as CLOSED is skipped and returned as-is."""
+        repo = make_repository(db_session, owner="prebid", name="prebid-server")
+        await db_session.flush()
+        existing = make_pull_request(
+            db_session,
+            repo,
+            number=4663,
+            state=PRState.CLOSED,
+            close_date=datetime(2025, 1, 15, 10, 0, tzinfo=UTC),
+        )
+        await db_session.flush()
+
+        gh_pr, files, commits, reviews = parse_real_pr(REAL_OPEN_PR)
+        mock_client.get_full_pull_request.return_value = (
+            self._abandoned(gh_pr),
+            files,
+            commits,
+            reviews,
+        )
 
         repo_repository = RepositoryRepository(db_session)
         pr_repository = PullRequestRepository(db_session)
@@ -254,6 +302,34 @@ class TestPRIngestionServiceAbandoned:
         assert result.skipped_abandoned is True
         assert result.pr is not None
         assert result.pr.id == existing.id
+        assert result.pr.state == PRState.CLOSED
+
+    async def test_ingest_abandoned_dry_run_does_not_close(
+        self, db_session, mock_client, parse_real_pr
+    ):
+        """Dry run reports the close transition without writing it."""
+        repo = make_repository(db_session, owner="prebid", name="prebid-server")
+        await db_session.flush()
+        existing = make_pull_request(db_session, repo, number=4663, state=PRState.OPEN)
+        await db_session.flush()
+
+        gh_pr, files, commits, reviews = parse_real_pr(REAL_OPEN_PR)
+        mock_client.get_full_pull_request.return_value = (
+            self._abandoned(gh_pr),
+            files,
+            commits,
+            reviews,
+        )
+
+        repo_repository = RepositoryRepository(db_session)
+        pr_repository = PullRequestRepository(db_session)
+        service = PRIngestionService(mock_client, repo_repository, pr_repository)
+
+        result = await service.ingest_pr("prebid", "prebid-server", 4663, dry_run=True)
+
+        assert result.updated is True
+        assert existing.state == PRState.OPEN
+        assert existing.close_date is None
 
 
 class TestPRIngestionServiceMerge:

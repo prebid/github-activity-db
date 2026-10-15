@@ -5,6 +5,7 @@ transforming it through our schema hierarchy, and persisting
 to the database.
 """
 
+from github_activity_db.db.models import PRState
 from github_activity_db.db.repositories import PullRequestRepository, RepositoryRepository
 from github_activity_db.github.client import GitHubClient
 from github_activity_db.github.exceptions import GitHubRetryableError
@@ -100,14 +101,36 @@ class PRIngestionService:
                 owner, repo, pr_number
             )
 
-            # Step 2.5: Skip abandoned PRs (closed but not merged)
+            # Step 2.5: Handle abandoned PRs (closed but not merged)
             # NOTE: We check this here because the list API does NOT include merge status.
             # Only the full PR endpoint tells us if a closed PR was actually merged.
             if gh_pr.state == "closed" and not gh_pr.merged:
-                pr_logger.debug("PR is abandoned (closed without merge), skipping")
-                # Check if we have an existing record to return
                 existing = await self._pr_repository.get_by_number(repository.id, pr_number)
-                return PRIngestionResult.from_skipped_abandoned(existing)
+
+                # Never tracked (or already CLOSED): nothing to store
+                if existing is None or existing.state != PRState.OPEN:
+                    pr_logger.debug("PR is abandoned (closed without merge), skipping")
+                    return PRIngestionResult.from_skipped_abandoned(existing)
+
+                # Tracked while open, since closed without merge: record the
+                # transition, otherwise the row stays OPEN forever and is
+                # re-fetched by every sync's OPEN-PR sweep
+                if dry_run:
+                    pr_logger.info("Dry run: would close PR")
+                    return PRIngestionResult(pr=existing, updated=True)
+
+                pr, _ = await self._pr_repository.create_or_update(
+                    repository.id,
+                    gh_pr.to_pr_create(repository.id),
+                    gh_pr.to_pr_sync(files, commits, reviews),
+                )
+                closed_pr = await self._pr_repository.apply_close(
+                    pr.id, gh_pr.closed_at or gh_pr.updated_at
+                )
+                # PR exists since we just updated it
+                assert closed_pr is not None, "apply_close should return PR for existing ID"
+                pr_logger.info("Closed PR (abandoned)", title=closed_pr.title[:50])
+                return PRIngestionResult.from_updated(closed_pr)
 
             # Step 3: Transform to internal schemas
             pr_create = gh_pr.to_pr_create(repository.id)
