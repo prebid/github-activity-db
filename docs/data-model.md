@@ -146,6 +146,16 @@ TRACKED_REPOS = [
     "prebid/prebid-mobile-ios",       # iOS SDK
     "prebid/prebid-universal-creative",
     "prebid/professor-prebid",        # Chrome extension
+    "prebid/salesagent",
+    "prebid/prebid-agent-skills",
+    "prebid/line-item-manager",       # Line item management tool
+    "prebid/go-gdpr",                 # Go IAB GDPR framework
+    "prebid/prebid-cache-java",       # Java Prebid Cache server
+    "prebid/repo-activity-dashboard",
+    "prebid/prebid-mobile-ios-sdk",
+    "prebid/openrtb",                 # Go OpenRTB / AdCOM types
+    "prebid/github-activity-db",      # This repo
+    "prebid/prebid-integration-monitor",
 ]
 ```
 
