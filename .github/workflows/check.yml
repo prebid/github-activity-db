@@ -49,19 +49,8 @@ jobs:
         run: uv sync --frozen --extra dev
       - name: pytest
         run: uv run --no-sync pytest --junitxml="$RUNNER_TEMP/junit.xml"
-      - name: Require a non-empty test run
-        run: |
-          uv run --no-sync python - "$RUNNER_TEMP/junit.xml" <<'PY'
-          import sys
-          import xml.etree.ElementTree as ET
-
-          root = ET.parse(sys.argv[1]).getroot()
-          suite = root if root.tag == "testsuite" else root.find("testsuite")
-          counts = {k: int(suite.get(k, "0")) for k in ("tests", "failures", "errors", "skipped")}
-          print(counts)
-          if counts["tests"] == 0 or counts["failures"] or counts["errors"]:
-              sys.exit(1)
-          PY
+      - name: Require an executed, passing test run with no skips
+        run: uv run --no-sync python scripts/check_junit.py "$RUNNER_TEMP/junit.xml" --max-skipped 0
       - name: Migrations upgrade a fresh database and match the models
         env:
           DATABASE_URL: sqlite+aiosqlite:///${{ runner.temp }}/migrations.db

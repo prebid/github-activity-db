@@ -74,7 +74,8 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**/*.py" = ["S101", "S105", "S106"]  # allow assert and test tokens/passwords
+"tests/**/*.py" = ["S101", "S105", "S106", "S603"]  # assert, test tokens, fixed-argv subprocesses
+"scripts/check_junit.py" = ["S314"]  # parses the report pytest wrote earlier in the same job
 
 [tool.ruff.lint.isort]
 known-first-party = ["github_activity_db"]
