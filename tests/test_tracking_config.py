@@ -107,6 +107,19 @@ class TestValidation:
         with pytest.raises(TrackingConfigError, match="gropu"):
             load_tracking_config(_write(tmp_path, body))
 
+    def test_unknown_top_level_key_is_rejected(self, tmp_path: Path) -> None:
+        body = "extra_setting = 1\n" + REPO.format(name="a", group="Tools")
+        with pytest.raises(TrackingConfigError, match="extra_setting"):
+            load_tracking_config(_write(tmp_path, body))
+
+    @pytest.mark.parametrize("field", ["owner", "name", "group"])
+    def test_empty_value_is_rejected(self, tmp_path: Path, field: str) -> None:
+        values = {"owner": "prebid", "name": "a", "group": "Tools", field: ""}
+        body = "[[repositories]]\n" + "".join(f'{k} = "{v}"\n' for k, v in values.items())
+        with pytest.raises(TrackingConfigError, match="at least 1 character") as error:
+            load_tracking_config(_write(tmp_path, body))
+        assert f"repositories.0.{field}" in str(error.value)
+
     def test_missing_group_is_rejected(self, tmp_path: Path) -> None:
         body = '[[repositories]]\nowner = "prebid"\nname = "a"\n'
         with pytest.raises(TrackingConfigError, match="group"):
