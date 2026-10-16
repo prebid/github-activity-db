@@ -1,0 +1,68 @@
+name: check
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: check-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: lint and types
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          version: "0.7.10"
+          python-version: "3.13"
+      - name: Install project and dev tools from uv.lock
+        run: uv sync --frozen --extra dev
+      - name: pre-commit (ruff, mypy, file checks, quality gates)
+        run: uv run --no-sync pre-commit run --all-files --show-diff-on-failure
+
+  test:
+    name: tests (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          version: "0.7.10"
+          python-version: ${{ matrix.python-version }}
+      - name: Install project and dev tools from uv.lock
+        run: uv sync --frozen --extra dev
+      - name: pytest
+        run: uv run --no-sync pytest --junitxml="$RUNNER_TEMP/junit.xml"
+      - name: Require a non-empty test run
+        run: |
+          uv run --no-sync python - "$RUNNER_TEMP/junit.xml" <<'PY'
+          import sys
+          import xml.etree.ElementTree as ET
+
+          root = ET.parse(sys.argv[1]).getroot()
+          suite = root if root.tag == "testsuite" else root.find("testsuite")
+          counts = {k: int(suite.get(k, "0")) for k in ("tests", "failures", "errors", "skipped")}
+          print(counts)
+          if counts["tests"] == 0 or counts["failures"] or counts["errors"]:
+              sys.exit(1)
+          PY
+      - name: Migrations upgrade a fresh database and match the models
+        env:
+          DATABASE_URL: sqlite+aiosqlite:///${{ runner.temp }}/migrations.db
+        run: |
+          uv run --no-sync alembic upgrade head
+          uv run --no-sync alembic check
