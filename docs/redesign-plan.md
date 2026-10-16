@@ -148,7 +148,7 @@ Every gap found in the audit, and where it is resolved.
 | 59 | The Any-alias check matched spellings, not imported objects: `from typing import Any as Dynamic` then `type Foo = Dynamic` passed, and a module's own `class Any` was flagged | Step 1: names resolved through the module's `typing` / `typing_extensions` imports |
 | 60 | The wheel smoke check rejected only the uppercase `TRACKING_CONFIG_PATH`, while `Settings` reads environment variables case-insensitively, so a lowercase override could stand in for a missing packaged file | Step 1: the check rejects a non-empty `tracking_config_path` on the `Settings` instance it reads from |
 | 61 | The Any-alias check's import map included imports from function and class bodies, so a function-local `from typing import cast as Dynamic` hid a module-level alias to `Any`, and a function-local `from typing import Any` flagged a module's own `class Any` | Step 1: imports and rebindings are followed in module scope only, in source order, merging branches so a name that may be `typing.Any` counts |
-| 62 | The Any-alias check missed string forward references (`Name: TypeAlias = "Any"`, `Optional["Any"]`), aliases in module-level `try`/`with`/loop/`match` blocks and non-`TYPE_CHECKING` `if` blocks, and `t = typing` copies; `x[k] = ...` and `x.attr = ...` counted as rebinding `x` | Step 1: forward references parsed where a type is expected; aliases flagged everywhere in module scope except either branch of an `if TYPE_CHECKING:` block; assignment copies followed; only stored names rebind |
+| 62 | The Any-alias check missed string forward references (`Name: TypeAlias = "Any"`, `Optional["Any"]`), aliases in module-level `try`/`with`/loop/`match` blocks and non-`TYPE_CHECKING` `if` blocks, and `t = typing` copies; `x[k] = ...` and `x.attr = ...` counted as rebinding `x` | Step 1: forward references parsed where a type is expected; aliases flagged wherever a type checker reads them in module scope, including an `if TYPE_CHECKING:` body, and not in the runtime-only branch (the `else` of `if TYPE_CHECKING:`); a quoted `"TypeAlias"` annotation is recognized; assignment copies followed; only stored names rebind |
 | 63 | The suppression counter missed `from <module> import no_type_check as X` when the module re-exports typing's (mypy follows the re-export) | Step 1: such aliases are collected from any module |
 
 ## 5. Design
@@ -383,7 +383,7 @@ Scope:
   locked dependencies and runs it from outside the checkout (D21).
 - Pre-commit runs ruff and mypy from `uv.lock` (local hooks via `uv run`), so local and CI use one
   version. `scripts/count_suppressions.py` fails above 5 `type: ignore` or 3 `noqa` comments in
-  `src/`, counting every spelling ruff and mypy honor (including `@no_type_check` and the isort
+  `src/`, counting the spellings its docstring lists (including `@no_type_check` and the isort
   skip comments); ruff `PGH004` rejects blanket `noqa`. `check-added-large-files` checks every
   file (`github_activity.db` exempt until Step 6).
 - Build inputs pinned: GitHub Actions and `pre-commit-hooks` by commit SHA, uv 0.7.10, the

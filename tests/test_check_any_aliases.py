@@ -88,6 +88,16 @@ ALIASES = [
     "Foo = D\n",
     "import sys\nfrom typing import *\n\nif sys.version_info >= (3, 12):\n\n    class Any:\n"
     "        pass\n\n\nFoo = Any\n",
+    # A type checker reads an `if TYPE_CHECKING:` body and the else of `if not TYPE_CHECKING:`.
+    "from typing import TYPE_CHECKING, Any\n\nif TYPE_CHECKING:\n    Foo = Any\n",
+    "from typing import TYPE_CHECKING, Any\n\nif not TYPE_CHECKING:\n    pass\nelse:\n"
+    "    Foo = Any\n",
+    # A quoted TypeAlias annotation, a copied typing object, and a string Annotated argument.
+    'from typing import Any, TypeAlias\n\nFoo: "TypeAlias" = Any\n',
+    "import typing\nfrom typing import Any\n\nO = typing.Optional\nFoo = O[Any]\n",
+    'from typing import Annotated, Any\n\nFoo = Annotated["Any", "x"]\n',
+    # An annotated subscript target reads its names.
+    "from typing import Any\n\nCOUNTS: dict[object, int] = {}\nCOUNTS[Any]: int = 2\nFoo = Any\n",
 ]
 NOT_ALIASES = [
     "from typing import Any\n\nFoo = dict[str, Any]\n",
@@ -111,8 +121,6 @@ NOT_ALIASES = [
     "from typing import *\n\n\nclass Any:\n    pass\n\n\nFoo = Any\n",
     "import contextlib\nfrom typing import Any as D\n\nwith contextlib.nullcontext(1) as D:\n"
     "    pass\n\nFoo = D\n",
-    # An alias inside a TYPE_CHECKING block is the recommended form.
-    "from typing import TYPE_CHECKING, Any\n\nif TYPE_CHECKING:\n    Foo = Any\n",
     # A string outside a type position is a value, and an unparsable reference is skipped.
     'from typing import Any\n\nFoo = "Any"\n',
     'from typing import Any, Literal\n\nFoo = Literal["Any"]\n',
@@ -124,14 +132,15 @@ NOT_ALIASES = [
     "from typing import Any as D\n\nD: int = 1\nFoo = D\n",
     "from typing import Any as D\n\ntry:\n    pass\nexcept Exception as D:\n    Foo = D\n",
     "from typing import Any\n\nfor Any in [1]:\n    Foo = Any\n",
-    "from typing import TYPE_CHECKING, Any\n\nif not TYPE_CHECKING:\n    pass\nelse:\n"
-    "    Foo = Any\n",
-    # Either branch of an `if TYPE_CHECKING:` block is exempt.
+    # The branch only the runtime executes is exempt.
     "from typing import TYPE_CHECKING, Any\n\nif TYPE_CHECKING:\n    pass\nelse:\n    Foo = Any\n",
     "from typing import TYPE_CHECKING, Any\n\nif not TYPE_CHECKING:\n    Foo = Any\n",
     # The TYPE_CHECKING pattern: a precise type for the checker, Any for the runtime.
     "from typing import TYPE_CHECKING, Any\n\nif TYPE_CHECKING:\n    from mylib import Model\n\n"
     "    Foo = Model\nelse:\n    Foo = Any\n",
+    # The attribute form `typing.TYPE_CHECKING` marks the runtime-only else as well.
+    "import typing\nfrom typing import Any\n\nif typing.TYPE_CHECKING:\n    pass\nelse:\n"
+    "    Foo = Any\n",
 ]
 
 

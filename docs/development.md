@@ -146,7 +146,7 @@ The project maintains strict quality standards with automated enforcement:
 | Mypy errors | 0 | Pre-commit blocks |
 
 ```bash
-# Check current quality metrics (counts comment tokens in every spelling ruff and mypy honor)
+# Check current quality metrics (the spellings it counts are listed in the script's docstring)
 uv run python scripts/count_suppressions.py src --max-type-ignore 5 --max-noqa 3
 ```
 

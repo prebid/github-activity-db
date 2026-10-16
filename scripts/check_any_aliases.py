@@ -1,11 +1,12 @@
 """Fail on module-level type aliases to Any; use a TYPE_CHECKING block instead.
 
-Flagged: aliases anywhere in module scope, except in either branch of an `if TYPE_CHECKING:`
-(or `if not TYPE_CHECKING:`) block, which is the recommended pattern (the checker sees one branch,
-the runtime the other), and inside functions and classes:
+Flagged: aliases anywhere a type checker reads them in module scope, including an
+`if TYPE_CHECKING:` body. Not flagged: the branch only the runtime executes (the `else` of
+`if TYPE_CHECKING:`, the body of `if not TYPE_CHECKING:`), so `if TYPE_CHECKING: X = Precise` /
+`else: X = Any` is allowed, and aliases inside functions and classes. The forms:
 - `Name = Any`, `Name = typing.Any`, unions containing Any (`Any | None`, `Optional[Any]`,
   `Union[int, Any]`), and `Annotated[Any, ...]`;
-- `Name: TypeAlias = Any`, also with `typing.TypeAlias`;
+- `Name: TypeAlias = Any`, also with `typing.TypeAlias` or a quoted `"TypeAlias"`;
 - `type Name = Any` and `type Name[T] = Any`.
 String forward references such as `Name: TypeAlias = "Any"` or `Optional["Any"]` are parsed where
 a type is expected; a plain `Name = "Any"` is a string value.
@@ -174,6 +175,16 @@ def _is_any(node: ast.expr, names: TypingNames, type_context: bool) -> bool:
     return names.refers_to(node, "Any")
 
 
+def _annotation(node: ast.expr) -> ast.expr:
+    """An annotation, with a string annotation (`x: "TypeAlias"`) parsed."""
+    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        try:
+            return ast.parse(node.value.strip(), mode="eval").body
+        except SyntaxError:
+            return node
+    return node
+
+
 def _aliases_in(statement: ast.stmt, names: TypingNames) -> Iterator[str]:
     if isinstance(statement, ast.Assign) and _is_any(statement.value, names, type_context=False):
         for target in statement.targets:
@@ -182,7 +193,7 @@ def _aliases_in(statement: ast.stmt, names: TypingNames) -> Iterator[str]:
     elif (
         isinstance(statement, ast.AnnAssign)
         and statement.value is not None
-        and names.refers_to(statement.annotation, "TypeAlias")
+        and names.refers_to(_annotation(statement.annotation), "TypeAlias")
         and _is_any(statement.value, names, type_context=True)
         and isinstance(statement.target, ast.Name)
     ):
@@ -193,13 +204,22 @@ def _aliases_in(statement: ast.stmt, names: TypingNames) -> Iterator[str]:
         yield statement.name.id
 
 
-def _is_type_checking_test(test: ast.expr) -> bool:
-    """`TYPE_CHECKING`, `typing.TYPE_CHECKING`, or `not` either of them."""
+def _runtime_only_branch(test: ast.expr) -> str | None:
+    """The branch of an `if` that only the runtime executes: "orelse", "body", or None.
+
+    Type checkers read the `TYPE_CHECKING` side and treat the other as unreachable.
+    """
+
+    def is_type_checking(node: ast.expr) -> bool:
+        return (isinstance(node, ast.Name) and node.id == "TYPE_CHECKING") or (
+            isinstance(node, ast.Attribute) and node.attr == "TYPE_CHECKING"
+        )
+
+    if is_type_checking(test):
+        return "orelse"
     if isinstance(test, ast.UnaryOp) and isinstance(test.op, ast.Not):
-        test = test.operand
-    return (isinstance(test, ast.Name) and test.id == "TYPE_CHECKING") or (
-        isinstance(test, ast.Attribute) and test.attr == "TYPE_CHECKING"
-    )
+        return "body" if is_type_checking(test.operand) else None
+    return None
 
 
 def _walk(
@@ -213,9 +233,9 @@ def _walk(
         if flag:
             found.extend((statement.lineno, alias) for alias in _aliases_in(statement, names))
         if isinstance(statement, ast.If):
-            inner = flag and not _is_type_checking_test(statement.test)
-            body = _walk(statement.body, names.copy(), inner, found)
-            orelse = _walk(statement.orelse, names.copy(), inner, found)
+            runtime_only = _runtime_only_branch(statement.test)
+            body = _walk(statement.body, names.copy(), flag and runtime_only != "body", found)
+            orelse = _walk(statement.orelse, names.copy(), flag and runtime_only != "orelse", found)
             names = TypingNames.merge(body, orelse)
         elif isinstance(statement, ast.For | ast.AsyncFor | ast.While):
             entered = names.copy()
