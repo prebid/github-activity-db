@@ -464,7 +464,7 @@ Measured 2026-10-16 unless noted. "Index" means the created-order enumeration in
 | Schedules | Public-repo schedules disable after 60 days without repository activity; start of hour is high load; queued jobs may be dropped; `workflow_dispatch` requires the workflow on the default branch | GitHub docs |
 | Concurrency | A new run replaces a pending run in the group; running runs are cancelled only with `cancel-in-progress: true` | GitHub docs |
 | App token action | `actions/create-github-app-token` v3.2.0 (2026-05-12) and v3.3.0 (2026-10-12) | GitHub API |
-| SQLite pragmas | A `connect` listener on `engine.sync_engine` yields `foreign_keys=1`, `journal_mode=wal`, `busy_timeout=5000` and rejects a foreign-key violation | probe |
+| SQLite pragmas | The `connect` listener on `engine.sync_engine` applies per connection through aiosqlite: `foreign_keys=1`, `busy_timeout=5000`, `journal_mode=delete` (D20); a foreign-key violation is rejected and `ON DELETE CASCADE` removes children | `tests/test_db_engine.py` (`TestSqliteConnectionSettings`) |
 | Existing file | 0 foreign-key violations; integrity check `ok` | local |
 | WAL snapshots | `VACUUM INTO` from a WAL database writes a rollback-journal file (header bytes 18-19 `0101` vs `0202`) that can be queried read-only from a read-only directory | sqlite3 |
 | Test-suite flake | pytest-asyncio 1.3.0 on Python 3.13 leaves an unclosed event loop after an async test followed by a test calling `asyncio.run()`; with `filterwarnings = error` the next test fails. Fixed in pytest-asyncio 1.4.0 (#724) | repeated runs on `22551d3` (3 of 3 failed) and with 1.4.0 (5 of 5 passed); release notes |
