@@ -1,7 +1,8 @@
 """Fail on module-level type aliases to Any; use a TYPE_CHECKING block instead.
 
 Flagged at module level (statements inside functions, classes, or `if` blocks are not):
-- `Name = Any`, `Name = typing.Any`, and `|` unions containing Any, such as `Name = Any | None`;
+- `Name = Any`, `Name = typing.Any`, and unions containing Any, such as `Name = Any | None`,
+  `Optional[Any]`, or `Union[int, Any]`, and `Annotated[Any, ...]`;
 - `Name: TypeAlias = Any`, also with `typing.TypeAlias`;
 - `type Name = Any` and `type Name[T] = Any`.
 `Any` matches the name `Any` and any attribute named `Any` (`typing.Any`, `t.Any`).
@@ -35,6 +36,12 @@ def _is_named(node: ast.expr, name: str) -> bool:
 def _is_any(node: ast.expr) -> bool:
     if isinstance(node, ast.BinOp) and isinstance(node.op, ast.BitOr):
         return _is_any(node.left) or _is_any(node.right)
+    if isinstance(node, ast.Subscript):
+        args = node.slice.elts if isinstance(node.slice, ast.Tuple) else [node.slice]
+        if _is_named(node.value, "Annotated"):
+            return bool(args) and _is_any(args[0])
+        if _is_named(node.value, "Optional") or _is_named(node.value, "Union"):
+            return any(_is_any(arg) for arg in args)
     return _is_named(node, "Any")
 
 

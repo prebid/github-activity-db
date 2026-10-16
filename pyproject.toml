@@ -40,6 +40,20 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["src/github_activity_db"]
 
+[tool.uv]
+# Build dependencies for every uv build, including the editable install `uv sync` makes.
+# build-constraints.txt pins the same versions with hashes for the built-wheel CI job;
+# tests/test_build_inputs.py keeps the two lists and [build-system] equal.
+build-constraint-dependencies = [
+    "editables==0.6",
+    "hatchling==1.32.4",
+    "packaging==26.3",
+    "pathspec==1.1.1",
+    "pluggy==1.7.0",
+    "tomlkit==0.15.2",
+    "trove-classifiers==2026.9.21.13",
+]
+
 # ------------------------------------------------------------------------------
 # Ruff - Linting & Formatting
 # ------------------------------------------------------------------------------

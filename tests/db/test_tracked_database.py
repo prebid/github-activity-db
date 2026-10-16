@@ -1,29 +1,29 @@
 """The tracked database file stays in rollback-journal mode (redesign plan D20).
 
-In WAL mode committed transactions can sit in a git-ignored *-wal file, so a committed
-github_activity.db in WAL mode can be missing data. Step 6 moves the database out of git
-and revisits this test.
+scripts/check_db_journal.py also runs as a pre-commit hook on github_activity.db. Step 6
+moves the database out of git and revisits this test.
 """
 
 import sqlite3
+import subprocess
+import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-ROLLBACK_JOURNAL = b"\x01\x01"
-WAL = b"\x02\x02"
+SCRIPT = REPO_ROOT / "scripts" / "check_db_journal.py"
 
 
-def journal_format(path: Path) -> bytes:
-    """Header bytes 18-19: the file format write and read versions (1 rollback, 2 WAL)."""
-    with path.open("rb") as handle:
-        return handle.read(20)[18:20]
+def _check(path: Path) -> subprocess.CompletedProcess[str]:
+    return subprocess.run([sys.executable, str(SCRIPT), str(path)], capture_output=True, text=True)
 
 
 def test_tracked_database_is_in_rollback_journal_mode() -> None:
-    assert journal_format(REPO_ROOT / "github_activity.db") == ROLLBACK_JOURNAL
+    result = _check(REPO_ROOT / "github_activity.db")
+    assert result.returncode == 0, result.stdout
+    assert "rollback journal" in result.stdout
 
 
-def test_journal_format_detects_wal(tmp_path: Path) -> None:
+def test_wal_database_is_rejected(tmp_path: Path) -> None:
     path = tmp_path / "wal.db"
     connection = sqlite3.connect(path)
     try:
@@ -32,4 +32,14 @@ def test_journal_format_detects_wal(tmp_path: Path) -> None:
         connection.commit()
     finally:
         connection.close()
-    assert journal_format(path) == WAL
+    result = _check(path)
+    assert result.returncode == 1
+    assert "journal format 2/2 (2 is WAL)" in result.stdout
+
+
+def test_non_database_file_is_rejected(tmp_path: Path) -> None:
+    path = tmp_path / "notes.db"
+    path.write_text("not a database")
+    result = _check(path)
+    assert result.returncode == 1
+    assert "not an SQLite database" in result.stdout

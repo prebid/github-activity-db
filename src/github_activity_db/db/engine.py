@@ -33,12 +33,16 @@ def _apply_sqlite_pragmas(dbapi_connection: Any, _connection_record: Any) -> Non
     foreign_keys is per connection and off by default in SQLite, so declared
     ON DELETE CASCADE constraints only hold when it is set on each connection.
 
-    Statements here must not need a database lock. SQLAlchemy does not close a
-    connection whose connect listener raised, and the open aiosqlite connection's
-    worker thread then keeps the process from exiting; a lock-taking statement such
-    as `PRAGMA journal_mode=DELETE` fails that way while another process holds the
-    database. The journal mode is left at SQLite's default rollback journal (D20);
-    tests/db/test_tracked_database.py checks the tracked file's header.
+    Statements here should not need a database lock: one that does, such as
+    `PRAGMA journal_mode=DELETE`, makes every connection fail with "database is
+    locked" while another process has the database open in WAL mode, or wait out
+    the busy timeout under an exclusive lock. The journal mode is therefore left
+    as the file has it; D20 (rollback journal for the tracked file) is checked by
+    scripts/check_db_journal.py as a pre-commit hook and by a test.
+
+    If a statement fails, the connection is closed before re-raising: SQLAlchemy
+    does not close a connection whose connect listener raised, and the open
+    aiosqlite connection's worker thread would keep the process from exiting.
     """
     cursor = dbapi_connection.cursor()
     try:

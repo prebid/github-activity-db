@@ -25,9 +25,15 @@ ALIASES = [
     "from typing import Any\n\ntype Foo = Any\n",
     "import typing\n\ntype Foo = typing.Any\n",
     "from typing import Any\n\ntype Foo[T] = Any\n",
+    "from typing import Any\n\nFoo = None | Any\n",
+    "from typing import Any, Optional\n\nFoo = Optional[Any]\n",
+    "import typing\n\nFoo = typing.Union[int, typing.Any]\n",
+    'from typing import Annotated, Any\n\nFoo = Annotated[Any, "x"]\n',
 ]
 NOT_ALIASES = [
     "from typing import Any\n\nFoo = dict[str, Any]\n",
+    'from typing import Annotated, Any\n\nFoo = Annotated[int, Any, "x"]\n',
+    "from typing import Any, Optional\n\nFoo = Optional[list[Any]]\n",
     "from typing import AnyStr\n\nFoo = AnyStr\n",
     "from typing import Any\n\nvalue: Any = 1\n",
     "from typing import Any\n\n\ndef f() -> None:\n    Foo = Any\n",

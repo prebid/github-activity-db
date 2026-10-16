@@ -67,10 +67,12 @@ uv add --optional dev package-name
 uv lock --upgrade
 uv sync --extra dev
 
-# Change the build backend: edit [build-system] requires in pyproject.toml, then
-# regenerate the hashed constraints the built-wheel CI job uses
-echo 'hatchling==<version>' | uv pip compile - --universal --generate-hashes \
-  --python-version 3.12 -o build-constraints.txt
+# Change the build backend: edit [build-system] requires in pyproject.toml, regenerate the
+# hashed constraints the built-wheel CI job uses, copy the same pins into
+# [tool.uv] build-constraint-dependencies, then run `uv lock` (tests/test_build_inputs.py
+# checks that the three agree)
+printf 'hatchling==<version>\neditables==<version>\n' | uv pip compile - --universal \
+  --generate-hashes --python-version 3.12 -o build-constraints.txt
 ```
 
 ### CLI

@@ -73,6 +73,8 @@ TYPE_IGNORE_SPELLINGS = [
     "import typing\n\n\n@typing.no_type_check\nclass C:\n    x: int = 'x'\n",
     "from typing import no_type_check\n\n\n@no_type_check\nasync def f() -> int:\n    return 'x'\n",
     "from typing import no_type_check as ntc\n\n\n@ntc\ndef f() -> int:\n    return 'x'\n",
+    "from typing_extensions import no_type_check as ntc\n\n\n"
+    "@ntc\ndef f() -> int:\n    return 'x'\n",
 ]
 NOT_SUPPRESSIONS = [
     'TEXT = "# noqa: F401, # type: ignore[misc], # ruff: noqa, # mypy: ignore-errors"\n',
