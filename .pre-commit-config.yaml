@@ -64,9 +64,7 @@ repos:
 
       - id: prevent-any-aliases
         name: Prevent new Any type aliases
-        entry: >
-          bash -c 'if grep -rnE "^(type[[:space:]]+)?[A-Z][[:alnum:]_]*([[:space:]]*:[[:space:]]*TypeAlias)?[[:space:]]*=[[:space:]]*Any([^[:alnum:]_]|$)" src/ 2>/dev/null | grep -v "^Binary";
-          then echo "Found type alias to Any - use TYPE_CHECKING block instead"; exit 1; fi; exit 0'
+        entry: uv run --no-sync python scripts/check_any_aliases.py src
         language: system
         pass_filenames: false
         always_run: true

@@ -487,7 +487,8 @@ uv run pre-commit install
   which fails unless at least one test ran and none failed, errored, or was skipped (pytest
   reports `xfail` as skipped, so an `xfail` also fails the job); and `alembic upgrade head` plus
   `alembic check` on a fresh database.
-- `built wheel`: builds the wheel, installs the `uv.lock` dependencies with hash checking and
+- `built wheel`: builds the wheel with build dependencies hash-checked against
+  `build-constraints.txt`, installs the `uv.lock` dependencies with hash checking and
   then the wheel into a new environment, runs `uv pip check`, and runs `scripts/wheel_smoke.py`
   and `ghactivity --help` from outside the checkout.
 

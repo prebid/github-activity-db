@@ -5,10 +5,11 @@ inside a string does not count. Both .py and .pyi files are scanned.
 
 - noqa: line-level `# noqa`, `#NOQA`, `# noqa: F401`; file-level `# ruff: noqa`,
   `# ruff: noqa: F401`, `# flake8: noqa`, in any letter case; and the isort action comments
-  that stop ruff's import sorting, `# isort: skip_file` and `# isort: off`.
+  ruff honors, `# isort: skip_file`, `# isort: off`, `# isort: skip`, also with a `# ruff:`
+  prefix.
 - type: ignore: `# type: ignore`, `# type:ignore[code]`, `#type:ignore`; mypy inline
   configuration such as `# mypy: ignore-errors` or `# mypy: disable-error-code=...`; and the
-  `@no_type_check` decorator (also as `@typing.no_type_check`).
+  `@no_type_check` decorator, also as `@typing.no_type_check` or under an imported alias.
 
 A directive after other comment text on the same line counts. Not counted: suppressions
 configured in pyproject.toml (per-file ignores, mypy overrides) and formatter comments
@@ -29,11 +30,13 @@ from collections.abc import Iterator
 from pathlib import Path
 
 NOQA = re.compile(
-    r"#\s*(?:(?:ruff|flake8)\s*:\s*)?noqa\b|#\s*isort\s*:\s*(?:skip_file|off)\b",
+    r"#\s*(?:(?:ruff|flake8)\s*:\s*)?noqa\b"
+    r"|#\s*(?:ruff\s*:\s*)?isort\s*:\s*(?:skip_file|off|skip)\b",
     re.IGNORECASE,
 )
 TYPE_IGNORE = re.compile(r"#\s*(?:type:\s*ignore\b|mypy\s*:)")
 NO_TYPE_CHECK = "no_type_check"
+TYPING_MODULES = {"typing", "typing_extensions"}
 
 
 def python_files(paths: list[Path]) -> Iterator[Path]:
@@ -51,18 +54,22 @@ def comments(source: bytes) -> Iterator[tuple[int, str]]:
 
 
 def no_type_check_lines(source: bytes) -> Iterator[int]:
-    for node in ast.walk(ast.parse(source)):
+    tree = ast.parse(source)
+    # Names that refer to no_type_check, including `from typing import no_type_check as x`.
+    local_names = {NO_TYPE_CHECK} | {
+        alias.asname
+        for node in ast.walk(tree)
+        if isinstance(node, ast.ImportFrom) and node.module in TYPING_MODULES
+        for alias in node.names
+        if alias.name == NO_TYPE_CHECK and alias.asname
+    }
+    for node in ast.walk(tree):
         if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef):
             for decorator in node.decorator_list:
                 target = decorator.func if isinstance(decorator, ast.Call) else decorator
-                name = (
-                    target.id
-                    if isinstance(target, ast.Name)
-                    else target.attr
-                    if isinstance(target, ast.Attribute)
-                    else None
-                )
-                if name == NO_TYPE_CHECK:
+                if (isinstance(target, ast.Name) and target.id in local_names) or (
+                    isinstance(target, ast.Attribute) and target.attr == NO_TYPE_CHECK
+                ):
                     yield decorator.lineno
 
 

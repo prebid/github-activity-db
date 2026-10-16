@@ -151,9 +151,10 @@ Pre-commit (run locally and by CI) fails on:
 - more than 5 `type: ignore` comments in src/ (`# mypy:` inline configuration and
   `@no_type_check` count too)
 - more than 3 `noqa` comments in src/ (file-level `# ruff: noqa` and `# flake8: noqa`, and
-  `# isort: skip_file` / `# isort: off`, count too)
+  the isort skip comments, count too)
 - a blanket `# noqa` without rule codes (ruff `PGH004`)
-- new `SomeName = Any` type aliases, including `type SomeName = Any` (use TYPE_CHECKING instead)
+- new module-level type aliases to `Any` (`SomeName = Any`, `type SomeName = Any`, and
+  `typing.Any` forms; `scripts/check_any_aliases.py`); use TYPE_CHECKING instead
 - files over 1000 KB anywhere in the repository (`github_activity.db` exempt while tracked)
 
 `scripts/count_suppressions.py` does the counting from comment tokens and decorators in `.py`

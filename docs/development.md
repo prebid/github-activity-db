@@ -66,6 +66,11 @@ uv add --optional dev package-name
 # Update all dependencies
 uv lock --upgrade
 uv sync --extra dev
+
+# Change the build backend: edit [build-system] requires in pyproject.toml, then
+# regenerate the hashed constraints the built-wheel CI job uses
+echo 'hatchling==<version>' | uv pip compile - --universal --generate-hashes \
+  --python-version 3.12 -o build-constraints.txt
 ```
 
 ### CLI
@@ -222,8 +227,9 @@ ruff and mypy run through `uv run --no-sync`, so hooks never change the environm
   unless at least one test ran and none failed, errored, or was skipped (pytest reports `xfail`
   as skipped);
 - `alembic upgrade head` plus `alembic check` against a fresh database;
-- a built wheel, installed into a new environment after the `uv.lock` dependencies (with hash
-  checking, then `uv pip check`) and run from outside the checkout (`scripts/wheel_smoke.py`,
+- a built wheel (build dependencies hash-checked against `build-constraints.txt`), installed
+  into a new environment after the `uv.lock` dependencies (with hash checking, then
+  `uv pip check`) and run from outside the checkout (`scripts/wheel_smoke.py`,
   `ghactivity --help`).
 
 ## Project Configuration

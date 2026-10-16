@@ -74,8 +74,10 @@ jobs:
         with:
           version: "0.7.10"
           python-version: "3.13"
-      - name: Build the wheel
-        run: uv build --wheel --out-dir "$RUNNER_TEMP/dist"
+      - name: Build the wheel with hash-checked build dependencies
+        run: |
+          uv build --wheel --build-constraints build-constraints.txt --require-hashes \
+            --out-dir "$RUNNER_TEMP/dist"
       - name: Install the wheel with the locked dependencies into a new environment
         run: |
           uv export --frozen --no-emit-project -o "$RUNNER_TEMP/requirements.txt"
