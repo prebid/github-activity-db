@@ -54,6 +54,23 @@ class TestPackagedConfig:
         assert settings.tracking_config_path is None
         assert settings.tracked_repos == EXPECTED_REPOS
 
+    @pytest.mark.parametrize("value", ["", "  "])
+    def test_empty_setting_reads_the_packaged_file(self, monkeypatch, value: str) -> None:
+        monkeypatch.setenv("TRACKING_CONFIG_PATH", value)
+        settings = Settings(_env_file=None)
+        assert settings.tracking_config_path is None
+        assert settings.tracked_repos == EXPECTED_REPOS
+
+    def test_empty_setting_in_env_file_reads_the_packaged_file(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        monkeypatch.delenv("TRACKING_CONFIG_PATH", raising=False)
+        env_file = tmp_path / ".env"
+        env_file.write_text("TRACKING_CONFIG_PATH=\n")
+        settings = Settings(_env_file=env_file)
+        assert settings.tracking_config_path is None
+        assert settings.tracked_repos == EXPECTED_REPOS
+
     def test_settings_reads_the_configured_path(self, tmp_path: Path, monkeypatch) -> None:
         path = _write(tmp_path, REPO.format(name="only-repo", group="Tools"))
         monkeypatch.setenv("TRACKING_CONFIG_PATH", str(path))
@@ -65,6 +82,11 @@ class TestValidation:
         missing = tmp_path / "absent.toml"
         with pytest.raises(TrackingConfigError, match="not found"):
             load_tracking_config(missing)
+
+    def test_unreadable_path(self, tmp_path: Path) -> None:
+        # A directory raises IsADirectoryError, an OSError other than FileNotFoundError.
+        with pytest.raises(TrackingConfigError, match="cannot read tracking config"):
+            load_tracking_config(tmp_path)
 
     def test_invalid_toml(self, tmp_path: Path) -> None:
         with pytest.raises(TrackingConfigError, match="not valid TOML"):

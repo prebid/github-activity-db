@@ -5,8 +5,12 @@ from __future__ import annotations
 import tomllib
 from importlib import resources
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
+
+if TYPE_CHECKING:
+    from importlib.resources.abc import Traversable
 
 
 class TrackingConfigError(ValueError):
@@ -65,19 +69,19 @@ def load_tracking_config(path: Path | None = None) -> TrackingConfig:
         path: A tracking.toml to read. None reads the file shipped in this package.
 
     Raises:
-        TrackingConfigError: The file is missing, is not valid TOML, or fails validation.
+        TrackingConfigError: The file is missing or unreadable, is not valid TOML, or fails
+            validation.
     """
-    source: str
+    file: Traversable = (
+        resources.files("github_activity_db").joinpath("tracking.toml") if path is None else path
+    )
+    source = f"package resource {file}" if path is None else str(path)
     try:
-        if path is None:
-            resource = resources.files("github_activity_db").joinpath("tracking.toml")
-            source = f"package resource {resource}"
-            raw = resource.read_bytes()
-        else:
-            source = str(path)
-            raw = path.read_bytes()
+        raw = file.read_bytes()
     except FileNotFoundError as e:
         raise TrackingConfigError(f"tracking config not found: {source}") from e
+    except OSError as e:
+        raise TrackingConfigError(f"cannot read tracking config {source}: {e}") from e
     try:
         data = tomllib.loads(raw.decode("utf-8"))
     except (tomllib.TOMLDecodeError, UnicodeDecodeError) as e:
