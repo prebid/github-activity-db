@@ -10,6 +10,8 @@ inside a string does not count. Both .py and .pyi files are scanned.
 - type: ignore: `# type: ignore`, `# type:ignore[code]`, `#type:ignore`; mypy inline
   configuration such as `# mypy: ignore-errors` or `# mypy: disable-error-code=...`; and the
   `@no_type_check` decorator, also as `@typing.no_type_check` or under an imported alias.
+  Aliases are collected from imports in every scope of the file, so a decorator in any scope
+  counts; this can over-count a name rebound elsewhere, never under-count.
 
 A directive after other comment text on the same line counts. Not counted: suppressions
 configured in pyproject.toml (per-file ignores, mypy overrides) and formatter comments
