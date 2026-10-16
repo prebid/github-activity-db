@@ -12,8 +12,9 @@
 git clone https://github.com/prebid/github-activity-db.git
 cd github-activity-db
 
-# Install dependencies
-uv sync
+# Install dependencies, including the dev extra (plain `uv sync` removes the dev tools)
+uv sync --frozen --extra dev
+uv run pre-commit install
 
 # Copy environment template
 cp .env.example .env
@@ -59,12 +60,12 @@ uv sync --all-extras
 # Add a new dependency
 uv add package-name
 
-# Add a dev dependency
-uv add --dev package-name
+# Add a dev dependency (dev tools live in the `dev` optional extra)
+uv add --optional dev package-name
 
 # Update all dependencies
 uv lock --upgrade
-uv sync
+uv sync --extra dev
 ```
 
 ### CLI
@@ -204,12 +205,21 @@ uv run pre-commit run mypy --all-files
 | `check-added-large-files` | Block files >1MB |
 | `check-merge-conflict` | Block merge conflict markers |
 | `detect-private-key` | Block private keys |
-| `ruff` | Linting with auto-fix |
-| `ruff-format` | Code formatting |
-| `mypy` | Type checking (src/ and tests/) |
-| `audit-type-ignores` | Report `type: ignore` count (target ≤5) |
-| `audit-noqa` | Report `noqa` count (target ≤3) |
+| `ruff-check` | Linting with auto-fix (ruff from `uv.lock`) |
+| `ruff-format` | Code formatting (ruff from `uv.lock`) |
+| `mypy` | Type checking of src/ and tests/ (mypy from `uv.lock`) |
+| `audit-type-ignores` | Fail above 5 `type: ignore` comments in src/ |
+| `audit-noqa` | Fail above 3 `noqa` comments in src/ |
 | `prevent-any-aliases` | Block `TypeName = Any` patterns |
+
+ruff and mypy run through `uv run --no-sync`, so hooks never change the environment; run
+`uv sync --frozen --extra dev` first.
+
+### Continuous Integration
+
+`.github/workflows/check.yml` runs on pull requests to `main` and pushes to `main`: pre-commit
+over all files, pytest on Python 3.12 and 3.13 (failing on an empty run), and
+`alembic upgrade head` plus `alembic check` against a fresh database.
 
 ## Project Configuration
 

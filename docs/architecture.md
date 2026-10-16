@@ -202,9 +202,10 @@ config.py ←── db/engine.py ←── db/models.py
 
 | Module | Status | Notes |
 |--------|--------|-------|
-| `config.py` | ✅ Complete | 18 repos, rate limit, pacing & sync configs |
+| `config.py` | ✅ Complete | Settings: database, token, rate limit, pacing & sync configs; tracked repos via `tracking.py` |
+| `tracking.py` | ✅ Complete | Loads and validates `config/tracking.toml` |
 | `db/models.py` | ✅ Complete | 4 tables, 26 columns |
-| `db/engine.py` | ✅ Complete | Async session factory |
+| `db/engine.py` | ✅ Complete | `build_engine` (foreign keys, WAL, busy timeout per connection), session factory |
 | `db/repositories/` | ✅ Complete | Repository, PullRequest repositories |
 | `cli/app.py` | ✅ Complete | GitHub and sync commands |
 | `cli/sync.py` | ✅ Complete | Single PR sync with --dry-run, --format, etc. |

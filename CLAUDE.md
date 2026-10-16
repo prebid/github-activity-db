@@ -1,12 +1,16 @@
 # GitHub Activity DB
 
-A searchable data store for GitHub PR data from Prebid repositories with custom tagging and AI-generated summaries.
+A searchable data store for GitHub PR data from Prebid repositories.
+
+Work follows [docs/redesign-plan.md](docs/redesign-plan.md), the plan of record: read it before
+changing the schema, sync, or CI, and update its step status table when a step lands.
 
 ## Quick Reference
 
 ```bash
 # Install & setup
-uv sync
+uv sync --frozen --extra dev  # dev tools are an optional extra; plain `uv sync` removes them
+uv run pre-commit install
 cp .env.example .env  # Add GITHUB_TOKEN
 uv run alembic upgrade head
 
@@ -17,17 +21,16 @@ uv run ghactivity sync pr owner/repo 1234         # Sync single PR
 uv run ghactivity sync repo owner/repo --since 2024-10-01  # Bulk sync
 uv run ghactivity sync all --since 2024-10-01     # Multi-repo sync
 
-# Development
-uv run mypy src/ tests/    # Type check
-uv run ruff check src/     # Lint
-uv run pytest              # Test (573+ tests)
-uv run pre-commit run --all-files  # All quality checks
+# Checks (CI runs the same: .github/workflows/check.yml)
+uv run pre-commit run --all-files  # ruff, mypy, file checks, quality gates
+uv run pytest                      # CI also runs Python 3.12 and `alembic check`
 ```
 
 ## Documentation
 
 | Document | Description |
 |----------|-------------|
+| [Redesign Plan](docs/redesign-plan.md) | Plan of record: decisions, target design, execution steps, evidence |
 | [Contributing](CONTRIBUTING.md) | Quality standards, code style, PR process |
 | [Architecture](docs/architecture.md) | Project structure, tech stack, module overview |
 | [Database](docs/database.md) | Schema, tables, migrations, usage examples |
@@ -39,15 +42,16 @@ uv run pre-commit run --all-files  # All quality checks
 ## Current Scope
 
 **Implemented:**
-- Pull Request data from 18 Prebid repositories
-- Custom user tags via CLI
-- Agent-generated classifications (`classify_tags`) and summaries (`ai_summary`)
+- Pull request data from the repositories listed in `config/tracking.toml`
 - Rate limit monitoring with proactive tracking
 - Request pacing with token bucket algorithm and priority queue scheduler
 - Single and bulk PR ingestion pipelines with 2-week grace period for merged PRs
-- Multi-repository sync orchestration for all tracked Prebid repositories
-- Batch commit resilience to prevent data loss during sync failures
+- Multi-repository sync orchestration for all tracked repositories
 - CLI commands: `ghactivity sync pr`, `ghactivity sync repo`, and `ghactivity sync all`
+
+**Not implemented despite existing code paths:** `classify_tags` and `ai_summary` have no
+producer, the `tags` and `search` commands are stubs, and bulk sync commits only after a
+repository finishes. The redesign plan replaces these.
 
 **Out of Scope (Future):**
 - GitHub Issues
@@ -101,7 +105,8 @@ Async GitHub API client with integrated pacing and rate limit tracking. Every AP
 | `LOG_LEVEL` | No | `INFO` | Logging level |
 | `ENVIRONMENT` | No | `development` | App environment |
 | `SYNC__MERGE_GRACE_PERIOD_DAYS` | No | `14` | Days after merge before PR is frozen |
-| `SYNC__COMMIT_BATCH_SIZE` | No | `25` | PRs to commit per batch (limits data loss on failure) |
+| `SYNC__COMMIT_BATCH_SIZE` | No | `25` | PRs per commit batch |
+| `TRACKING_CONFIG_PATH` | No | `config/tracking.toml` | Tracked repositories file |
 
 ## Type Safety Policy
 
@@ -130,17 +135,19 @@ This project enforces strict type safety through mypy strict mode and custom qua
 1. **Must include error code:** `# type: ignore[arg-type]`
 2. **Must have justification comment** if not obvious
 3. **Prefer fixing** the underlying type issue
-4. **Tracked:** Pre-commit reports count (target: <=5)
+4. **Enforced:** pre-commit fails above 5 in `src/`
 
 ### `noqa` Policy
 
 1. **Centralize** in shared utility functions (e.g., `cli/common.py`)
 2. **Document** why the rule doesn't apply
-3. **Tracked:** Pre-commit reports count (target: <=3)
+3. **Enforced:** pre-commit fails above 3 in `src/`
 
 ### Quality Gates
 
-Pre-commit hooks track:
-- `type: ignore` count in src/ (target: <=5)
-- `noqa` count in src/ (target: <=3)
-- Blocks new `SomeName = Any` type aliases (use TYPE_CHECKING instead)
+Pre-commit (run locally and by CI) fails on:
+- more than 5 `type: ignore` comments in src/
+- more than 3 `noqa` comments in src/
+- new `SomeName = Any` type aliases (use TYPE_CHECKING instead)
+
+ruff and mypy run from `uv.lock` through `uv run --no-sync`, so local and CI versions match.

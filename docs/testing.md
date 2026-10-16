@@ -32,7 +32,7 @@ This document describes the testing strategy, infrastructure, and patterns used 
 
 - **Mock external dependencies** (GitHub API, network)
 - **Test real internal logic** (business rules, transformations)
-- **Use real database** (in-memory SQLite for speed + isolation)
+- **Use real database** (a temporary SQLite file per test, built with the application's `build_engine`)
 
 ---
 
@@ -67,7 +67,7 @@ Test multiple components working together.
 
 **Characteristics:**
 - Mock external APIs (GitHub)
-- Use real database (in-memory SQLite)
+- Use real database (temporary SQLite file)
 - Test component contracts
 
 ### E2E Tests (Full Pipeline)
@@ -87,7 +87,10 @@ Test complete workflows from input to output.
 
 ## Current Coverage
 
-### Test Statistics (573+ tests)
+### Test Statistics
+
+Counts drift; `uv run pytest --collect-only | tail -1` prints the current total. The
+per-module figures below predate the redesign and are rewritten in its documentation step.
 
 | Module | Tests | Coverage |
 |--------|-------|----------|
@@ -162,7 +165,8 @@ async def db_session(test_engine):
 ```
 
 **Key properties:**
-- In-memory SQLite (fast, no cleanup needed)
+- A temporary SQLite file per test from `build_engine`, so foreign keys and WAL match production
+  (the application engine opens a connection per session, which an in-memory database cannot share)
 - Auto-rollback (each test starts fresh)
 - Async support (matches production code)
 
@@ -469,18 +473,18 @@ async def test_not_found_raises_exception(db_session):
 uv run pre-commit install
 
 # Runs automatically on commit:
-# - ruff (lint + format)
-# - mypy (type check)
-# - pytest (test subset)
+# - ruff (lint + format) and mypy, from uv.lock
+# - file checks and the type:ignore / noqa limits
+# pytest is not a hook; run it before pushing.
 ```
 
-### GitHub Actions (Future)
+### GitHub Actions
 
-```yaml
-# .github/workflows/test.yml
-- name: Run tests
-  run: uv run pytest --cov --cov-fail-under=80
-```
+`.github/workflows/check.yml` runs on pull requests to `main` and pushes to `main`:
+
+- `lint and types`: pre-commit over all files.
+- `tests (Python 3.12 / 3.13)`: pytest with JUnit output, a step that fails on zero tests,
+  failures, or errors, and `alembic upgrade head` plus `alembic check` on a fresh database.
 
 ---
 

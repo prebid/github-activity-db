@@ -281,7 +281,9 @@ Workflow `.github/workflows/sync.yml`:
 - Download the newest asset from release `db`; run `verify --db-only`; halt on failure unless
   `bootstrap` is set. Never start from an empty database otherwise.
 - `alembic upgrade head`, `ghactivity sync --max-minutes 300`, `ghactivity verify`.
-- Upload `github_activity-<UTC timestamp>.db.gz` and its manifest (run id, code SHA, migration head,
+- Snapshot with `VACUUM INTO` (a consistent copy in rollback-journal mode, readable from a
+  read-only location; the working file is in WAL mode), gzip it, and upload
+  `github_activity-<UTC timestamp>.db.gz` and its manifest (run id, code SHA, migration head,
   per-repo counts, SHA-256) as new assets; never `--clobber`. Keep the newest 28 assets (7 days).
 - Heartbeat: when the last commit on `main` is older than 7 days, commit `data/manifest.json`.
 - `github_activity.db` is removed from git tracking when the workflow takes over.
@@ -358,7 +360,9 @@ Scope:
 - Fix the existing lint and format findings under the locked ruff.
 - Declare the `sync_failures` indexes on the model so `alembic check` passes.
 - Per-connection `PRAGMA foreign_keys=ON`, `journal_mode=WAL`, `busy_timeout`.
-- `config/tracking.toml` and its loader; `Settings.tracked_repos` reads it.
+- `config/tracking.toml` and its loader; `Settings.tracked_repos` reads it. Step 1 adds only
+  `[[repositories]]` (with `group`); `[coverage]`, `[automation]`, and `[sync]` land in the steps
+  that read them, so no section exists without a consumer.
 - Documentation for the changed commands and files; this plan.
 
 Tests: pragma values and a rejected foreign-key violation; `alembic check` on a fresh database;
@@ -458,6 +462,8 @@ Measured 2026-10-16 unless noted. "Index" means the created-order enumeration in
 | App token action | `actions/create-github-app-token` v3.2.0 (2026-05-12) and v3.3.0 (2026-10-12) | GitHub API |
 | SQLite pragmas | A `connect` listener on `engine.sync_engine` yields `foreign_keys=1`, `journal_mode=wal`, `busy_timeout=5000` and rejects a foreign-key violation | probe |
 | Existing file | 0 foreign-key violations; integrity check `ok` | local |
+| WAL snapshots | `VACUUM INTO` from a WAL database writes a rollback-journal file (header bytes 18-19 `0101` vs `0202`) that can be queried read-only from a read-only directory | sqlite3 |
+| Test-suite flake | pytest-asyncio 1.3.0 on Python 3.13 leaves an unclosed event loop after an async test followed by a test calling `asyncio.run()`; with `filterwarnings = error` the next test fails. Fixed in pytest-asyncio 1.4.0 (#724) | bisect on `22551d3` and `43fcf06`; release notes |
 | Quality gates | No CI; pre-commit hooks not installed; ruff 0.14.11 (lock) 10 findings plus 4 format diffs vs ruff 0.8.6 (pre-commit pin) 0 findings plus 1 format diff; mypy clean on 91 files; 608 tests, 0 failures | local |
 | Private data | `prebid-agent-skills` is private; the committed file contains its PRs since commit `bf40280` | `gh repo view`; history |
 

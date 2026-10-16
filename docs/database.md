@@ -6,6 +6,14 @@ The database uses SQLite with async access via aiosqlite. Schema migrations are 
 
 **Connection String:** `sqlite+aiosqlite:///./github_activity.db`
 
+**Connection settings:** `build_engine()` in `db/engine.py` sets these on every SQLite connection:
+
+| Pragma | Value | Why |
+|--------|-------|-----|
+| `foreign_keys` | `ON` | SQLite disables it per connection by default; declared `ON DELETE CASCADE` constraints only hold with it on |
+| `journal_mode` | `WAL` | Readers proceed while a sync writes; `*.db-wal` and `*.db-shm` sidecars are git-ignored |
+| `busy_timeout` | `5000` ms | Wait for a lock before raising "database is locked" |
+
 ## Entity Relationship Diagram
 
 ```
@@ -333,13 +341,8 @@ SYNC__COMMIT_BATCH_SIZE=50 uv run ghactivity sync all --since 2024-10-01
 
 ### Failure Recovery
 
-With CommitManager, only the current uncommitted batch is lost on failure:
-
-```
-Processing 100 PRs with batch_size=25:
-- PRs 1-25: Committed ✅
-- PRs 26-50: Committed ✅
-- PRs 51-75: Committed ✅
-- PRs 76-85: [FAILURE] → Rolled back ❌
-- Result: 75 PRs saved (3 complete batches)
-```
+`CommitManager` commits at a batch boundary each time `record_success()` reaches `batch_size`.
+`BulkPRIngestionService` calls `record_success()` only after every PR in a repository has been
+processed, so during a bulk sync nothing is committed until the repository finishes, and a
+failure part-way through loses that repository's uncommitted writes. Step 3 of
+[the redesign plan](redesign-plan.md) replaces this with one transaction per item.
