@@ -55,6 +55,8 @@ NOQA_SPELLINGS = [
     "#ruff:noqa\nimport os\n",
     "# flake8: noqa\nimport os\n",
     "# flake8: noqa: F401\nimport os\n",
+    "# isort: skip_file\nimport sys\nimport os\n",
+    "# isort: off\nimport sys\nimport os\n",
 ]
 TYPE_IGNORE_SPELLINGS = [
     'x: int = "a"  # type: ignore[assignment]\n',
@@ -64,11 +66,15 @@ TYPE_IGNORE_SPELLINGS = [
     '# type: ignore\nx: int = "a"\n',
     '# mypy: ignore-errors\nx: int = "a"\n',
     '# mypy: disable-error-code="assignment"\nx: int = "a"\n',
+    "from typing import no_type_check\n\n\n@no_type_check\ndef f() -> int:\n    return 'x'\n",
+    "import typing\n\n\n@typing.no_type_check\nclass C:\n    x: int = 'x'\n",
 ]
 NOT_SUPPRESSIONS = [
     'TEXT = "# noqa: F401, # type: ignore[misc], # ruff: noqa, # mypy: ignore-errors"\n',
     '"""Docstring.\n\n# noqa\n# type: ignore\n"""\n',
     "# this module needs no noqa and no type checking exceptions\nimport os\n",
+    "import os\n# isort: on\n",
+    "def no_type_check() -> None:\n    pass\n\n\nno_type_check()\n",
 ]
 
 
@@ -87,6 +93,15 @@ def test_directive_text_outside_a_directive_comment_is_not_counted(
     tmp_path: Path, source: str
 ) -> None:
     assert _counts(_run(_package(tmp_path, source))) == (0, 0)
+
+
+def test_counts_stub_files(tmp_path: Path) -> None:
+    root = tmp_path / "pkg"
+    root.mkdir()
+    (root / "stub.pyi").write_text("x: int  # type: ignore[misc]\ny: int  # noqa: E501\n")
+    result = _run(root)
+    assert result.stdout.startswith("scanned 1 files")
+    assert _counts(result) == (1, 1)
 
 
 def test_counts_across_files_and_subdirectories(tmp_path: Path) -> None:

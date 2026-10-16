@@ -10,14 +10,18 @@ repos:
   # General hooks
   # ------------------------------------------------------------------------------
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v5.0.0
+    rev: cef0300fd0fc4d2a87a85fa2093c6b283ea36f4b # frozen: v5.0.0
     hooks:
       - id: trailing-whitespace
       - id: end-of-file-fixer
       - id: check-yaml
       - id: check-toml
+      # --enforce-all checks every file, not only newly added ones, so the hook also works
+      # in CI (`pre-commit run --all-files`). github_activity.db stays exempt while it is
+      # tracked in git (redesign plan Step 6 moves it out).
       - id: check-added-large-files
-        args: ["--maxkb=1000"]
+        args: ["--maxkb=1000", "--enforce-all"]
+        exclude: ^github_activity\.db$
       - id: check-merge-conflict
       - id: detect-private-key
 
@@ -61,7 +65,7 @@ repos:
       - id: prevent-any-aliases
         name: Prevent new Any type aliases
         entry: >
-          bash -c 'if grep -rn "^[A-Z][a-zA-Z]* = Any" src/ 2>/dev/null | grep -v "^Binary";
+          bash -c 'if grep -rnE "^(type[[:space:]]+)?[A-Z][[:alnum:]_]*([[:space:]]*:[[:space:]]*TypeAlias)?[[:space:]]*=[[:space:]]*Any([^[:alnum:]_]|$)" src/ 2>/dev/null | grep -v "^Binary";
           then echo "Found type alias to Any - use TYPE_CHECKING block instead"; exit 1; fi; exit 0'
         language: system
         pass_filenames: false
