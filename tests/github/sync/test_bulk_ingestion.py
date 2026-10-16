@@ -566,8 +566,7 @@ class TestDiscoverPRs:
         pr_numbers = await service.discover_prs("owner", "repo", config)
 
         assert pr_numbers == [42], (
-            "long-lived but recently-updated PR should be discovered; "
-            "stale-created PR should not"
+            "long-lived but recently-updated PR should be discovered; stale-created PR should not"
         )
 
     @pytest.mark.asyncio

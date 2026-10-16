@@ -12,8 +12,9 @@
 git clone https://github.com/prebid/github-activity-db.git
 cd github-activity-db
 
-# Install dependencies
-uv sync
+# Install dependencies, including the dev extra (plain `uv sync` removes the dev tools)
+uv sync --frozen --extra dev
+uv run pre-commit install
 
 # Copy environment template
 cp .env.example .env
@@ -59,12 +60,20 @@ uv sync --all-extras
 # Add a new dependency
 uv add package-name
 
-# Add a dev dependency
-uv add --dev package-name
+# Add a dev dependency (dev tools live in the `dev` optional extra)
+uv add --optional dev package-name
 
 # Update all dependencies
 uv lock --upgrade
-uv sync
+uv sync --extra dev
+
+# Change the build backend: edit [build-system] requires in pyproject.toml, regenerate the
+# hashed constraints the built-wheel CI job uses, copy the same pins into
+# [tool.uv] build-constraint-dependencies, then run `uv lock`, which copies them into
+# uv.lock for `uv sync --frozen` (tests/test_build_inputs.py checks that all four agree;
+# CI runs `uv lock --locked`)
+printf 'hatchling==<version>\neditables==<version>\n' | uv pip compile - --universal \
+  --generate-hashes --python-version 3.12 -o build-constraints.txt
 ```
 
 ### CLI
@@ -107,7 +116,7 @@ uv run ghactivity user-tags --help
 # Type checking (strict mode for src/, relaxed for tests/)
 uv run mypy src/
 uv run mypy tests/  # Runs with relaxed settings
-uv run mypy src/ tests/  # Check everything
+uv run mypy src tests scripts  # Check everything (what the pre-commit hook runs)
 
 # Linting
 uv run ruff check src/ tests/
@@ -131,15 +140,14 @@ The project maintains strict quality standards with automated enforcement:
 
 | Metric | Target | Enforcement |
 |--------|--------|-------------|
-| `type: ignore` comments in src/ | ≤5 | Pre-commit audit |
-| `noqa` comments in src/ | ≤3 | Pre-commit audit |
+| `type: ignore` comments in src/ | ≤5 | Pre-commit blocks |
+| `noqa` comments in src/ | ≤3 | Pre-commit blocks |
 | `Any` type aliases | 0 | Pre-commit blocks |
 | Mypy errors | 0 | Pre-commit blocks |
 
 ```bash
-# Check current quality metrics
-grep -r "type: ignore" src/ | wc -l  # type:ignore count
-grep -r "noqa:" src/ | wc -l         # noqa count
+# Check current quality metrics (the spellings it counts are listed in the script's docstring)
+uv run python scripts/count_suppressions.py src --max-type-ignore 5 --max-noqa 3
 ```
 
 ### Testing
@@ -204,12 +212,28 @@ uv run pre-commit run mypy --all-files
 | `check-added-large-files` | Block files >1MB |
 | `check-merge-conflict` | Block merge conflict markers |
 | `detect-private-key` | Block private keys |
-| `ruff` | Linting with auto-fix |
-| `ruff-format` | Code formatting |
-| `mypy` | Type checking (src/ and tests/) |
-| `audit-type-ignores` | Report `type: ignore` count (target ≤5) |
-| `audit-noqa` | Report `noqa` count (target ≤3) |
+| `ruff-check` | Linting with auto-fix (ruff from `uv.lock`) |
+| `ruff-format` | Code formatting (ruff from `uv.lock`) |
+| `mypy` | Type checking of src/, tests/, and scripts/ (mypy from `uv.lock`) |
+| `suppression-caps` | Fail above 5 `type: ignore` or 3 `noqa` comments in src/ (`scripts/count_suppressions.py`) |
 | `prevent-any-aliases` | Block `TypeName = Any` patterns |
+
+ruff and mypy run through `uv run --no-sync`, so hooks never change the environment; run
+`uv sync --frozen --extra dev` first.
+
+### Continuous Integration
+
+`.github/workflows/check.yml` runs on pull requests to `main` and pushes to `main`:
+
+- `uv lock --locked` (uv.lock matches pyproject.toml), then pre-commit over all files;
+- pytest on Python 3.12 and 3.13, then `scripts/check_junit.py --max-skipped 0`, which fails
+  unless at least one test ran and none failed, errored, or was skipped (pytest reports `xfail`
+  as skipped);
+- `alembic upgrade head` plus `alembic check` against a fresh database;
+- a built wheel (build dependencies hash-checked against `build-constraints.txt`), installed
+  into a new environment after the `uv.lock` dependencies (with hash checking, then
+  `uv pip check`) and run from outside the checkout (`scripts/wheel_smoke.py`,
+  `ghactivity --help`).
 
 ## Project Configuration
 
@@ -357,9 +381,11 @@ target_metadata = Base.metadata
 
 ### SQLite "database is locked"
 
-This can happen with concurrent access. The async engine uses `NullPool` to avoid connection issues:
+This can happen with concurrent access. Create engines with `build_engine` from
+`github_activity_db.db.engine`, which uses `NullPool` and sets a 30 s busy timeout, foreign keys,
+and the rollback journal on every connection:
 ```python
-create_async_engine(url, poolclass=pool.NullPool)
+engine = build_engine(url)
 ```
 
 ### Type errors with JSON columns

@@ -5,18 +5,14 @@ shared across all repositories.
 """
 
 import asyncio
-from typing import Generic, TypeVar
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from github_activity_db.db.models import Base
 
-# Generic type variable for model classes
-ModelT = TypeVar("ModelT", bound=Base)
 
-
-class BaseRepository(Generic[ModelT]):
+class BaseRepository[ModelT: Base]:
     """Base repository with common async session handling.
 
     All repositories should inherit from this class to get

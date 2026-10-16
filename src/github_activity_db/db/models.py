@@ -7,6 +7,7 @@ from sqlalchemy import (
     Column,
     DateTime,
     ForeignKey,
+    Index,
     String,
     Table,
     Text,
@@ -242,6 +243,8 @@ class SyncFailure(Base):
     # This allows multiple resolved/permanent records for history
     __table_args__ = (
         UniqueConstraint("repository_id", "pr_number", "status", name="uq_repo_pr_pending_status"),
+        Index("ix_sync_failures_status", "status"),
+        Index("ix_sync_failures_repository_id", "repository_id"),
     )
 
     def __repr__(self) -> str:

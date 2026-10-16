@@ -1,6 +1,7 @@
 """Tests for sync CLI commands."""
 
 import json
+import re
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -10,6 +11,19 @@ from github_activity_db.cli.app import app
 from github_activity_db.db.models import PRState
 
 runner = CliRunner()
+
+# typer forces Rich terminal styling when GITHUB_ACTIONS, FORCE_COLOR, or PY_COLORS is set,
+# which splits option names with ANSI escape sequences. Assert on the text without styling.
+_ANSI_ESCAPE = re.compile(r"\x1b\[[0-9;?]*[ -/]*[@-~]")
+
+
+def _plain(text: str) -> str:
+    return _ANSI_ESCAPE.sub("", text)
+
+
+def _has_option(help_text: str, option: str) -> bool:
+    """True when the option appears as a whole token (so "-v" is not matched inside "--verbose")."""
+    return re.search(rf"(?<![\w-]){re.escape(option)}(?![\w-])", help_text) is not None
 
 
 @pytest.fixture(autouse=True)
@@ -33,14 +47,18 @@ class TestGlobalFlags:
     def test_global_help_shows_verbose_flag(self):
         """Main help text shows --verbose and -v flags."""
         result = runner.invoke(app, ["--help"])
-        assert "-v" in result.stdout
-        assert "--verbose" in result.stdout
+        help_text = _plain(result.stdout)
+        assert result.exit_code == 0
+        assert _has_option(help_text, "-v")
+        assert _has_option(help_text, "--verbose")
 
     def test_global_help_shows_quiet_flag(self):
         """Main help text shows --quiet and -q flags."""
         result = runner.invoke(app, ["--help"])
-        assert "-q" in result.stdout
-        assert "--quiet" in result.stdout
+        help_text = _plain(result.stdout)
+        assert result.exit_code == 0
+        assert _has_option(help_text, "-q")
+        assert _has_option(help_text, "--quiet")
 
 
 @pytest.fixture

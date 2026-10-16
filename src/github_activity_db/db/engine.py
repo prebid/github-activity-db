@@ -1,9 +1,11 @@
 """Async SQLAlchemy engine and session management."""
 
+import contextlib
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
+from typing import Any
 
-from sqlalchemy import pool
+from sqlalchemy import event, pool
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
@@ -18,18 +20,61 @@ from github_activity_db.db.models import Base
 _engine: AsyncEngine | None = None
 _async_session_factory: async_sessionmaker[AsyncSession] | None = None
 
+# How long a connection waits on a locked database before raising "database is locked".
+# Python's sqlite3 waits 5 s by default (timeout=5.0). In rollback-journal mode a reader's
+# lock blocks a writer's commit; the sync is the only writer, and 30 s lets it outlast a
+# concurrent read instead of failing the item.
+SQLITE_BUSY_TIMEOUT_MS = 30_000
+
+
+def _apply_sqlite_pragmas(dbapi_connection: Any, _connection_record: Any) -> None:
+    """Configure every new SQLite connection.
+
+    foreign_keys is per connection and off by default in SQLite, so declared
+    ON DELETE CASCADE constraints only hold when it is set on each connection.
+
+    Statements here should not need a database lock: one that does, such as
+    `PRAGMA journal_mode=DELETE`, makes every connection fail with "database is
+    locked" while another process has the database open in WAL mode, or wait out
+    the busy timeout under an exclusive lock. The journal mode is therefore left
+    as the file has it; D20 (rollback journal for the tracked file) is checked by
+    scripts/check_db_journal.py as a pre-commit hook and by a test.
+
+    If a statement fails, the connection is closed before re-raising: SQLAlchemy
+    does not close a connection whose connect listener raised, and the open
+    aiosqlite connection's worker thread would keep the process from exiting.
+    """
+    cursor = dbapi_connection.cursor()
+    try:
+        cursor.execute("PRAGMA foreign_keys=ON")
+        cursor.execute(f"PRAGMA busy_timeout={SQLITE_BUSY_TIMEOUT_MS}")
+    except BaseException:
+        with contextlib.suppress(Exception):
+            cursor.close()
+        with contextlib.suppress(Exception):
+            dbapi_connection.close()
+        raise
+    cursor.close()
+
+
+def build_engine(database_url: str) -> AsyncEngine:
+    """Create an async engine with the application's connection settings."""
+    engine = create_async_engine(
+        database_url,
+        echo=False,  # SQLAlchemy logging controlled via loguru interception
+        future=True,
+        poolclass=pool.NullPool,  # Required for SQLite to prevent "database is locked"
+    )
+    if engine.dialect.name == "sqlite":
+        event.listen(engine.sync_engine, "connect", _apply_sqlite_pragmas)
+    return engine
+
 
 def get_engine() -> AsyncEngine:
     """Get or create the async SQLAlchemy engine."""
     global _engine
     if _engine is None:
-        settings = get_settings()
-        _engine = create_async_engine(
-            settings.database_url,
-            echo=False,  # SQLAlchemy logging controlled via loguru interception
-            future=True,
-            poolclass=pool.NullPool,  # Required for SQLite to prevent "database is locked"
-        )
+        _engine = build_engine(get_settings().database_url)
     return _engine
 
 

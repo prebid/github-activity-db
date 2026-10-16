@@ -136,28 +136,11 @@ if stored_pr.state in (PRState.MERGED, PRState.CLOSED):
 
 ## Target Repositories
 
-```python
-TRACKED_REPOS = [
-    "prebid/prebid-server",           # Go
-    "prebid/prebid-server-java",      # Java
-    "prebid/Prebid.js",               # JavaScript
-    "prebid/prebid.github.io",        # Documentation
-    "prebid/prebid-mobile-android",   # Android SDK
-    "prebid/prebid-mobile-ios",       # iOS SDK
-    "prebid/prebid-universal-creative",
-    "prebid/professor-prebid",        # Chrome extension
-    "prebid/salesagent",
-    "prebid/prebid-agent-skills",
-    "prebid/line-item-manager",       # Line item management tool
-    "prebid/go-gdpr",                 # Go IAB GDPR framework
-    "prebid/prebid-cache-java",       # Java Prebid Cache server
-    "prebid/repo-activity-dashboard",
-    "prebid/prebid-mobile-ios-sdk",
-    "prebid/openrtb",                 # Go OpenRTB / AdCOM types
-    "prebid/github-activity-db",      # This repo
-    "prebid/prebid-integration-monitor",
-]
-```
+Tracked repositories are listed in `src/github_activity_db/tracking.toml`, one `[[repositories]]`
+entry per repository with `owner`, `name`, and `group`. The file ships inside the package, so an
+installed wheel reads the same list as a checkout. `github_activity_db.tracking` validates the file
+at load, and `Settings.tracked_repos` returns the entries in file order. `TRACKING_CONFIG_PATH`
+points at a different file.
 
 ## Field Validation Rules
 

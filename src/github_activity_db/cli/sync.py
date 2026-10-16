@@ -82,7 +82,7 @@ def _parse_date(date_str: str | None) -> datetime | None:
             continue
 
     raise typer.BadParameter(
-        f"Invalid date format: {date_str}. " "Use YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS format."
+        f"Invalid date format: {date_str}. Use YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS format."
     )
 
 
@@ -219,8 +219,7 @@ def sync_repository(
     valid_states = ("open", "merged", "all")
     if state not in valid_states:
         console.print(
-            f"[red]Error:[/red] Invalid state '{state}'. "
-            f"Must be one of: {', '.join(valid_states)}"
+            f"[red]Error:[/red] Invalid state '{state}'. Must be one of: {', '.join(valid_states)}"
         )
         raise typer.Exit(1)
 
@@ -428,8 +427,7 @@ def sync_all_repositories(
     valid_states = ("open", "merged", "all")
     if state not in valid_states:
         console.print(
-            f"[red]Error:[/red] Invalid state '{state}'. "
-            f"Must be one of: {', '.join(valid_states)}"
+            f"[red]Error:[/red] Invalid state '{state}'. Must be one of: {', '.join(valid_states)}"
         )
         raise typer.Exit(1)
 

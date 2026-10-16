@@ -1,0 +1,92 @@
+"""Tracked-repository configuration: tracking.toml, shipped inside this package."""
+
+from __future__ import annotations
+
+import tomllib
+from importlib import resources
+from pathlib import Path
+from typing import TYPE_CHECKING
+
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
+
+if TYPE_CHECKING:
+    from importlib.resources.abc import Traversable
+
+
+class TrackingConfigError(ValueError):
+    """The tracking configuration file is missing or invalid."""
+
+
+class TrackedRepository(BaseModel):
+    """One repository to sync."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    owner: str = Field(min_length=1)
+    name: str = Field(min_length=1)
+    group: str = Field(min_length=1)
+
+    @field_validator("owner", "name")
+    @classmethod
+    def _single_path_segment(cls, value: str) -> str:
+        if "/" in value or value != value.strip() or any(c.isspace() for c in value):
+            raise ValueError(f"must be a single path segment without whitespace: {value!r}")
+        return value
+
+    @property
+    def full_name(self) -> str:
+        """Repository in owner/name form."""
+        return f"{self.owner}/{self.name}"
+
+
+class TrackingConfig(BaseModel):
+    """Contents of tracking.toml."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    repositories: tuple[TrackedRepository, ...] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def _unique_repositories(self) -> TrackingConfig:
+        seen: set[str] = set()
+        for repo in self.repositories:
+            key = repo.full_name.lower()  # GitHub repository names are case-insensitive
+            if key in seen:
+                raise ValueError(f"repository listed more than once: {repo.full_name}")
+            seen.add(key)
+        return self
+
+    @property
+    def full_names(self) -> list[str]:
+        """Repositories in owner/name form, in file order."""
+        return [repo.full_name for repo in self.repositories]
+
+
+def load_tracking_config(path: Path | None = None) -> TrackingConfig:
+    """Read and validate the tracking configuration.
+
+    Args:
+        path: A tracking.toml to read. None reads the file shipped in this package.
+
+    Raises:
+        TrackingConfigError: The file is missing or unreadable, is not valid TOML, or fails
+            validation.
+    """
+    file: Traversable = (
+        resources.files("github_activity_db").joinpath("tracking.toml") if path is None else path
+    )
+    source = f"package resource {file}" if path is None else str(path)
+    try:
+        raw = file.read_bytes()
+    except FileNotFoundError as e:
+        raise TrackingConfigError(f"tracking config not found: {source}") from e
+    except OSError as e:
+        raise TrackingConfigError(f"cannot read tracking config {source}: {e}") from e
+    try:
+        data = tomllib.loads(raw.decode("utf-8"))
+    except (tomllib.TOMLDecodeError, UnicodeDecodeError) as e:
+        raise TrackingConfigError(f"tracking config is not valid TOML: {source}: {e}") from e
+    try:
+        return TrackingConfig.model_validate(data)
+    except ValidationError as e:
+        raise TrackingConfigError(f"invalid tracking config {source}:\n{e}") from e

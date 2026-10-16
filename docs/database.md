@@ -6,6 +6,21 @@ The database uses SQLite with async access via aiosqlite. Schema migrations are 
 
 **Connection String:** `sqlite+aiosqlite:///./github_activity.db`
 
+**Connection settings:** `build_engine()` in `db/engine.py` sets these on every SQLite connection:
+
+| Pragma | Value | Why |
+|--------|-------|-----|
+| `foreign_keys` | `ON` | SQLite disables it per connection by default; declared `ON DELETE CASCADE` constraints only hold with it on |
+| `busy_timeout` | `30000` ms | Wait for a lock before raising "database is locked". Python's `sqlite3` default is 5000 ms; in rollback-journal mode a reader's lock blocks a writer's commit, and the longer wait lets the sync outlast a concurrent read |
+
+The tracked database stays in SQLite's default rollback-journal mode (redesign plan D20).
+The listener does not set the journal mode: that statement needs a lock, so every connection
+would fail while another process has a WAL database open. Instead `scripts/check_db_journal.py`
+checks the tracked file's header as a pre-commit hook and in the test suite. In WAL mode
+committed transactions can sit in a git-ignored `*-wal` file until a checkpoint, and
+`github_activity.db` is tracked in git, so a commit, checkout, or stash could separate the database
+from its WAL. Step 6 of [the redesign plan](redesign-plan.md) moves the database out of git.
+
 ## Entity Relationship Diagram
 
 ```
@@ -333,13 +348,8 @@ SYNC__COMMIT_BATCH_SIZE=50 uv run ghactivity sync all --since 2024-10-01
 
 ### Failure Recovery
 
-With CommitManager, only the current uncommitted batch is lost on failure:
-
-```
-Processing 100 PRs with batch_size=25:
-- PRs 1-25: Committed ✅
-- PRs 26-50: Committed ✅
-- PRs 51-75: Committed ✅
-- PRs 76-85: [FAILURE] → Rolled back ❌
-- Result: 75 PRs saved (3 complete batches)
-```
+`CommitManager` commits at a batch boundary each time `record_success()` reaches `batch_size`.
+`BulkPRIngestionService` calls `record_success()` only after every PR in a repository has been
+processed, so during a bulk sync nothing is committed until the repository finishes, and a
+failure part-way through loses that repository's uncommitted writes. Step 3 of
+[the redesign plan](redesign-plan.md) replaces this with one transaction per item.

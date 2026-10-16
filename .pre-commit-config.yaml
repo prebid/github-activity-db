@@ -1,100 +1,76 @@
 # See https://pre-commit.com for more information
 # See https://pre-commit.com/hooks.html for more hooks
-
-default_language_version:
-  python: python3.13
+#
+# ruff and mypy run from the project environment so local runs and CI use the versions
+# pinned in uv.lock. Hooks never modify the environment (`--no-sync`); create it first with
+# `uv sync --frozen --extra dev`, then install the hooks with `uv run pre-commit install`.
 
 repos:
   # ------------------------------------------------------------------------------
   # General hooks
   # ------------------------------------------------------------------------------
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v5.0.0
+    rev: cef0300fd0fc4d2a87a85fa2093c6b283ea36f4b # frozen: v5.0.0
     hooks:
       - id: trailing-whitespace
       - id: end-of-file-fixer
       - id: check-yaml
       - id: check-toml
+      # --enforce-all checks every file, not only newly added ones, so the hook also works
+      # in CI (`pre-commit run --all-files`). github_activity.db stays exempt while it is
+      # tracked in git (redesign plan Step 6 moves it out).
       - id: check-added-large-files
-        args: ["--maxkb=1000"]
+        args: ["--maxkb=1000", "--enforce-all"]
+        exclude: ^github_activity\.db$
       - id: check-merge-conflict
       - id: detect-private-key
 
   # ------------------------------------------------------------------------------
-  # Ruff - Linting & Formatting (replaces black, isort, flake8)
-  # ------------------------------------------------------------------------------
-  - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.8.6
-    hooks:
-      # Run the linter with auto-fix
-      - id: ruff
-        args: [--fix, --exit-non-zero-on-fix]
-      # Run the formatter
-      - id: ruff-format
-
-  # ------------------------------------------------------------------------------
-  # Mypy - Type Checking
-  # ------------------------------------------------------------------------------
-  - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.14.1
-    hooks:
-      - id: mypy
-        additional_dependencies:
-          - pydantic>=2.0
-          - pydantic-settings>=2.0
-          - sqlalchemy>=2.0
-          - pytest-asyncio>=0.24
-          - typer>=0.9.0
-          - rich>=13.0
-          - loguru>=0.7.0
-          - types-python-dateutil>=2.8.0
-          - githubkit>=0.11.0
-          - aiosqlite>=0.19.0
-          - pytest>=8.0
-        args: [--config-file=pyproject.toml, src, tests]
-        pass_filenames: false
-        # Run on both src and tests directories
-        files: ^(src|tests)/
-
-  # ------------------------------------------------------------------------------
-  # Custom Quality Gates (non-blocking, informational)
+  # Lint, format, and type check from uv.lock
   # ------------------------------------------------------------------------------
   - repo: local
     hooks:
-      # Track type: ignore count (warning, not blocking)
-      - id: audit-type-ignores
-        name: Audit type:ignore comments
-        entry: >
-          bash -c 'count=$(grep -r "type: ignore" src/ 2>/dev/null | wc -l | tr -d " ");
-          echo "type:ignore comments in src/: $count (target: <=5)";
-          [ "$count" -le 5 ] || echo "Consider reducing type:ignore usage"; exit 0'
+      - id: ruff-check
+        name: ruff check
+        entry: uv run --no-sync ruff check --fix --exit-non-zero-on-fix
+        language: system
+        types_or: [python, pyi]
+
+      - id: ruff-format
+        name: ruff format
+        entry: uv run --no-sync ruff format
+        language: system
+        types_or: [python, pyi]
+
+      - id: mypy
+        name: mypy
+        entry: uv run --no-sync mypy src tests scripts
+        language: system
+        pass_filenames: false
+        files: ^(src|tests|scripts)/
+
+  # ------------------------------------------------------------------------------
+  # Quality gates
+  # ------------------------------------------------------------------------------
+  - repo: local
+    hooks:
+      - id: suppression-caps
+        name: type:ignore (max 5) and noqa (max 3) comments in src/
+        entry: uv run --no-sync python scripts/count_suppressions.py src --max-type-ignore 5 --max-noqa 3
         language: system
         pass_filenames: false
         always_run: true
         verbose: true
 
-      # Track noqa count (warning, not blocking)
-      - id: audit-noqa
-        name: Audit noqa comments
-        entry: >
-          bash -c 'count=$(grep -r "noqa:" src/ 2>/dev/null | wc -l | tr -d " ");
-          echo "noqa comments in src/: $count (target: <=3)";
-          [ "$count" -le 3 ] || echo "Consider reducing noqa usage"; exit 0'
+      - id: tracked-db-rollback-journal
+        name: github_activity.db in rollback-journal mode (D20)
+        entry: uv run --no-sync python scripts/check_db_journal.py
         language: system
-        pass_filenames: false
-        always_run: true
-        verbose: true
+        files: ^github_activity\.db$
 
-      # BLOCK new Any type aliases (excluding legitimate dict[str, Any])
       - id: prevent-any-aliases
         name: Prevent new Any type aliases
-        entry: >
-          bash -c 'if grep -rn "^[A-Z][a-zA-Z]* = Any" src/ 2>/dev/null | grep -v "^Binary";
-          then echo "Found type alias to Any - use TYPE_CHECKING block instead"; exit 1; fi; exit 0'
+        entry: uv run --no-sync python scripts/check_any_aliases.py src
         language: system
         pass_filenames: false
         always_run: true
-
-ci:
-  autoupdate_schedule: weekly
-  # mypy now runs on both src/ and tests/

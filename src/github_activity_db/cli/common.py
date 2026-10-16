@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Coroutine
-from typing import Annotated, TypeVar
+from typing import Annotated
 
 import typer
 from rich.console import Console
@@ -22,10 +22,8 @@ from github_activity_db.github.sync.enums import OutputFormat
 # Shared console instance for CLI output
 console = Console()
 
-T = TypeVar("T")
 
-
-def run_async_command(
+def run_async_command[T](
     coro: Coroutine[object, object, T],
     *,
     error_prefix: str = "Error",

@@ -2,10 +2,13 @@
 
 from datetime import timedelta
 from functools import lru_cache
+from pathlib import Path
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+from github_activity_db.tracking import load_tracking_config
 
 
 class RateLimitConfig(BaseModel):
@@ -214,29 +217,23 @@ class Settings(BaseSettings):
     # --------------------------------------------------------------------------
     # Tracked Repositories
     # --------------------------------------------------------------------------
+    tracking_config_path: Path | None = Field(
+        default=None,
+        description="tracking.toml to read instead of the one shipped in the package",
+    )
+
+    @field_validator("tracking_config_path", mode="before")
+    @classmethod
+    def _empty_path_means_packaged(cls, value: object) -> object:
+        # `TRACKING_CONFIG_PATH=` in .env would otherwise become Path("."), the working directory.
+        if isinstance(value, str) and not value.strip():
+            return None
+        return value
+
     @property
     def tracked_repos(self) -> list[str]:
-        """List of GitHub repositories to track."""
-        return [
-            "prebid/prebid-server",
-            "prebid/prebid-server-java",
-            "prebid/Prebid.js",
-            "prebid/prebid.github.io",
-            "prebid/prebid-mobile-android",
-            "prebid/prebid-mobile-ios",
-            "prebid/prebid-universal-creative",
-            "prebid/professor-prebid",
-            "prebid/salesagent",
-            "prebid/prebid-agent-skills",
-            "prebid/line-item-manager",
-            "prebid/go-gdpr",
-            "prebid/prebid-cache-java",
-            "prebid/repo-activity-dashboard",
-            "prebid/prebid-mobile-ios-sdk",
-            "prebid/openrtb",
-            "prebid/github-activity-db",
-            "prebid/prebid-integration-monitor",
-        ]
+        """Tracked repositories in owner/name form, in tracking.toml order."""
+        return load_tracking_config(self.tracking_config_path).full_names
 
 
 @lru_cache

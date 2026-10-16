@@ -168,7 +168,7 @@ class TestGitHubReviewSchemaContract:
         assert len(reviews) == MERGED_PR_METADATA["expected_review_count"]
 
         # Check review states match expected
-        expected = cast(dict[str, str], MERGED_PR_METADATA["expected_reviewer_actions"])
+        expected = cast("dict[str, str]", MERGED_PR_METADATA["expected_reviewer_actions"])
         for review in reviews:
             assert review.user.login in expected
             assert review.state == expected[review.user.login]

@@ -32,7 +32,7 @@ This document describes the testing strategy, infrastructure, and patterns used 
 
 - **Mock external dependencies** (GitHub API, network)
 - **Test real internal logic** (business rules, transformations)
-- **Use real database** (in-memory SQLite for speed + isolation)
+- **Use real database** (a temporary SQLite file per test, built with the application's `build_engine`)
 
 ---
 
@@ -67,7 +67,7 @@ Test multiple components working together.
 
 **Characteristics:**
 - Mock external APIs (GitHub)
-- Use real database (in-memory SQLite)
+- Use real database (temporary SQLite file)
 - Test component contracts
 
 ### E2E Tests (Full Pipeline)
@@ -87,7 +87,10 @@ Test complete workflows from input to output.
 
 ## Current Coverage
 
-### Test Statistics (573+ tests)
+### Test Statistics
+
+Counts drift; `uv run pytest --collect-only | tail -1` prints the current total. The
+per-module figures below predate the redesign and are rewritten in its documentation step.
 
 | Module | Tests | Coverage |
 |--------|-------|----------|
@@ -162,7 +165,8 @@ async def db_session(test_engine):
 ```
 
 **Key properties:**
-- In-memory SQLite (fast, no cleanup needed)
+- A temporary SQLite file per test from `build_engine`, so foreign-key enforcement matches production
+  (the application engine opens a connection per session, which an in-memory database cannot share)
 - Auto-rollback (each test starts fresh)
 - Async support (matches production code)
 
@@ -469,18 +473,25 @@ async def test_not_found_raises_exception(db_session):
 uv run pre-commit install
 
 # Runs automatically on commit:
-# - ruff (lint + format)
-# - mypy (type check)
-# - pytest (test subset)
+# - ruff (lint + format) and mypy, from uv.lock
+# - file checks and the type:ignore / noqa limits
+# pytest is not a hook; run it before pushing.
 ```
 
-### GitHub Actions (Future)
+### GitHub Actions
 
-```yaml
-# .github/workflows/test.yml
-- name: Run tests
-  run: uv run pytest --cov --cov-fail-under=80
-```
+`.github/workflows/check.yml` runs on pull requests to `main` and pushes to `main`:
+
+- `lint and types`: `uv lock --locked` (uv.lock matches pyproject.toml), then pre-commit over
+  all files.
+- `tests (Python 3.12 / 3.13)`: pytest with JUnit output; `scripts/check_junit.py --max-skipped 0`,
+  which fails unless at least one test ran and none failed, errored, or was skipped (pytest
+  reports `xfail` as skipped, so an `xfail` also fails the job); and `alembic upgrade head` plus
+  `alembic check` on a fresh database.
+- `built wheel`: builds the wheel with build dependencies hash-checked against
+  `build-constraints.txt`, installs the `uv.lock` dependencies with hash checking and
+  then the wheel into a new environment, runs `uv pip check`, and runs `scripts/wheel_smoke.py`
+  and `ghactivity --help` from outside the checkout.
 
 ---
 
@@ -499,9 +510,10 @@ async def db_session():
 
 ### "Database is locked"
 
-SQLite concurrent access issue. Use `NullPool`:
+SQLite concurrent access issue. Build test engines with `build_engine` (as the `test_engine`
+fixture does), which uses `NullPool` and the application's connection settings:
 ```python
-create_async_engine(url, poolclass=pool.NullPool)
+engine = build_engine(f"sqlite+aiosqlite:///{tmp_path / 'test.db'}")
 ```
 
 ### Flaky Async Tests
@@ -547,9 +559,9 @@ This allows flexibility for test-specific patterns (mocks, fixtures) while still
 uv run mypy tests/
 
 # Check everything
-uv run mypy src/ tests/
+uv run mypy src tests scripts
 
-# Pre-commit runs mypy on both src/ and tests/
+# Pre-commit runs mypy on src/, tests/, and scripts/
 uv run pre-commit run mypy --all-files
 ```
 

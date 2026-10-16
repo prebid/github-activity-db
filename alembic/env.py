@@ -15,12 +15,15 @@ from github_activity_db.db.models import Base
 # Alembic Config object
 config = context.config
 
-# Set sqlalchemy.url from our settings
-settings = get_settings()
-config.set_main_option("sqlalchemy.url", settings.database_url)
+# Database URL: a programmatic caller may pass config.attributes["database_url"];
+# otherwise use the application settings.
+database_url = config.attributes.get("database_url") or get_settings().database_url
+config.set_main_option("sqlalchemy.url", database_url)
 
-# Interpret the config file for Python logging
-if config.config_file_name is not None:
+# Interpret the config file for Python logging. Programmatic callers that already
+# configured logging pass config.attributes["configure_logger"] = False, because
+# fileConfig disables existing loggers.
+if config.config_file_name is not None and config.attributes.get("configure_logger", True):
     fileConfig(config.config_file_name)
 
 # Model MetaData for autogenerate support
