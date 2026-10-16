@@ -10,10 +10,6 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from github_activity_db.tracking import load_tracking_config
 
-# Repository root (src/github_activity_db/config.py -> repository root).
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_TRACKING_CONFIG = PROJECT_ROOT / "config" / "tracking.toml"
-
 
 class RateLimitConfig(BaseModel):
     """Configuration for rate limit monitoring.
@@ -221,14 +217,14 @@ class Settings(BaseSettings):
     # --------------------------------------------------------------------------
     # Tracked Repositories
     # --------------------------------------------------------------------------
-    tracking_config_path: Path = Field(
-        default=DEFAULT_TRACKING_CONFIG,
-        description="Path to tracking.toml, the list of tracked repositories",
+    tracking_config_path: Path | None = Field(
+        default=None,
+        description="tracking.toml to read instead of the one shipped in the package",
     )
 
     @property
     def tracked_repos(self) -> list[str]:
-        """Tracked repositories in owner/name form, read from tracking_config_path."""
+        """Tracked repositories in owner/name form, in tracking.toml order."""
         return load_tracking_config(self.tracking_config_path).full_names
 
 

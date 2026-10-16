@@ -68,3 +68,28 @@ jobs:
         run: |
           uv run --no-sync alembic upgrade head
           uv run --no-sync alembic check
+
+  wheel:
+    name: built wheel
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          version: "0.7.10"
+          python-version: "3.13"
+      - name: Build the wheel
+        run: uv build --wheel --out-dir "$RUNNER_TEMP/dist"
+      - name: Install the wheel with the locked dependencies into a new environment
+        run: |
+          uv export --frozen --no-emit-project --no-hashes -o "$RUNNER_TEMP/requirements.txt"
+          uv venv "$RUNNER_TEMP/wheel-env"
+          uv pip install --python "$RUNNER_TEMP/wheel-env/bin/python" \
+            -r "$RUNNER_TEMP/requirements.txt" "$RUNNER_TEMP"/dist/*.whl
+      - name: Run the installed package from outside the checkout
+        working-directory: ${{ runner.temp }}
+        run: |
+          "$RUNNER_TEMP/wheel-env/bin/python" -I "$GITHUB_WORKSPACE/scripts/wheel_smoke.py" \
+            "$GITHUB_WORKSPACE/src/github_activity_db/tracking.toml" "$GITHUB_WORKSPACE"
+          "$RUNNER_TEMP/wheel-env/bin/ghactivity" --help

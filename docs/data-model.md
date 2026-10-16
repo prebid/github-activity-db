@@ -136,9 +136,10 @@ if stored_pr.state in (PRState.MERGED, PRState.CLOSED):
 
 ## Target Repositories
 
-Tracked repositories are listed in `config/tracking.toml`, one `[[repositories]]` entry per
-repository with `owner`, `name`, and `group`. `github_activity_db.tracking` validates the file at
-load, and `Settings.tracked_repos` returns the entries in file order. `TRACKING_CONFIG_PATH`
+Tracked repositories are listed in `src/github_activity_db/tracking.toml`, one `[[repositories]]`
+entry per repository with `owner`, `name`, and `group`. The file ships inside the package, so an
+installed wheel reads the same list as a checkout. `github_activity_db.tracking` validates the file
+at load, and `Settings.tracked_repos` returns the entries in file order. `TRACKING_CONFIG_PATH`
 points at a different file.
 
 ## Field Validation Rules

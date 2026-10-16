@@ -66,7 +66,7 @@ status, releases, and repositories not in the tracked list.
 
 ## 3. Coverage rule
 
-Floor `F = 2023-01-01T00:00:00Z`, set in `config/tracking.toml`.
+Floor `F = 2023-01-01T00:00:00Z`, set in `tracking.toml`.
 
 - A pull request is in coverage when its state is `OPEN`, or its state is `MERGED` and `mergedAt >= F`.
   (`mergedAt >= createdAt` always holds, so "created or merged on or after F" reduces to this.)
@@ -180,7 +180,7 @@ text ordering equals time ordering.
 - Bot logins differ between APIs (`chatgpt-codex-connector` in GraphQL, `chatgpt-codex-connector[bot]`
   in REST; `copilot-pull-request-reviewer[bot]` and `Copilot` share id 175728472). Identity never
   joins on login.
-- `is_automation` is true for type `Bot` or a GitHub id in `config/tracking.toml`. Commit identities
+- `is_automation` is true for type `Bot` or a GitHub id in `tracking.toml`. Commit identities
   without a linked account are flagged by configured email.
 
 ### 5.3 Sync run
@@ -232,8 +232,9 @@ GitHub search is never an oracle: it returns at most 1,000 results and omits ite
 
 ### 5.5 Configuration
 
-`config/tracking.toml`, parsed with `tomllib` and validated with pydantic at load. Missing optional
-values take defaults.
+`src/github_activity_db/tracking.toml`, shipped inside the package and read through
+`importlib.resources`, parsed with `tomllib` and validated with pydantic at load. Missing optional
+values take defaults. `TRACKING_CONFIG_PATH` names a different file.
 
 ```toml
 [coverage]
@@ -362,7 +363,7 @@ Scope:
 - Fix the existing lint and format findings under the locked ruff.
 - Declare the `sync_failures` indexes on the model so `alembic check` passes.
 - Per-connection `PRAGMA foreign_keys=ON` and `busy_timeout`; journal mode stays rollback (D20).
-- `config/tracking.toml` and its loader; `Settings.tracked_repos` reads it. Step 1 adds only
+- `tracking.toml` in the package and its loader; `Settings.tracked_repos` reads it. Step 1 adds only
   `[[repositories]]` (with `group`); `[coverage]`, `[automation]`, and `[sync]` land in the steps
   that read them, so no section exists without a consumer.
 - Documentation for the changed commands and files; this plan.
@@ -390,7 +391,7 @@ Acceptance: removing any invariant check makes at least one test fail.
 Scope: migration (new tables and views; old PR tables and AI columns dropped; tag tables
 re-pointed); writer; planner with coverage rule, deletions, and guards; unsettled re-hydration;
 `hydration_version`; run records; `ghactivity sync` and `ghactivity verify`; removal of the old
-pipeline. The new CLI reports an invalid `config/tracking.toml` as a CLI error; the current
+pipeline. The new CLI reports an invalid `tracking.toml` as a CLI error; the current
 `sync all` command raises it with a traceback. Logging calls that survive the cutover move to `{}`
 placeholders (gap 44).
 

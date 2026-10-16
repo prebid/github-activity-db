@@ -203,7 +203,7 @@ config.py ←── db/engine.py ←── db/models.py
 | Module | Status | Notes |
 |--------|--------|-------|
 | `config.py` | ✅ Complete | Settings: database, token, rate limit, pacing & sync configs; tracked repos via `tracking.py` |
-| `tracking.py` | ✅ Complete | Loads and validates `config/tracking.toml` |
+| `tracking.py` | ✅ Complete | Loads and validates `tracking.toml`, shipped in the package |
 | `db/models.py` | ✅ Complete | 4 tables, 26 columns |
 | `db/engine.py` | ✅ Complete | `build_engine` (foreign keys and busy timeout per connection), session factory |
 | `db/repositories/` | ✅ Complete | Repository, PullRequest repositories |

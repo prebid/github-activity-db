@@ -1,8 +1,9 @@
-"""Tracked-repository configuration loaded from config/tracking.toml."""
+"""Tracked-repository configuration: tracking.toml, shipped inside this package."""
 
 from __future__ import annotations
 
 import tomllib
+from importlib import resources
 from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
@@ -35,7 +36,7 @@ class TrackedRepository(BaseModel):
 
 
 class TrackingConfig(BaseModel):
-    """Contents of config/tracking.toml."""
+    """Contents of tracking.toml."""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -57,20 +58,31 @@ class TrackingConfig(BaseModel):
         return [repo.full_name for repo in self.repositories]
 
 
-def load_tracking_config(path: Path) -> TrackingConfig:
+def load_tracking_config(path: Path | None = None) -> TrackingConfig:
     """Read and validate the tracking configuration.
+
+    Args:
+        path: A tracking.toml to read. None reads the file shipped in this package.
 
     Raises:
         TrackingConfigError: The file is missing, is not valid TOML, or fails validation.
     """
+    source: str
     try:
-        with path.open("rb") as handle:
-            data = tomllib.load(handle)
+        if path is None:
+            resource = resources.files("github_activity_db").joinpath("tracking.toml")
+            source = f"package resource {resource}"
+            raw = resource.read_bytes()
+        else:
+            source = str(path)
+            raw = path.read_bytes()
     except FileNotFoundError as e:
-        raise TrackingConfigError(f"tracking config not found: {path}") from e
-    except tomllib.TOMLDecodeError as e:
-        raise TrackingConfigError(f"tracking config is not valid TOML: {path}: {e}") from e
+        raise TrackingConfigError(f"tracking config not found: {source}") from e
+    try:
+        data = tomllib.loads(raw.decode("utf-8"))
+    except (tomllib.TOMLDecodeError, UnicodeDecodeError) as e:
+        raise TrackingConfigError(f"tracking config is not valid TOML: {source}: {e}") from e
     try:
         return TrackingConfig.model_validate(data)
     except ValidationError as e:
-        raise TrackingConfigError(f"invalid tracking config {path}:\n{e}") from e
+        raise TrackingConfigError(f"invalid tracking config {source}:\n{e}") from e

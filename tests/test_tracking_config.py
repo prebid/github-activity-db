@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from github_activity_db.config import DEFAULT_TRACKING_CONFIG, Settings
+from github_activity_db.config import Settings
 from github_activity_db.tracking import TrackingConfigError, load_tracking_config
 
 # The list the hardcoded Settings.tracked_repos returned before tracking.toml.
@@ -39,14 +39,20 @@ def _write(tmp_path: Path, body: str) -> Path:
 REPO = '[[repositories]]\nowner = "prebid"\nname = "{name}"\ngroup = "{group}"\n'
 
 
-class TestCommittedConfig:
-    def test_committed_file_lists_the_tracked_repositories_in_order(self) -> None:
-        config = load_tracking_config(DEFAULT_TRACKING_CONFIG)
+class TestPackagedConfig:
+    def test_packaged_file_lists_the_tracked_repositories_in_order(self) -> None:
+        config = load_tracking_config()
         assert config.full_names == EXPECTED_REPOS
 
     def test_every_repository_has_a_group(self) -> None:
-        config = load_tracking_config(DEFAULT_TRACKING_CONFIG)
+        config = load_tracking_config()
         assert all(repo.group for repo in config.repositories)
+
+    def test_settings_default_reads_the_packaged_file(self, monkeypatch) -> None:
+        monkeypatch.delenv("TRACKING_CONFIG_PATH", raising=False)
+        settings = Settings(_env_file=None)
+        assert settings.tracking_config_path is None
+        assert settings.tracked_repos == EXPECTED_REPOS
 
     def test_settings_reads_the_configured_path(self, tmp_path: Path, monkeypatch) -> None:
         path = _write(tmp_path, REPO.format(name="only-repo", group="Tools"))
@@ -63,6 +69,12 @@ class TestValidation:
     def test_invalid_toml(self, tmp_path: Path) -> None:
         with pytest.raises(TrackingConfigError, match="not valid TOML"):
             load_tracking_config(_write(tmp_path, "[[repositories]\n"))
+
+    def test_non_utf8_file(self, tmp_path: Path) -> None:
+        path = tmp_path / "tracking.toml"
+        path.write_bytes(b"\xff\xfe")
+        with pytest.raises(TrackingConfigError, match="not valid TOML"):
+            load_tracking_config(path)
 
     def test_empty_repository_list(self, tmp_path: Path) -> None:
         with pytest.raises(TrackingConfigError, match="repositories"):

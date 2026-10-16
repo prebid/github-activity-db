@@ -42,7 +42,7 @@ uv run pytest                      # CI also runs Python 3.12 and `alembic check
 ## Current Scope
 
 **Implemented:**
-- Pull request data from the repositories listed in `config/tracking.toml`
+- Pull request data from the repositories listed in `src/github_activity_db/tracking.toml`
 - Rate limit monitoring with proactive tracking
 - Request pacing with token bucket algorithm and priority queue scheduler
 - Single and bulk PR ingestion pipelines with 2-week grace period for merged PRs
@@ -106,7 +106,7 @@ Async GitHub API client with integrated pacing and rate limit tracking. Every AP
 | `ENVIRONMENT` | No | `development` | App environment |
 | `SYNC__MERGE_GRACE_PERIOD_DAYS` | No | `14` | Days after merge before PR is frozen |
 | `SYNC__COMMIT_BATCH_SIZE` | No | `25` | PRs per commit batch |
-| `TRACKING_CONFIG_PATH` | No | `config/tracking.toml` | Tracked repositories file |
+| `TRACKING_CONFIG_PATH` | No | packaged `tracking.toml` | Tracked repositories file to read instead |
 
 ## Type Safety Policy
 
