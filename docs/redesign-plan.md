@@ -62,6 +62,7 @@ status, releases, and repositories not in the tracked list.
 | D17 | `user_tags` and `pr_user_tags` stay (empty), re-pointed at the new `pull_requests` table. The `search` and `tags` CLI stubs are removed. |
 | D18 | The database is rebuilt from GitHub, not migrated row by row. The current file holds nothing that cannot be re-fetched (0 user tags, 0 sync failures, 0 AI values). |
 | D19 | PR and issue bodies are stored. |
+| D20 | SQLite stays in rollback-journal mode while `github_activity.db` is tracked in git. In WAL mode committed transactions can sit in a git-ignored `*-wal` file until a checkpoint, and SQLite documents separating a database from its journal as a corruption path. WAL is reconsidered in Step 6, after the database leaves git. |
 
 ## 3. Coverage rule
 
@@ -109,7 +110,7 @@ Every gap found in the audit, and where it is resolved.
 | 23 | Open-PR sweep refetches every open PR each run | Replaced by the full index |
 | 24 | Child data stored as JSON blobs | Step 3: normalized tables |
 | 25 | Missing indexes | Step 3 |
-| 26 | `foreign_keys` off, rollback journal | Step 1 |
+| 26 | `foreign_keys` off; no busy timeout | Step 1 (`foreign_keys=ON`, `busy_timeout`); journal mode per D20 |
 | 27 | Model and migration drift (`alembic check` fails) | Step 1 |
 | 28 | No query layer | Later (section 9) |
 | 29 | 14-day freeze after merge | Removed in Step 3 |
@@ -127,6 +128,7 @@ Every gap found in the audit, and where it is resolved.
 | 41 | Issue transfers between repositories | Step 4: upsert by GitHub id; deletions recomputed at delete time |
 | 42 | `uv sync --frozen` without `--extra dev` uninstalls dev tools | Step 1 |
 | 43 | Pre-commit `type: ignore` and `noqa` audits always exit 0 | Step 1 |
+| 44 | `get_logger` returns a loguru logger (`{}` formatting), but 25 of 72 logging calls in `src/` use `%s` placeholders, so their arguments are dropped (a failed rate-limit fetch logs a literal `Failed to fetch rate limits: %s`) | Step 3: new code uses `{}` placeholders; surviving calls converted |
 
 ## 5. Design
 
@@ -282,7 +284,7 @@ Workflow `.github/workflows/sync.yml`:
   `bootstrap` is set. Never start from an empty database otherwise.
 - `alembic upgrade head`, `ghactivity sync --max-minutes 300`, `ghactivity verify`.
 - Snapshot with `VACUUM INTO` (a consistent copy in rollback-journal mode, readable from a
-  read-only location; the working file is in WAL mode), gzip it, and upload
+  read-only location, whatever mode the working file uses), gzip it, and upload
   `github_activity-<UTC timestamp>.db.gz` and its manifest (run id, code SHA, migration head,
   per-repo counts, SHA-256) as new assets; never `--clobber`. Keep the newest 28 assets (7 days).
 - Heartbeat: when the last commit on `main` is older than 7 days, commit `data/manifest.json`.
@@ -359,7 +361,7 @@ Scope:
   version. The `type: ignore` and `noqa` audits fail when over target.
 - Fix the existing lint and format findings under the locked ruff.
 - Declare the `sync_failures` indexes on the model so `alembic check` passes.
-- Per-connection `PRAGMA foreign_keys=ON`, `journal_mode=WAL`, `busy_timeout`.
+- Per-connection `PRAGMA foreign_keys=ON` and `busy_timeout`; journal mode stays rollback (D20).
 - `config/tracking.toml` and its loader; `Settings.tracked_repos` reads it. Step 1 adds only
   `[[repositories]]` (with `group`); `[coverage]`, `[automation]`, and `[sync]` land in the steps
   that read them, so no section exists without a consumer.
@@ -388,7 +390,9 @@ Acceptance: removing any invariant check makes at least one test fail.
 Scope: migration (new tables and views; old PR tables and AI columns dropped; tag tables
 re-pointed); writer; planner with coverage rule, deletions, and guards; unsettled re-hydration;
 `hydration_version`; run records; `ghactivity sync` and `ghactivity verify`; removal of the old
-pipeline.
+pipeline. The new CLI reports an invalid `config/tracking.toml` as a CLI error; the current
+`sync all` command raises it with a traceback. Logging calls that survive the cutover move to `{}`
+placeholders (gap 44).
 
 Tests through the sync service with a fake transport and a real SQLite file: first sync, update,
 merge, close then delete, reopen, mass-delete halt, incomplete-index halt, crash mid-run then resume
@@ -463,7 +467,9 @@ Measured 2026-10-16 unless noted. "Index" means the created-order enumeration in
 | SQLite pragmas | A `connect` listener on `engine.sync_engine` yields `foreign_keys=1`, `journal_mode=wal`, `busy_timeout=5000` and rejects a foreign-key violation | probe |
 | Existing file | 0 foreign-key violations; integrity check `ok` | local |
 | WAL snapshots | `VACUUM INTO` from a WAL database writes a rollback-journal file (header bytes 18-19 `0101` vs `0202`) that can be queried read-only from a read-only directory | sqlite3 |
-| Test-suite flake | pytest-asyncio 1.3.0 on Python 3.13 leaves an unclosed event loop after an async test followed by a test calling `asyncio.run()`; with `filterwarnings = error` the next test fails. Fixed in pytest-asyncio 1.4.0 (#724) | bisect on `22551d3` and `43fcf06`; release notes |
+| Test-suite flake | pytest-asyncio 1.3.0 on Python 3.13 leaves an unclosed event loop after an async test followed by a test calling `asyncio.run()`; with `filterwarnings = error` the next test fails. Fixed in pytest-asyncio 1.4.0 (#724) | repeated runs on `22551d3` (3 of 3 failed) and with 1.4.0 (5 of 5 passed); release notes |
+| WAL with a tracked file | SQLite: any `*-wal` file must be copied together with the database, and swapping or moving journal files between databases is likely to corrupt them | sqlite.org/howtocorrupt.html |
+| CI color forcing | typer sets `FORCE_TERMINAL` when `GITHUB_ACTIONS`, `FORCE_COLOR`, or `PY_COLORS` is set; two help-text tests failed only on GitHub Actions and reproduced locally with `GITHUB_ACTIONS=true` | installed typer `rich_utils.py`; CI run on `c7e0146` |
 | Quality gates | No CI; pre-commit hooks not installed; ruff 0.14.11 (lock) 10 findings plus 4 format diffs vs ruff 0.8.6 (pre-commit pin) 0 findings plus 1 format diff; mypy clean on 91 files; 608 tests, 0 failures | local |
 | Private data | `prebid-agent-skills` is private; the committed file contains its PRs since commit `bf40280` | `gh repo view`; history |
 
