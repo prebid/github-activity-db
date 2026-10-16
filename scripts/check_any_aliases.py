@@ -13,6 +13,8 @@ imports inside module-level `if`, `try`, `with`, `match`, and loop blocks do. A 
 module-level class, function, assignment, `with`/`for`/`except` target, or non-typing import of
 the same name replaces the typing binding. Where branches disagree (`if TYPE_CHECKING:` with an
 `else`, `try`/`except`, loops that may not run), a name counts as typing if any branch binds it so.
+Not tracked: `del`, `global`, walrus targets, and `match` captures. A rebinding by one of them
+leaves the typing binding in place (over-flagging), and `(Name := typing.Any)` is not recognized.
 
 Usage: python scripts/check_any_aliases.py PATH...
 """
