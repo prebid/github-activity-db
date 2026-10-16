@@ -2,10 +2,17 @@
 
 from datetime import timedelta
 from functools import lru_cache
+from pathlib import Path
 from typing import Literal
 
 from pydantic import BaseModel, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+from github_activity_db.tracking import load_tracking_config
+
+# Repository root (src/github_activity_db/config.py -> repository root).
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+DEFAULT_TRACKING_CONFIG = PROJECT_ROOT / "config" / "tracking.toml"
 
 
 class RateLimitConfig(BaseModel):
@@ -214,29 +221,15 @@ class Settings(BaseSettings):
     # --------------------------------------------------------------------------
     # Tracked Repositories
     # --------------------------------------------------------------------------
+    tracking_config_path: Path = Field(
+        default=DEFAULT_TRACKING_CONFIG,
+        description="Path to tracking.toml, the list of tracked repositories",
+    )
+
     @property
     def tracked_repos(self) -> list[str]:
-        """List of GitHub repositories to track."""
-        return [
-            "prebid/prebid-server",
-            "prebid/prebid-server-java",
-            "prebid/Prebid.js",
-            "prebid/prebid.github.io",
-            "prebid/prebid-mobile-android",
-            "prebid/prebid-mobile-ios",
-            "prebid/prebid-universal-creative",
-            "prebid/professor-prebid",
-            "prebid/salesagent",
-            "prebid/prebid-agent-skills",
-            "prebid/line-item-manager",
-            "prebid/go-gdpr",
-            "prebid/prebid-cache-java",
-            "prebid/repo-activity-dashboard",
-            "prebid/prebid-mobile-ios-sdk",
-            "prebid/openrtb",
-            "prebid/github-activity-db",
-            "prebid/prebid-integration-monitor",
-        ]
+        """Tracked repositories in owner/name form, read from tracking_config_path."""
+        return load_tracking_config(self.tracking_config_path).full_names
 
 
 @lru_cache

@@ -1,0 +1,96 @@
+# Repositories tracked by github-activity-db.
+#
+# Each entry needs owner, name, and group. Groups label repositories for reporting
+# (Client, Server, Mobile, Docs, Agentic, Tools). Order is the sync order.
+# Validated at load by github_activity_db.tracking; unknown keys are rejected.
+# Later steps of docs/redesign-plan.md add [coverage], [automation], and [sync].
+
+[[repositories]]
+owner = "prebid"
+name = "prebid-server"
+group = "Server"
+
+[[repositories]]
+owner = "prebid"
+name = "prebid-server-java"
+group = "Server"
+
+[[repositories]]
+owner = "prebid"
+name = "Prebid.js"
+group = "Client"
+
+[[repositories]]
+owner = "prebid"
+name = "prebid.github.io"
+group = "Docs"
+
+[[repositories]]
+owner = "prebid"
+name = "prebid-mobile-android"
+group = "Mobile"
+
+[[repositories]]
+owner = "prebid"
+name = "prebid-mobile-ios"
+group = "Mobile"
+
+[[repositories]]
+owner = "prebid"
+name = "prebid-universal-creative"
+group = "Client"
+
+[[repositories]]
+owner = "prebid"
+name = "professor-prebid"
+group = "Tools"
+
+[[repositories]]
+owner = "prebid"
+name = "salesagent"
+group = "Agentic"
+
+[[repositories]]
+owner = "prebid"
+name = "prebid-agent-skills"
+group = "Agentic"
+
+[[repositories]]
+owner = "prebid"
+name = "line-item-manager"
+group = "Tools"
+
+[[repositories]]
+owner = "prebid"
+name = "go-gdpr"
+group = "Server"
+
+[[repositories]]
+owner = "prebid"
+name = "prebid-cache-java"
+group = "Server"
+
+[[repositories]]
+owner = "prebid"
+name = "repo-activity-dashboard"
+group = "Tools"
+
+[[repositories]]
+owner = "prebid"
+name = "prebid-mobile-ios-sdk"
+group = "Mobile"
+
+[[repositories]]
+owner = "prebid"
+name = "openrtb"
+group = "Server"
+
+[[repositories]]
+owner = "prebid"
+name = "github-activity-db"
+group = "Tools"
+
+[[repositories]]
+owner = "prebid"
+name = "prebid-integration-monitor"
+group = "Tools"
