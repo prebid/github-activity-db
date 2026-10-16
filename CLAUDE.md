@@ -23,7 +23,7 @@ uv run ghactivity sync all --since 2024-10-01     # Multi-repo sync
 
 # Checks (CI runs the same: .github/workflows/check.yml)
 uv run pre-commit run --all-files  # ruff, mypy, file checks, quality gates
-uv run pytest                      # CI also runs Python 3.12 and `alembic check`
+uv run pytest                      # CI also runs Python 3.12, `alembic check`, and a built wheel
 ```
 
 ## Documentation
@@ -53,8 +53,10 @@ uv run pytest                      # CI also runs Python 3.12 and `alembic check
 producer, the `tags` and `search` commands are stubs, and bulk sync commits only after a
 repository finishes. The redesign plan replaces these.
 
+**Planned in the redesign plan:** GitHub Issues and closing-issue links (Step 4); scheduled sync
+and release publication (Step 6).
+
 **Out of Scope (Future):**
-- GitHub Issues
 - Webhooks / real-time sync
 - Web UI
 

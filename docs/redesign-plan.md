@@ -64,7 +64,7 @@ status, releases, and repositories not in the tracked list.
 | D19 | PR and issue bodies are stored. |
 | D20 | SQLite stays in rollback-journal mode while `github_activity.db` is tracked in git. In WAL mode committed transactions can sit in a git-ignored `*-wal` file until a checkpoint, and SQLite documents separating a database from its journal as a corruption path. WAL is reconsidered in Step 6, after the database leaves git. |
 | D21 | `tracking.toml` ships inside the package (`src/github_activity_db/tracking.toml`) and is read through `importlib.resources`, so an installed wheel and a checkout read the same list. `TRACKING_CONFIG_PATH` names a different file. |
-| D22 | The CI test gate allows no skipped tests (`scripts/check_junit.py --max-skipped 0`). A test that must skip in CI needs the allowance raised in the workflow, in the same change. |
+| D22 | The CI test gate allows no skipped tests (`scripts/check_junit.py --max-skipped 0`). A test that must skip in CI needs the allowance raised in the workflow, in the same change. pytest reports `xfail` as skipped, so the same applies to an `xfail`. |
 
 ## 3. Coverage rule
 
@@ -135,6 +135,8 @@ Every gap found in the audit, and where it is resolved.
 | 46 | Foreign-key enforcement was tested only on engines built directly with `build_engine()`; a `get_engine()` that bypassed it left every application session at `foreign_keys=0` with the suite green | Step 1: tests through `get_session()` |
 | 47 | The JUnit gate passed a run in which every test was skipped (pytest exits 0) and read only the first `<testsuite>` | Step 1 (D22) |
 | 48 | The suppression caps missed spellings ruff and mypy honor (bare `# noqa`, `# type:ignore[...]`, file-level `# ruff: noqa`, `# mypy: ignore-errors`) and counted directive text inside strings | Step 1: comment-token counter; ruff `PGH004` |
+| 49 | An empty `TRACKING_CONFIG_PATH` became the working directory, and a directory or unreadable file raised a raw `OSError` | Step 1: empty means the packaged file; read errors raise `TrackingConfigError` |
+| 50 | `actions/checkout` left the job token in `.git/config` while the built-wheel job ran build-backend code from PyPI | Step 1: `persist-credentials: false` on every checkout |
 
 ## 5. Design
 

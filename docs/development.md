@@ -215,9 +215,15 @@ ruff and mypy run through `uv run --no-sync`, so hooks never change the environm
 
 ### Continuous Integration
 
-`.github/workflows/check.yml` runs on pull requests to `main` and pushes to `main`: pre-commit
-over all files, pytest on Python 3.12 and 3.13 (failing on an empty run), and
-`alembic upgrade head` plus `alembic check` against a fresh database.
+`.github/workflows/check.yml` runs on pull requests to `main` and pushes to `main`:
+
+- pre-commit over all files;
+- pytest on Python 3.12 and 3.13, then `scripts/check_junit.py --max-skipped 0`, which fails
+  unless at least one test ran and none failed, errored, or was skipped (pytest reports `xfail`
+  as skipped);
+- `alembic upgrade head` plus `alembic check` against a fresh database;
+- a built wheel, installed with the `uv.lock` dependencies into a new environment and run from
+  outside the checkout (`scripts/wheel_smoke.py`, `ghactivity --help`).
 
 ## Project Configuration
 

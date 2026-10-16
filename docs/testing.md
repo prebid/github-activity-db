@@ -483,8 +483,13 @@ uv run pre-commit install
 `.github/workflows/check.yml` runs on pull requests to `main` and pushes to `main`:
 
 - `lint and types`: pre-commit over all files.
-- `tests (Python 3.12 / 3.13)`: pytest with JUnit output, a step that fails on zero tests,
-  failures, or errors, and `alembic upgrade head` plus `alembic check` on a fresh database.
+- `tests (Python 3.12 / 3.13)`: pytest with JUnit output; `scripts/check_junit.py --max-skipped 0`,
+  which fails unless at least one test ran and none failed, errored, or was skipped (pytest
+  reports `xfail` as skipped, so an `xfail` also fails the job); and `alembic upgrade head` plus
+  `alembic check` on a fresh database.
+- `built wheel`: builds the wheel, installs it with the `uv.lock` dependencies into a new
+  environment, and runs `scripts/wheel_smoke.py` and `ghactivity --help` from outside the
+  checkout.
 
 ---
 
