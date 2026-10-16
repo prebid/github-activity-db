@@ -62,7 +62,7 @@ status, releases, and repositories not in the tracked list.
 | D17 | `user_tags` and `pr_user_tags` stay (empty), re-pointed at the new `pull_requests` table. The `search` and `tags` CLI stubs are removed. |
 | D18 | The database is rebuilt from GitHub, not migrated row by row. The current file holds nothing that cannot be re-fetched (0 user tags, 0 sync failures, 0 AI values). |
 | D19 | PR and issue bodies are stored. |
-| D20 | SQLite stays in rollback-journal mode while `github_activity.db` is tracked in git. In WAL mode committed transactions can sit in a git-ignored `*-wal` file until a checkpoint, and SQLite documents separating a database from its journal as a corruption path. WAL is reconsidered in Step 6, after the database leaves git. |
+| D20 | SQLite stays in rollback-journal mode while `github_activity.db` is tracked in git; the connection listener sets `journal_mode=DELETE` on every connection, because WAL mode persists in the file once set. In WAL mode committed transactions can sit in a git-ignored `*-wal` file until a checkpoint, and SQLite documents separating a database from its journal as a corruption path. WAL is reconsidered in Step 6, after the database leaves git. |
 | D21 | `tracking.toml` ships inside the package (`src/github_activity_db/tracking.toml`) and is read through `importlib.resources`, so an installed wheel and a checkout read the same list. `TRACKING_CONFIG_PATH` names a different file. |
 | D22 | The CI test gate allows no skipped tests (`scripts/check_junit.py --max-skipped 0`). A test that must skip in CI needs the allowance raised in the workflow, in the same change. pytest reports `xfail` as skipped, so the same applies to an `xfail`. |
 
@@ -112,7 +112,7 @@ Every gap found in the audit, and where it is resolved.
 | 23 | Open-PR sweep refetches every open PR each run | Replaced by the full index |
 | 24 | Child data stored as JSON blobs | Step 3: normalized tables |
 | 25 | Missing indexes | Step 3 |
-| 26 | `foreign_keys` off; no busy timeout | Step 1 (`foreign_keys=ON`, `busy_timeout`); journal mode per D20 |
+| 26 | `foreign_keys` off; busy timeout only from the driver default (Python `sqlite3`, 5 s); journal mode not set, and WAL persists in the file once set | Step 1: `foreign_keys=ON`, `busy_timeout=30000`, and `journal_mode=DELETE` on every connection (D20) |
 | 27 | Model and migration drift (`alembic check` fails) | Step 1 |
 | 28 | No query layer | Later (section 9) |
 | 29 | 14-day freeze after merge | Removed in Step 3 |
@@ -373,7 +373,7 @@ Scope:
   `src/`, counting every spelling ruff and mypy honor; ruff `PGH004` rejects blanket `noqa`.
 - Fix the existing lint and format findings under the locked ruff.
 - Declare the `sync_failures` indexes on the model so `alembic check` passes.
-- Per-connection `PRAGMA foreign_keys=ON` and `busy_timeout`; journal mode stays rollback (D20).
+- Per-connection `PRAGMA foreign_keys=ON`, `busy_timeout=30000`, and `journal_mode=DELETE` (D20).
 - `tracking.toml` in the package and its loader; `Settings.tracked_repos` reads it. Step 1 adds only
   `[[repositories]]` (with `group`); `[coverage]`, `[automation]`, and `[sync]` land in the steps
   that read them, so no section exists without a consumer.
@@ -480,7 +480,7 @@ Measured 2026-10-16 unless noted. "Index" means the created-order enumeration in
 | Schedules | Public-repo schedules disable after 60 days without repository activity; start of hour is high load; queued jobs may be dropped; `workflow_dispatch` requires the workflow on the default branch | GitHub docs |
 | Concurrency | A new run replaces a pending run in the group; running runs are cancelled only with `cancel-in-progress: true` | GitHub docs |
 | App token action | `actions/create-github-app-token` v3.2.0 (2026-05-12) and v3.3.0 (2026-10-12) | GitHub API |
-| SQLite pragmas | The `connect` listener on `engine.sync_engine` applies per connection through aiosqlite: `foreign_keys=1`, `busy_timeout=5000`, `journal_mode=delete` (D20); a foreign-key violation is rejected and `ON DELETE CASCADE` removes children; the same values hold on every session from `get_session()`, and routing `get_engine()` around `build_engine()` fails 2 tests (628 collected before and after) | `tests/test_db_engine.py` (`TestSqliteConnectionSettings`), `tests/db/test_application_engine.py`; mutation run |
+| SQLite pragmas | The `connect` listener on `engine.sync_engine` sets per connection through aiosqlite: `foreign_keys=1`, `busy_timeout=30000`, `journal_mode=delete` (D20). Without the listener a connection reports `foreign_keys=0` and `busy_timeout=5000` (Python `sqlite3` default `timeout=5.0`), and a file once set to WAL stays WAL; with it, such a file opens in rollback mode with header bytes 18-19 `0101`. A foreign-key violation is rejected and `ON DELETE CASCADE` removes children; the same values hold on every session from `get_session()`, and routing `get_engine()` around `build_engine()` fails 2 tests (628 collected before and after) | `tests/test_db_engine.py` (`TestSqliteConnectionSettings`), `tests/db/test_application_engine.py`; mutation run |
 | Packaged config | The wheel built from this branch contains `github_activity_db/tracking.toml`; installed with the locked dependencies and run outside the checkout, `Settings().tracked_repos` returns the 18 repositories. A wheel built from `7555a6d` raises `TrackingConfigError` for `<env>/lib/python3.13/config/tracking.toml`; a wheel excluding the file fails the same check | `uv build`, `scripts/wheel_smoke.py` in a new environment |
 | All-skipped runs | pytest exits 0 when every collected test is skipped; the previous inline gate exited 0 on that report and `scripts/check_junit.py` exits 1 | report written by a real pytest run |
 | Suppression spellings | ruff 0.14.11 honors `# noqa` in any letter case, `#noqa`, `# noqa:F401`, a directive after other comment text, and file-level `# ruff: noqa`, `# ruff: noqa: F401`, `#ruff:noqa`, `# flake8: noqa[: codes]`, but not `# RUFF: NOQA`; `PGH004` flags only the blanket forms. mypy 1.19.1 honors `# type: ignore`, `# type:ignore[...]`, `#type:ignore`, a first-line `# type: ignore`, `# mypy: ignore-errors`, and `# mypy: disable-error-code=...`, but not `# TYPE: IGNORE`, `#mypy:ignore-errors`, or `# type: ignore` after other comment text. The counter also counts `# RUFF: NOQA`, `#mypy:ignore-errors`, and the trailing `# type: ignore`, and does not count `# TYPE: IGNORE` | probe files with `ruff check --isolated` and `mypy --strict` |

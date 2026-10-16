@@ -1,5 +1,6 @@
 """Tests for database engine and session management."""
 
+import sqlite3
 from pathlib import Path
 
 import pytest
@@ -112,6 +113,37 @@ class TestSqliteConnectionSettings:
         assert busy_timeout == SQLITE_BUSY_TIMEOUT_MS
         # Rollback journal while github_activity.db is tracked in git (see _apply_sqlite_pragmas).
         assert journal_mode == "delete"
+
+    def test_busy_timeout_differs_from_the_driver_default(self, tmp_path: Path) -> None:
+        # The pragma assertions can only detect a missing busy_timeout setting while the
+        # configured value differs from what sqlite3 reports without it.
+        connection = sqlite3.connect(tmp_path / "default.db")
+        try:
+            driver_default = connection.execute("PRAGMA busy_timeout").fetchone()[0]
+        finally:
+            connection.close()
+        assert driver_default != SQLITE_BUSY_TIMEOUT_MS
+
+    async def test_wal_database_returns_to_the_rollback_journal(self, tmp_path: Path) -> None:
+        path = tmp_path / "was_wal.db"
+        connection = sqlite3.connect(path)
+        try:
+            connection.execute("PRAGMA journal_mode=WAL")
+            connection.execute("CREATE TABLE t (x INTEGER)")
+            connection.commit()
+        finally:
+            connection.close()
+
+        engine = build_engine(f"sqlite+aiosqlite:///{path}")
+        try:
+            async with engine.connect() as conn:
+                journal_mode = (await conn.execute(text("PRAGMA journal_mode"))).scalar()
+        finally:
+            await engine.dispose()
+
+        assert journal_mode == "delete"
+        # Header bytes 18-19 record the journal format: 1 is rollback journal, 2 is WAL.
+        assert path.read_bytes()[18:20] == b"\x01\x01"
 
     async def test_foreign_key_violation_is_rejected(self, test_engine) -> None:
         with pytest.raises(IntegrityError, match="FOREIGN KEY constraint failed"):

@@ -11,12 +11,12 @@ The database uses SQLite with async access via aiosqlite. Schema migrations are 
 | Pragma | Value | Why |
 |--------|-------|-----|
 | `foreign_keys` | `ON` | SQLite disables it per connection by default; declared `ON DELETE CASCADE` constraints only hold with it on |
-| `busy_timeout` | `5000` ms | Wait for a lock before raising "database is locked" |
+| `busy_timeout` | `30000` ms | Wait for a lock before raising "database is locked". Python's `sqlite3` default is 5000 ms; in rollback-journal mode a reader's lock blocks a writer's commit, and the longer wait lets the sync outlast a concurrent read |
+| `journal_mode` | `DELETE` | SQLite's default rollback journal, set on every connection because WAL mode persists in the file once set |
 
-The journal stays in SQLite's default rollback mode. In WAL mode committed transactions can sit in
-a git-ignored `*-wal` file until a checkpoint, and `github_activity.db` is tracked in git, so a
-commit, checkout, or stash could separate the database from its WAL. Step 6 of
-[the redesign plan](redesign-plan.md) moves the database out of git.
+In WAL mode committed transactions can sit in a git-ignored `*-wal` file until a checkpoint, and
+`github_activity.db` is tracked in git, so a commit, checkout, or stash could separate the database
+from its WAL. Step 6 of [the redesign plan](redesign-plan.md) moves the database out of git.
 
 ## Entity Relationship Diagram
 

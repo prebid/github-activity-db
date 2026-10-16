@@ -20,7 +20,10 @@ _engine: AsyncEngine | None = None
 _async_session_factory: async_sessionmaker[AsyncSession] | None = None
 
 # How long a connection waits on a locked database before raising "database is locked".
-SQLITE_BUSY_TIMEOUT_MS = 5000
+# Python's sqlite3 waits 5 s by default (timeout=5.0). In rollback-journal mode a reader's
+# lock blocks a writer's commit; the sync is the only writer, and 30 s lets it outlast a
+# concurrent read instead of failing the item.
+SQLITE_BUSY_TIMEOUT_MS = 30_000
 
 
 def _apply_sqlite_pragmas(dbapi_connection: Any, _connection_record: Any) -> None:
@@ -29,15 +32,17 @@ def _apply_sqlite_pragmas(dbapi_connection: Any, _connection_record: Any) -> Non
     foreign_keys is per connection and off by default in SQLite, so declared
     ON DELETE CASCADE constraints only hold when it is set on each connection.
 
-    The journal stays in SQLite's default rollback mode. In WAL mode committed
-    transactions can live in a git-ignored *-wal file until a checkpoint, and
-    github_activity.db is tracked in git, so a commit, checkout, or stash could
-    separate the database from its WAL.
+    journal_mode is set to DELETE, SQLite's default rollback journal, on every
+    connection because WAL mode, once set, persists in the database file. In WAL
+    mode committed transactions can live in a git-ignored *-wal file until a
+    checkpoint, and github_activity.db is tracked in git, so a commit, checkout,
+    or stash could separate the database from its WAL.
     """
     cursor = dbapi_connection.cursor()
     try:
         cursor.execute("PRAGMA foreign_keys=ON")
         cursor.execute(f"PRAGMA busy_timeout={SQLITE_BUSY_TIMEOUT_MS}")
+        cursor.execute("PRAGMA journal_mode=DELETE")
     finally:
         cursor.close()
 
