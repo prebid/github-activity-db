@@ -8,7 +8,6 @@ outside the checkout:
 
 from __future__ import annotations
 
-import os
 import sys
 import tomllib
 from pathlib import Path
@@ -19,8 +18,14 @@ from github_activity_db.config import Settings
 
 def main(argv: list[str]) -> int:
     source_toml, checkout = Path(argv[1]), Path(argv[2]).resolve()
-    if "TRACKING_CONFIG_PATH" in os.environ:
-        print("FAIL: TRACKING_CONFIG_PATH is set, so the packaged file would not be read")
+    # Settings reads environment variables case-insensitively, so inspect the value it
+    # resolved rather than one spelling of the variable name.
+    settings = Settings(_env_file=None)
+    if settings.tracking_config_path is not None:
+        print(
+            f"FAIL: tracking_config_path is set ({settings.tracking_config_path}), "
+            "so the packaged file would not be read"
+        )
         return 1
     package_dir = Path(github_activity_db.__file__).resolve().parent
     if package_dir.is_relative_to(checkout):
@@ -30,7 +35,7 @@ def main(argv: list[str]) -> int:
         f"{repo['owner']}/{repo['name']}"
         for repo in tomllib.loads(source_toml.read_text())["repositories"]
     ]
-    installed = Settings(_env_file=None).tracked_repos
+    installed = settings.tracked_repos
     print(f"installed package: {package_dir}")
     print(f"tracked repositories from the packaged tracking.toml: {len(installed)}")
     if installed != expected:

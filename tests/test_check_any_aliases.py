@@ -29,6 +29,13 @@ ALIASES = [
     "from typing import Any, Optional\n\nFoo = Optional[Any]\n",
     "import typing\n\nFoo = typing.Union[int, typing.Any]\n",
     'from typing import Annotated, Any\n\nFoo = Annotated[Any, "x"]\n',
+    "from typing import Any as Dynamic\n\ntype Foo = Dynamic\n",
+    "from typing import Any, Optional as Maybe\n\nFoo = Maybe[Any]\n",
+    "from typing import Any, Union as Either\n\nFoo = Either[int, Any]\n",
+    'from typing import Annotated as Note, Any\n\nFoo = Note[Any, "x"]\n',
+    "from typing import Any, TypeAlias as Alias\n\nFoo: Alias = Any\n",
+    "import typing_extensions as te\n\nFoo = te.Any\n",
+    "from typing import *\n\nFoo = Any\n",
 ]
 NOT_ALIASES = [
     "from typing import Any\n\nFoo = dict[str, Any]\n",
@@ -39,6 +46,9 @@ NOT_ALIASES = [
     "from typing import Any\n\n\ndef f() -> None:\n    Foo = Any\n",
     "from typing import Any\n\n\nclass C:\n    Foo = Any\n",
     'TEXT = "Foo = Any"\n',
+    "class Any:\n    pass\n\n\ntype Foo = Any\n",
+    "from mylib import Any\n\nFoo = Any\n",
+    "import mylib\n\nFoo = mylib.Any\n",
 ]
 
 

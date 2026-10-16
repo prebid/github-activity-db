@@ -5,7 +5,9 @@ Flagged at module level (statements inside functions, classes, or `if` blocks ar
   `Optional[Any]`, or `Union[int, Any]`, and `Annotated[Any, ...]`;
 - `Name: TypeAlias = Any`, also with `typing.TypeAlias`;
 - `type Name = Any` and `type Name[T] = Any`.
-`Any` matches the name `Any` and any attribute named `Any` (`typing.Any`, `t.Any`).
+Names are resolved through the module's imports from `typing` and `typing_extensions`, so
+`from typing import Any as Dynamic` followed by `Name = Dynamic` is flagged, and a `class Any`
+defined in the module, or `Any` imported from another package, is not.
 
 Usage: python scripts/check_any_aliases.py PATH...
 """
@@ -27,39 +29,68 @@ def python_files(paths: list[Path]) -> Iterator[Path]:
             yield path
 
 
-def _is_named(node: ast.expr, name: str) -> bool:
-    return (isinstance(node, ast.Name) and node.id == name) or (
-        isinstance(node, ast.Attribute) and node.attr == name
-    )
+TYPING_MODULES = {"typing", "typing_extensions"}
 
 
-def _is_any(node: ast.expr) -> bool:
+class TypingNames:
+    """The local names that refer to typing objects and modules in one module."""
+
+    def __init__(self, tree: ast.Module) -> None:
+        self.objects: dict[str, str] = {}  # local name -> typing attribute it refers to
+        self.modules: set[str] = set()  # local names bound to typing or typing_extensions
+        self.star = False
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    if alias.name in TYPING_MODULES:
+                        self.modules.add(alias.asname or alias.name)
+            elif isinstance(node, ast.ImportFrom) and node.module in TYPING_MODULES:
+                for alias in node.names:
+                    if alias.name == "*":
+                        self.star = True
+                    else:
+                        self.objects[alias.asname or alias.name] = alias.name
+
+    def refers_to(self, node: ast.expr, name: str) -> bool:
+        if isinstance(node, ast.Name):
+            return self.objects.get(node.id) == name or (self.star and node.id == name)
+        return (
+            isinstance(node, ast.Attribute)
+            and node.attr == name
+            and isinstance(node.value, ast.Name)
+            and node.value.id in self.modules
+        )
+
+
+def _is_any(node: ast.expr, names: TypingNames) -> bool:
     if isinstance(node, ast.BinOp) and isinstance(node.op, ast.BitOr):
-        return _is_any(node.left) or _is_any(node.right)
+        return _is_any(node.left, names) or _is_any(node.right, names)
     if isinstance(node, ast.Subscript):
         args = node.slice.elts if isinstance(node.slice, ast.Tuple) else [node.slice]
-        if _is_named(node.value, "Annotated"):
-            return bool(args) and _is_any(args[0])
-        if _is_named(node.value, "Optional") or _is_named(node.value, "Union"):
-            return any(_is_any(arg) for arg in args)
-    return _is_named(node, "Any")
+        if names.refers_to(node.value, "Annotated"):
+            return bool(args) and _is_any(args[0], names)
+        if names.refers_to(node.value, "Optional") or names.refers_to(node.value, "Union"):
+            return any(_is_any(arg, names) for arg in args)
+    return names.refers_to(node, "Any")
 
 
 def any_aliases(source: bytes) -> Iterator[tuple[int, str]]:
-    for statement in ast.parse(source).body:
-        if isinstance(statement, ast.Assign) and _is_any(statement.value):
+    tree = ast.parse(source)
+    names = TypingNames(tree)
+    for statement in tree.body:
+        if isinstance(statement, ast.Assign) and _is_any(statement.value, names):
             for target in statement.targets:
                 if isinstance(target, ast.Name):
                     yield statement.lineno, target.id
         elif (
             isinstance(statement, ast.AnnAssign)
             and statement.value is not None
-            and _is_named(statement.annotation, "TypeAlias")
-            and _is_any(statement.value)
+            and names.refers_to(statement.annotation, "TypeAlias")
+            and _is_any(statement.value, names)
             and isinstance(statement.target, ast.Name)
         ):
             yield statement.lineno, statement.target.id
-        elif isinstance(statement, ast.TypeAlias) and _is_any(statement.value):
+        elif isinstance(statement, ast.TypeAlias) and _is_any(statement.value, names):
             yield statement.lineno, statement.name.id
 
 
