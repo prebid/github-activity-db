@@ -28,6 +28,8 @@ jobs:
         with:
           version: "0.7.10"
           python-version: "3.13"
+      - name: uv.lock matches pyproject.toml
+        run: uv lock --locked
       - name: Install project and dev tools from uv.lock
         run: uv sync --frozen --extra dev
       - name: pre-commit (ruff, mypy, file checks, quality gates)

@@ -41,9 +41,10 @@ build-backend = "hatchling.build"
 packages = ["src/github_activity_db"]
 
 [tool.uv]
-# Build dependencies for every uv build, including the editable install `uv sync` makes.
-# build-constraints.txt pins the same versions with hashes for the built-wheel CI job;
-# tests/test_build_inputs.py keeps the two lists and [build-system] equal.
+# Build dependencies for uv builds, including the editable install `uv sync` makes. Run
+# `uv lock` after changing them: `uv sync --frozen` (CI and the documented install) reads
+# the copy in uv.lock's [manifest]. build-constraints.txt pins the same versions with hashes
+# for the built-wheel CI job; tests/test_build_inputs.py keeps all four pin sites equal.
 build-constraint-dependencies = [
     "editables==0.6",
     "hatchling==1.32.4",

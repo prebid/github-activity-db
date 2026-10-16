@@ -482,7 +482,8 @@ uv run pre-commit install
 
 `.github/workflows/check.yml` runs on pull requests to `main` and pushes to `main`:
 
-- `lint and types`: pre-commit over all files.
+- `lint and types`: `uv lock --locked` (uv.lock matches pyproject.toml), then pre-commit over
+  all files.
 - `tests (Python 3.12 / 3.13)`: pytest with JUnit output; `scripts/check_junit.py --max-skipped 0`,
   which fails unless at least one test ran and none failed, errored, or was skipped (pytest
   reports `xfail` as skipped, so an `xfail` also fails the job); and `alembic upgrade head` plus

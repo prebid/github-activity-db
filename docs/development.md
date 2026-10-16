@@ -69,8 +69,9 @@ uv sync --extra dev
 
 # Change the build backend: edit [build-system] requires in pyproject.toml, regenerate the
 # hashed constraints the built-wheel CI job uses, copy the same pins into
-# [tool.uv] build-constraint-dependencies, then run `uv lock` (tests/test_build_inputs.py
-# checks that the three agree)
+# [tool.uv] build-constraint-dependencies, then run `uv lock`, which copies them into
+# uv.lock for `uv sync --frozen` (tests/test_build_inputs.py checks that all four agree;
+# CI runs `uv lock --locked`)
 printf 'hatchling==<version>\neditables==<version>\n' | uv pip compile - --universal \
   --generate-hashes --python-version 3.12 -o build-constraints.txt
 ```
@@ -224,7 +225,7 @@ ruff and mypy run through `uv run --no-sync`, so hooks never change the environm
 
 `.github/workflows/check.yml` runs on pull requests to `main` and pushes to `main`:
 
-- pre-commit over all files;
+- `uv lock --locked` (uv.lock matches pyproject.toml), then pre-commit over all files;
 - pytest on Python 3.12 and 3.13, then `scripts/check_junit.py --max-skipped 0`, which fails
   unless at least one test ran and none failed, errored, or was skipped (pytest reports `xfail`
   as skipped);

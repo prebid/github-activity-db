@@ -143,7 +143,7 @@ Every gap found in the audit, and where it is resolved.
 | 54 | `check-added-large-files` checked nothing in CI: with `--all-files` no file is newly added | Step 1: `--enforce-all`; `github_activity.db` exempt until Step 6 |
 | 55 | Build inputs not pinned: the hatchling build backend and its dependencies, `pre-commit-hooks` by tag, wheel-job dependencies installed without hashes | Step 1: hatchling pinned in `pyproject.toml` and, with its dependencies, hash-pinned in `build-constraints.txt` (a test keeps the two pins equal); `pre-commit-hooks` by SHA; `--require-hashes` installs |
 | 56 | The tracked database's journal mode was checked only by pytest: a WAL-mode `github_activity.db` passed every pre-commit hook | Step 1: `scripts/check_db_journal.py` pre-commit hook on the file; the test runs the same script |
-| 57 | `uv sync` built the editable project with hatchling's dependencies and `editables` resolved fresh | Step 1: `[tool.uv] build-constraint-dependencies` pins all seven; a test keeps them equal to `build-constraints.txt` |
+| 57 | `uv sync` built the editable project with hatchling's dependencies and `editables` resolved fresh | Step 1: `[tool.uv] build-constraint-dependencies` pins all seven, and `uv lock` copies them into uv.lock's `[manifest]`, which `uv sync --frozen` reads; a test keeps all four pin sites equal and CI runs `uv lock --locked` |
 | 58 | The Any-alias check missed `Optional[Any]`, `Union[..., Any]`, and `Annotated[Any, ...]`; `None | Any` and a `typing_extensions` alias of `no_type_check` had no test | Step 1 |
 
 ## 5. Design
