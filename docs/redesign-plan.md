@@ -63,6 +63,8 @@ status, releases, and repositories not in the tracked list.
 | D18 | The database is rebuilt from GitHub, not migrated row by row. The current file holds nothing that cannot be re-fetched (0 user tags, 0 sync failures, 0 AI values). |
 | D19 | PR and issue bodies are stored. |
 | D20 | SQLite stays in rollback-journal mode while `github_activity.db` is tracked in git. In WAL mode committed transactions can sit in a git-ignored `*-wal` file until a checkpoint, and SQLite documents separating a database from its journal as a corruption path. WAL is reconsidered in Step 6, after the database leaves git. |
+| D21 | `tracking.toml` ships inside the package (`src/github_activity_db/tracking.toml`) and is read through `importlib.resources`, so an installed wheel and a checkout read the same list. `TRACKING_CONFIG_PATH` names a different file. |
+| D22 | The CI test gate allows no skipped tests (`scripts/check_junit.py --max-skipped 0`). A test that must skip in CI needs the allowance raised in the workflow, in the same change. |
 
 ## 3. Coverage rule
 
@@ -129,6 +131,10 @@ Every gap found in the audit, and where it is resolved.
 | 42 | `uv sync --frozen` without `--extra dev` uninstalls dev tools | Step 1 |
 | 43 | Pre-commit `type: ignore` and `noqa` audits always exit 0 | Step 1 |
 | 44 | `get_logger` returns a loguru logger (`{}` formatting), but 25 of 72 logging calls in `src/` use `%s` placeholders, so their arguments are dropped (a failed rate-limit fetch logs a literal `Failed to fetch rate limits: %s`) | Step 3: new code uses `{}` placeholders; surviving calls converted |
+| 45 | `tracking.toml` was read from a path three directories above `config.py`; a non-editable install has no such file and every command reading `Settings.tracked_repos` fails | Step 1 (D21); the built-wheel CI job runs the installed package outside the checkout |
+| 46 | Foreign-key enforcement was tested only on engines built directly with `build_engine()`; a `get_engine()` that bypassed it left every application session at `foreign_keys=0` with the suite green | Step 1: tests through `get_session()` |
+| 47 | The JUnit gate passed a run in which every test was skipped (pytest exits 0) and read only the first `<testsuite>` | Step 1 (D22) |
+| 48 | The suppression caps missed spellings ruff and mypy honor (bare `# noqa`, `# type:ignore[...]`, file-level `# ruff: noqa`, `# mypy: ignore-errors`) and counted directive text inside strings | Step 1: comment-token counter; ruff `PGH004` |
 
 ## 5. Design
 
@@ -356,10 +362,13 @@ merges.
 Scope:
 
 - `.github/workflows/check.yml` on `pull_request` and pushes to `main`: `uv sync --frozen --extra dev`,
-  `pre-commit run --all-files`, pytest with JUnit output and a non-zero test count, and
-  `alembic upgrade head` plus `alembic check` against a temporary database.
+  `pre-commit run --all-files`, pytest with JUnit output checked by `scripts/check_junit.py` (at
+  least one test executed, none failed or errored, no skips; D22), and `alembic upgrade head` plus
+  `alembic check` against a temporary database. A built-wheel job installs the wheel with the
+  locked dependencies and runs it from outside the checkout (D21).
 - Pre-commit runs ruff and mypy from `uv.lock` (local hooks via `uv run`), so local and CI use one
-  version. The `type: ignore` and `noqa` audits fail when over target.
+  version. `scripts/count_suppressions.py` fails above 5 `type: ignore` or 3 `noqa` comments in
+  `src/`, counting every spelling ruff and mypy honor; ruff `PGH004` rejects blanket `noqa`.
 - Fix the existing lint and format findings under the locked ruff.
 - Declare the `sync_failures` indexes on the model so `alembic check` passes.
 - Per-connection `PRAGMA foreign_keys=ON` and `busy_timeout`; journal mode stays rollback (D20).
@@ -368,11 +377,15 @@ Scope:
   that read them, so no section exists without a consumer.
 - Documentation for the changed commands and files; this plan.
 
-Tests: pragma values and a rejected foreign-key violation; `alembic check` on a fresh database;
-config loading for valid, invalid, and default cases.
+Tests: pragma values and a rejected foreign-key violation, on a directly built engine and through
+the application's `get_session()`; `alembic check` on a fresh database; config loading for valid,
+invalid, and default cases; the JUnit gate for each condition, including a report written by a
+real all-skipped pytest run; the suppression counter for each spelling, string decoys, and each cap
+at and over its limit.
 
 Acceptance: CI passes on the exact PR head with a non-empty job list; removing the model index makes
-CI fail; removing the pragma listener makes its test fail.
+CI fail; removing the pragma listener makes its test fail; routing `get_engine()` around
+`build_engine()` makes a test fail; a wheel without `tracking.toml` fails the built-wheel job.
 
 ### Step 2: GitHub source layer
 
@@ -465,7 +478,10 @@ Measured 2026-10-16 unless noted. "Index" means the created-order enumeration in
 | Schedules | Public-repo schedules disable after 60 days without repository activity; start of hour is high load; queued jobs may be dropped; `workflow_dispatch` requires the workflow on the default branch | GitHub docs |
 | Concurrency | A new run replaces a pending run in the group; running runs are cancelled only with `cancel-in-progress: true` | GitHub docs |
 | App token action | `actions/create-github-app-token` v3.2.0 (2026-05-12) and v3.3.0 (2026-10-12) | GitHub API |
-| SQLite pragmas | The `connect` listener on `engine.sync_engine` applies per connection through aiosqlite: `foreign_keys=1`, `busy_timeout=5000`, `journal_mode=delete` (D20); a foreign-key violation is rejected and `ON DELETE CASCADE` removes children | `tests/test_db_engine.py` (`TestSqliteConnectionSettings`) |
+| SQLite pragmas | The `connect` listener on `engine.sync_engine` applies per connection through aiosqlite: `foreign_keys=1`, `busy_timeout=5000`, `journal_mode=delete` (D20); a foreign-key violation is rejected and `ON DELETE CASCADE` removes children; the same values hold on every session from `get_session()`, and routing `get_engine()` around `build_engine()` fails 2 tests (628 collected before and after) | `tests/test_db_engine.py` (`TestSqliteConnectionSettings`), `tests/db/test_application_engine.py`; mutation run |
+| Packaged config | The wheel built from this branch contains `github_activity_db/tracking.toml`; installed with the locked dependencies and run outside the checkout, `Settings().tracked_repos` returns the 18 repositories. A wheel built from `7555a6d` raises `TrackingConfigError` for `<env>/lib/python3.13/config/tracking.toml`; a wheel excluding the file fails the same check | `uv build`, `scripts/wheel_smoke.py` in a new environment |
+| All-skipped runs | pytest exits 0 when every collected test is skipped; the previous inline gate exited 0 on that report and `scripts/check_junit.py` exits 1 | report written by a real pytest run |
+| Suppression spellings | ruff 0.14.11 honors `# noqa` in any letter case, `#noqa`, `# noqa:F401`, a directive after other comment text, and file-level `# ruff: noqa`, `# ruff: noqa: F401`, `#ruff:noqa`, `# flake8: noqa[: codes]`, but not `# RUFF: NOQA`; `PGH004` flags only the blanket forms. mypy 1.19.1 honors `# type: ignore`, `# type:ignore[...]`, `#type:ignore`, a first-line `# type: ignore`, `# mypy: ignore-errors`, and `# mypy: disable-error-code=...`, but not `# TYPE: IGNORE`, `#mypy:ignore-errors`, or `# type: ignore` after other comment text. The counter also counts `# RUFF: NOQA`, `#mypy:ignore-errors`, and the trailing `# type: ignore`, and does not count `# TYPE: IGNORE` | probe files with `ruff check --isolated` and `mypy --strict` |
 | Existing file | 0 foreign-key violations; integrity check `ok` | local |
 | WAL snapshots | `VACUUM INTO` from a WAL database writes a rollback-journal file (header bytes 18-19 `0101` vs `0202`) that can be queried read-only from a read-only directory | sqlite3 |
 | Test-suite flake | pytest-asyncio 1.3.0 on Python 3.13 leaves an unclosed event loop after an async test followed by a test calling `asyncio.run()`; with `filterwarnings = error` the next test fails. Fixed in pytest-asyncio 1.4.0 (#724) | repeated runs on `22551d3` (3 of 3 failed) and with 1.4.0 (5 of 5 passed); release notes |
