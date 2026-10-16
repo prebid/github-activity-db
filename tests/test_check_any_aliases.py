@@ -58,6 +58,36 @@ ALIASES = [
     "    from typing import Any as D\n\nFoo = D\n",
     "from typing import Any as D\n\nfor D in []:\n    pass\n\nFoo = D\n",
     "from typing import Any as D\n\nmatch 1:\n    case 1:\n        D = int\n\nFoo = D\n",
+    # String forward references where a type is expected.
+    'from typing import Any, TypeAlias\n\nFoo: TypeAlias = "Any"\n',
+    'from typing import Any\n\ntype Foo = "Any"\n',
+    'from typing import Any, Optional\n\nFoo = Optional["Any"]\n',
+    'from typing import Any, Optional, TypeAlias\n\nFoo: TypeAlias = "Optional[Any]"\n',
+    # x[k] = ... and x.attr = ... read x; they do not rebind it.
+    'from typing import Any\n\nHANDLERS: dict[object, str] = {}\nHANDLERS[Any] = "any"\n'
+    "Foo = Any\n",
+    'import typing as t\n\nt.__doc__ = "patched"\nFoo = t.Any\n',
+    "from typing import Any\n\nCOUNTS: dict[object, int] = {}\nCOUNTS[Any] += 1\nFoo = Any\n",
+    # Aliases in module-level blocks other than an `if TYPE_CHECKING:` body.
+    "from typing import Any\n\ntry:\n    Foo = Any\nexcept ImportError:\n    pass\n",
+    "import contextlib\nfrom typing import Any\n\nwith contextlib.suppress(Exception):\n"
+    "    Foo = Any\n",
+    "from typing import Any\n\nfor _ in range(1):\n    Foo = Any\n",
+    "from typing import Any\n\nwhile True:\n    Foo = Any\n    break\n",
+    "from typing import Any\n\nmatch 1:\n    case 1:\n        Foo = Any\n",
+    "import sys\nfrom typing import Any\n\nif sys.version_info >= (3, 12):\n    Foo = Any\n",
+    # Assignments that copy a typing module or object.
+    "import typing\n\nt = typing\nFoo = t.Any\n",
+    # Each binding rule.
+    "from typing import *\n\n\nclass Any:\n    pass\n\n\nfrom typing import *\n\nFoo = Any\n",
+    "from typing import Any as D\n\nwhile False:\n    D = int\n\nFoo = D\n",
+    "try:\n    pass\nfinally:\n    from typing import Any as D\n\nFoo = D\n",
+    "try:\n    from mylib import D\nexcept* ImportError:\n    from typing import Any as D\n\n"
+    "Foo = D\n",
+    "from mylib import D\n\nmatch 1:\n    case 1:\n        from typing import Any as D\n\n"
+    "Foo = D\n",
+    "import sys\nfrom typing import *\n\nif sys.version_info >= (3, 12):\n\n    class Any:\n"
+    "        pass\n\n\nFoo = Any\n",
 ]
 NOT_ALIASES = [
     "from typing import Any\n\nFoo = dict[str, Any]\n",
@@ -83,6 +113,25 @@ NOT_ALIASES = [
     "    pass\n\nFoo = D\n",
     # An alias inside a TYPE_CHECKING block is the recommended form.
     "from typing import TYPE_CHECKING, Any\n\nif TYPE_CHECKING:\n    Foo = Any\n",
+    # A string outside a type position is a value, and an unparsable reference is skipped.
+    'from typing import Any\n\nFoo = "Any"\n',
+    'from typing import Any, Literal\n\nFoo = Literal["Any"]\n',
+    'from typing import TypeAlias\n\nFoo: TypeAlias = "not ( valid"\n',
+    # Each binding rule.
+    "from .typing import Any\n\nFoo = Any\n",
+    "from typing import Any as D\n\ntype D = int\nFoo = D\n",
+    "from typing import Any as D\n\nD += 1\nFoo = D\n",
+    "from typing import Any as D\n\nD: int = 1\nFoo = D\n",
+    "from typing import Any as D\n\ntry:\n    pass\nexcept Exception as D:\n    Foo = D\n",
+    "from typing import Any\n\nfor Any in [1]:\n    Foo = Any\n",
+    "from typing import TYPE_CHECKING, Any\n\nif not TYPE_CHECKING:\n    pass\nelse:\n"
+    "    Foo = Any\n",
+    # Either branch of an `if TYPE_CHECKING:` block is exempt.
+    "from typing import TYPE_CHECKING, Any\n\nif TYPE_CHECKING:\n    pass\nelse:\n    Foo = Any\n",
+    "from typing import TYPE_CHECKING, Any\n\nif not TYPE_CHECKING:\n    Foo = Any\n",
+    # The TYPE_CHECKING pattern: a precise type for the checker, Any for the runtime.
+    "from typing import TYPE_CHECKING, Any\n\nif TYPE_CHECKING:\n    from mylib import Model\n\n"
+    "    Foo = Model\nelse:\n    Foo = Any\n",
 ]
 
 

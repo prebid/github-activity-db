@@ -9,9 +9,10 @@ inside a string does not count. Both .py and .pyi files are scanned.
   prefix.
 - type: ignore: `# type: ignore`, `# type:ignore[code]`, `#type:ignore`; mypy inline
   configuration such as `# mypy: ignore-errors` or `# mypy: disable-error-code=...`; and the
-  `@no_type_check` decorator, also as `@typing.no_type_check` or under an imported alias.
-  Aliases are collected from imports in every scope of the file, so a decorator in any scope
-  counts; this can over-count a name rebound elsewhere, never under-count.
+  `@no_type_check` decorator, also as `@<module>.no_type_check` or under a name imported
+  `as` another from any module (a re-export of typing's counts). Aliases are collected from
+  imports in every scope of the file, so this can over-count a name rebound elsewhere. An
+  assignment alias (`skip = no_type_check`) is not counted; mypy 1.19.1 does not honor one.
 
 A directive after other comment text on the same line counts. Not counted: suppressions
 configured in pyproject.toml (per-file ignores, mypy overrides) and formatter comments
@@ -38,7 +39,6 @@ NOQA = re.compile(
 )
 TYPE_IGNORE = re.compile(r"#\s*(?:type:\s*ignore\b|mypy\s*:)")
 NO_TYPE_CHECK = "no_type_check"
-TYPING_MODULES = {"typing", "typing_extensions"}
 
 
 def python_files(paths: list[Path]) -> Iterator[Path]:
@@ -57,11 +57,11 @@ def comments(source: bytes) -> Iterator[tuple[int, str]]:
 
 def no_type_check_lines(source: bytes) -> Iterator[int]:
     tree = ast.parse(source)
-    # Names that refer to no_type_check, including `from typing import no_type_check as x`.
+    # Names that refer to no_type_check, including `from <module> import no_type_check as x`.
     local_names = {NO_TYPE_CHECK} | {
         alias.asname
         for node in ast.walk(tree)
-        if isinstance(node, ast.ImportFrom) and node.module in TYPING_MODULES
+        if isinstance(node, ast.ImportFrom)
         for alias in node.names
         if alias.name == NO_TYPE_CHECK and alias.asname
     }

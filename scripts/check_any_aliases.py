@@ -1,18 +1,23 @@
 """Fail on module-level type aliases to Any; use a TYPE_CHECKING block instead.
 
-Flagged at module level (statements inside functions, classes, or `if` blocks are not):
-- `Name = Any`, `Name = typing.Any`, and unions containing Any, such as `Name = Any | None`,
-  `Optional[Any]`, or `Union[int, Any]`, and `Annotated[Any, ...]`;
+Flagged: aliases anywhere in module scope, except in either branch of an `if TYPE_CHECKING:`
+(or `if not TYPE_CHECKING:`) block, which is the recommended pattern (the checker sees one branch,
+the runtime the other), and inside functions and classes:
+- `Name = Any`, `Name = typing.Any`, unions containing Any (`Any | None`, `Optional[Any]`,
+  `Union[int, Any]`), and `Annotated[Any, ...]`;
 - `Name: TypeAlias = Any`, also with `typing.TypeAlias`;
 - `type Name = Any` and `type Name[T] = Any`.
-Names are resolved through the module's own imports from `typing` and `typing_extensions`,
-in source order: `from typing import Any as Dynamic` followed by `Name = Dynamic` is flagged,
-and a `class Any` defined in the module, or `Any` imported from another package, is not.
-Imports inside functions and classes do not count, since they bind names in another scope;
-imports inside module-level `if`, `try`, `with`, `match`, and loop blocks do. A later
-module-level class, function, assignment, `with`/`for`/`except` target, or non-typing import of
-the same name replaces the typing binding. Where branches disagree (`if TYPE_CHECKING:` with an
-`else`, `try`/`except`, loops that may not run), a name counts as typing if any branch binds it so.
+String forward references such as `Name: TypeAlias = "Any"` or `Optional["Any"]` are parsed where
+a type is expected; a plain `Name = "Any"` is a string value.
+
+Names are resolved through the module's own bindings, in source order: imports from `typing` and
+`typing_extensions`, and assignments that copy them (`t = typing`, `D = typing.Any`). Imports
+inside functions and classes bind other scopes and do not count. A later module-level class,
+function, `type` statement, assignment to the name, `with`/`for`/`except` target, or non-typing
+import replaces a typing binding; `x[k] = ...` and `x.attr = ...` only read `x`. Where branches
+disagree (`if`/`else`, `try`/`except`, a loop or `match` that may not run), a name counts as
+typing if any branch binds it so.
+
 Not tracked: `del`, `global`, walrus targets, and `match` captures. A rebinding by one of them
 leaves the typing binding in place (over-flagging), and `(Name := typing.Any)` is not recognized.
 
@@ -27,6 +32,9 @@ import sys
 from collections.abc import Iterator
 from pathlib import Path
 
+TYPING_MODULES = {"typing", "typing_extensions"}
+NEW_SCOPES = (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
+
 
 def python_files(paths: list[Path]) -> Iterator[Path]:
     for path in paths:
@@ -36,14 +44,15 @@ def python_files(paths: list[Path]) -> Iterator[Path]:
             yield path
 
 
-TYPING_MODULES = {"typing", "typing_extensions"}
-NEW_SCOPES = (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
-
-
 def _stored_names(target: ast.AST | None) -> list[str]:
+    """Names a target binds: `x` and `a, *b` do; `x[k]` and `x.attr` only read `x`."""
     if target is None:
         return []
-    return [node.id for node in ast.walk(target) if isinstance(node, ast.Name)]
+    return [
+        node.id
+        for node in ast.walk(target)
+        if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Store)
+    ]
 
 
 class TypingNames:
@@ -53,7 +62,7 @@ class TypingNames:
         self.objects: dict[str, set[str]] = {}  # local name -> typing attributes it may be
         self.modules: set[str] = set()  # local names that may be typing or typing_extensions
         self.star = False  # `from typing import *` may have bound every typing name
-        self.shadowed: set[str] = set()  # names rebound after a star import
+        self.shadowed: set[str] = set()  # names rebound since that star import
 
     def copy(self) -> TypingNames:
         other = TypingNames()
@@ -75,11 +84,35 @@ class TypingNames:
         merged.shadowed = set.intersection(*(branch.shadowed for branch in branches))
         return merged
 
+    def resolve(self, node: ast.expr) -> tuple[set[str], bool]:
+        """The typing attributes node may be, and whether it may be a typing module."""
+        if isinstance(node, ast.Name):
+            attrs = set(self.objects.get(node.id, ()))
+            if self.star and node.id not in self.shadowed:
+                attrs.add(node.id)
+            return attrs, node.id in self.modules
+        if isinstance(node, ast.Attribute) and self.resolve(node.value)[1]:
+            return {node.attr}, False
+        return set(), False
+
+    def refers_to(self, node: ast.expr, name: str) -> bool:
+        return name in self.resolve(node)[0]
+
     def unbind(self, *names: str) -> None:
         for name in names:
             self.objects.pop(name, None)
             self.modules.discard(name)
             self.shadowed.add(name)
+
+    def _bind_copy(self, target: ast.expr, value: ast.expr) -> None:
+        """After `target = value`, a plain name target refers to whatever value may be."""
+        attrs, is_module = self.resolve(value)
+        self.unbind(*_stored_names(target))
+        if isinstance(target, ast.Name):
+            if attrs:
+                self.objects[target.id] = attrs
+            if is_module:
+                self.modules.add(target.id)
 
     def update(self, statement: ast.stmt) -> None:
         """Apply the bindings a simple module-scope statement makes."""
@@ -105,46 +138,44 @@ class TypingNames:
                 self.unbind(local)
                 if from_typing:
                     self.objects[local] = {alias.name}
-                    self.shadowed.discard(local)
         elif isinstance(statement, NEW_SCOPES):
             self.unbind(statement.name)
         elif isinstance(statement, ast.TypeAlias):
             self.unbind(statement.name.id)
         elif isinstance(statement, ast.Assign):
             for target in statement.targets:
-                self.unbind(*_stored_names(target))
-        elif isinstance(statement, ast.AugAssign) or (
-            isinstance(statement, ast.AnnAssign) and statement.value is not None
-        ):
+                self._bind_copy(target, statement.value)
+        elif isinstance(statement, ast.AnnAssign) and statement.value is not None:
+            self._bind_copy(statement.target, statement.value)
+        elif isinstance(statement, ast.AugAssign):
             self.unbind(*_stored_names(statement.target))
 
-    def refers_to(self, node: ast.expr, name: str) -> bool:
-        if isinstance(node, ast.Name):
-            if node.id in self.objects:
-                return name in self.objects[node.id]
-            return self.star and node.id == name and node.id not in self.shadowed
-        return (
-            isinstance(node, ast.Attribute)
-            and node.attr == name
-            and isinstance(node.value, ast.Name)
-            and node.value.id in self.modules
-        )
 
+def _is_any(node: ast.expr, names: TypingNames, type_context: bool) -> bool:
+    """Whether node is Any, or a union, Optional, or Annotated form of it.
 
-def _is_any(node: ast.expr, names: TypingNames) -> bool:
+    In a type context (a TypeAlias value, a `type` statement, or a typing subscript argument)
+    a string is a forward reference and is parsed; elsewhere a string is a value.
+    """
+    if type_context and isinstance(node, ast.Constant) and isinstance(node.value, str):
+        try:
+            parsed = ast.parse(node.value.strip(), mode="eval").body
+        except SyntaxError:
+            return False
+        return _is_any(parsed, names, type_context=True)
     if isinstance(node, ast.BinOp) and isinstance(node.op, ast.BitOr):
-        return _is_any(node.left, names) or _is_any(node.right, names)
+        return _is_any(node.left, names, type_context) or _is_any(node.right, names, type_context)
     if isinstance(node, ast.Subscript):
         args = node.slice.elts if isinstance(node.slice, ast.Tuple) else [node.slice]
         if names.refers_to(node.value, "Annotated"):
-            return bool(args) and _is_any(args[0], names)
+            return bool(args) and _is_any(args[0], names, type_context=True)
         if names.refers_to(node.value, "Optional") or names.refers_to(node.value, "Union"):
-            return any(_is_any(arg, names) for arg in args)
+            return any(_is_any(arg, names, type_context=True) for arg in args)
     return names.refers_to(node, "Any")
 
 
 def _aliases_in(statement: ast.stmt, names: TypingNames) -> Iterator[str]:
-    if isinstance(statement, ast.Assign) and _is_any(statement.value, names):
+    if isinstance(statement, ast.Assign) and _is_any(statement.value, names, type_context=False):
         for target in statement.targets:
             if isinstance(target, ast.Name):
                 yield target.id
@@ -152,49 +183,61 @@ def _aliases_in(statement: ast.stmt, names: TypingNames) -> Iterator[str]:
         isinstance(statement, ast.AnnAssign)
         and statement.value is not None
         and names.refers_to(statement.annotation, "TypeAlias")
-        and _is_any(statement.value, names)
+        and _is_any(statement.value, names, type_context=True)
         and isinstance(statement.target, ast.Name)
     ):
         yield statement.target.id
-    elif isinstance(statement, ast.TypeAlias) and _is_any(statement.value, names):
+    elif isinstance(statement, ast.TypeAlias) and _is_any(
+        statement.value, names, type_context=True
+    ):
         yield statement.name.id
+
+
+def _is_type_checking_test(test: ast.expr) -> bool:
+    """`TYPE_CHECKING`, `typing.TYPE_CHECKING`, or `not` either of them."""
+    if isinstance(test, ast.UnaryOp) and isinstance(test.op, ast.Not):
+        test = test.operand
+    return (isinstance(test, ast.Name) and test.id == "TYPE_CHECKING") or (
+        isinstance(test, ast.Attribute) and test.attr == "TYPE_CHECKING"
+    )
 
 
 def _walk(
     statements: list[ast.stmt],
     names: TypingNames,
-    top_level: bool,
+    flag: bool,
     found: list[tuple[int, str]],
 ) -> TypingNames:
-    """Follow module-scope bindings through statements; record top-level aliases to Any."""
+    """Follow module-scope bindings through statements; record aliases to Any where flagged."""
     for statement in statements:
-        if top_level:
+        if flag:
             found.extend((statement.lineno, alias) for alias in _aliases_in(statement, names))
         if isinstance(statement, ast.If):
-            body = _walk(statement.body, names.copy(), False, found)
-            orelse = _walk(statement.orelse, names.copy(), False, found)
+            inner = flag and not _is_type_checking_test(statement.test)
+            body = _walk(statement.body, names.copy(), inner, found)
+            orelse = _walk(statement.orelse, names.copy(), inner, found)
             names = TypingNames.merge(body, orelse)
         elif isinstance(statement, ast.For | ast.AsyncFor | ast.While):
             entered = names.copy()
             if not isinstance(statement, ast.While):
                 entered.unbind(*_stored_names(statement.target))
-            body = _walk(statement.body, entered, False, found)
-            names = _walk(statement.orelse, TypingNames.merge(names, body), False, found)
+            body = _walk(statement.body, entered, flag, found)
+            names = _walk(statement.orelse, TypingNames.merge(names, body), flag, found)
         elif isinstance(statement, ast.With | ast.AsyncWith):
             for item in statement.items:
                 names.unbind(*_stored_names(item.optional_vars))
-            names = _walk(statement.body, names, False, found)
+            names = _walk(statement.body, names, flag, found)
         elif isinstance(statement, ast.Try | ast.TryStar):
-            body = _walk(statement.body, names.copy(), False, found)
-            branches = [_walk(statement.orelse, body.copy(), False, found)]
+            body = _walk(statement.body, names.copy(), flag, found)
+            branches = [_walk(statement.orelse, body.copy(), flag, found)]
             for handler in statement.handlers:
                 entered = TypingNames.merge(names, body)
                 if handler.name:
                     entered.unbind(handler.name)
-                branches.append(_walk(handler.body, entered, False, found))
-            names = _walk(statement.finalbody, TypingNames.merge(*branches), False, found)
+                branches.append(_walk(handler.body, entered, flag, found))
+            names = _walk(statement.finalbody, TypingNames.merge(*branches), flag, found)
         elif isinstance(statement, ast.Match):
-            cases = [_walk(case.body, names.copy(), False, found) for case in statement.cases]
+            cases = [_walk(case.body, names.copy(), flag, found) for case in statement.cases]
             names = TypingNames.merge(names, *cases)
         else:
             names.update(statement)
