@@ -15,12 +15,12 @@ from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from sqlalchemy.ext.asyncio import create_async_engine
 from tests.factories import make_github_pr
 from typer.testing import CliRunner
 
 from github_activity_db.cli.app import app
 from github_activity_db.config import get_settings
+from github_activity_db.db.engine import build_engine
 from github_activity_db.db.models import Base, PRState, PullRequest, Repository
 
 runner = CliRunner()
@@ -79,7 +79,7 @@ def temp_db_path():
 async def test_db_engine(temp_db_path):
     """Create a test database engine with tables."""
     db_url = f"sqlite+aiosqlite:///{temp_db_path}"
-    engine = create_async_engine(db_url, echo=False)
+    engine = build_engine(db_url)
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     yield engine, db_url

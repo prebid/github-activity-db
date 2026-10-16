@@ -10,8 +10,9 @@ from datetime import UTC, datetime
 from typing import Any
 
 import pytest
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from github_activity_db.db.engine import build_engine
 from github_activity_db.db.models import Base, PRState
 
 # -----------------------------------------------------------------------------
@@ -46,15 +47,14 @@ JAN_20_ISO = "2024-01-20T16:00:00Z"
 # Database Fixtures
 # -----------------------------------------------------------------------------
 @pytest.fixture
-async def test_engine():
-    """Create an in-memory SQLite engine for tests.
+async def test_engine(tmp_path):
+    """Create a SQLite engine for tests with the application's connection settings.
 
-    Each test gets a fresh database with all tables created.
+    Each test gets a fresh database file with all tables created. A file (not
+    :memory:) is required because the application engine opens a new connection
+    per session, and foreign-key enforcement must match production.
     """
-    engine = create_async_engine(
-        "sqlite+aiosqlite:///:memory:",
-        echo=False,
-    )
+    engine = build_engine(f"sqlite+aiosqlite:///{tmp_path / 'test.db'}")
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     yield engine

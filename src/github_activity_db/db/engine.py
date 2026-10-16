@@ -2,8 +2,9 @@
 
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
+from typing import Any
 
-from sqlalchemy import pool
+from sqlalchemy import event, pool
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
@@ -18,18 +19,44 @@ from github_activity_db.db.models import Base
 _engine: AsyncEngine | None = None
 _async_session_factory: async_sessionmaker[AsyncSession] | None = None
 
+# How long a connection waits on a locked database before raising "database is locked".
+SQLITE_BUSY_TIMEOUT_MS = 5000
+
+
+def _apply_sqlite_pragmas(dbapi_connection: Any, _connection_record: Any) -> None:
+    """Configure every new SQLite connection.
+
+    foreign_keys is per connection and off by default in SQLite, so declared
+    ON DELETE CASCADE constraints only hold when it is set on each connection.
+    WAL lets readers proceed while a sync writes.
+    """
+    cursor = dbapi_connection.cursor()
+    try:
+        cursor.execute("PRAGMA foreign_keys=ON")
+        cursor.execute("PRAGMA journal_mode=WAL")
+        cursor.execute(f"PRAGMA busy_timeout={SQLITE_BUSY_TIMEOUT_MS}")
+    finally:
+        cursor.close()
+
+
+def build_engine(database_url: str) -> AsyncEngine:
+    """Create an async engine with the application's connection settings."""
+    engine = create_async_engine(
+        database_url,
+        echo=False,  # SQLAlchemy logging controlled via loguru interception
+        future=True,
+        poolclass=pool.NullPool,  # Required for SQLite to prevent "database is locked"
+    )
+    if engine.dialect.name == "sqlite":
+        event.listen(engine.sync_engine, "connect", _apply_sqlite_pragmas)
+    return engine
+
 
 def get_engine() -> AsyncEngine:
     """Get or create the async SQLAlchemy engine."""
     global _engine
     if _engine is None:
-        settings = get_settings()
-        _engine = create_async_engine(
-            settings.database_url,
-            echo=False,  # SQLAlchemy logging controlled via loguru interception
-            future=True,
-            poolclass=pool.NullPool,  # Required for SQLite to prevent "database is locked"
-        )
+        _engine = build_engine(get_settings().database_url)
     return _engine
 
 
