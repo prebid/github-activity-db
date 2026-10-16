@@ -28,12 +28,15 @@ def _apply_sqlite_pragmas(dbapi_connection: Any, _connection_record: Any) -> Non
 
     foreign_keys is per connection and off by default in SQLite, so declared
     ON DELETE CASCADE constraints only hold when it is set on each connection.
-    WAL lets readers proceed while a sync writes.
+
+    The journal stays in SQLite's default rollback mode. In WAL mode committed
+    transactions can live in a git-ignored *-wal file until a checkpoint, and
+    github_activity.db is tracked in git, so a commit, checkout, or stash could
+    separate the database from its WAL.
     """
     cursor = dbapi_connection.cursor()
     try:
         cursor.execute("PRAGMA foreign_keys=ON")
-        cursor.execute("PRAGMA journal_mode=WAL")
         cursor.execute(f"PRAGMA busy_timeout={SQLITE_BUSY_TIMEOUT_MS}")
     finally:
         cursor.close()

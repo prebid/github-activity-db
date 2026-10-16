@@ -165,7 +165,7 @@ async def db_session(test_engine):
 ```
 
 **Key properties:**
-- A temporary SQLite file per test from `build_engine`, so foreign keys and WAL match production
+- A temporary SQLite file per test from `build_engine`, so foreign-key enforcement matches production
   (the application engine opens a connection per session, which an in-memory database cannot share)
 - Auto-rollback (each test starts fresh)
 - Async support (matches production code)

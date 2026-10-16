@@ -109,8 +109,9 @@ class TestSqliteConnectionSettings:
             await engine.dispose()
 
         assert foreign_keys == 1
-        assert journal_mode == "wal"
         assert busy_timeout == SQLITE_BUSY_TIMEOUT_MS
+        # Rollback journal while github_activity.db is tracked in git (see _apply_sqlite_pragmas).
+        assert journal_mode == "delete"
 
     async def test_foreign_key_violation_is_rejected(self, test_engine) -> None:
         with pytest.raises(IntegrityError, match="FOREIGN KEY constraint failed"):
