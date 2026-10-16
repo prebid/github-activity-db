@@ -10,7 +10,9 @@ permissions:
   contents: read
 
 concurrency:
-  group: check-${{ github.ref }}
+  # Pull requests: a new push supersedes the previous run. Pushes to main: one group per
+  # commit, so no run on main is cancelled or replaced and every commit keeps a verdict.
+  group: check-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
   cancel-in-progress: true
 
 jobs:
