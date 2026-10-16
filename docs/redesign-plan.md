@@ -23,7 +23,7 @@ totals) are dated; regenerate them with `ghactivity verify` once Step 3 lands.
 
 | Step | Title | Status |
 |------|-------|--------|
-| 1 | Guardrails | in progress |
+| 1 | Guardrails | done (PR #5) |
 | 2 | GitHub source layer | not started |
 | 3 | New schema, PR sync engine, cutover | not started |
 | 4 | Issues and closing-issue links | not started |
@@ -137,6 +137,11 @@ Every gap found in the audit, and where it is resolved.
 | 48 | The suppression caps missed spellings ruff and mypy honor (bare `# noqa`, `# type:ignore[...]`, file-level `# ruff: noqa`, `# mypy: ignore-errors`) and counted directive text inside strings | Step 1: comment-token counter; ruff `PGH004` |
 | 49 | An empty `TRACKING_CONFIG_PATH` became the working directory, and a directory or unreadable file raised a raw `OSError` | Step 1: empty means the packaged file; read errors raise `TrackingConfigError` |
 | 50 | `actions/checkout` left the job token in `.git/config` while the built-wheel job ran build-backend code from PyPI | Step 1: `persist-credentials: false` on every checkout |
+| 51 | `.env.example`, which the setup instructions copy, was deleted in `7899671` | Step 1: restored |
+| 52 | The migration test passed while migrating `DATABASE_URL` (by default the tracked database) if `alembic/env.py` ignored its URL override; two `tracking.toml` guards (unknown top-level keys, empty values) had no test | Step 1: decoy URL and head-revision check; guard tests |
+| 53 | Suppression counting missed `.pyi` files, `@no_type_check`, and `# isort: skip_file` / `# isort: off`; the Any-alias hook missed `type X = Any` | Step 1 |
+| 54 | `check-added-large-files` checked nothing in CI: with `--all-files` no file is newly added | Step 1: `--enforce-all`; `github_activity.db` exempt until Step 6 |
+| 55 | Build inputs not pinned: the hatchling build backend, `pre-commit-hooks` by tag, wheel-job dependencies installed without hashes | Step 1 |
 
 ## 5. Design
 
@@ -370,7 +375,11 @@ Scope:
   locked dependencies and runs it from outside the checkout (D21).
 - Pre-commit runs ruff and mypy from `uv.lock` (local hooks via `uv run`), so local and CI use one
   version. `scripts/count_suppressions.py` fails above 5 `type: ignore` or 3 `noqa` comments in
-  `src/`, counting every spelling ruff and mypy honor; ruff `PGH004` rejects blanket `noqa`.
+  `src/`, counting every spelling ruff and mypy honor (including `@no_type_check` and the isort
+  skip comments); ruff `PGH004` rejects blanket `noqa`. `check-added-large-files` checks every
+  file (`github_activity.db` exempt until Step 6).
+- Build inputs pinned: GitHub Actions and `pre-commit-hooks` by commit SHA, uv 0.7.10, the
+  hatchling build backend; the built-wheel job installs locked dependencies with hash checking.
 - Fix the existing lint and format findings under the locked ruff.
 - Declare the `sync_failures` indexes on the model so `alembic check` passes.
 - Per-connection `PRAGMA foreign_keys=ON`, `busy_timeout=30000`, and `journal_mode=DELETE` (D20).
@@ -483,7 +492,7 @@ Measured 2026-10-16 unless noted. "Index" means the created-order enumeration in
 | SQLite pragmas | The `connect` listener on `engine.sync_engine` sets per connection through aiosqlite: `foreign_keys=1`, `busy_timeout=30000`, `journal_mode=delete` (D20). Without the listener a connection reports `foreign_keys=0` and `busy_timeout=5000` (Python `sqlite3` default `timeout=5.0`), and a file once set to WAL stays WAL; with it, such a file opens in rollback mode with header bytes 18-19 `0101`. A foreign-key violation is rejected and `ON DELETE CASCADE` removes children; the same values hold on every session from `get_session()`, and routing `get_engine()` around `build_engine()` fails 2 tests (628 collected before and after) | `tests/test_db_engine.py` (`TestSqliteConnectionSettings`), `tests/db/test_application_engine.py`; mutation run |
 | Packaged config | The wheel built from this branch contains `github_activity_db/tracking.toml`; installed with the locked dependencies and run outside the checkout, `Settings().tracked_repos` returns the 18 repositories. A wheel built from `7555a6d` raises `TrackingConfigError` for `<env>/lib/python3.13/config/tracking.toml`; a wheel excluding the file fails the same check | `uv build`, `scripts/wheel_smoke.py` in a new environment |
 | All-skipped runs | pytest exits 0 when every collected test is skipped; the previous inline gate exited 0 on that report and `scripts/check_junit.py` exits 1 | report written by a real pytest run |
-| Suppression spellings | ruff 0.14.11 honors `# noqa` in any letter case, `#noqa`, `# noqa:F401`, a directive after other comment text, and file-level `# ruff: noqa`, `# ruff: noqa: F401`, `#ruff:noqa`, `# flake8: noqa[: codes]`, but not `# RUFF: NOQA`; `PGH004` flags only the blanket forms. mypy 1.19.1 honors `# type: ignore`, `# type:ignore[...]`, `#type:ignore`, a first-line `# type: ignore`, `# mypy: ignore-errors`, and `# mypy: disable-error-code=...`, but not `# TYPE: IGNORE`, `#mypy:ignore-errors`, or `# type: ignore` after other comment text. The counter also counts `# RUFF: NOQA`, `#mypy:ignore-errors`, and the trailing `# type: ignore`, and does not count `# TYPE: IGNORE` | probe files with `ruff check --isolated` and `mypy --strict` |
+| Suppression spellings | ruff 0.14.11 honors `# noqa` in any letter case, `#noqa`, `# noqa:F401`, a directive after other comment text, and file-level `# ruff: noqa`, `# ruff: noqa: F401`, `#ruff:noqa`, `# flake8: noqa[: codes]`, but not `# RUFF: NOQA`; `PGH004` flags only the blanket forms. mypy 1.19.1 honors `# type: ignore`, `# type:ignore[...]`, `#type:ignore`, a first-line `# type: ignore`, `# mypy: ignore-errors`, and `# mypy: disable-error-code=...`, but not `# TYPE: IGNORE`, `#mypy:ignore-errors`, or `# type: ignore` after other comment text. The counter also counts `# RUFF: NOQA`, `#mypy:ignore-errors`, and the trailing `# type: ignore`, and does not count `# TYPE: IGNORE`. ruff also stops I001 for `# isort: skip_file` and `# isort: off`, but not for a line-level `# isort: skip`; mypy reports no error inside a `@no_type_check` function | probe files with `ruff check --isolated` and `mypy --strict` |
 | Existing file | 0 foreign-key violations; integrity check `ok` | local |
 | WAL snapshots | `VACUUM INTO` from a WAL database writes a rollback-journal file (header bytes 18-19 `0101` vs `0202`) that can be queried read-only from a read-only directory | sqlite3 |
 | Test-suite flake | pytest-asyncio 1.3.0 on Python 3.13 leaves an unclosed event loop after an async test followed by a test calling `asyncio.run()`; with `filterwarnings = error` the next test fails. Fixed in pytest-asyncio 1.4.0 (#724) | repeated runs on `22551d3` (3 of 3 failed) and with 1.4.0 (5 of 5 passed); release notes |

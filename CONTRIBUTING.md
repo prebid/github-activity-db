@@ -60,7 +60,7 @@ uv run pre-commit run --all-files
 | Hook | Purpose | Action on Failure |
 |------|---------|-------------------|
 | `mypy` | Type checking | Blocks commit |
-| `ruff` | Linting | Auto-fixes or blocks |
+| `ruff-check` | Linting | Auto-fixes or blocks |
 | `ruff-format` | Formatting | Auto-fixes |
 | `suppression-caps` | Count `type: ignore` and `noqa` comments in src/ | Blocks above 5 and 3 |
 | `prevent-any-aliases` | Block lazy types | Blocks commit |

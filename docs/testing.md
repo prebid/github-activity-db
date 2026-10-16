@@ -487,9 +487,9 @@ uv run pre-commit install
   which fails unless at least one test ran and none failed, errored, or was skipped (pytest
   reports `xfail` as skipped, so an `xfail` also fails the job); and `alembic upgrade head` plus
   `alembic check` on a fresh database.
-- `built wheel`: builds the wheel, installs it with the `uv.lock` dependencies into a new
-  environment, and runs `scripts/wheel_smoke.py` and `ghactivity --help` from outside the
-  checkout.
+- `built wheel`: builds the wheel, installs the `uv.lock` dependencies with hash checking and
+  then the wheel into a new environment, runs `uv pip check`, and runs `scripts/wheel_smoke.py`
+  and `ghactivity --help` from outside the checkout.
 
 ---
 
@@ -508,9 +508,10 @@ async def db_session():
 
 ### "Database is locked"
 
-SQLite concurrent access issue. Use `NullPool`:
+SQLite concurrent access issue. Build test engines with `build_engine` (as the `test_engine`
+fixture does), which uses `NullPool` and the application's connection settings:
 ```python
-create_async_engine(url, poolclass=pool.NullPool)
+engine = build_engine(f"sqlite+aiosqlite:///{tmp_path / 'test.db'}")
 ```
 
 ### Flaky Async Tests
@@ -556,9 +557,9 @@ This allows flexibility for test-specific patterns (mocks, fixtures) while still
 uv run mypy tests/
 
 # Check everything
-uv run mypy src/ tests/
+uv run mypy src tests scripts
 
-# Pre-commit runs mypy on both src/ and tests/
+# Pre-commit runs mypy on src/, tests/, and scripts/
 uv run pre-commit run mypy --all-files
 ```
 

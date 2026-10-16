@@ -108,7 +108,7 @@ uv run ghactivity user-tags --help
 # Type checking (strict mode for src/, relaxed for tests/)
 uv run mypy src/
 uv run mypy tests/  # Runs with relaxed settings
-uv run mypy src/ tests/  # Check everything
+uv run mypy src tests scripts  # Check everything (what the pre-commit hook runs)
 
 # Linting
 uv run ruff check src/ tests/
@@ -222,8 +222,9 @@ ruff and mypy run through `uv run --no-sync`, so hooks never change the environm
   unless at least one test ran and none failed, errored, or was skipped (pytest reports `xfail`
   as skipped);
 - `alembic upgrade head` plus `alembic check` against a fresh database;
-- a built wheel, installed with the `uv.lock` dependencies into a new environment and run from
-  outside the checkout (`scripts/wheel_smoke.py`, `ghactivity --help`).
+- a built wheel, installed into a new environment after the `uv.lock` dependencies (with hash
+  checking, then `uv pip check`) and run from outside the checkout (`scripts/wheel_smoke.py`,
+  `ghactivity --help`).
 
 ## Project Configuration
 
@@ -371,9 +372,11 @@ target_metadata = Base.metadata
 
 ### SQLite "database is locked"
 
-This can happen with concurrent access. The async engine uses `NullPool` to avoid connection issues:
+This can happen with concurrent access. Create engines with `build_engine` from
+`github_activity_db.db.engine`, which uses `NullPool` and sets a 30 s busy timeout, foreign keys,
+and the rollback journal on every connection:
 ```python
-create_async_engine(url, poolclass=pool.NullPool)
+engine = build_engine(url)
 ```
 
 ### Type errors with JSON columns
