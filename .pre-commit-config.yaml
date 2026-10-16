@@ -50,21 +50,9 @@ repos:
   # ------------------------------------------------------------------------------
   - repo: local
     hooks:
-      - id: audit-type-ignores
-        name: type:ignore comments in src/ (max 5)
-        entry: >
-          bash -c 'count=$(grep -r "type: ignore" src/ | wc -l | tr -d " ");
-          echo "type:ignore comments in src/: $count (max 5)"; [ "$count" -le 5 ]'
-        language: system
-        pass_filenames: false
-        always_run: true
-        verbose: true
-
-      - id: audit-noqa
-        name: noqa comments in src/ (max 3)
-        entry: >
-          bash -c 'count=$(grep -r "noqa:" src/ | wc -l | tr -d " ");
-          echo "noqa comments in src/: $count (max 3)"; [ "$count" -le 3 ]'
+      - id: suppression-caps
+        name: type:ignore (max 5) and noqa (max 3) comments in src/
+        entry: uv run --no-sync python scripts/count_suppressions.py src --max-type-ignore 5 --max-noqa 3
         language: system
         pass_filenames: false
         always_run: true

@@ -64,6 +64,7 @@ select = [
     # Type checking best practices (non-strict mode)
     "TC006",  # Quote type annotations in cast() calls
     "FA",     # flake8-future-annotations
+    "PGH004", # blanket noqa: a suppression must name its rule codes
 ]
 ignore = [
     "S101",     # allow assert in tests

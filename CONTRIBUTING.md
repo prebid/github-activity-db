@@ -42,10 +42,10 @@ This project maintains strict code quality standards with automated enforcement.
 
 | Metric | Target | Enforcement |
 |--------|--------|-------------|
-| `type: ignore` comments in src/ | ≤5 | Pre-commit audit |
-| `noqa` comments in src/ | ≤3 | Pre-commit audit |
+| `type: ignore` comments in src/ | ≤5 | Pre-commit blocks |
+| `noqa` comments in src/ | ≤3 | Pre-commit blocks |
 | `Any` type aliases | 0 | Pre-commit blocks |
-| Mypy errors (src/ + tests/) | 0 | Pre-commit blocks |
+| Mypy errors (src/, tests/, scripts/) | 0 | Pre-commit blocks |
 | Test coverage (critical paths) | 100% | Manual review |
 
 ### Pre-commit Hooks
@@ -62,8 +62,7 @@ uv run pre-commit run --all-files
 | `mypy` | Type checking | Blocks commit |
 | `ruff` | Linting | Auto-fixes or blocks |
 | `ruff-format` | Formatting | Auto-fixes |
-| `audit-type-ignores` | Count suppressions | Reports (target ≤5) |
-| `audit-noqa` | Count suppressions | Reports (target ≤3) |
+| `suppression-caps` | Count `type: ignore` and `noqa` comments in src/ | Blocks above 5 and 3 |
 | `prevent-any-aliases` | Block lazy types | Blocks commit |
 
 ### Quality Gate Philosophy
@@ -287,13 +286,12 @@ See [Testing Guide](docs/testing.md) for comprehensive testing documentation.
 
 2. **Ensure mypy passes:**
    ```bash
-   uv run mypy src/ tests/
+   uv run mypy src tests scripts
    ```
 
 3. **Check quality metrics:**
    ```bash
-   grep -r "type: ignore" src/ | wc -l  # Should be ≤5
-   grep -r "noqa:" src/ | wc -l         # Should be ≤3
+   uv run python scripts/count_suppressions.py src --max-type-ignore 5 --max-noqa 3
    ```
 
 ### PR Requirements

@@ -132,15 +132,14 @@ The project maintains strict quality standards with automated enforcement:
 
 | Metric | Target | Enforcement |
 |--------|--------|-------------|
-| `type: ignore` comments in src/ | ≤5 | Pre-commit audit |
-| `noqa` comments in src/ | ≤3 | Pre-commit audit |
+| `type: ignore` comments in src/ | ≤5 | Pre-commit blocks |
+| `noqa` comments in src/ | ≤3 | Pre-commit blocks |
 | `Any` type aliases | 0 | Pre-commit blocks |
 | Mypy errors | 0 | Pre-commit blocks |
 
 ```bash
-# Check current quality metrics
-grep -r "type: ignore" src/ | wc -l  # type:ignore count
-grep -r "noqa:" src/ | wc -l         # noqa count
+# Check current quality metrics (counts comment tokens in every spelling ruff and mypy honor)
+uv run python scripts/count_suppressions.py src --max-type-ignore 5 --max-noqa 3
 ```
 
 ### Testing
@@ -207,9 +206,8 @@ uv run pre-commit run mypy --all-files
 | `detect-private-key` | Block private keys |
 | `ruff-check` | Linting with auto-fix (ruff from `uv.lock`) |
 | `ruff-format` | Code formatting (ruff from `uv.lock`) |
-| `mypy` | Type checking of src/ and tests/ (mypy from `uv.lock`) |
-| `audit-type-ignores` | Fail above 5 `type: ignore` comments in src/ |
-| `audit-noqa` | Fail above 3 `noqa` comments in src/ |
+| `mypy` | Type checking of src/, tests/, and scripts/ (mypy from `uv.lock`) |
+| `suppression-caps` | Fail above 5 `type: ignore` or 3 `noqa` comments in src/ (`scripts/count_suppressions.py`) |
 | `prevent-any-aliases` | Block `TypeName = Any` patterns |
 
 ruff and mypy run through `uv run --no-sync`, so hooks never change the environment; run

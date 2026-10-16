@@ -146,8 +146,12 @@ This project enforces strict type safety through mypy strict mode and custom qua
 ### Quality Gates
 
 Pre-commit (run locally and by CI) fails on:
-- more than 5 `type: ignore` comments in src/
-- more than 3 `noqa` comments in src/
+- more than 5 `type: ignore` comments in src/ (`# mypy:` inline configuration counts too)
+- more than 3 `noqa` comments in src/ (file-level `# ruff: noqa` and `# flake8: noqa` count too)
+- a blanket `# noqa` without rule codes (ruff `PGH004`)
 - new `SomeName = Any` type aliases (use TYPE_CHECKING instead)
+
+`scripts/count_suppressions.py` does the counting from comment tokens, in every spelling ruff and
+mypy honor; text inside strings is not counted.
 
 ruff and mypy run from `uv.lock` through `uv run --no-sync`, so local and CI versions match.
