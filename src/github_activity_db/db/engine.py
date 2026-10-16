@@ -1,5 +1,6 @@
 """Async SQLAlchemy engine and session management."""
 
+import contextlib
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from typing import Any
@@ -32,19 +33,24 @@ def _apply_sqlite_pragmas(dbapi_connection: Any, _connection_record: Any) -> Non
     foreign_keys is per connection and off by default in SQLite, so declared
     ON DELETE CASCADE constraints only hold when it is set on each connection.
 
-    journal_mode is set to DELETE, SQLite's default rollback journal, on every
-    connection because WAL mode, once set, persists in the database file. In WAL
-    mode committed transactions can live in a git-ignored *-wal file until a
-    checkpoint, and github_activity.db is tracked in git, so a commit, checkout,
-    or stash could separate the database from its WAL.
+    Statements here must not need a database lock. SQLAlchemy does not close a
+    connection whose connect listener raised, and the open aiosqlite connection's
+    worker thread then keeps the process from exiting; a lock-taking statement such
+    as `PRAGMA journal_mode=DELETE` fails that way while another process holds the
+    database. The journal mode is left at SQLite's default rollback journal (D20);
+    tests/db/test_tracked_database.py checks the tracked file's header.
     """
     cursor = dbapi_connection.cursor()
     try:
         cursor.execute("PRAGMA foreign_keys=ON")
         cursor.execute(f"PRAGMA busy_timeout={SQLITE_BUSY_TIMEOUT_MS}")
-        cursor.execute("PRAGMA journal_mode=DELETE")
-    finally:
-        cursor.close()
+    except BaseException:
+        with contextlib.suppress(Exception):
+            cursor.close()
+        with contextlib.suppress(Exception):
+            dbapi_connection.close()
+        raise
+    cursor.close()
 
 
 def build_engine(database_url: str) -> AsyncEngine:

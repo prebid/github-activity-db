@@ -8,7 +8,11 @@ from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-from github_activity_db.db.engine import SQLITE_BUSY_TIMEOUT_MS, build_engine
+from github_activity_db.db.engine import (
+    SQLITE_BUSY_TIMEOUT_MS,
+    _apply_sqlite_pragmas,
+    build_engine,
+)
 from github_activity_db.db.models import Base, Repository
 
 
@@ -124,26 +128,47 @@ class TestSqliteConnectionSettings:
             connection.close()
         assert driver_default != SQLITE_BUSY_TIMEOUT_MS
 
-    async def test_wal_database_returns_to_the_rollback_journal(self, tmp_path: Path) -> None:
-        path = tmp_path / "was_wal.db"
-        connection = sqlite3.connect(path)
+    async def test_connect_needs_no_database_lock(self, tmp_path: Path) -> None:
+        # A connect-time statement that needs a lock fails while another process holds
+        # the database, and the failed connection keeps the process alive (see
+        # _apply_sqlite_pragmas). Connecting must succeed under an exclusive lock.
+        path = tmp_path / "held.db"
+        holder = sqlite3.connect(path, isolation_level=None)
         try:
-            connection.execute("PRAGMA journal_mode=WAL")
-            connection.execute("CREATE TABLE t (x INTEGER)")
-            connection.commit()
+            holder.execute("CREATE TABLE t (x INTEGER)")
+            holder.execute("BEGIN EXCLUSIVE")
+            engine = build_engine(f"sqlite+aiosqlite:///{path}")
+            try:
+                async with engine.connect() as conn:
+                    foreign_keys = (await conn.execute(text("PRAGMA foreign_keys"))).scalar()
+            finally:
+                await engine.dispose()
         finally:
-            connection.close()
+            holder.close()
 
-        engine = build_engine(f"sqlite+aiosqlite:///{path}")
-        try:
-            async with engine.connect() as conn:
-                journal_mode = (await conn.execute(text("PRAGMA journal_mode"))).scalar()
-        finally:
-            await engine.dispose()
+        assert foreign_keys == 1
 
-        assert journal_mode == "delete"
-        # Header bytes 18-19 record the journal format: 1 is rollback journal, 2 is WAL.
-        assert path.read_bytes()[18:20] == b"\x01\x01"
+    def test_listener_failure_closes_the_connection(self) -> None:
+        class FailingCursor:
+            def execute(self, statement: str) -> None:
+                raise sqlite3.OperationalError("database is locked")
+
+            def close(self) -> None:
+                pass
+
+        class Connection:
+            closed = False
+
+            def cursor(self) -> FailingCursor:
+                return FailingCursor()
+
+            def close(self) -> None:
+                self.closed = True
+
+        connection = Connection()
+        with pytest.raises(sqlite3.OperationalError, match="database is locked"):
+            _apply_sqlite_pragmas(connection, None)
+        assert connection.closed
 
     async def test_foreign_key_violation_is_rejected(self, test_engine) -> None:
         with pytest.raises(IntegrityError, match="FOREIGN KEY constraint failed"):
