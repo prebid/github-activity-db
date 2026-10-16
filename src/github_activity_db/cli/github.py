@@ -64,7 +64,7 @@ def test_connection(
                 else:
                     reset_str = str(reset_time)
                 console.print(
-                    f"  Rate limit: {rate['remaining']}/{rate['limit']} " f"(resets at {reset_str})"
+                    f"  Rate limit: {rate['remaining']}/{rate['limit']} (resets at {reset_str})"
                 )
 
                 if isinstance(rate["remaining"], int) and rate["remaining"] < 10:
@@ -114,7 +114,7 @@ def test_connection(
                     console.print(f"  Title: {pr.title}")
                     console.print(f"  State: {pr.state} (merged: {pr.merged})")
                     console.print(
-                        f"  Stats: +{pr.additions}/-{pr.deletions} " f"in {pr.changed_files} files"
+                        f"  Stats: +{pr.additions}/-{pr.deletions} in {pr.changed_files} files"
                     )
                     console.print(f"  Commits: {len(commits)}")
                     console.print(f"  Reviews: {len(reviews)}")
@@ -214,7 +214,7 @@ def show_rate_limit(
                     console.print("[green]✓[/green] Authenticated with PAT (5,000 requests/hour)")
                 else:
                     console.print(
-                        "[yellow]⚠[/yellow] Unauthenticated or limited token " "(60 requests/hour)"
+                        "[yellow]⚠[/yellow] Unauthenticated or limited token (60 requests/hour)"
                     )
 
                 # Determine which pools to show

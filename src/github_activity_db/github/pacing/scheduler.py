@@ -19,7 +19,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import IntEnum
-from typing import Any, Generic, TypeVar
+from typing import Any
 
 from github_activity_db.github.exceptions import GitHubRateLimitError
 from github_activity_db.logging import get_logger
@@ -27,8 +27,6 @@ from github_activity_db.logging import get_logger
 from .pacer import RequestPacer
 
 logger = get_logger(__name__)
-
-T = TypeVar("T")
 
 
 class RequestPriority(IntEnum):
@@ -53,7 +51,7 @@ class RequestState(IntEnum):
 
 
 @dataclass(order=True)
-class QueuedRequest(Generic[T]):
+class QueuedRequest[T]:
     """A request waiting to be executed.
 
     Ordering is by (priority, created_at) for heapq.
@@ -193,7 +191,7 @@ class RequestScheduler:
     # -------------------------------------------------------------------------
     # Request Submission
     # -------------------------------------------------------------------------
-    def enqueue(
+    def enqueue[T](
         self,
         coro_factory: Callable[[], Awaitable[T]],
         priority: RequestPriority = RequestPriority.NORMAL,
@@ -231,7 +229,7 @@ class RequestScheduler:
 
         return request_id
 
-    async def submit(
+    async def submit[T](
         self,
         coro_factory: Callable[[], Awaitable[T]],
         priority: RequestPriority = RequestPriority.NORMAL,

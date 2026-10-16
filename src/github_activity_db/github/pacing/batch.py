@@ -10,7 +10,7 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass, field
-from typing import Generic, TypeVar, cast
+from typing import cast
 
 from github_activity_db.logging import get_logger
 
@@ -19,12 +19,9 @@ from .scheduler import RequestPriority, RequestScheduler
 
 logger = get_logger(__name__)
 
-T = TypeVar("T")
-R = TypeVar("R")
-
 
 @dataclass
-class BatchResult(Generic[T]):
+class BatchResult[T]:
     """Result of a batch operation."""
 
     succeeded: list[T] = field(default_factory=list)
@@ -51,7 +48,7 @@ class BatchResult(Generic[T]):
         return len(self.failed) == 0
 
 
-class BatchExecutor(Generic[T, R]):
+class BatchExecutor[T, R]:
     """Coordinates batch API operations with rate limiting and progress.
 
     Usage:
@@ -262,7 +259,7 @@ class BatchExecutor(Generic[T, R]):
         return self._cancelled
 
 
-async def execute_batch(
+async def execute_batch[T, R](
     scheduler: RequestScheduler,
     items: Sequence[T],
     processor: Callable[[T], Awaitable[R]],

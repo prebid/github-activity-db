@@ -186,7 +186,7 @@ class TestCommitManagerMultipleBatches:
         for i in range(5):
             result = await manager.record_success()
             if i < 4:
-                assert result == 0, f"Commit triggered early at item {i+1}"
+                assert result == 0, f"Commit triggered early at item {i + 1}"
 
         # Assert - Last item should have triggered commit
         assert result == 5

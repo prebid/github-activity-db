@@ -195,7 +195,7 @@ class TestIdempotencyE2E:
         # Modify the fixture to simulate an update
         gh_pr_updated = GitHubPullRequest.model_validate(
             {
-                **cast(dict[str, Any], REAL_OPEN_PR["pr"]),
+                **cast("dict[str, Any]", REAL_OPEN_PR["pr"]),
                 "title": "Updated Title",
                 "updated_at": "2030-01-01T00:00:00Z",
             }
@@ -229,7 +229,7 @@ class TestGracePeriodE2E:
         now_iso = datetime.now(UTC).isoformat().replace("+00:00", "Z")
         gh_pr_recent = GitHubPullRequest.model_validate(
             {
-                **cast(dict[str, Any], REAL_MERGED_PR["pr"]),
+                **cast("dict[str, Any]", REAL_MERGED_PR["pr"]),
                 "merged_at": now_iso,
                 "closed_at": now_iso,
                 "updated_at": now_iso,
@@ -255,7 +255,7 @@ class TestGracePeriodE2E:
         updated_at_iso = updated_at_iso.replace("+00:00", "Z")
         gh_pr_updated = GitHubPullRequest.model_validate(
             {
-                **cast(dict[str, Any], REAL_MERGED_PR["pr"]),
+                **cast("dict[str, Any]", REAL_MERGED_PR["pr"]),
                 "title": "Updated Merged PR",
                 "merged_at": now_iso,
                 "closed_at": now_iso,
@@ -353,7 +353,7 @@ class TestRepositoryCreation:
 
         # Second PR (different number, same repo)
         gh_pr2 = GitHubPullRequest.model_validate(
-            {**cast(dict[str, Any], REAL_OPEN_PR["pr"]), "number": 4664}
+            {**cast("dict[str, Any]", REAL_OPEN_PR["pr"]), "number": 4664}
         )
         mock_github_client.get_full_pull_request.return_value = (gh_pr2, files, commits, reviews)
         result2 = await ingestion_service.ingest_pr("prebid", "prebid-server", 4664)
