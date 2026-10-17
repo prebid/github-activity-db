@@ -3,10 +3,22 @@
 Suppressions are read from comment tokens (tokenize) and decorators (ast), so directive text
 inside a string does not count. Both .py and .pyi files are scanned.
 
+A file the counter may read differently from ruff is refused (exit 1, naming the file), not
+counted: a file without a lowercase `.py` or `.pyi` suffix that pre-commit's file tagging
+(identify) marks python or pyi, such as `module.PY`, `stub.PYI`, `app.wsgi`, or an executable
+with a `#!/usr/bin/env python3` shebang (pre-commit passes these to ruff), or that identify cannot
+read; any coding declaration other than UTF-8 (ruff reads every file as UTF-8, tokenize follows
+the declaration); and a lone CR line ending (ruff ends a line there, tokenize does not). Entries
+named `*.py` or `*.pyi` that are not regular files (a directory, a broken symlink) are skipped, as
+pre-commit skips them.
+
 - noqa: line-level `# noqa`, `#NOQA`, `# noqa: F401`; file-level `# ruff: noqa`,
-  `# ruff: noqa: F401`, `# flake8: noqa`, in any letter case; and the isort action comments
-  ruff honors, `# isort: skip_file`, `# isort: off`, `# isort: skip`, also with a `# ruff:`
-  prefix.
+  `# ruff: noqa: F401`, `# flake8: noqa`, in any letter case; range suppressions
+  `# ruff: disable[F401]`, `#ruff:disable[F401, E501]`, in any letter case and with any
+  whitespace (ruff 0.14.11 honors them only in preview, only in lowercase with codes, and only as
+  a comment on its own line; `# ruff: enable[...]` ends a range and is not counted); and the
+  isort action comments ruff honors, `# isort: skip_file`, `# isort: off`, `# isort: skip`, also
+  with a `# ruff:` prefix (`# isort: split`, which starts a new import block, is not counted).
 - type: ignore: `# type: ignore`, `# type:ignore[code]`, `#type:ignore`; mypy inline
   configuration such as `# mypy: ignore-errors` or `# mypy: disable-error-code=...`; and the
   `@no_type_check` decorator, also as `@<module>.no_type_check` or under a name imported
@@ -25,6 +37,7 @@ from __future__ import annotations
 
 import argparse
 import ast
+import codecs
 import io
 import re
 import sys
@@ -32,21 +45,56 @@ import tokenize
 from collections.abc import Iterator
 from pathlib import Path
 
+from identify.identify import tags_from_path
+
 NOQA = re.compile(
     r"#\s*(?:(?:ruff|flake8)\s*:\s*)?noqa\b"
+    r"|#\s*ruff\s*:\s*disable\b"
     r"|#\s*(?:ruff\s*:\s*)?isort\s*:\s*(?:skip_file|off|skip)\b",
     re.IGNORECASE,
 )
 TYPE_IGNORE = re.compile(r"#\s*(?:type:\s*ignore\b|mypy\s*:)")
 NO_TYPE_CHECK = "no_type_check"
+SUFFIXES = {".py", ".pyi"}
+LONE_CR = re.compile(rb"\r(?!\n)")
 
 
 def python_files(paths: list[Path]) -> Iterator[Path]:
     for path in paths:
         if path.is_dir():
-            yield from sorted(p for p in path.rglob("*") if p.suffix in {".py", ".pyi"})
-        elif path.suffix in {".py", ".pyi"}:
+            yield from sorted(p for p in path.rglob("*") if p.suffix in SUFFIXES and p.is_file())
+        elif path.suffix in SUFFIXES and path.is_file():
             yield path
+
+
+def all_files(paths: list[Path]) -> Iterator[Path]:
+    for path in paths:
+        if path.is_dir():
+            yield from sorted(p for p in path.rglob("*") if p.is_file())
+        elif path.is_file():
+            yield path
+
+
+def refusal(path: Path) -> str | None:
+    """Why the counter may read this file differently from ruff, or None."""
+    if path.suffix not in SUFFIXES:
+        try:
+            tags = tags_from_path(str(path))
+        except OSError as e:
+            return f"identify cannot read it to tag it ({e.strerror})"
+        if {"python", "pyi"} & tags:
+            return "identify tags it python or pyi without a lowercase .py/.pyi suffix"
+        return None
+    source = path.read_bytes()
+    if LONE_CR.search(source):
+        return "a lone CR line ending, where ruff ends a line and tokenize does not"
+    try:
+        encoding, _ = tokenize.detect_encoding(io.BytesIO(source).readline)
+    except SyntaxError as e:
+        return f"an unreadable coding declaration ({e})"
+    if codecs.lookup(encoding).name not in {"utf-8", "utf-8-sig"}:
+        return f"coding declaration {encoding}; ruff reads every file as UTF-8"
+    return None
 
 
 def comments(source: bytes) -> Iterator[tuple[int, str]]:
@@ -95,6 +143,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--max-type-ignore", type=int, required=True)
     parser.add_argument("--max-noqa", type=int, required=True)
     args = parser.parse_args(argv)
+    refused = [(path, reason) for path in all_files(args.paths) if (reason := refusal(path))]
+    for path, reason in refused:
+        print(f"{path}: refused: {reason}", file=sys.stderr)
+    if refused:
+        return 1
     files = list(python_files(args.paths))
     if not files:
         print(f"no Python files under {' '.join(map(str, args.paths))}", file=sys.stderr)
