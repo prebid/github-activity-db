@@ -1,15 +1,17 @@
 """Errors raised by the GitHub source layer.
 
-Three audiences, by what the caller does next:
+By what the caller does next:
 
 - ``FatalSourceError``: stop the run (exit 1). Bad credentials, a missing permission, a response
   this code does not understand, or a rate-limit wait no deadline bounds.
 - ``RepositoryError``: this repository fails for the run; other repositories continue.
 - ``ItemError``: one pull request or issue failed; the hydrator retries it alone once and then
   reports it as a failed outcome, never by raising.
+- ``UserLookupFailed``: a ``nodes(ids:)`` lookup failed; the caller fails the items waiting on it.
+- ``DeadlineReached``: the run stops issuing requests and drains (redesign plan 5.3 step 4).
 
-``DeadlineReached`` is none of these: the run stops issuing requests and drains (redesign plan
-5.3 step 4).
+``RequestFailedError`` is internal: the transport raises it after its retries, and the operations
+turn it into one of the above.
 """
 
 from __future__ import annotations
@@ -76,6 +78,10 @@ class RequestTooHeavy(RequestFailedError):
     """GitHub timed out or hit a resource limit on the request; a smaller request may pass."""
 
 
+class LookupShapeError(SourceError):
+    """A ``nodes(ids:)`` answer did not match the request or the typed models."""
+
+
 class UserLookupFailed(SourceError):
     """A ``nodes(ids:)`` lookup still failed after its retries.
 
@@ -122,7 +128,8 @@ class RepositoryRequestFailed(RepositoryError):
 
 
 class RepositoryShapeError(RepositoryError):
-    """A resolve or index response did not match the typed models."""
+    """A response for the repository did not match the typed models, or GitHub reported errors
+    for it, or its paging did not advance."""
 
 
 class IndexCountMismatch(RepositoryError):
@@ -228,6 +235,15 @@ class ItemChangedDuringRead(InvariantError):
         self.field = field
         self.first = first
         self.later = later
+
+
+class PagingStalled(InvariantError):
+    """A page reported a next page without a new cursor; following it would never end."""
+
+    def __init__(self, number: int, connection: str, cursor: str | None) -> None:
+        super().__init__(number, f"{connection}: next page without a new cursor ({cursor!r})")
+        self.connection = connection
+        self.cursor = cursor
 
 
 class NullEntry(InvariantError):

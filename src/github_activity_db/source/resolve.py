@@ -26,7 +26,7 @@ async def resolve_repository(transport: Transport, owner: str, name: str) -> Rep
 
     Raises:
         RepositoryError: the repository is missing, has no default branch, or a request or
-            response for it failed. Nothing of it is deleted this run.
+            response for it failed.
     """
     full_name = f"{owner}/{name}"
     result = await _send(transport, full_name, RESOLVE, {"owner": owner, "name": name})
@@ -64,10 +64,14 @@ async def _label_names(
     page: LabelPage = repository.labels
     total = page.total_count
     names = _page_names(full_name, page)
+    previous: str | None = None
     while page.page_info.has_next_page:
         cursor = page.page_info.end_cursor
-        if cursor is None:
-            raise RepositoryShapeError(full_name, "label page has a next page but no cursor")
+        if cursor is None or cursor == previous:
+            raise RepositoryShapeError(
+                full_name, f"label page has a next page but no new cursor ({cursor!r})"
+            )
+        previous = cursor
         result = await _send(
             transport, full_name, REPOSITORY_LABELS, {"id": repository.id, "after": cursor}
         )
@@ -79,8 +83,12 @@ async def _label_names(
             raise RepositoryShapeError(full_name, f"label page for {node.id}, not {repository.id}")
         page = node.labels
         if page.total_count != total:
-            raise LabelCountMismatch(full_name, len(names), page.total_count)
+            raise RepositoryShapeError(
+                full_name, f"label totalCount changed from {total} to {page.total_count}"
+            )
         names.extend(_page_names(full_name, page))
+        if len(names) > total:
+            raise LabelCountMismatch(full_name, len(names), total)
     if len(names) != total:
         raise LabelCountMismatch(full_name, len(names), total)
     return names

@@ -87,13 +87,6 @@ class RecordingTransport(httpx.AsyncBaseTransport):
             units = split_graphql(json.loads(request.content), body, headers, self._recorded_at)
         else:
             units = split_rest(str(request.url), body, headers, self._recorded_at)
-        for unit in units:
-            if (
-                unit.kind == "resolve"
-                and isinstance(unit.data, dict)
-                and unit.data.get("isPrivate")
-            ):
-                raise PrivateRepository(unit.data.get("nameWithOwner"))
         self.units.extend(units)
         return response
 
@@ -101,20 +94,36 @@ class RecordingTransport(httpx.AsyncBaseTransport):
         await self._inner.aclose()
 
 
-async def record(token: str) -> list[Unit]:
+async def record(
+    token: str,
+    *,
+    inner: httpx.AsyncBaseTransport | None = None,
+    scenarios: tuple[Scenario, ...] = SCENARIOS,
+    users: tuple[str, ...] = USERS,
+) -> list[Unit]:
+    """Record ``scenarios`` and ``users``; refuse a private repository before reading more of it.
+
+    The resolve response is the first one for a repository, so a private one raises after that
+    one request and before ``main`` writes anything.
+    """
     recorded_at = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
-    recording = RecordingTransport(httpx.AsyncHTTPTransport(), recorded_at)
+    recording = RecordingTransport(inner or httpx.AsyncHTTPTransport(), recorded_at)
     async with GitHubSource(token, http_transport=recording) as source:
-        for scenario in SCENARIOS:
+        for scenario in scenarios:
             full_name = f"{scenario.owner}/{scenario.name}"
             if full_name in PRIVATE:
                 raise PrivateRepository(full_name)
             repository = await source.resolve(scenario.owner, scenario.name)
+            if repository.is_private:
+                raise PrivateRepository(repository.full_name)
             if scenario.index:
                 await source.index_pull_requests(repository)
             if scenario.numbers:
-                await source.hydrate_pull_requests(repository, scenario.numbers)
-        await source.lookup_users(USERS)
+                async for _ in source.hydrate_pull_requests(repository, scenario.numbers):
+                    pass
+        if users:
+            async for _ in source.lookup_users(users):
+                pass
         print(f"usage: {source.usage}", file=sys.stderr)
     return recording.units
 

@@ -33,6 +33,8 @@ SYNTHETIC = FIXTURES / "synthetic"
 KEPT_HEADERS = ("date", "retry-after")
 KEPT_HEADER_PREFIX = "x-ratelimit-"
 
+# The REST request compare units answer. Compare has no query document; edit this text when the
+# compare request changes, and the replay refuses units recorded for the old request.
 COMPARE_STAMP = "rest:compare/{base}...{head}?per_page&page"
 
 _COMPARE_PATH = re.compile(
@@ -113,29 +115,58 @@ def extract_block(text: str, start: str) -> str:
     raise ValueError(f"unbalanced block at {start!r}")
 
 
-def pull_request_stamp(query: str) -> str:
-    """Stamp of a batch request: its PullRequestFields and Actor fragments."""
+def canonical_batch(query: str) -> str:
+    """A batch request with its aliases collapsed to one, so any batch size compares equal."""
     text = documents.normalize(query)
-    fields = extract_block(text, "fragment PullRequestFields on PullRequest")
-    actor = extract_block(text, "fragment Actor on Actor")
-    return documents.document_hash(fields, actor)
+    text = re.sub(r"\$n\d+", "$n0", text)
+    text = re.sub(r"\bp\d+:", "p0:", text)
+    text = re.sub(r"\$n0: Int!(?: \$n0: Int!)+", "$n0: Int!", text)
+    alias = re.escape("p0: pullRequest(number: $n0) { ...PullRequestFields }")
+    return re.sub(
+        rf"{alias}(?: {alias})+", "p0: pullRequest(number: $n0) { ...PullRequestFields }", text
+    )
+
+
+def pull_request_stamp(query: str) -> str:
+    """Stamp of a batch request: the whole document, wrapper included, at any batch size."""
+    return documents.document_hash(canonical_batch(query))
+
+
+def canonical_overflow(query: str, index: int, connection: str) -> str:
+    """One continuation of a request, as the one-alias document it would be on its own."""
+    text = documents.normalize(query)
+    block = extract_block(text, f"o{index}_{connection}: node(id: $id{index})")
+    block = (
+        block.replace(f"o{index}_", "o0_", 1)
+        .replace(f"$id{index}", "$id0")
+        .replace(f"$after{index}", "$after0")
+    )
+    rate_limit = documents.normalize(documents.RATE_LIMIT)
+    selected_rate_limit = f" {rate_limit}" if rate_limit in text else ""
+    fragment = (
+        f" {extract_block(text, 'fragment Actor on Actor')}"
+        if "...Actor" in block and "fragment Actor on Actor" in text
+        else ""
+    )
+    return (
+        f"query Overflow($id0: ID! $after0: String!) {{ {block}{selected_rate_limit} }}{fragment}"
+    )
 
 
 def overflow_stamp(query: str, index: int, connection: str) -> str:
-    """Stamp of one continuation: its connection selection, with its cursor variable renamed."""
-    text = documents.normalize(query)
-    alias_block = extract_block(text, f"o{index}_{connection}: node(id: $id{index})")
-    selection = extract_block(alias_block, f"{connection}(")
-    return documents.document_hash(selection.replace(f"$after{index}", "$after"))
+    """Stamp of one continuation: its alias block, the rateLimit it selects, its fragment."""
+    return documents.document_hash(canonical_overflow(query, index, connection))
 
 
 def expected_overflow_stamp(connection: str) -> str:
     """What a current continuation of ``connection`` hashes to."""
-    return documents.document_hash(documents.CONNECTIONS_BY_FIELD[connection].selection("after"))
+    return documents.document_hash(
+        documents.overflow_continuation([documents.CONNECTIONS_BY_FIELD[connection]])
+    )
 
 
 def expected_pull_request_stamp() -> str:
-    return documents.document_hash(documents.PULL_REQUEST_FIELDS, documents.ACTOR_FRAGMENT)
+    return documents.document_hash(documents.pull_request_batch(1))
 
 
 def whole_stamp(query: str) -> str:
@@ -159,7 +190,8 @@ def relative_errors(errors: list[dict[str, Any]], prefix: list[Any]) -> list[dic
     for error in errors:
         path = error.get("path") or []
         if path[: len(prefix)] == prefix:
-            relative.append({**error, "path": path[len(prefix) :]})
+            kept = {key: value for key, value in error.items() if key != "locations"}
+            relative.append({**kept, "path": path[len(prefix) :]})
     return relative
 
 
@@ -256,12 +288,16 @@ def split_rest(url: str, body: Any, headers: dict[str, str], recorded_at: str) -
     if match is None:
         raise ValueError(f"no unit split for REST {parts.path}")
     query = parse_qs(parts.query)
-    key = {**match.groupdict(), "page": int(query["page"][0])}
+    key = {
+        **match.groupdict(),
+        "page": int(query["page"][0]),
+        "per_page": int(query["per_page"][0]),
+    }
     return [
         Unit(
             kind="compare",
             key=key,
-            document_sha256=documents.document_hash(COMPARE_STAMP),
+            document_sha256=whole_stamp(COMPARE_STAMP),
             recorded_at=recorded_at,
             headers=kept_headers(headers),
             data=body,
@@ -276,4 +312,8 @@ def compare_key(url: str) -> dict[str, Any] | None:
     if match is None:
         return None
     query = parse_qs(parts.query)
-    return {**match.groupdict(), "page": int(query["page"][0])}
+    return {
+        **match.groupdict(),
+        "page": int(query["page"][0]),
+        "per_page": int(query["per_page"][0]),
+    }

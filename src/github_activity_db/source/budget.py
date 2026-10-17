@@ -23,8 +23,7 @@ class BudgetPool:
     time, each at its lowest value, and the pool gates on the lowest among windows not yet reset.
     """
 
-    def __init__(self, name: str, reserve: int) -> None:
-        self.name = name
+    def __init__(self, reserve: int) -> None:
         self.reserve = reserve
         self._windows: dict[datetime, int] = {}
 

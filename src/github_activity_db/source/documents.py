@@ -213,10 +213,12 @@ def document_hash(*documents: str) -> str:
 
 
 def pull_request_documents() -> tuple[str, ...]:
-    """What the pull request kind's ``hydration_version`` covers.
+    """What the pull request kind's ``hydration_version`` covers: every document it sends.
 
-    The per-alias field document, the actor fragment it uses, and each connection's
-    continuation selection.
+    A one-alias batch (its wrapper, the field and actor fragments) and a one-alias continuation of
+    each connection (its head fields and selection).
     """
-    continuations = tuple(connection.selection("after") for connection in PULL_REQUEST_CONNECTIONS)
-    return (PULL_REQUEST_FIELDS, ACTOR_FRAGMENT, *continuations)
+    continuations = tuple(
+        overflow_continuation([connection]) for connection in PULL_REQUEST_CONNECTIONS
+    )
+    return (pull_request_batch(1), *continuations)

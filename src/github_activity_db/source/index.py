@@ -58,14 +58,14 @@ async def _scan(
     entries: list[IndexedPullRequest] = []
     seen: set[int] = set()
     cursor: str | None = None
-    page_dates: list[datetime] = []
+    first_page_date: datetime | None = None
     while True:
         variables = {"owner": repository.owner, "name": repository.name, "after": cursor}
         try:
             result = await transport.graphql(PULL_REQUEST_INDEX, variables, splittable=False)
         except RequestFailedError as e:
             raise RepositoryRequestFailed(full_name, e) from e
-        page_dates.append(result.date)
+        first_page_date = first_page_date or result.date
         if result.errors:
             detail = "; ".join(f"{error.type}: {error.message}" for error in result.errors)
             raise RepositoryShapeError(full_name, f"index errors: {detail}")
@@ -91,10 +91,13 @@ async def _scan(
             seen.add(entry.number)
             entries.append(entry)
         if not page.page_info.has_next_page:
-            return tuple(entries), page.total_count, page_dates[0]
-        cursor = page.page_info.end_cursor
-        if cursor is None:
-            raise RepositoryShapeError(full_name, "index page has a next page but no cursor")
+            return tuple(entries), page.total_count, first_page_date
+        next_cursor = page.page_info.end_cursor
+        if next_cursor is None or next_cursor == cursor:
+            raise RepositoryShapeError(
+                full_name, f"index page has a next page but no new cursor ({next_cursor!r})"
+            )
+        cursor = next_cursor
 
 
 def _entry(full_name: str, node: IndexedPullRequestNode) -> IndexedPullRequest:

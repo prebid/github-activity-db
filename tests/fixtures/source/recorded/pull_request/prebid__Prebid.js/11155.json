@@ -1325,18 +1325,18 @@
     "title": "Colossus Bid Adapter: Add GPP Support and Accept eids from publisher request",
     "updatedAt": "2024-03-06T21:05:23Z"
   },
-  "document_sha256": "e0376cea8685e41c5e18368d5f43610f07e83ae7dcb7cb32e879877fc61aec04",
+  "document_sha256": "bcdac6b7a83d74688da324dead3486a0056b3e9aa474f50d8fb8de54333a5c6a",
   "errors": [],
   "extra": {
     "repository_database_id": 39321023
   },
   "headers": {
-    "date": "Sat, 17 Oct 2026 03:31:45 GMT",
+    "date": "Sat, 17 Oct 2026 04:27:33 GMT",
     "x-ratelimit-limit": "5000",
-    "x-ratelimit-remaining": "4770",
-    "x-ratelimit-reset": "1792208984",
+    "x-ratelimit-remaining": "4658",
+    "x-ratelimit-reset": "1792212701",
     "x-ratelimit-resource": "graphql",
-    "x-ratelimit-used": "230"
+    "x-ratelimit-used": "342"
   },
   "key": {
     "name": "Prebid.js",
@@ -1344,6 +1344,6 @@
     "owner": "prebid"
   },
   "kind": "pull_request",
-  "recorded_at": "2026-10-17T03:31:41Z",
+  "recorded_at": "2026-10-17T04:27:28Z",
   "source": "live"
 }

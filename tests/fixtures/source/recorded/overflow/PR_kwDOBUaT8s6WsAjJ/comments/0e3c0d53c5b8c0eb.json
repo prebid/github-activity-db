@@ -84,16 +84,16 @@
     "headRefOid": "c0dd6b96762622636d52f1241dca4a4ad1bb6305",
     "updatedAt": "2026-10-02T14:07:24Z"
   },
-  "document_sha256": "3a4f2f622acac2790553b5753695214c4a44f645c5dccbb0145e777b48e1de0a",
+  "document_sha256": "eeacc2cf864f92172505f72ff87f1bd596d61615fcd668b29667f35ecb2a8f02",
   "errors": [],
   "extra": {},
   "headers": {
-    "date": "Sat, 17 Oct 2026 03:31:52 GMT",
+    "date": "Sat, 17 Oct 2026 04:27:40 GMT",
     "x-ratelimit-limit": "5000",
-    "x-ratelimit-remaining": "4758",
-    "x-ratelimit-reset": "1792208984",
+    "x-ratelimit-remaining": "4646",
+    "x-ratelimit-reset": "1792212701",
     "x-ratelimit-resource": "graphql",
-    "x-ratelimit-used": "242"
+    "x-ratelimit-used": "354"
   },
   "key": {
     "after": "Y3Vyc29yOnYyOpHPAAAAAU7JU7k=",
@@ -101,6 +101,6 @@
     "id": "PR_kwDOBUaT8s6WsAjJ"
   },
   "kind": "overflow",
-  "recorded_at": "2026-10-17T03:31:41Z",
+  "recorded_at": "2026-10-17T04:27:28Z",
   "source": "live"
 }

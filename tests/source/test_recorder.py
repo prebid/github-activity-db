@@ -1,0 +1,73 @@
+"""The recorder: it refuses private repositories, and recording the replay gives back every unit."""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+from typing import Any
+
+import pytest
+
+from tests.source import recorder
+from tests.source.recorder import PrivateRepository, Scenario, record
+from tests.source.replay import Replay
+
+
+async def test_recording_the_replay_gives_back_every_unit() -> None:
+    """Split (recorder) after assemble (replay) is the identity on the fixtures, per operation."""
+    replay = Replay.from_fixtures()
+    units = await record("test-token", inner=replay.transport())
+    assert replay.problems == []
+    produced = {(unit.kind, json.dumps(unit.key, sort_keys=True)): unit for unit in units}
+    assert len(produced) == len(units), "a unit was recorded twice"
+    assert produced.keys() == replay.units.keys()
+    for key, unit in produced.items():
+        original = replay.units[key]
+        assert (unit.document_sha256, unit.data, unit.errors, unit.extra, unit.headers) == (
+            original.document_sha256,
+            original.data,
+            original.errors,
+            original.extra,
+            original.headers,
+        ), key
+
+
+async def test_a_private_repository_stops_the_run_after_its_resolve() -> None:
+    replay = Replay.from_fixtures()
+    unit = replay.unit("resolve", owner="prebid", name="go-gdpr")
+    unit.data["isPrivate"] = True
+    replay.add(unit)
+    scenarios = (
+        Scenario("prebid", "prebid-cache-java", index=True),
+        Scenario("prebid", "go-gdpr", index=True),
+    )
+    with pytest.raises(PrivateRepository, match="prebid/go-gdpr"):
+        await record("test-token", inner=replay.transport(), scenarios=scenarios)
+    operations = [seen.operation for seen in replay.seen]
+    # prebid-cache-java: resolve and two index pages; go-gdpr: its resolve only; no users.
+    assert operations == ["Resolve", "PullRequestIndex", "PullRequestIndex", "Resolve"]
+
+
+async def test_a_listed_private_repository_is_never_requested() -> None:
+    replay = Replay.from_fixtures()
+    scenarios = (Scenario("prebid", "prebid-agent-skills", index=True),)
+    with pytest.raises(PrivateRepository):
+        await record("test-token", inner=replay.transport(), scenarios=scenarios)
+    assert replay.seen == []
+
+
+def test_a_failed_recording_writes_nothing(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    recorded = tmp_path / "recorded"
+    recorded.mkdir()
+    (recorded / "kept.json").write_text("{}")
+
+    async def refuse(token: str, **kwargs: Any) -> list[Any]:
+        raise PrivateRepository("prebid/private")
+
+    monkeypatch.setattr(recorder, "RECORDED", recorded)
+    monkeypatch.setattr(recorder, "record", refuse)
+    monkeypatch.setenv("GITHUB_TOKEN", "test-token")
+    with pytest.raises(PrivateRepository):
+        recorder.main()
+    assert [path.name for path in tmp_path.iterdir()] == ["recorded"]
+    assert [path.name for path in recorded.iterdir()] == ["kept.json"]

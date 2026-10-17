@@ -2,20 +2,22 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import AsyncIterator, Sequence
 
 from pydantic import ValidationError
 
 from .documents import USER_LOOKUP
-from .errors import RequestFailedError, UnexpectedResponse, UserLookupFailed
+from .errors import LookupShapeError, RequestFailedError, UserLookupFailed
 from .limits import USER_LOOKUP_BATCH
 from .models import LookedUpUser
 from .records import Account
 from .transport import Transport
 
 
-async def lookup_users(transport: Transport, node_ids: Sequence[str]) -> dict[str, Account | None]:
-    """The account behind each node id; None where GitHub no longer has one (deleted).
+async def lookup_user_batches(
+    transport: Transport, node_ids: Sequence[str]
+) -> AsyncIterator[dict[str, Account | None]]:
+    """The account behind each node id, batch by batch; None where GitHub has none (deleted).
 
     This is where an account first seen through a commit gets its type and its GraphQL login
     (plan 5.2): GraphQL types a commit's user ``User`` even for a bot, while ``nodes(ids:)``
@@ -25,8 +27,8 @@ async def lookup_users(transport: Transport, node_ids: Sequence[str]) -> dict[st
         UserLookupFailed: a lookup request still failed after its retries.
     """
     unique = list(dict.fromkeys(node_ids))
-    accounts: dict[str, Account | None] = {}
     for start in range(0, len(unique), USER_LOOKUP_BATCH):
+        accounts: dict[str, Account | None] = {}
         batch = unique[start : start + USER_LOOKUP_BATCH]
         try:
             result = await transport.graphql(USER_LOOKUP, {"ids": batch}, splittable=False)
@@ -51,8 +53,8 @@ async def lookup_users(transport: Transport, node_ids: Sequence[str]) -> dict[st
             accounts[node_id] = Account(
                 github_id=user.database_id, node_id=user.id, login=user.login, type=user.typename
             )
-    return accounts
+        yield accounts
 
 
 def _failed(message: str) -> UserLookupFailed:
-    return UserLookupFailed(UnexpectedResponse(message))
+    return UserLookupFailed(LookupShapeError(message))

@@ -45,10 +45,12 @@ class TestHydrationVersionLock:
             assert int(version) >= 1
             assert len(digest) == 64
 
-    def test_every_continuation_selection_is_covered(self) -> None:
+    def test_the_version_covers_every_document_the_kind_sends(self) -> None:
         covered = documents.pull_request_documents()
+        assert documents.pull_request_batch(1) in covered
         for connection in documents.PULL_REQUEST_CONNECTIONS:
-            assert connection.selection("after") in covered
+            assert documents.overflow_continuation([connection]) in covered
+        assert len(covered) == 1 + len(documents.PULL_REQUEST_CONNECTIONS)
 
 
 class TestCost:
@@ -93,8 +95,8 @@ class TestDocuments:
 
     def test_item_ids_use_full_database_id(self) -> None:
         # PullRequest.databaseId and PullRequestReview.databaseId are deprecated (32-bit).
-        assert "fullDatabaseId" in documents.PULL_REQUEST_FIELDS
         assert "fullDatabaseId" in documents.REVIEWS.nodes
         assert "fullDatabaseId" in documents.PULL_REQUEST_INDEX
-        fields = documents.normalize(documents.PULL_REQUEST_FIELDS)
-        assert " databaseId " not in fields.split("author {")[0]
+        scalars = documents.normalize(documents.PULL_REQUEST_FIELDS).split("author {")[0]
+        assert " fullDatabaseId " in scalars
+        assert " databaseId " not in scalars

@@ -17,10 +17,14 @@ from typing import Any
 
 import httpx
 
+from github_activity_db.source import documents
+from github_activity_db.source.documents import pull_request_alias
 from tests.source.recordings import (
+    COMPARE_STAMP,
     RECORDED,
     SYNTHETIC,
     Unit,
+    canonical_batch,
     compare_key,
     overflow_stamp,
     pull_request_stamp,
@@ -105,8 +109,12 @@ class Replay:
         *,
         when: Callable[[Seen], bool] = lambda seen: True,
         times: int | None = 1,
+        headers: dict[str, str] | None = None,
     ) -> None:
-        """Serve the recorded response for matching requests after ``change`` edits its body."""
+        """Serve the recorded response for matching requests after ``change`` edits its body.
+
+        ``headers`` add to or replace the recorded response headers.
+        """
 
         def respond(request: httpx.Request) -> httpx.Response:
             seen = self._seen(request)
@@ -117,12 +125,13 @@ class Replay:
                 return httpx.Response(418, json={"message": str(miss)})
             body = json.loads(normal.content)
             change(body)
-            headers = {
+            kept = {
                 name: value
                 for name, value in normal.headers.items()
                 if name.lower() not in ("content-length", "content-type")
             }
-            return httpx.Response(normal.status_code, json=body, headers=headers)
+            merged = {**kept, **(headers or {})}
+            return httpx.Response(normal.status_code, json=body, headers=merged)
 
         self.fault(respond, when=when, times=times)
 
@@ -180,7 +189,7 @@ class Replay:
                     whole_stamp(seen.query),
                 )
                 return _graphql_response(
-                    [unit], {"repository": unit.data}, [(unit, ["repository"])]
+                    seen, [unit], {"repository": unit.data}, [(unit, ["repository"])]
                 )
             case "RepositoryLabels":
                 unit = self._lookup(
@@ -188,7 +197,7 @@ class Replay:
                     {"id": variables["id"], "after": variables["after"]},
                     whole_stamp(seen.query),
                 )
-                return _graphql_response([unit], {"node": unit.data}, [(unit, ["node"])])
+                return _graphql_response(seen, [unit], {"node": unit.data}, [(unit, ["node"])])
             case "PullRequestIndex":
                 key = {
                     "owner": variables["owner"],
@@ -197,7 +206,10 @@ class Replay:
                 }
                 unit = self._lookup("index", key, whole_stamp(seen.query))
                 return _graphql_response(
-                    [unit], {"repository": {"pullRequests": unit.data}}, [(unit, ["repository"])]
+                    seen,
+                    [unit],
+                    {"repository": {"pullRequests": unit.data}},
+                    [(unit, ["repository"])],
                 )
             case "PullRequestBatch":
                 stamp = pull_request_stamp(seen.query)
@@ -206,11 +218,12 @@ class Replay:
                 for index, number in enumerate(seen.numbers):
                     key = {"owner": variables["owner"], "name": variables["name"], "number": number}
                     unit = self._lookup("pull_request", key, stamp)
-                    container["databaseId"] = unit.extra["repository_database_id"]
-                    container[f"p{index}"] = unit.data
+                    container[pull_request_alias(index)] = unit.data
+                    if "{ databaseId p0:" in canonical_batch(seen.query):
+                        container["databaseId"] = unit.extra["repository_database_id"]
                     units.append((unit, ["repository", f"p{index}"]))
                 return _graphql_response(
-                    [unit for unit, _ in units], {"repository": container}, units
+                    seen, [unit for unit, _ in units], {"repository": container}, units
                 )
             case "Overflow":
                 data: dict[str, Any] = {}
@@ -228,7 +241,7 @@ class Replay:
                     )
                     data[alias] = unit.data
                     units.append((unit, [alias]))
-                return _graphql_response([unit for unit, _ in units], data, units)
+                return _graphql_response(seen, [unit for unit, _ in units], data, units)
             case "UserLookup":
                 stamp = whole_stamp(seen.query)
                 nodes = []
@@ -237,14 +250,14 @@ class Replay:
                     unit = self._lookup("user", {"id": node_id}, stamp)
                     nodes.append(unit.data)
                     units.append((unit, ["nodes", position]))
-                return _graphql_response([unit for unit, _ in units], {"nodes": nodes}, units)
+                return _graphql_response(seen, [unit for unit, _ in units], {"nodes": nodes}, units)
         raise _Miss(f"no replay for GraphQL operation {seen.operation}")
 
     def _rest(self, request: httpx.Request) -> httpx.Response:
         key = compare_key(str(request.url))
         if key is None:
             raise _Miss(f"no replay for REST {request.url}")
-        unit = self._lookup("compare", key)
+        unit = self._lookup("compare", key, whole_stamp(COMPARE_STAMP))
         return httpx.Response(200, json=unit.data, headers=_headers([unit]))
 
 
@@ -253,14 +266,21 @@ class _Miss(Exception):
 
 
 def _graphql_response(
-    units: list[Unit], data: dict[str, Any], errors_from: list[tuple[Unit, list[Any]]]
+    seen: Seen,
+    units: list[Unit],
+    data: dict[str, Any],
+    errors_from: list[tuple[Unit, list[Any]]],
 ) -> httpx.Response:
     errors = [
         {**error, "path": [*prefix, *error.get("path", [])]}
         for unit, prefix in errors_from
         for error in unit.errors
     ]
-    body: dict[str, Any] = {"data": {**data, "rateLimit": dict(RATE_LIMIT)}}
+    # Only what the request selects: a document without rateLimit gets none, as from GitHub.
+    selected = documents.normalize(seen.query)
+    if documents.normalize(documents.RATE_LIMIT) in selected:
+        data = {**data, "rateLimit": dict(RATE_LIMIT)}
+    body: dict[str, Any] = {"data": data}
     if errors:
         body["errors"] = errors
     return httpx.Response(200, json=body, headers=_headers(units))

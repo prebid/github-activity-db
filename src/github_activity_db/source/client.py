@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import AsyncIterator, Sequence
 from contextlib import AsyncExitStack
 from datetime import datetime
 from types import TracebackType
@@ -17,7 +17,7 @@ from .index import index_pull_requests
 from .limits import CONNECT_TIMEOUT, READ_TIMEOUT
 from .resolve import resolve_repository
 from .transport import Transport
-from .users import lookup_users
+from .users import lookup_user_batches
 
 if TYPE_CHECKING:
     from githubkit import BaseAuthStrategy
@@ -85,6 +85,7 @@ class GitHubSource:
 
     @property
     def transport(self) -> Transport:
+        """The low-level transport, for a document the operations below do not send."""
         return self._transport
 
     async def resolve(self, owner: str, name: str) -> RepositoryRecord:
@@ -93,10 +94,16 @@ class GitHubSource:
     async def index_pull_requests(self, repository: RepositoryRecord) -> PullRequestIndex:
         return await index_pull_requests(self._transport, repository)
 
-    async def hydrate_pull_requests(
+    def hydrate_pull_requests(
         self, repository: RepositoryRecord, numbers: Sequence[int]
-    ) -> list[PullRequestOutcome]:
-        return await PullRequestHydrator(self._transport, repository).hydrate(numbers)
+    ) -> AsyncIterator[list[PullRequestOutcome]]:
+        """Outcomes batch by batch: ``async for outcomes in source.hydrate_pull_requests(...)``.
 
-    async def lookup_users(self, node_ids: Sequence[str]) -> dict[str, Account | None]:
-        return await lookup_users(self._transport, node_ids)
+        Each batch arrives after its failed items were retried alone, so a deadline or a fatal
+        error loses at most the batch in progress.
+        """
+        return PullRequestHydrator(self._transport, repository).batches(numbers)
+
+    def lookup_users(self, node_ids: Sequence[str]) -> AsyncIterator[dict[str, Account | None]]:
+        """Accounts batch by batch, keyed by node id; None where GitHub has no such account."""
+        return lookup_user_batches(self._transport, node_ids)

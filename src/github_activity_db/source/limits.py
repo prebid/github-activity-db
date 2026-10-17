@@ -1,7 +1,8 @@
-"""Mechanics measured against GitHub, kept in code rather than configuration.
+"""Request mechanics, kept in code rather than configuration (redesign plan 5.5).
 
-Each value names the redesign-plan evidence row or GitHub rule it rests on (plan 5.5). Changing
-one can invalidate a measured cost or time, so a change re-measures it.
+A measured value names the evidence row or GitHub rule it rests on; a value chosen without a
+measurement says so, and plan section 8 lists it for Step 5 to measure. Changing a measured
+value can invalidate a measured cost or time, so a change re-measures it.
 """
 
 from __future__ import annotations
@@ -16,7 +17,8 @@ PAGE_SIZE: Final = 100
 # under GitHub's 10 s request limit.
 PR_BATCH_SIZE: Final = 25
 
-# Overflow continuations per request. Not measured; each costs one request per 100 entries.
+# Overflow continuations per request. Chosen, not measured (plan section 8): 25 aliases of 100
+# entries each stay at one point by GitHub's cost formula.
 OVERFLOW_ALIASES_PER_REQUEST: Final = 25
 
 # `nodes(ids:)` accepts at most 100 ids.
@@ -36,7 +38,7 @@ INDEX_CLOSING_LINKS: Final = 10
 INDEX_BOUNDARY_MARGIN: Final = timedelta(seconds=60)
 
 # Retries after the first attempt for 5xx, transport errors, and unsplittable timeouts
-# (plan 5.3 step 4). Jitter adds up to JITTER_FRACTION of each delay.
+# (plan 5.3 step 4). Jitter adds up to JITTER_FRACTION of each delay (chosen, not measured).
 SERVER_RETRY_DELAYS: Final = (2.0, 4.0, 8.0)
 JITTER_FRACTION: Final = 0.25
 
@@ -53,7 +55,8 @@ MAX_RATE_LIMIT_WAIT: Final = 65 * 60.0
 GRAPHQL_RESERVE_POINTS: Final = 100
 REST_RESERVE_CALLS: Final = 100
 
-# Seconds added to a reset time before the next request.
+# Seconds added to a reset time before the next request, for clock differences with GitHub.
+# Chosen, not measured.
 RESET_MARGIN: Final = 1.0
 
 # GitHub limits GraphQL to 60 s of CPU time per minute and advises against concurrent requests;

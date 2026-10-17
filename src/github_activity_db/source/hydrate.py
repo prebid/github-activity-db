@@ -1,17 +1,19 @@
 """Hydrate pull requests: every connection fetched in full and checked (redesign plan 5.3 steps
 4 and 5).
 
-A batch of up to 25 pull requests is one GraphQL request. Connections with more than 100 entries
-continue through ``node(id:)``, continuations from several items sharing a request. Above 250
-commits the commit list comes from the REST compare endpoint. A request that fails is split in
-half down to single items; an item that fails is retried once alone and then reported as
-``Failed``. Nothing here raises for a single item.
+A batch of up to ``PR_BATCH_SIZE`` pull requests is one GraphQL request. Connections with more
+than one page continue through ``node(id:)``, continuations from several items sharing a request.
+Above ``GRAPHQL_COMMIT_CAP`` commits the commit list comes from the REST compare endpoint. A
+request that fails is split in half down to single items; an item that fails is retried once
+alone and then reported as ``Failed``. Nothing here raises for a single item.
+
+Outcomes are delivered per batch, so a deadline or a fatal error loses at most the batch in
+progress.
 """
 
 from __future__ import annotations
 
-from collections import Counter
-from collections.abc import Sequence
+from collections.abc import AsyncIterator, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
 from math import ceil
@@ -40,7 +42,9 @@ from .errors import (
     ItemError,
     ItemRequestFailed,
     NullEntry,
+    PagingStalled,
     RepositoryNotFound,
+    RepositoryShapeError,
     RequestFailedError,
     ResponseShapeError,
     TotalCountChanged,
@@ -65,6 +69,7 @@ from .models import (
     ReviewNode,
 )
 from .records import (
+    Account,
     Commenter,
     CommitRecord,
     CommitSource,
@@ -156,18 +161,23 @@ class PullRequestHydrator:
         self._transport = transport
         self._repository = repository
 
-    async def hydrate(self, numbers: Sequence[int]) -> list[PullRequestOutcome]:
-        """One outcome per number, in the order given."""
-        outcomes: dict[int, PullRequestOutcome | ItemError] = {}
-        for start in range(0, len(numbers), PR_BATCH_SIZE):
-            outcomes.update(await self._group(list(numbers[start : start + PR_BATCH_SIZE])))
-        for number, outcome in list(outcomes.items()):
-            if isinstance(outcome, ItemError):
-                retried = (await self._group([number]))[number]
-                outcomes[number] = (
-                    Failed(number, retried) if isinstance(retried, ItemError) else retried
-                )
-        return [_final(number, outcomes[number]) for number in numbers]
+    async def batches(self, numbers: Sequence[int]) -> AsyncIterator[list[PullRequestOutcome]]:
+        """Outcomes batch by batch: one per distinct number, in the order first given.
+
+        A batch's failed items are retried alone before the batch is delivered.
+        """
+        distinct = list(dict.fromkeys(numbers))
+        for start in range(0, len(distinct), PR_BATCH_SIZE):
+            batch = distinct[start : start + PR_BATCH_SIZE]
+            first = await self._group(batch)
+            outcomes: list[PullRequestOutcome] = []
+            for number in batch:
+                outcome = first[number]
+                if isinstance(outcome, ItemError):
+                    retried = (await self._group([number]))[number]
+                    outcome = Failed(number, retried) if isinstance(retried, ItemError) else retried
+                outcomes.append(outcome)
+            yield outcomes
 
     # ----------------------------------------------------------------------------------------
     # One group: first pages, overflow, compare, records
@@ -213,7 +223,13 @@ class PullRequestHydrator:
         )
         container = result.data.get("repository")
         if not isinstance(container, dict):
-            raise RepositoryNotFound(self._repository.full_name)
+            errors = result.errors_under("repository")
+            if any(error.type == "NOT_FOUND" and error.path == ("repository",) for error in errors):
+                raise RepositoryNotFound(self._repository.full_name)
+            detail = "; ".join(f"{error.type}: {error.message}" for error in errors) or "no error"
+            raise RepositoryShapeError(
+                self._repository.full_name, f"batch repository is null: {detail}"
+            )
         items: dict[int, _Item | Gone | ItemError] = {}
         for i, number in enumerate(numbers):
             alias = pull_request_alias(i)
@@ -363,14 +379,15 @@ class PullRequestHydrator:
     def _record(self, item: _Item) -> PullRequestRecord:
         number = item.number
         node = item.node
-        for name in ("labels", "closingIssuesReferences", "reviews", "comments", "files"):
-            _check_complete(number, name, item.collected(name))
+        for connection in PULL_REQUEST_CONNECTIONS:
+            if connection is COMMITS and item.compare_commits is not None:
+                continue  # checked against compare's total_commits instead
+            _check_complete(number, connection.field, item.collected(connection.field))
         commit_source: CommitSource
         if item.compare_commits is not None:
             commits = item.compare_commits
             commit_source = "compare"
         else:
-            _check_complete(number, "commits", item.commits)
             commits = [_graphql_commit(commit) for commit in item.commits.nodes]
             commit_source = "graphql"
 
@@ -386,9 +403,14 @@ class PullRequestHydrator:
             account(comment.author, number=number, role="commenter")
             for comment in item.comments.nodes
         ]
-        counts = Counter(author for author in comment_authors if author is not None)
+        # Counted by GitHub id: identity never joins on login (plan 5.2). The last sighting wins.
+        by_id: dict[int, tuple[Account, int]] = {}
+        for author in comment_authors:
+            if author is not None:
+                count = by_id.get(author.github_id, (author, 0))[1]
+                by_id[author.github_id] = (author, count + 1)
         commenters = tuple(
-            Commenter(account=author, comment_count=count) for author, count in counts.items()
+            Commenter(account=author, comment_count=count) for author, count in by_id.values()
         )
         return PullRequestRecord(
             repository=self._repository.full_name,
@@ -446,10 +468,13 @@ def _first_collected[NodeT](number: int, name: str, page: Page[NodeT] | None) ->
     """The first page of a connection; a null connection or entry fails the item."""
     if page is None or page.nodes is None or any(node is None for node in page.nodes):
         raise NullEntry(number, name)
+    cursor = page.page_info.end_cursor
+    if page.page_info.has_next_page and cursor is None:
+        raise PagingStalled(number, name, cursor)
     return _Collected(
         total=page.total_count,
         nodes=[node for node in page.nodes if node is not None],
-        cursor=page.page_info.end_cursor if page.page_info.has_next_page else None,
+        cursor=cursor if page.page_info.has_next_page else None,
     )
 
 
@@ -486,7 +511,17 @@ def _apply_continuation(
     if page.nodes is None or any(node is None for node in page.nodes):
         return NullEntry(number, connection.field)
     collected.nodes.extend(node for node in page.nodes if node is not None)
-    collected.cursor = page.page_info.end_cursor if page.page_info.has_next_page else None
+    if len(collected.nodes) > collected.total:
+        return ConnectionCountMismatch(
+            number, connection.field, len(collected.nodes), collected.total
+        )
+    if page.page_info.has_next_page:
+        cursor = page.page_info.end_cursor
+        if cursor is None or cursor == collected.cursor:
+            return PagingStalled(number, connection.field, cursor)
+        collected.cursor = cursor
+    else:
+        collected.cursor = None
     return None
 
 
@@ -527,9 +562,3 @@ def _compare_commit(number: int, commit: CompareCommit) -> CommitRecord:
         author_email=git_author.email,
         authored_at=utc(git_author.date),
     )
-
-
-def _final(number: int, outcome: PullRequestOutcome | ItemError) -> PullRequestOutcome:
-    if isinstance(outcome, ItemError):
-        return Failed(number, outcome)
-    return outcome

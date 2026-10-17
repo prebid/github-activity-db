@@ -782,18 +782,18 @@
     "title": "Add test stored configs",
     "updatedAt": "2023-05-24T06:52:39Z"
   },
-  "document_sha256": "e0376cea8685e41c5e18368d5f43610f07e83ae7dcb7cb32e879877fc61aec04",
+  "document_sha256": "bcdac6b7a83d74688da324dead3486a0056b3e9aa474f50d8fb8de54333a5c6a",
   "errors": [],
   "extra": {
     "repository_database_id": 96349829
   },
   "headers": {
-    "date": "Sat, 17 Oct 2026 03:31:49 GMT",
+    "date": "Sat, 17 Oct 2026 04:27:36 GMT",
     "x-ratelimit-limit": "5000",
-    "x-ratelimit-remaining": "4765",
-    "x-ratelimit-reset": "1792208984",
+    "x-ratelimit-remaining": "4653",
+    "x-ratelimit-reset": "1792212701",
     "x-ratelimit-resource": "graphql",
-    "x-ratelimit-used": "235"
+    "x-ratelimit-used": "347"
   },
   "key": {
     "name": "prebid-mobile-ios",
@@ -801,6 +801,6 @@
     "owner": "prebid"
   },
   "kind": "pull_request",
-  "recorded_at": "2026-10-17T03:31:41Z",
+  "recorded_at": "2026-10-17T04:27:28Z",
   "source": "live"
 }

@@ -8469,21 +8469,22 @@
   "errors": [],
   "extra": {},
   "headers": {
-    "date": "Sat, 17 Oct 2026 03:31:46 GMT",
+    "date": "Sat, 17 Oct 2026 04:27:33 GMT",
     "x-ratelimit-limit": "5000",
-    "x-ratelimit-remaining": "4920",
-    "x-ratelimit-reset": "1792209584",
+    "x-ratelimit-remaining": "4996",
+    "x-ratelimit-reset": "1792213206",
     "x-ratelimit-resource": "core",
-    "x-ratelimit-used": "80"
+    "x-ratelimit-used": "4"
   },
   "key": {
     "base": "6c63c6f00267f396176e5b96629b6fc570e40805",
     "head": "896a11a8ca80aef3156c06df76f460ca42ab3c75",
     "name": "Prebid.js",
     "owner": "prebid",
-    "page": 1
+    "page": 1,
+    "per_page": 100
   },
   "kind": "compare",
-  "recorded_at": "2026-10-17T03:31:41Z",
+  "recorded_at": "2026-10-17T04:27:28Z",
   "source": "live"
 }

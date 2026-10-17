@@ -2,13 +2,19 @@
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator, Iterator
-from contextlib import asynccontextmanager
+from collections.abc import AsyncIterator, Iterator, Sequence
+from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from datetime import UTC, datetime, timedelta
+from typing import Protocol
 
 import pytest
 
-from github_activity_db.source import GitHubSource
+from github_activity_db.source import (
+    Account,
+    GitHubSource,
+    PullRequestOutcome,
+    RepositoryRecord,
+)
 from tests.source.replay import Replay
 
 START = datetime(2026, 10, 17, 12, 0, tzinfo=UTC)
@@ -32,6 +38,12 @@ class FakeClock:
         return delay
 
 
+class OpenSource(Protocol):
+    def __call__(
+        self, deadline: datetime | None = None
+    ) -> AbstractAsyncContextManager[GitHubSource]: ...
+
+
 @pytest.fixture
 def clock() -> FakeClock:
     return FakeClock()
@@ -45,7 +57,7 @@ def replay() -> Iterator[Replay]:
 
 
 @pytest.fixture
-def open_source(replay: Replay, clock: FakeClock):
+def open_source(replay: Replay, clock: FakeClock) -> OpenSource:
     """``async with open_source(deadline=...) as source`` over the replay and the fake clock."""
 
     @asynccontextmanager
@@ -57,3 +69,20 @@ def open_source(replay: Replay, clock: FakeClock):
             yield source
 
     return opened
+
+
+async def all_outcomes(
+    source: GitHubSource, repository: RepositoryRecord, numbers: Sequence[int]
+) -> list[PullRequestOutcome]:
+    """Every batch's outcomes, in order."""
+    outcomes: list[PullRequestOutcome] = []
+    async for batch in source.hydrate_pull_requests(repository, numbers):
+        outcomes.extend(batch)
+    return outcomes
+
+
+async def all_accounts(source: GitHubSource, node_ids: Sequence[str]) -> dict[str, Account | None]:
+    accounts: dict[str, Account | None] = {}
+    async for batch in source.lookup_users(node_ids):
+        accounts.update(batch)
+    return accounts

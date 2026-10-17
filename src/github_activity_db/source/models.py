@@ -26,22 +26,28 @@ from pydantic import (
 )
 
 _DIGITS = re.compile(r"[0-9]+")
+_ISO_8601 = re.compile(
+    r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]+)?(Z|[+-][0-9]{2}:[0-9]{2})"
+)
 
 
 def _big_int(value: object) -> int:
-    """GraphQL ``BigInt`` arrives as a JSON string of digits."""
+    """GraphQL ``BigInt`` arrives as a JSON string of digits; nothing else is accepted."""
     if isinstance(value, str) and _DIGITS.fullmatch(value):
         return int(value)
-    if isinstance(value, int) and not isinstance(value, bool):
-        return value
     raise ValueError(f"expected a BigInt, a string of digits: {value!r}")
 
 
 def _iso_string(value: object) -> object:
-    """GitHub's ``DateTime`` is an ISO 8601 string; a number is not a timestamp here."""
-    if not isinstance(value, str):
-        raise ValueError(f"expected an ISO 8601 string: {value!r}")
+    """GitHub's ``DateTime`` is an ISO 8601 string with a zone; digits are not a timestamp here."""
+    if not isinstance(value, str) or not _ISO_8601.fullmatch(value):
+        raise ValueError(f"expected an ISO 8601 date-time string: {value!r}")
     return value
+
+
+def _no_empty_account(value: object) -> object:
+    """REST describes a commit's linked account as an account, an empty object, or null."""
+    return None if value == {} else value
 
 
 # Types are checked strictly: JSON from GitHub has exact types, and lax coercion would read
@@ -287,7 +293,7 @@ class CompareAccount(RestModel):
 class CompareCommit(RestModel):
     sha: StrictStr
     commit: CompareGitCommit
-    author: CompareAccount | None
+    author: Annotated[CompareAccount | None, BeforeValidator(_no_empty_account)]
 
 
 class ComparePage(RestModel):
