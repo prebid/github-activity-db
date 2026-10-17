@@ -4,8 +4,10 @@
 A batch of up to ``PR_BATCH_SIZE`` pull requests is one GraphQL request. Connections with more
 than one page continue through ``node(id:)``, continuations from several items sharing a request.
 Above ``GRAPHQL_COMMIT_CAP`` commits the commit list comes from the REST compare endpoint. A
-request that fails is split in half down to single items; an item that fails is retried once
-alone and then reported as ``Failed``. Nothing here raises for a single item.
+request that fails is split in half down to single items. An item that fails is retried once
+alone and then reported as ``Failed``, unless the failure was its own request, already sent alone
+and retried by the transport (``ItemRequestFailed``), which a retry would only repeat. Nothing
+here raises for a single item.
 
 Outcomes are delivered per batch, so a deadline or a fatal error loses at most the batch in
 progress.
@@ -43,6 +45,7 @@ from .errors import (
     ItemRequestFailed,
     NullEntry,
     PagingStalled,
+    RepositoryChanged,
     RepositoryNotFound,
     RepositoryShapeError,
     RequestFailedError,
@@ -124,8 +127,7 @@ class _Item:
         return pending
 
     def uses_compare(self) -> bool:
-        """GraphQL stops at 250 commits; above that the list comes from compare."""
-        return self.commits.total > GRAPHQL_COMMIT_CAP
+        return _uses_compare(self.commits.total)
 
     def collected(self, name: str) -> _Collected[Any]:
         match name:
@@ -173,7 +175,9 @@ class PullRequestHydrator:
             outcomes: list[PullRequestOutcome] = []
             for number in batch:
                 outcome = first[number]
-                if isinstance(outcome, ItemError):
+                if isinstance(outcome, ItemRequestFailed):
+                    outcome = Failed(number, outcome)
+                elif isinstance(outcome, ItemError):
                     retried = (await self._group([number]))[number]
                     outcome = Failed(number, retried) if isinstance(retried, ItemError) else retried
                 outcomes.append(outcome)
@@ -230,6 +234,10 @@ class PullRequestHydrator:
             raise RepositoryShapeError(
                 self._repository.full_name, f"batch repository is null: {detail}"
             )
+        if container.get("databaseId") != self._repository.github_id:
+            raise RepositoryChanged(
+                self._repository.full_name, self._repository.github_id, container.get("databaseId")
+            )
         items: dict[int, _Item | Gone | ItemError] = {}
         for i, number in enumerate(numbers):
             alias = pull_request_alias(i)
@@ -250,10 +258,6 @@ class PullRequestHydrator:
             )
         if errors:
             return AliasError(number, errors[0].type, errors[0].message)
-        if container.get("databaseId") != self._repository.github_id:
-            return IdentityMismatch(
-                number, "repository", self._repository.github_id, container.get("databaseId")
-            )
         try:
             node = PullRequestNode.model_validate(raw)
         except ValidationError as e:
@@ -292,6 +296,10 @@ class PullRequestHydrator:
             ]
 
     async def _continue(self, group: list[tuple[_Item, Connection]]) -> None:
+        # An item that failed earlier in this round needs no more pages.
+        group = [(item, connection) for item, connection in group if item.error is None]
+        if not group:
+            return
         connections = [connection for _, connection in group]
         variables: dict[str, object] = {}
         for i, (item, connection) in enumerate(group):
@@ -464,6 +472,11 @@ class PullRequestHydrator:
 # --------------------------------------------------------------------------------------------
 # Helpers
 # --------------------------------------------------------------------------------------------
+def _uses_compare(total_commits: int) -> bool:
+    """GraphQL stops at 250 commits; above that the list comes from compare."""
+    return total_commits > GRAPHQL_COMMIT_CAP
+
+
 def _first_collected[NodeT](number: int, name: str, page: Page[NodeT] | None) -> _Collected[NodeT]:
     """The first page of a connection; a null connection or entry fails the item."""
     if page is None or page.nodes is None or any(node is None for node in page.nodes):

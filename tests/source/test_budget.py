@@ -31,6 +31,15 @@ def test_keeps_the_lowest_reading_per_window() -> None:
     assert pool.blocked_until(NOW) == SOON
 
 
+def test_several_windows_below_the_reserve_wait_for_the_last_reset() -> None:
+    # The lower reading resets first; waiting for it alone would meet the other window still low.
+    pool = BudgetPool(reserve=100)
+    pool.record(10, SOON)
+    pool.record(60, LATER)
+    assert pool.blocked_until(NOW) == LATER
+    assert pool.blocked_until(SOON + timedelta(seconds=1)) == LATER
+
+
 def test_alternating_windows_gate_on_the_lowest_unexpired() -> None:
     # One token's readings alternate between two windows (plan section 7, "Rate-limit windows").
     pool = BudgetPool(reserve=100)

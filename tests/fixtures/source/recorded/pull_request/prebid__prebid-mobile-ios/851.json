@@ -788,12 +788,12 @@
     "repository_database_id": 96349829
   },
   "headers": {
-    "date": "Sat, 17 Oct 2026 04:27:36 GMT",
+    "date": "Sat, 17 Oct 2026 05:18:34 GMT",
     "x-ratelimit-limit": "5000",
-    "x-ratelimit-remaining": "4653",
-    "x-ratelimit-reset": "1792212701",
+    "x-ratelimit-remaining": "4955",
+    "x-ratelimit-reset": "1792216302",
     "x-ratelimit-resource": "graphql",
-    "x-ratelimit-used": "347"
+    "x-ratelimit-used": "45"
   },
   "key": {
     "name": "prebid-mobile-ios",
@@ -801,6 +801,6 @@
     "owner": "prebid"
   },
   "kind": "pull_request",
-  "recorded_at": "2026-10-17T04:27:28Z",
+  "recorded_at": "2026-10-17T05:18:27Z",
   "source": "live"
 }

@@ -10,6 +10,7 @@ import httpx
 import pytest
 
 from github_activity_db.source import documents
+from tests.source import recordings
 from tests.source.recordings import (
     COMPARE_STAMP,
     RECORDED,
@@ -35,7 +36,16 @@ WHOLE_DOCUMENTS = {
 
 def test_fixtures_were_recorded() -> None:
     kinds = {Unit.load(path).kind for path in UNITS}
-    assert {"resolve", "index", "pull_request", "overflow", "compare", "user"} <= kinds
+    # One kind per query document the source layer sends, so each is stamped by a recording.
+    assert kinds == {
+        "resolve",
+        "repository_labels",
+        "index",
+        "pull_request",
+        "overflow",
+        "compare",
+        "user",
+    }
 
 
 @pytest.mark.parametrize("path", UNITS, ids=lambda path: str(path.relative_to(RECORDED)))
@@ -110,6 +120,37 @@ def test_the_replay_refuses_a_request_for_another_document() -> None:
     response = replay.transport().handle_request(request)
     assert response.status_code == 418
     assert "re-record" in replay.problems[0]
+
+
+def _refused(replay: Replay, payload: dict) -> str:
+    request = httpx.Request("POST", "https://api.github.com/graphql", json=payload)
+    response = replay.transport().handle_request(request)
+    assert response.status_code == 418
+    return replay.problems[0]
+
+
+def test_the_replay_refuses_a_batch_alias_bound_to_another_number() -> None:
+    query = documents.pull_request_batch(2).replace(
+        "p1: pullRequest(number: $n1)", "p1: pullRequest(number: $n0)"
+    )
+    assert "pullRequest(number: $n0)" in query
+    payload = {
+        "query": query,
+        "variables": {"owner": "prebid", "name": "Prebid.js", "n0": 13481, "n1": 15724},
+    }
+    assert "bind" in _refused(Replay.from_fixtures(), payload)
+
+
+def test_the_replay_refuses_a_continuation_bound_to_another_cursor() -> None:
+    connections = [documents.CONNECTIONS_BY_FIELD["commits"]] * 2
+    query = documents.overflow_continuation(connections)
+    block = recordings.extract_block(query, "o1_commits: node(")
+    query = query.replace(block, block.replace("$after1", "$after0"))
+    payload = {
+        "query": query,
+        "variables": {"id0": "PR_a", "after0": "x", "id1": "PR_b", "after1": "y"},
+    }
+    assert "binds" in _refused(Replay.from_fixtures(), payload)
 
 
 def test_splitting_a_replayed_batch_gives_back_its_units() -> None:

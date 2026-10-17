@@ -25,6 +25,6 @@
   "headers": {
     "date": "Sat, 17 Oct 2026 12:00:00 GMT"
   },
-  "source": "A GraphQL validation error: the document asks for a field that does not exist",
+  "source": "Observed live on 2026-10-17: GitHub answers HTTP 200 with this error, and no data, for a field that does not exist",
   "status": 200
 }

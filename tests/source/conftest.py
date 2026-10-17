@@ -14,8 +14,9 @@ from github_activity_db.source import (
     GitHubSource,
     PullRequestOutcome,
     RepositoryRecord,
+    UserLookupFailed,
 )
-from tests.source.replay import Replay
+from tests.source.replay import Replay, unused_faults
 
 START = datetime(2026, 10, 17, 12, 0, tzinfo=UTC)
 
@@ -54,6 +55,7 @@ def replay() -> Iterator[Replay]:
     replay = Replay.from_fixtures()
     yield replay
     assert replay.problems == [], "\n".join(replay.problems)
+    assert unused_faults(replay) == [], "a fault's predicate never matched as the test assumes"
 
 
 @pytest.fixture
@@ -81,8 +83,20 @@ async def all_outcomes(
     return outcomes
 
 
-async def all_accounts(source: GitHubSource, node_ids: Sequence[str]) -> dict[str, Account | None]:
+async def all_lookups(
+    source: GitHubSource, node_ids: Sequence[str]
+) -> tuple[dict[str, Account | None], dict[str, UserLookupFailed]]:
+    """Every batch's accounts and failed ids, merged."""
     accounts: dict[str, Account | None] = {}
-    async for batch in source.lookup_users(node_ids):
-        accounts.update(batch)
+    failed: dict[str, UserLookupFailed] = {}
+    async for lookup in source.lookup_users(node_ids):
+        accounts.update(lookup.accounts)
+        failed.update(lookup.failed)
+    return accounts, failed
+
+
+async def all_accounts(source: GitHubSource, node_ids: Sequence[str]) -> dict[str, Account | None]:
+    """Every account, for a lookup that must not fail."""
+    accounts, failed = await all_lookups(source, node_ids)
+    assert failed == {}, failed
     return accounts

@@ -18,8 +18,11 @@ from githubkit.exception import (
 )
 from githubkit.response import Response
 
+from github_activity_db.source import GitHubSource
 from github_activity_db.source.client import build_github
+from github_activity_db.source.clock import SystemClock
 from github_activity_db.source.errors import (
+    ClientFailure,
     DeadlineReached,
     Forbidden,
     RateLimitWaitTooLong,
@@ -31,13 +34,14 @@ from github_activity_db.source.errors import (
 )
 from github_activity_db.source.limits import (
     CONNECT_TIMEOUT,
+    JITTER_FRACTION,
     MAX_RATE_LIMIT_WAIT,
     RATE_LIMIT_FALLBACK_WAIT,
     READ_TIMEOUT,
     RESET_MARGIN,
     SERVER_RETRY_DELAYS,
 )
-from github_activity_db.source.transport import RestRefused
+from github_activity_db.source.transport import RestRefused, Transport, _Failure
 from tests.source.conftest import FakeClock
 from tests.source.replay import Replay, Seen, synthetic
 
@@ -74,6 +78,17 @@ def rate_limit(cost: int, remaining: int, reset_at: datetime) -> Callable[[dict[
 
 def date_header(clock: FakeClock) -> dict[str, str]:
     return {"date": format_datetime(clock.now(), usegmt=True)}
+
+
+def resolve_body(replay: Replay, **extra: Any) -> dict[str, Any]:
+    """The recorded go-gdpr resolve answer as a response body, with ``extra`` added."""
+    data = {"repository": replay.unit("resolve", **RESOLVE).data, "rateLimit": RATE_LIMIT}
+    return {"data": data, **extra}
+
+
+RATE_LIMIT = {"cost": 1, "remaining": 4900, "resetAt": "2099-01-01T00:00:00Z"}
+HUGE = "9" * 20
+REST_DATE = {"date": "Sat, 17 Oct 2026 12:00:00 GMT"}
 
 
 class TestRateLimited:
@@ -258,6 +273,117 @@ class TestRateLimited:
         assert clock.sleeps == [45.0]
 
 
+class TestPersistentLimits:
+    """GitHub: while a limit persists, "wait for an exponentially increasing amount of time
+    between retries, and throw an error after a specific number of retries"."""
+
+    async def test_a_repeated_limit_backs_off_from_retry_after(
+        self, open_source, replay: Replay, clock: FakeClock
+    ) -> None:
+        replay.fault(
+            lambda request: synthetic("secondary_limit_rest", headers={"retry-after": "30"}),
+            when=resolves,
+            times=3,
+        )
+        async with open_source() as source:
+            await source.resolve(**RESOLVE)
+        assert clock.sleeps == [30.0, 2 * RATE_LIMIT_FALLBACK_WAIT, 4 * RATE_LIMIT_FALLBACK_WAIT]
+
+    async def test_a_zero_retry_after_resends_once_then_backs_off(
+        self, open_source, replay: Replay, clock: FakeClock
+    ) -> None:
+        replay.fault(
+            lambda request: synthetic("secondary_limit_rest", headers={"retry-after": "0"}),
+            when=resolves,
+            times=2,
+        )
+        async with open_source() as source:
+            await source.resolve(**RESOLVE)
+        assert clock.sleeps == [2 * RATE_LIMIT_FALLBACK_WAIT]
+        assert sum(1 for seen in replay.seen if seen.operation == "Resolve") == 3
+
+    async def test_a_limit_that_never_lifts_fails_the_run(
+        self, open_source, replay: Replay, clock: FakeClock
+    ) -> None:
+        # Eight limits: seven waits, and the eighth wait is too long. A transport that kept
+        # waiting would get the recorded answer on the ninth request instead of looping.
+        replay.fault(
+            lambda request: synthetic("secondary_limit_rest", headers={"retry-after": "60"}),
+            when=resolves,
+            times=8,
+        )
+        async with open_source() as source:
+            with pytest.raises(RateLimitWaitTooLong):
+                await source.resolve(**RESOLVE)
+        waits = [RATE_LIMIT_FALLBACK_WAIT * 2**repeat for repeat in range(7)]
+        assert clock.sleeps == waits
+        assert waits[-1] <= MAX_RATE_LIMIT_WAIT < 2 * waits[-1]
+
+    async def test_a_primary_limit_without_any_reset_falls_back(
+        self, open_source, replay: Replay, clock: FakeClock
+    ) -> None:
+        replay.fault(lambda request: synthetic("rate_limited"), when=resolves)
+        async with open_source() as source:
+            await source.resolve(**RESOLVE)
+        assert clock.sleeps == [RATE_LIMIT_FALLBACK_WAIT]
+
+    def test_a_shorter_limit_keeps_the_longer_pause(self, clock: FakeClock) -> None:
+        # Reachable only with more than one request in flight.
+        transport = Transport(build_github("test-token"), clock=clock)
+        transport._pause_for(_Failure("rate_limited", "first", 300.0))
+        transport._pause_for(_Failure("rate_limited", "second", 30.0))
+        assert transport._pause.until == clock.now() + timedelta(seconds=300)
+
+
+class TestOutOfRangeValues:
+    """Values GitHub's docs do not allow end in a classified failure, never another exception."""
+
+    @pytest.mark.parametrize(
+        "headers",
+        [
+            {"retry-after": HUGE},
+            {"x-ratelimit-remaining": "0", "x-ratelimit-reset": HUGE},
+        ],
+        ids=["retry-after", "reset"],
+    )
+    async def test_a_403_githubkit_cannot_read_falls_back(
+        self, open_source, replay: Replay, clock: FakeClock, headers: dict[str, str]
+    ) -> None:
+        replay.fault(
+            lambda request: synthetic("secondary_limit_rest", headers=headers), when=resolves
+        )
+        async with open_source() as source:
+            await source.resolve(**RESOLVE)
+        assert clock.sleeps == [RATE_LIMIT_FALLBACK_WAIT]
+
+    async def test_a_403_with_a_null_message_falls_back(
+        self, open_source, replay: Replay, clock: FakeClock
+    ) -> None:
+        replay.fault(
+            lambda request: httpx.Response(
+                403,
+                json={"message": None},
+                headers={**date_header(clock), "x-ratelimit-remaining": "0"},
+            ),
+            when=resolves,
+        )
+        async with open_source() as source:
+            await source.resolve(**RESOLVE)
+        assert clock.sleeps == [RATE_LIMIT_FALLBACK_WAIT]
+
+    async def test_a_huge_retry_after_on_200_is_too_long(
+        self, open_source, replay: Replay, clock: FakeClock
+    ) -> None:
+        replay.fault(
+            lambda request: synthetic("secondary_limit_graphql", headers={"retry-after": HUGE}),
+            when=resolves,
+        )
+        async with open_source() as source:
+            with pytest.raises(RateLimitWaitTooLong):
+                await source.resolve(**RESOLVE)
+        assert clock.sleeps == []
+
+
 class TestPauseIsShared:
     async def test_a_queued_request_waits_out_the_pause(
         self, open_source, replay: Replay, clock: FakeClock
@@ -311,6 +437,17 @@ class TestMalformedHeaders:
             await source.resolve(**RESOLVE)
         assert clock.sleeps == [45.0]
 
+    async def test_an_unreadable_retry_after_on_200_falls_back(
+        self, open_source, replay: Replay, clock: FakeClock
+    ) -> None:
+        replay.fault(
+            lambda request: synthetic("secondary_limit_graphql", headers={"retry-after": "soon"}),
+            when=resolves,
+        )
+        async with open_source() as source:
+            await source.resolve(**RESOLVE)
+        assert clock.sleeps == [RATE_LIMIT_FALLBACK_WAIT]
+
     async def test_an_unparseable_reset_on_403_falls_back(
         self, open_source, replay: Replay, clock: FakeClock
     ) -> None:
@@ -325,8 +462,8 @@ class TestMalformedHeaders:
 
     @pytest.mark.parametrize(
         ("remaining", "reset"),
-        [("5.0", None), ("5", "soon"), ("", None)],
-        ids=["remaining-not-integer", "reset-not-integer", "remaining-empty"],
+        [("5.0", None), ("5", "soon"), ("", None), ("5", "999999999999")],
+        ids=["remaining-not-integer", "reset-not-integer", "remaining-empty", "reset-out-of-range"],
     )
     async def test_unparseable_rest_rate_headers_are_ignored(
         self,
@@ -389,6 +526,41 @@ class TestCredentials:
             await source.resolve(**RESOLVE)
         assert clock.sleeps == [SERVER_RETRY_DELAYS[0]]
 
+    @pytest.mark.parametrize(
+        ("status", "message"),
+        [
+            (429, "Too many requests"),
+            (403, "You have exceeded a secondary rate limit. Please wait."),
+        ],
+        ids=["429", "403-secondary"],
+    )
+    async def test_a_rate_limited_token_mint_waits(
+        self, open_source, replay: Replay, clock: FakeClock, status: int, message: str
+    ) -> None:
+        # githubkit raises a rate limit only with retry-after or remaining 0; without them the
+        # mint fails as a plain RequestFailed, which still carries the limit.
+        def limited(request: httpx.Request) -> httpx.Response:
+            response = httpx.Response(status, json={"message": message}, request=request)
+            raise RequestFailed(Response(response, Any))
+
+        replay.fault(limited, when=resolves)
+        async with open_source() as source:
+            await source.resolve(**RESOLVE)
+        assert clock.sleeps == [RATE_LIMIT_FALLBACK_WAIT]
+
+    async def test_a_client_failure_outside_the_network_is_fatal(
+        self, open_source, replay: Replay, clock: FakeClock
+    ) -> None:
+        replay.fault(
+            self.raising(RuntimeError("JWT support for GitHub APP should be installed")),
+            when=resolves,
+        )
+        async with open_source() as source:
+            with pytest.raises(ClientFailure, match="JWT support"):
+                await source.resolve(**RESOLVE)
+        assert clock.sleeps == []
+        assert len(replay.seen) == 1
+
 
 class TestFatal:
     async def test_401_is_unauthorized(self, open_source, replay: Replay) -> None:
@@ -410,6 +582,14 @@ class TestFatal:
         replay.fault(lambda request: synthetic("query_rejected"), when=resolves)
         async with open_source() as source:
             with pytest.raises(UnexpectedResponse, match="noSuchField"):
+                await source.resolve(**RESOLVE)
+
+    async def test_a_403_with_an_html_body_is_forbidden(self, open_source, replay: Replay) -> None:
+        replay.fault(
+            lambda request: httpx.Response(403, text="<html>blocked</html>"), when=resolves
+        )
+        async with open_source() as source:
+            with pytest.raises(Forbidden, match="<html>blocked</html>"):
                 await source.resolve(**RESOLVE)
 
     async def test_an_unhandled_status_is_unexpected(self, open_source, replay: Replay) -> None:
@@ -434,7 +614,10 @@ class TestServerErrors:
             (lambda request: synthetic("graphql_timeout"), RequestTooHeavy),
             (lambda request: synthetic("resource_limit"), RequestTooHeavy),
             (lambda request: synthetic("graphql_server_fault"), ServerError),
+            (lambda request: synthetic("graphql_generic_timeout"), RequestTooHeavy),
             (lambda request: httpx.Response(200, text="<html>proxy</html>"), ServerError),
+            (lambda request: httpx.Response(502, text="<html>bad gateway</html>"), RequestTooHeavy),
+            (lambda request: httpx.Response(503, json=["unavailable"]), ServerError),
         ],
         ids=[
             "500",
@@ -443,7 +626,10 @@ class TestServerErrors:
             "graphql-timeout",
             "graphql-resource-limit",
             "graphql-server-fault",
+            "graphql-generic-timeout",
             "not-json",
+            "502-html",
+            "503-json-list",
         ],
     )
     async def test_retried_three_times_then_the_repository_fails(
@@ -542,6 +728,24 @@ class TestBudget:
             usage = source.usage
         assert (usage.graphql_points, usage.graphql_requests, usage.rest_calls) == (1, 1, 1)
 
+    @pytest.mark.parametrize(
+        "respond",
+        [
+            lambda request: httpx.Response(200, text="<html>proxy</html>", headers=REST_DATE),
+            lambda request: httpx.Response(200, json={"total_commits": 0}),
+        ],
+        ids=["not-json", "no-date"],
+    )
+    async def test_a_malformed_rest_response_is_retried(
+        self, open_source, replay: Replay, clock: FakeClock, respond
+    ) -> None:
+        path, params = compare_unit(replay)
+        replay.fault(respond, when=lambda s: s.operation == "rest")
+        async with open_source() as source:
+            result = await source.transport.rest_get(path, params)
+        assert not isinstance(result, RestRefused)
+        assert clock.sleeps == [SERVER_RETRY_DELAYS[0]]
+
     async def test_rest_refusals_come_back_as_values(self, open_source, replay: Replay) -> None:
         path, params = compare_unit(replay)
         replay.fault(
@@ -559,6 +763,35 @@ class TestBudget:
             with pytest.raises(DeadlineReached):
                 await source.resolve(**RESOLVE)
         assert replay.seen == []
+
+    async def test_a_request_queued_past_the_deadline_is_not_sent(
+        self, open_source, replay: Replay, clock: FakeClock
+    ) -> None:
+        def wrap(handle):
+            async def slow(request: httpx.Request) -> httpx.Response:
+                await asyncio.sleep(0)  # the second request queues on the slot meanwhile
+                await clock.sleep(25)  # and the first runs past the deadline
+                return handle(request)
+
+            return slow
+
+        replay.wrap = wrap
+        async with open_source(deadline=clock.now() + timedelta(seconds=20)) as source:
+            results: list[object] = await asyncio.gather(
+                source.resolve(**RESOLVE), source.resolve(**RESOLVE), return_exceptions=True
+            )
+        first, second = results
+        assert not isinstance(first, BaseException)
+        assert isinstance(second, DeadlineReached)
+        assert len(replay.seen) == 1
+
+    async def test_a_retry_that_ends_before_the_deadline_is_waited(
+        self, open_source, replay: Replay, clock: FakeClock
+    ) -> None:
+        replay.fault(lambda request: synthetic("server_error"), when=resolves)
+        async with open_source(deadline=clock.now() + timedelta(minutes=10)) as source:
+            await source.resolve(**RESOLVE)
+        assert clock.sleeps == [SERVER_RETRY_DELAYS[0]]
 
     async def test_points_are_the_sum_of_reported_costs(
         self, open_source, replay: Replay, clock: FakeClock
@@ -605,14 +838,127 @@ class TestGraphQLReading:
     async def test_a_response_without_a_date_is_retried(
         self, open_source, replay: Replay, clock: FakeClock
     ) -> None:
-        unit = next(u for u in replay.units.values() if u.kind == "resolve")
+        replay.fault(lambda request: httpx.Response(200, json=resolve_body(replay)), when=resolves)
+        async with open_source() as source:
+            await source.resolve(**RESOLVE)
+        assert clock.sleeps == [SERVER_RETRY_DELAYS[0]]
+
+    async def test_an_unreadable_date_is_retried(
+        self, open_source, replay: Replay, clock: FakeClock
+    ) -> None:
         replay.fault(
-            lambda request: httpx.Response(200, json={"data": {"repository": unit.data}}),
+            lambda request: httpx.Response(
+                200, json=resolve_body(replay), headers={"date": "yesterday"}
+            ),
             when=resolves,
         )
         async with open_source() as source:
             await source.resolve(**RESOLVE)
         assert clock.sleeps == [SERVER_RETRY_DELAYS[0]]
+
+    @pytest.mark.parametrize(
+        "body",
+        [{}, {"data": None}, {"data": []}, [], {"data": {}, "errors": 5}],
+        ids=["empty", "null-data", "list-data", "list-body", "errors-not-a-list"],
+    )
+    async def test_a_malformed_body_is_retried(
+        self, open_source, replay: Replay, clock: FakeClock, body: Any
+    ) -> None:
+        replay.fault(
+            lambda request: httpx.Response(200, json=body, headers=date_header(clock)),
+            when=resolves,
+        )
+        async with open_source() as source:
+            await source.resolve(**RESOLVE)
+        assert clock.sleeps == [SERVER_RETRY_DELAYS[0]]
+
+    @pytest.mark.parametrize(
+        "entry", ["boom", {"message": "boom", "path": 5}], ids=["string", "path"]
+    )
+    async def test_a_malformed_error_entry_is_a_rejection(
+        self, open_source, replay: Replay, clock: FakeClock, entry: Any
+    ) -> None:
+        body = resolve_body(replay, errors=[entry])
+        replay.fault(
+            lambda request: httpx.Response(200, json=body, headers=date_header(clock)),
+            when=resolves,
+        )
+        async with open_source() as source:
+            with pytest.raises(UnexpectedResponse, match="rejected: boom"):
+                await source.resolve(**RESOLVE)
+
+    @pytest.mark.parametrize("status", [404, 422])
+    async def test_the_graphql_endpoint_refusing_is_unexpected(
+        self, open_source, replay: Replay, status: int
+    ) -> None:
+        replay.fault(
+            lambda request: httpx.Response(status, json={"message": "refused"}), when=resolves
+        )
+        async with open_source() as source:
+            with pytest.raises(UnexpectedResponse) as raised:
+                await source.resolve(**RESOLVE)
+        assert raised.value.status == status
+
+    @pytest.mark.parametrize(
+        ("path", "message", "cause"),
+        [
+            ([], "We couldn't respond to your request in time.", RequestTooHeavy),
+            (["repository"], "Resource limits for this query exceeded.", RequestTooHeavy),
+            (["repository"], "Something went wrong while executing your query.", ServerError),
+        ],
+        ids=["pathless-timeout-with-data", "resource-limit-at-a-path", "server-fault-at-a-path"],
+    )
+    async def test_an_error_about_the_request_fails_it_at_any_path(
+        self,
+        open_source,
+        replay: Replay,
+        clock: FakeClock,
+        path: list[str],
+        message: str,
+        cause: type[Exception],
+    ) -> None:
+        # GitHub documents partial results "along with an error indicating that resource limits
+        # were exceeded"; the paths here are constructed.
+        body = resolve_body(replay, errors=[{"message": message, "path": path}])
+        replay.fault(
+            lambda request: httpx.Response(200, json=body, headers=date_header(clock)),
+            when=resolves,
+            times=None,
+        )
+        async with open_source() as source:
+            with pytest.raises(RepositoryRequestFailed) as raised:
+                await source.resolve(**RESOLVE)
+        assert isinstance(raised.value.cause, cause)
+        assert clock.sleeps == list(SERVER_RETRY_DELAYS)
+
+    async def test_points_in_a_failed_response_are_counted(
+        self, open_source, replay: Replay, clock: FakeClock
+    ) -> None:
+        reading = {**RATE_LIMIT, "cost": 3}
+        body = {
+            "data": {"repository": None, "rateLimit": reading},
+            "errors": [{"message": "We couldn't respond to your request in time.", "path": []}],
+        }
+        replay.fault(
+            lambda request: httpx.Response(200, json=body, headers=date_header(clock)),
+            when=resolves,
+        )
+        async with open_source() as source:
+            await source.resolve(**RESOLVE)
+            usage = source.usage
+        assert (usage.graphql_points, usage.graphql_requests) == (3 + 1, 2)
+
+    async def test_unencodable_variables_raise_before_any_request(
+        self, open_source, replay: Replay
+    ) -> None:
+        async with open_source() as source:
+            with pytest.raises(ValueError, match="JSON"):
+                await source.transport.graphql(
+                    "query Resolve { x }", {"n": float("nan")}, splittable=False
+                )
+            usage = source.usage
+        assert replay.seen == []
+        assert usage.graphql_requests == 0
 
 
 def test_the_client_leaves_retries_caching_and_timeouts_to_the_transport() -> None:
@@ -643,3 +989,22 @@ async def test_one_request_in_flight(open_source, replay: Replay) -> None:
         await asyncio.gather(*(source.resolve(**RESOLVE) for _ in range(4)))
     assert most == 1
     assert len(replay.seen) == 4
+
+
+def test_the_system_clock_jitters_within_its_fraction() -> None:
+    clock = SystemClock()
+    samples = [clock.jitter(8.0) for _ in range(200)]
+    assert all(8.0 <= sample <= 8.0 * (1 + JITTER_FRACTION) for sample in samples)
+    assert len(set(samples)) > 1
+
+
+async def test_retry_delays_go_through_the_clock_jitter(replay: Replay) -> None:
+    class Jittery(FakeClock):
+        def jitter(self, delay: float) -> float:
+            return delay + 0.5
+
+    clock = Jittery()
+    replay.fault(lambda request: synthetic("server_error"), when=resolves, times=3)
+    async with GitHubSource("test-token", http_transport=replay.transport(), clock=clock) as source:
+        await source.resolve(**RESOLVE)
+    assert clock.sleeps == [delay + 0.5 for delay in SERVER_RETRY_DELAYS]

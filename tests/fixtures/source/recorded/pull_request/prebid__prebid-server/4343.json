@@ -2050,12 +2050,12 @@
     "repository_database_id": 88511474
   },
   "headers": {
-    "date": "Sat, 17 Oct 2026 04:27:40 GMT",
+    "date": "Sat, 17 Oct 2026 05:18:37 GMT",
     "x-ratelimit-limit": "5000",
-    "x-ratelimit-remaining": "4647",
-    "x-ratelimit-reset": "1792212701",
+    "x-ratelimit-remaining": "4950",
+    "x-ratelimit-reset": "1792216302",
     "x-ratelimit-resource": "graphql",
-    "x-ratelimit-used": "353"
+    "x-ratelimit-used": "50"
   },
   "key": {
     "name": "prebid-server",
@@ -2063,6 +2063,6 @@
     "owner": "prebid"
   },
   "kind": "pull_request",
-  "recorded_at": "2026-10-17T04:27:28Z",
+  "recorded_at": "2026-10-17T05:18:27Z",
   "source": "live"
 }

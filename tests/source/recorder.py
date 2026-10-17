@@ -2,8 +2,9 @@
 
 Runs the real source layer through a recording transport and writes one file per unit (see
 ``tests.source.recordings``). Public repositories only: the recorder refuses a private
-repository before writing anything. Response bodies and the headers the source layer reads are
-kept; request headers, which carry the token, never are.
+repository before writing anything. A failed item or user lookup stops the recording, so the
+fixtures are replaced only by a complete set. Response bodies and the headers the source layer
+reads are kept; request headers, which carry the token, never are.
 """
 
 from __future__ import annotations
@@ -18,7 +19,7 @@ from datetime import UTC, datetime
 
 import httpx
 
-from github_activity_db.source import GitHubSource
+from github_activity_db.source import Failed, GitHubSource
 from tests.source.recordings import RECORDED, Unit, split_graphql, split_rest
 
 MAX_FILE_BYTES = 1000 * 1024  # check-added-large-files --maxkb=1000
@@ -55,6 +56,8 @@ SCENARIOS = (
     Scenario("prebid", "prebid-mobile-ios", numbers=(851,)),  # 101 files: file overflow
     Scenario("prebid", "salesagent", numbers=(1699,)),  # 106 reviews: review overflow
     Scenario("prebid", "prebid-server", numbers=(4343,)),  # 109 comments: comment overflow
+    # 144 labels: a second label page. No tracked repository has more than 100 labels.
+    Scenario("golang", "go"),
 )
 
 USERS = (
@@ -66,6 +69,10 @@ USERS = (
 
 class PrivateRepository(Exception):
     pass
+
+
+class RecordingFailed(Exception):
+    """An item or a user lookup failed, so the recording would be incomplete."""
 
 
 class RecordingTransport(httpx.AsyncBaseTransport):
@@ -119,11 +126,14 @@ async def record(
             if scenario.index:
                 await source.index_pull_requests(repository)
             if scenario.numbers:
-                async for _ in source.hydrate_pull_requests(repository, scenario.numbers):
-                    pass
+                async for outcomes in source.hydrate_pull_requests(repository, scenario.numbers):
+                    failed = [outcome for outcome in outcomes if isinstance(outcome, Failed)]
+                    if failed:
+                        raise RecordingFailed(f"{full_name}: {failed}")
         if users:
-            async for _ in source.lookup_users(users):
-                pass
+            async for lookup in source.lookup_users(users):
+                if lookup.failed:
+                    raise RecordingFailed(f"user lookup: {lookup.failed}")
         print(f"usage: {source.usage}", file=sys.stderr)
     return recording.units
 

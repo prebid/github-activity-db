@@ -8,20 +8,21 @@ from typing import Any
 
 import pytest
 
-from github_activity_db.source import Account, ClosingIssue, IndexedPullRequest, documents
+from github_activity_db.source import Account, ClosingIssue, IndexedPullRequest
 from github_activity_db.source.errors import (
     IndexCountMismatch,
     IndexOrderViolation,
     LabelCountMismatch,
+    LookupShapeError,
     RepositoryNotFound,
     RepositoryRequestFailed,
     RepositoryShapeError,
     RepositoryWithoutDefaultBranch,
-    UserLookupFailed,
+    ServerError,
 )
-from github_activity_db.source.limits import INDEX_BOUNDARY_MARGIN
-from tests.source.conftest import all_accounts
-from tests.source.recordings import Unit, whole_stamp
+from github_activity_db.source.limits import INDEX_BOUNDARY_MARGIN, SERVER_RETRY_DELAYS
+from tests.source.conftest import FakeClock, all_accounts, all_lookups
+from tests.source.recordings import Unit
 from tests.source.replay import Replay, synthetic
 
 DEPENDABOT = "MDM6Qm90NDk2OTkzMzM="
@@ -43,6 +44,17 @@ def recorded(kind: str) -> list[Unit]:
 
 def labelled(unit: Unit) -> str:
     return "/".join(str(value) for value in unit.key.values())
+
+
+GO = ("golang", "go")
+
+
+def label_page(replay: Replay) -> Unit:
+    """golang/go's recorded second label page, to modify and add back."""
+    resolve = replay.unit("resolve", owner="golang", name="go").data
+    return replay.unit(
+        "repository_labels", id=resolve["id"], after=resolve["labels"]["pageInfo"]["endCursor"]
+    )
 
 
 class TestResolve:
@@ -85,61 +97,12 @@ class TestResolve:
             with pytest.raises(RepositoryShapeError):
                 await source.resolve("prebid", "go-gdpr")
 
-    async def test_labels_page_past_100(self, open_source, replay: Replay) -> None:
-        # Modifies the recorded go-gdpr unit: one more label behind a cursor.
-        unit = replay.unit("resolve", owner="prebid", name="go-gdpr")
-        labels = unit.data["labels"]
-        labels["totalCount"] = 11
-        labels["pageInfo"] = {"hasNextPage": True, "endCursor": "page-2"}
-        replay.add(unit)
-        replay.add(_label_page(unit, "page-2", ["needs triage"], total=11))
-        async with open_source() as source:
-            repository = await source.resolve("prebid", "go-gdpr")
-        assert "needs triage" in repository.label_names
-        assert len(repository.label_names) == 11
-
-    async def test_label_pages_must_add_up(self, open_source, replay: Replay) -> None:
-        unit = replay.unit("resolve", owner="prebid", name="go-gdpr")
-        unit.data["labels"]["totalCount"] = 12
-        unit.data["labels"]["pageInfo"] = {"hasNextPage": True, "endCursor": "page-2"}
-        replay.add(unit)
-        replay.add(_label_page(unit, "page-2", ["needs triage"], total=12))
-        async with open_source() as source:
-            with pytest.raises(LabelCountMismatch):
-                await source.resolve("prebid", "go-gdpr")
-
     async def test_errors_under_the_repository_fail_it(self, open_source, replay: Replay) -> None:
         unit = replay.unit("resolve", owner="prebid", name="go-gdpr")
         unit.errors = [{"type": "SERVICE_UNAVAILABLE", "path": ["labels"], "message": "partial"}]
         replay.add(unit)
         async with open_source() as source:
             with pytest.raises(RepositoryShapeError, match="errors under repository"):
-                await source.resolve("prebid", "go-gdpr")
-
-    async def test_a_label_page_for_another_repository(self, open_source, replay: Replay) -> None:
-        unit = replay.unit("resolve", owner="prebid", name="go-gdpr")
-        unit.data["labels"]["totalCount"] = 11
-        unit.data["labels"]["pageInfo"] = {"hasNextPage": True, "endCursor": "page-2"}
-        replay.add(unit)
-        page = _label_page(unit, "page-2", ["needs triage"], total=11)
-        page.data["id"] = "R_another"
-        replay.add(page)
-        async with open_source() as source:
-            with pytest.raises(RepositoryShapeError, match="label page for R_another"):
-                await source.resolve("prebid", "go-gdpr")
-
-    async def test_a_label_total_that_changes_between_pages(
-        self, open_source, replay: Replay
-    ) -> None:
-        unit = replay.unit("resolve", owner="prebid", name="go-gdpr")
-        unit.data["labels"]["totalCount"] = 11
-        unit.data["labels"]["pageInfo"] = {"hasNextPage": True, "endCursor": "page-2"}
-        replay.add(unit)
-        replay.add(_label_page(unit, "page-2", ["needs triage", "another"], total=12))
-        async with open_source() as source:
-            with pytest.raises(
-                RepositoryShapeError, match="label totalCount changed from 11 to 12"
-            ):
                 await source.resolve("prebid", "go-gdpr")
 
     async def test_a_null_label_entry(self, open_source, replay: Replay) -> None:
@@ -166,23 +129,110 @@ class TestResolve:
             with pytest.raises(RepositoryShapeError, match="no new cursor"):
                 await source.resolve("prebid", "go-gdpr")
 
-    async def test_a_label_page_that_repeats_its_cursor(self, open_source, replay: Replay) -> None:
-        unit = replay.unit("resolve", owner="prebid", name="go-gdpr")
-        unit.data["labels"]["totalCount"] = 11
-        unit.data["labels"]["pageInfo"] = {"hasNextPage": True, "endCursor": "page-2"}
-        replay.add(unit)
-        replay.add(_label_page(unit, "page-2", ["needs triage"], total=11))
+    async def test_a_null_repository_without_not_found(self, open_source, replay: Replay) -> None:
+        def nothing(body: dict[str, Any]) -> None:
+            body["data"]["repository"] = None
 
-        # Once only: a resolver that followed the cursor would read page 2 again and fail on
-        # the label count instead of looping.
-        def repeat(body: dict[str, Any]) -> None:
-            page_info = body["data"]["node"]["labels"]["pageInfo"]
-            page_info.update(hasNextPage=True, endCursor="page-2")
+        replay.modify(nothing, when=operation("Resolve"))
+        async with open_source() as source:
+            with pytest.raises(RepositoryShapeError, match="repository is null: no errors"):
+                await source.resolve("prebid", "go-gdpr")
 
-        replay.modify(repeat, when=operation("RepositoryLabels"))
+
+class TestLabelPages:
+    """Labels past the first 100, on golang/go's recorded second page (144 labels)."""
+
+    async def test_labels_page_past_100(self, open_source, replay: Replay) -> None:
+        first = replay.unit("resolve", owner="golang", name="go").data["labels"]
+        second = label_page(replay).data["labels"]
+        async with open_source() as source:
+            repository = await source.resolve(*GO)
+        names = [node["name"] for node in first["nodes"] + second["nodes"]]
+        assert repository.label_names == frozenset(names)
+        assert len(names) == first["totalCount"] == 144
+        (request,) = [seen for seen in replay.seen if seen.operation == "RepositoryLabels"]
+        assert request.variables["after"] == first["pageInfo"]["endCursor"]
+
+    async def test_label_pages_must_add_up(self, open_source, replay: Replay) -> None:
+        resolve = replay.unit("resolve", owner="golang", name="go")
+        resolve.data["labels"]["totalCount"] = 145
+        replay.add(resolve)
+        page = label_page(replay)
+        page.data["labels"]["totalCount"] = 145
+        replay.add(page)
+        async with open_source() as source:
+            with pytest.raises(LabelCountMismatch) as raised:
+                await source.resolve(*GO)
+        assert (raised.value.fetched, raised.value.total_count) == (144, 145)
+
+    async def test_a_label_page_for_another_repository(self, open_source, replay: Replay) -> None:
+        page = label_page(replay)
+        page.data["id"] = "R_another"
+        replay.add(page)
+        async with open_source() as source:
+            with pytest.raises(RepositoryShapeError, match="label page for R_another"):
+                await source.resolve(*GO)
+
+    async def test_a_label_total_that_changes_between_pages(
+        self, open_source, replay: Replay
+    ) -> None:
+        page = label_page(replay)
+        page.data["labels"]["totalCount"] = 145
+        replay.add(page)
+        async with open_source() as source:
+            with pytest.raises(
+                RepositoryShapeError, match="label totalCount changed from 144 to 145"
+            ):
+                await source.resolve(*GO)
+
+    @pytest.mark.parametrize("where", ["nodes", "entry"])
+    async def test_a_null_on_a_later_page(self, open_source, replay: Replay, where: str) -> None:
+        page = label_page(replay)
+        if where == "nodes":
+            page.data["labels"]["nodes"] = None
+        else:
+            page.data["labels"]["nodes"][0] = None
+        replay.add(page)
+        async with open_source() as source:
+            with pytest.raises(RepositoryShapeError, match="null label entry"):
+                await source.resolve(*GO)
+
+    async def test_a_label_page_the_models_reject(self, open_source, replay: Replay) -> None:
+        page = label_page(replay)
+        page.data = None
+        replay.add(page)
+        async with open_source() as source:
+            with pytest.raises(RepositoryShapeError, match="unexpected label page"):
+                await source.resolve(*GO)
+
+    @pytest.mark.parametrize("cursor", [None, "MTAw"], ids=["missing", "repeated"])
+    async def test_a_later_page_without_a_new_cursor(
+        self, open_source, replay: Replay, cursor: str | None
+    ) -> None:
+        # Once only: a resolver that followed a repeated cursor would read the page again and
+        # fail on the label count instead of looping.
+        def stall(body: dict[str, Any]) -> None:
+            body["data"]["node"]["labels"]["pageInfo"] = {"hasNextPage": True, "endCursor": cursor}
+
+        replay.modify(stall, when=operation("RepositoryLabels"))
         async with open_source() as source:
             with pytest.raises(RepositoryShapeError, match="no new cursor"):
-                await source.resolve("prebid", "go-gdpr")
+                await source.resolve(*GO)
+
+    async def test_more_labels_than_the_total_stop_paging(
+        self, open_source, replay: Replay
+    ) -> None:
+        # One label over the total and a further page: the resolver stops instead of reading
+        # a page the replay does not have.
+        page = label_page(replay)
+        labels = page.data["labels"]
+        labels["nodes"].append({"name": "one too many"})
+        labels["pageInfo"] = {"hasNextPage": True, "endCursor": "MTQ1"}
+        replay.add(page)
+        async with open_source() as source:
+            with pytest.raises(LabelCountMismatch) as raised:
+                await source.resolve(*GO)
+        assert (raised.value.fetched, raised.value.total_count) == (145, 144)
 
 
 @pytest.mark.parametrize("unit", recorded("resolve"), ids=labelled)
@@ -209,7 +259,15 @@ async def test_resolve_maps_every_field_from_its_wire_name(open_source, unit: Un
         data["isArchived"],
         data["defaultBranchRef"]["name"],
     )
-    assert repository.label_names == {node["name"] for node in data["labels"]["nodes"]}
+    names = [node["name"] for node in data["labels"]["nodes"]]
+    names += [
+        node["name"]
+        for page in recorded("repository_labels")
+        if page.key["id"] == data["id"]
+        for node in page.data["labels"]["nodes"]
+    ]
+    assert repository.label_names == frozenset(names)
+    assert len(names) == data["labels"]["totalCount"]
 
 
 @pytest.mark.parametrize(("field", "value"), [("isPrivate", True), ("isArchived", True)])
@@ -224,25 +282,6 @@ async def test_resolve_reports_private_and_archived(
     assert (repository.is_private, repository.is_archived) == (
         field == "isPrivate",
         field == "isArchived",
-    )
-
-
-def _label_page(resolve: Unit, cursor: str, names: list[str], *, total: int) -> Unit:
-    return Unit(
-        kind="repository_labels",
-        key={"id": resolve.data["id"], "after": cursor},
-        document_sha256=whole_stamp(documents.REPOSITORY_LABELS),
-        recorded_at=resolve.recorded_at,
-        headers=resolve.headers,
-        data={
-            "id": resolve.data["id"],
-            "labels": {
-                "totalCount": total,
-                "pageInfo": {"hasNextPage": False, "endCursor": None},
-                "nodes": [{"name": name} for name in names],
-            },
-        },
-        source="synthetic: a second label page for the recorded go-gdpr resolve unit",
     )
 
 
@@ -346,8 +385,11 @@ class TestIndex:
             lambda page: page["nodes"][0].update(
                 closingIssuesReferences={"totalCount": 1, "nodes": [None]}
             ),
+            lambda page: page["nodes"][0].update(
+                closingIssuesReferences={"totalCount": 1, "nodes": None}
+            ),
         ],
-        ids=["nodes", "entry", "links", "link-entry"],
+        ids=["nodes", "entry", "links", "link-entry", "link-nodes"],
     )
     async def test_a_null_entry_fails_the_repository(
         self, open_source, replay: Replay, change
@@ -372,28 +414,60 @@ class TestIndex:
             with pytest.raises(RepositoryRequestFailed):
                 await source.index_pull_requests(repository)
 
-    @pytest.mark.parametrize("repeat", [False, True], ids=["missing", "repeated"])
+    @pytest.mark.parametrize(
+        ("page", "next_cursor"),
+        [("first", None), ("second", None), ("second", "first")],
+        ids=["first-page-missing", "second-page-missing", "second-page-repeated"],
+    )
     async def test_a_next_page_without_a_new_cursor(
-        self, open_source, replay: Replay, repeat: bool
+        self, open_source, replay: Replay, page: str, next_cursor: str | None
     ) -> None:
         first_page = replay.unit("index", owner="prebid", name="prebid-cache-java", after=None)
         first_cursor = first_page.data["pageInfo"]["endCursor"]
+        after = None if page == "first" else first_cursor
+        stalled = first_cursor if next_cursor == "first" else None
 
-        # Once only on the second page: an index that followed a repeated cursor would read
-        # the recorded page again and fail on a duplicate instead of looping.
+        # Once only: an index that followed a repeated cursor would read the recorded page
+        # again and fail on a duplicate instead of looping.
         def stall(body: dict[str, Any]) -> None:
             page_info = body["data"]["repository"]["pullRequests"]["pageInfo"]
-            page_info.update(hasNextPage=True, endCursor=first_cursor if repeat else None)
+            page_info.update(hasNextPage=True, endCursor=stalled)
 
         replay.modify(
             stall,
             when=lambda seen: seen.operation == "PullRequestIndex"
-            and seen.variables.get("after") == (first_cursor if repeat else None),
+            and seen.variables.get("after") == after,
         )
         async with open_source() as source:
             repository = await source.resolve("prebid", "prebid-cache-java")
             with pytest.raises(RepositoryShapeError, match="no new cursor"):
                 await source.index_pull_requests(repository)
+
+    @pytest.mark.parametrize(
+        ("field", "value"),
+        [("state", "QUEUED"), ("fullDatabaseId", 187290288), ("isDraft", "no")],
+    )
+    async def test_an_index_page_the_models_reject(
+        self, open_source, replay: Replay, field: str, value: object
+    ) -> None:
+        def change(body: dict[str, Any]) -> None:
+            body["data"]["repository"]["pullRequests"]["nodes"][0][field] = value
+
+        replay.modify(change, when=operation("PullRequestIndex"))
+        async with open_source() as source:
+            repository = await source.resolve("prebid", "go-gdpr")
+            with pytest.raises(RepositoryShapeError, match="unexpected index page"):
+                await source.index_pull_requests(repository)
+
+    async def test_an_index_timeout_is_retried(
+        self, open_source, replay: Replay, clock: FakeClock
+    ) -> None:
+        replay.fault(lambda request: synthetic("bad_gateway"), when=operation("PullRequestIndex"))
+        async with open_source() as source:
+            repository = await source.resolve("prebid", "go-gdpr")
+            index = await source.index_pull_requests(repository)
+        assert index.total_count == len(index.entries)
+        assert clock.sleeps == [SERVER_RETRY_DELAYS[0]]
 
     async def test_errors_in_an_index_page_fail_the_repository(
         self, open_source, replay: Replay
@@ -459,6 +533,19 @@ async def test_index_maps_every_field_from_its_wire_name(
     assert index.repository == f"{owner}/{name}"
 
 
+def synthetic_users(replay: Replay, count: int) -> list[str]:
+    """``count`` accounts served under new ids, copied from the recorded patmmccann lookup."""
+    template = replay.unit("user", id=PATMMCCANN)
+    ids = [f"synthetic-{i}" for i in range(count)]
+    for number, node_id in enumerate(ids):
+        unit = replay.unit("user", id=PATMMCCANN)
+        unit.key = {"id": node_id}
+        unit.data = {**template.data, "id": node_id, "databaseId": number + 1}
+        unit.source = "synthetic: copies of the recorded patmmccann lookup with new ids"
+        replay.add(unit)
+    return ids
+
+
 class TestUserLookup:
     async def test_a_commit_linked_bot_gets_its_real_type(
         self, open_source, replay: Replay
@@ -479,14 +566,7 @@ class TestUserLookup:
         assert request.variables["ids"] == [DEPENDABOT, PATMMCCANN, NO_SUCH_USER]
 
     async def test_batches_of_100(self, open_source, replay: Replay) -> None:
-        template = replay.unit("user", id=PATMMCCANN)
-        ids = [f"synthetic-{i}" for i in range(150)]
-        for number, node_id in enumerate(ids):
-            unit = replay.unit("user", id=PATMMCCANN)
-            unit.key = {"id": node_id}
-            unit.data = {**template.data, "id": node_id, "databaseId": number + 1}
-            unit.source = "synthetic: copies of the recorded patmmccann lookup with new ids"
-            replay.add(unit)
+        ids = synthetic_users(replay, 150)
         async with open_source() as source:
             accounts = await all_accounts(source, ids)
         assert len(accounts) == 150
@@ -495,42 +575,80 @@ class TestUserLookup:
         ]
         assert sizes == [100, 50]
 
-    async def test_an_error_other_than_not_found_fails_the_lookup(
+    async def test_an_error_on_one_node_fails_that_id_only(
         self, open_source, replay: Replay
     ) -> None:
-        def forbid(body: dict) -> None:
+        def forbid(body: dict[str, Any]) -> None:
             body["data"]["nodes"][0] = None
             body["errors"] = [{"type": "FORBIDDEN", "path": ["nodes", 0], "message": "no"}]
 
         replay.modify(forbid, when=operation("UserLookup"))
         async with open_source() as source:
-            with pytest.raises(UserLookupFailed):
-                await all_accounts(source, [PATMMCCANN])
+            accounts, failed = await all_lookups(source, [PATMMCCANN, DEPENDABOT])
+        assert list(failed) == [PATMMCCANN]
+        assert isinstance(failed[PATMMCCANN].cause, LookupShapeError)
+        assert list(accounts) == [DEPENDABOT]
 
-    async def test_a_short_answer_fails_the_lookup(self, open_source, replay: Replay) -> None:
-        def short(body: dict) -> None:
-            body["data"]["nodes"] = body["data"]["nodes"][:1]
-
-        replay.modify(short, when=operation("UserLookup"))
+    @pytest.mark.parametrize(
+        "change",
+        [
+            lambda body: body.setdefault("errors", []).append(
+                {"type": "SERVICE_UNAVAILABLE", "path": ["nodes", 0, "login"], "message": "x"}
+            ),
+            lambda body: body["data"]["nodes"].__setitem__(
+                0, {"__typename": "PullRequest", "id": PATMMCCANN}
+            ),
+            lambda body: body["data"]["nodes"][0].update(id="MDQ6VXNlcjE="),
+        ],
+        ids=["partial-data", "not-an-actor", "another-id"],
+    )
+    async def test_a_bad_answer_for_one_node_fails_that_id_only(
+        self, open_source, replay: Replay, change
+    ) -> None:
+        replay.modify(change, when=operation("UserLookup"))
         async with open_source() as source:
-            with pytest.raises(UserLookupFailed):
-                await all_accounts(source, [PATMMCCANN, DEPENDABOT])
+            accounts, failed = await all_lookups(source, [PATMMCCANN, DEPENDABOT])
+        assert list(failed) == [PATMMCCANN]
+        assert list(accounts) == [DEPENDABOT]
 
-    async def test_an_answer_for_another_id_fails_the_lookup(
+    @pytest.mark.parametrize(
+        "change",
+        [
+            lambda body: body["data"].update(nodes=body["data"]["nodes"][:1]),
+            lambda body: body["data"].update(nodes={"0": None}),
+        ],
+        ids=["short", "not-a-list"],
+    )
+    async def test_an_answer_that_does_not_line_up_fails_the_batch(
+        self, open_source, replay: Replay, change
+    ) -> None:
+        replay.modify(change, when=operation("UserLookup"))
+        async with open_source() as source:
+            accounts, failed = await all_lookups(source, [PATMMCCANN, DEPENDABOT])
+        assert accounts == {}
+        assert set(failed) == {PATMMCCANN, DEPENDABOT}
+        assert all(isinstance(error.cause, LookupShapeError) for error in failed.values())
+
+    async def test_a_failed_request_fails_its_batch_and_later_batches_continue(
         self, open_source, replay: Replay
     ) -> None:
-        def swapped(body: dict) -> None:
-            body["data"]["nodes"][0]["id"] = DEPENDABOT
-
-        replay.modify(swapped, when=operation("UserLookup"))
-        async with open_source() as source:
-            with pytest.raises(UserLookupFailed):
-                await all_accounts(source, [PATMMCCANN])
-
-    async def test_a_failed_request_fails_the_lookup(self, open_source, replay: Replay) -> None:
+        ids = synthetic_users(replay, 150)
         replay.fault(
-            lambda request: synthetic("server_error"), when=operation("UserLookup"), times=None
+            lambda request: synthetic("server_error"),
+            when=lambda seen: seen.operation == "UserLookup" and len(seen.variables["ids"]) == 100,
+            times=None,
         )
         async with open_source() as source:
-            with pytest.raises(UserLookupFailed):
-                await all_accounts(source, [PATMMCCANN])
+            accounts, failed = await all_lookups(source, ids)
+        assert list(failed) == ids[:100]
+        assert all(isinstance(error.cause, ServerError) for error in failed.values())
+        assert list(accounts) == ids[100:]
+
+    async def test_a_lookup_timeout_is_retried(
+        self, open_source, replay: Replay, clock: FakeClock
+    ) -> None:
+        replay.fault(lambda request: synthetic("bad_gateway"), when=operation("UserLookup"))
+        async with open_source() as source:
+            accounts = await all_accounts(source, [PATMMCCANN])
+        assert accounts[PATMMCCANN] is not None
+        assert clock.sleeps == [SERVER_RETRY_DELAYS[0]]

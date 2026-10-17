@@ -8,7 +8,12 @@ from datetime import datetime
 
 @dataclass
 class Usage:
-    """What a run spent: ``graphql_points`` sums ``rateLimit.cost``."""
+    """What the transport spent.
+
+    ``graphql_points`` sums every ``rateLimit.cost`` GitHub reported; ``graphql_requests`` and
+    ``rest_calls`` count attempts, retries and rate-limited ones included. Requests the HTTP
+    client makes on its own (a followed redirect, an App installation-token mint) are not counted.
+    """
 
     graphql_points: int = 0
     graphql_requests: int = 0
@@ -20,7 +25,8 @@ class BudgetPool:
 
     GitHub serves requests from several regions, and one token's readings can alternate between
     windows with different ``remaining`` and reset times. Readings are therefore kept per reset
-    time, each at its lowest value, and the pool gates on the lowest among windows not yet reset.
+    time, each at its lowest value, and a request waits until every window below the reserve has
+    reset.
     """
 
     def __init__(self, reserve: int) -> None:
@@ -42,9 +48,5 @@ class BudgetPool:
         self._windows = {
             reset_at: left for reset_at, left in self._windows.items() if reset_at > now
         }
-        below = [
-            (left, reset_at) for reset_at, left in self._windows.items() if left < self.reserve
-        ]
-        if not below:
-            return None
-        return min(below)[1]
+        below = [reset_at for reset_at, left in self._windows.items() if left < self.reserve]
+        return max(below) if below else None

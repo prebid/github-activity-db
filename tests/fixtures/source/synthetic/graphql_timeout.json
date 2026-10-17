@@ -10,6 +10,6 @@
   "headers": {
     "date": "Sat, 17 Oct 2026 12:00:00 GMT"
   },
-  "source": "GitHub GraphQL docs: a request taking more than 10 seconds is terminated with a message reporting that \"We couldn't respond to your request in time\"",
+  "source": "Constructed: the documented timeout message (GitHub GraphQL docs, 'Rate limits and query limits for the GraphQL API') at HTTP 200, a status the docs do not name for it, so the message alone must classify it",
   "status": 200
 }

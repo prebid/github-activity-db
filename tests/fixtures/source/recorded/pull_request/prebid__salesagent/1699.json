@@ -1279,12 +1279,12 @@
     "repository_database_id": 1025117899
   },
   "headers": {
-    "date": "Sat, 17 Oct 2026 04:27:37 GMT",
+    "date": "Sat, 17 Oct 2026 05:18:36 GMT",
     "x-ratelimit-limit": "5000",
-    "x-ratelimit-remaining": "4650",
-    "x-ratelimit-reset": "1792212701",
+    "x-ratelimit-remaining": "4952",
+    "x-ratelimit-reset": "1792216302",
     "x-ratelimit-resource": "graphql",
-    "x-ratelimit-used": "350"
+    "x-ratelimit-used": "48"
   },
   "key": {
     "name": "salesagent",
@@ -1292,6 +1292,6 @@
     "owner": "prebid"
   },
   "kind": "pull_request",
-  "recorded_at": "2026-10-17T04:27:28Z",
+  "recorded_at": "2026-10-17T05:18:27Z",
   "source": "live"
 }

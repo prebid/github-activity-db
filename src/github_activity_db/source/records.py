@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Literal
 
-from .errors import ItemError
+from .errors import ItemError, UserLookupFailed
 
 AccountType = Literal["User", "Bot", "Organization", "Mannequin"]
 PullRequestState = Literal["OPEN", "CLOSED", "MERGED"]
@@ -20,7 +20,10 @@ CommitSource = Literal["graphql", "compare"]
 
 @dataclass(frozen=True, slots=True)
 class Account:
-    """A GitHub account as an actor sighting reports it: the only source of type and login."""
+    """A GitHub account as an actor sighting or a ``nodes(ids:)`` lookup reports it.
+
+    Those two are the only sources of an account's type and login (plan 5.2).
+    """
 
     github_id: int
     node_id: str
@@ -211,3 +214,15 @@ class Failed:
 
 
 PullRequestOutcome = Hydrated | Gone | Failed
+
+
+@dataclass(frozen=True, slots=True)
+class UserLookup:
+    """One ``nodes(ids:)`` batch: the account behind each id, and the ids whose lookup failed.
+
+    An account is None where GitHub has no such account. Every requested id is in exactly one of
+    the two mappings.
+    """
+
+    accounts: dict[str, Account | None]
+    failed: dict[str, UserLookupFailed]

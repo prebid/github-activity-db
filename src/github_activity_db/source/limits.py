@@ -42,16 +42,17 @@ INDEX_BOUNDARY_MARGIN: Final = timedelta(seconds=60)
 SERVER_RETRY_DELAYS: Final = (2.0, 4.0, 8.0)
 JITTER_FRACTION: Final = 0.25
 
-# GitHub: without retry-after, and with x-ratelimit-remaining above 0, "wait for at least one
-# minute before retrying". Doubles while the limit repeats.
+# GitHub: without retry-after or an exhausted primary limit, "wait for at least one minute before
+# retrying"; while a limit persists, "wait for an exponentially increasing amount of time between
+# retries". The transport doubles this per repeated limit.
 RATE_LIMIT_FALLBACK_WAIT: Final = 60.0
 
 # Without --max-minutes, a rate-limit wait longer than this fails the run (plan 5.3 step 4).
-# A primary window resets within an hour.
+# Chosen, not measured: a primary window resets within an hour, plus 5 minutes.
 MAX_RATE_LIMIT_WAIT: Final = 65 * 60.0
 
-# Budget reserves. The largest measured request costs 2 points (Evidence "Hydration cost"),
-# and one request is in flight, so 100 leaves room for concurrent use of the same token.
+# Budget reserves. Chosen, not measured: the largest measured request costs 2 points (Evidence
+# "Hydration cost") and one request is in flight, so 100 leaves room for other use of the token.
 GRAPHQL_RESERVE_POINTS: Final = 100
 REST_RESERVE_CALLS: Final = 100
 
@@ -63,6 +64,7 @@ RESET_MARGIN: Final = 1.0
 # parallel requests were never measured (plan 5.3 step 2). Step 5 measures before raising it.
 MAX_IN_FLIGHT: Final = 1
 
-# HTTP client timeouts: above GitHub's 10 s request limit, so they catch stalled connections.
+# HTTP client timeouts, chosen, not measured. The read timeout is above GitHub's 10 s request
+# limit, so it fires only on a stalled connection; the connect timeout bounds connection setup.
 READ_TIMEOUT: Final = 30.0
 CONNECT_TIMEOUT: Final = 10.0

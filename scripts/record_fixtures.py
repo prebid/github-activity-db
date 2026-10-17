@@ -4,8 +4,8 @@ Usage (from the repository root, with a token that can read the public tracked r
 
     GITHUB_TOKEN="$(gh auth token)" uv run --no-sync python scripts/record_fixtures.py
 
-Writes tests/fixtures/source/recorded/, replacing it only when every unit was recorded. See
-tests/source/recorder.py for the scenarios.
+Writes tests/fixtures/source/recorded/, replacing it only after every scenario recorded without a
+failed item or user lookup. See tests/source/recorder.py for the scenarios.
 """
 
 from __future__ import annotations

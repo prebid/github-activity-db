@@ -3,58 +3,80 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator, Sequence
+from typing import Any
 
 from pydantic import ValidationError
 
 from .documents import USER_LOOKUP
-from .errors import LookupShapeError, RequestFailedError, UserLookupFailed
+from .errors import LookupShapeError, RequestFailedError, SourceError, UserLookupFailed
 from .limits import USER_LOOKUP_BATCH
 from .models import LookedUpUser
-from .records import Account
-from .transport import Transport
+from .records import Account, UserLookup
+from .transport import GraphQLError, Transport
 
 
 async def lookup_user_batches(
     transport: Transport, node_ids: Sequence[str]
-) -> AsyncIterator[dict[str, Account | None]]:
-    """The account behind each node id, batch by batch; None where GitHub has none (deleted).
+) -> AsyncIterator[UserLookup]:
+    """The account behind each distinct node id, batch by batch.
 
-    This is where an account first seen through a commit gets its type and its GraphQL login
-    (plan 5.2): GraphQL types a commit's user ``User`` even for a bot, while ``nodes(ids:)``
-    returns the real type.
+    An account is None where GitHub has none (deleted). This is where an account first seen
+    through a commit gets its type and its GraphQL login (plan 5.2): GraphQL types a commit's
+    user ``User`` even for a bot, while ``nodes(ids:)`` returns the real type.
 
-    Raises:
-        UserLookupFailed: a lookup request still failed after its retries.
+    A failure is scoped to what it covers: an error or a mismatch for one node fails that id; a
+    request that still fails after its retries, or an answer that does not line up with the
+    request, fails every id of its batch. Later batches are still looked up.
     """
-    unique = list(dict.fromkeys(node_ids))
-    for start in range(0, len(unique), USER_LOOKUP_BATCH):
-        accounts: dict[str, Account | None] = {}
-        batch = unique[start : start + USER_LOOKUP_BATCH]
-        try:
-            result = await transport.graphql(USER_LOOKUP, {"ids": batch}, splittable=False)
-        except RequestFailedError as e:
-            raise UserLookupFailed(e) from e
-        nodes = result.data.get("nodes")
-        if not isinstance(nodes, list) or len(nodes) != len(batch):
-            raise _failed(f"user lookup returned {len(batch)} ids but nodes {nodes!r}")
-        for index, (node_id, raw) in enumerate(zip(batch, nodes, strict=True)):
-            errors = result.errors_under("nodes", index)
-            if raw is None:
-                if any(error.type != "NOT_FOUND" for error in errors):
-                    raise _failed(f"user lookup for {node_id}: {errors[0].message}")
-                accounts[node_id] = None
-                continue
-            try:
-                user = LookedUpUser.model_validate(raw)
-            except ValidationError as e:
-                raise _failed(f"user lookup for {node_id}: {e}") from e
-            if user.id != node_id:
-                raise _failed(f"user lookup for {node_id} returned {user.id}")
-            accounts[node_id] = Account(
-                github_id=user.database_id, node_id=user.id, login=user.login, type=user.typename
-            )
-        yield accounts
+    distinct = list(dict.fromkeys(node_ids))
+    for start in range(0, len(distinct), USER_LOOKUP_BATCH):
+        yield await _lookup(transport, distinct[start : start + USER_LOOKUP_BATCH])
 
 
-def _failed(message: str) -> UserLookupFailed:
-    return UserLookupFailed(LookupShapeError(message))
+async def _lookup(transport: Transport, batch: list[str]) -> UserLookup:
+    try:
+        result = await transport.graphql(USER_LOOKUP, {"ids": batch}, splittable=False)
+    except RequestFailedError as e:
+        return _all_failed(batch, e)
+    nodes = result.data.get("nodes")
+    if not isinstance(nodes, list) or len(nodes) != len(batch):
+        return _all_failed(batch, LookupShapeError(f"{len(batch)} ids, nodes {nodes!r:.200}"))
+    accounts: dict[str, Account | None] = {}
+    failed: dict[str, UserLookupFailed] = {}
+    for index, (node_id, raw) in enumerate(zip(batch, nodes, strict=True)):
+        account = _account(node_id, raw, result.errors_under("nodes", index))
+        if isinstance(account, UserLookupFailed):
+            failed[node_id] = account
+        else:
+            accounts[node_id] = account
+    return UserLookup(accounts=accounts, failed=failed)
+
+
+def _account(
+    node_id: str, raw: Any, errors: tuple[GraphQLError, ...]
+) -> Account | None | UserLookupFailed:
+    if raw is None:
+        if any(error.type != "NOT_FOUND" for error in errors):
+            return _failed(node_id, f"{errors[0].type}: {errors[0].message}")
+        return None
+    if errors:
+        return _failed(node_id, f"partial data with {errors[0].type}: {errors[0].message}")
+    try:
+        user = LookedUpUser.model_validate(raw)
+    except ValidationError as e:
+        return _failed(node_id, str(e))
+    if user.id != node_id:
+        return _failed(node_id, f"answered for {user.id}")
+    return Account(
+        github_id=user.database_id, node_id=user.id, login=user.login, type=user.typename
+    )
+
+
+def _failed(node_id: str, message: str) -> UserLookupFailed:
+    return UserLookupFailed(node_id, LookupShapeError(message))
+
+
+def _all_failed(batch: list[str], cause: SourceError) -> UserLookup:
+    return UserLookup(
+        accounts={}, failed={node_id: UserLookupFailed(node_id, cause) for node_id in batch}
+    )

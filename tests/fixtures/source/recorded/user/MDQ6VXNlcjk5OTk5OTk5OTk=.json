@@ -10,17 +10,17 @@
   ],
   "extra": {},
   "headers": {
-    "date": "Sat, 17 Oct 2026 04:27:40 GMT",
+    "date": "Sat, 17 Oct 2026 05:18:38 GMT",
     "x-ratelimit-limit": "5000",
-    "x-ratelimit-remaining": "4645",
-    "x-ratelimit-reset": "1792212701",
+    "x-ratelimit-remaining": "4946",
+    "x-ratelimit-reset": "1792216302",
     "x-ratelimit-resource": "graphql",
-    "x-ratelimit-used": "355"
+    "x-ratelimit-used": "54"
   },
   "key": {
     "id": "MDQ6VXNlcjk5OTk5OTk5OTk="
   },
   "kind": "user",
-  "recorded_at": "2026-10-17T04:27:28Z",
+  "recorded_at": "2026-10-17T05:18:27Z",
   "source": "live"
 }

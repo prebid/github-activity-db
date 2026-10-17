@@ -6,6 +6,6 @@
     "date": "Sat, 17 Oct 2026 12:00:00 GMT",
     "x-ratelimit-remaining": "0"
   },
-  "source": "GitHub REST docs: over the primary limit, 403 with x-ratelimit-remaining 0; wait until x-ratelimit-reset",
+  "source": "GitHub REST docs, 'Best practices for using the REST API': when 'the x-ratelimit-remaining header is 0', wait 'until after the time specified by the x-ratelimit-reset header'. The message is constructed",
   "status": 403
 }

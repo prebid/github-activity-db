@@ -5,6 +5,6 @@
   "headers": {
     "date": "Sat, 17 Oct 2026 12:00:00 GMT"
   },
-  "source": "GitHub REST docs: a secondary limit can answer 429",
+  "source": "GitHub REST docs, 'Troubleshooting the REST API': over a primary or a secondary rate limit 'you will receive a 403 Forbidden or 429 Too Many Requests response'. The body is constructed and names no limit, so the status alone must classify it",
   "status": 429
 }

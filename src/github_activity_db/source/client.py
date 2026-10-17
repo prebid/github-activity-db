@@ -23,7 +23,7 @@ if TYPE_CHECKING:
     from githubkit import BaseAuthStrategy
 
     from .budget import Usage
-    from .records import Account, PullRequestIndex, PullRequestOutcome, RepositoryRecord
+    from .records import PullRequestIndex, PullRequestOutcome, RepositoryRecord, UserLookup
 
 USER_AGENT = "github-activity-db"
 
@@ -99,11 +99,11 @@ class GitHubSource:
     ) -> AsyncIterator[list[PullRequestOutcome]]:
         """Outcomes batch by batch: ``async for outcomes in source.hydrate_pull_requests(...)``.
 
-        Each batch arrives after its failed items were retried alone, so a deadline or a fatal
-        error loses at most the batch in progress.
+        Each batch arrives after its failed items were retried alone, so a deadline, a
+        repository error, or a fatal error loses at most the batch in progress.
         """
         return PullRequestHydrator(self._transport, repository).batches(numbers)
 
-    def lookup_users(self, node_ids: Sequence[str]) -> AsyncIterator[dict[str, Account | None]]:
-        """Accounts batch by batch, keyed by node id; None where GitHub has no such account."""
+    def lookup_users(self, node_ids: Sequence[str]) -> AsyncIterator[UserLookup]:
+        """Accounts batch by batch, keyed by node id, with the ids whose lookup failed."""
         return lookup_user_batches(self._transport, node_ids)

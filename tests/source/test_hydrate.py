@@ -1,4 +1,5 @@
-"""Hydration against recorded responses: every scenario and every invariant (plan Step 2).
+"""Hydration against recorded responses: the recorded scenarios and the invariant checks (plan
+Step 2).
 
 Recorded units come from public repositories (tests/source/recorder.py names why each was
 recorded). A test that needs a case GitHub does not serve on demand modifies a recorded unit in
@@ -45,11 +46,14 @@ from github_activity_db.source.errors import (
     ItemRequestFailed,
     NullEntry,
     PagingStalled,
+    RepositoryChanged,
     RepositoryNotFound,
     RepositoryShapeError,
+    RequestTooHeavy,
     ResponseShapeError,
     TotalCountChanged,
 )
+from github_activity_db.source.hydrate import _uses_compare
 from github_activity_db.source.limits import (
     OVERFLOW_ALIASES_PER_REQUEST,
     PR_BATCH_SIZE,
@@ -154,7 +158,6 @@ class TestRecordedScenarios:
                 github_id=49699333, node_id="MDM6Qm90NDk2OTkzMzM=", login="dependabot[bot]"
             ),
         )
-        assert record.author in record.accounts()
 
     async def test_ids_above_32_bits(self, open_source) -> None:
         record = await hydrate_one(open_source, PREBID_JS, 15724)
@@ -387,7 +390,15 @@ def wire_link(git_actor: dict[str, Any] | None) -> LinkedAccount | None:
 # --------------------------------------------------------------------------------------------
 # Synthetic overflow for labels and closing issues (no tracked PR has more than 100)
 # --------------------------------------------------------------------------------------------
-def overflow_unit(item: Unit, connection: str, after: str, nodes: list[Any], total: int) -> Unit:
+def overflow_unit(
+    item: Unit,
+    connection: str,
+    after: str,
+    nodes: list[Any],
+    total: int,
+    next_cursor: str | None = None,
+) -> Unit:
+    """A synthetic continuation page; ``next_cursor`` gives it a further page."""
     return Unit(
         kind="overflow",
         key={"id": item.data["id"], "connection": connection, "after": after},
@@ -399,12 +410,39 @@ def overflow_unit(item: Unit, connection: str, after: str, nodes: list[Any], tot
             "updatedAt": item.data["updatedAt"],
             connection: {
                 "totalCount": total,
-                "pageInfo": {"hasNextPage": False, "endCursor": "end"},
+                "pageInfo": {
+                    "hasNextPage": next_cursor is not None,
+                    "endCursor": next_cursor or after,
+                },
                 "nodes": nodes,
             },
         },
-        source=f"synthetic: a second {connection} page for recorded unit #{item.key['number']}",
+        source=f"synthetic: {connection} after {after} for recorded unit #{item.key['number']}",
     )
+
+
+SECOND_PAGES: dict[str, dict[str, Any]] = {
+    "labels": {"name": "extra"},
+    "closingIssuesReferences": {
+        "number": 1,
+        "repository": {"databaseId": 39321023, "nameWithOwner": "prebid/Prebid.js"},
+    },
+}
+
+
+def with_second_pages(replay: Replay, unit: Unit, connections: tuple[str, ...]) -> Unit:
+    """``unit`` (one recorded entry on each connection) with a second page on ``connections``."""
+    for connection in connections:
+        page = unit.data[connection]
+        page["totalCount"] += 1
+        page["pageInfo"] = {"hasNextPage": True, "endCursor": "page-2"}
+        replay.add(
+            overflow_unit(
+                unit, connection, "page-2", [SECOND_PAGES[connection]], page["totalCount"]
+            )
+        )
+    replay.add(unit)
+    return unit
 
 
 @pytest.mark.parametrize(
@@ -432,6 +470,25 @@ async def test_overflow_on_labels_and_closing_issues(
     replay.add(overflow_unit(unit, connection, "page-2", [node], page["totalCount"]))
     record = await hydrate_one(open_source, PREBID_JS, 12975)
     assert len(read(record)) == page["totalCount"] == 2
+
+
+async def test_a_connection_with_three_pages(open_source, replay: Replay) -> None:
+    unit = pr_unit(replay, 12975)  # one label, recorded
+    labels = unit.data["labels"]
+    labels["totalCount"] = 3
+    labels["pageInfo"] = {"hasNextPage": True, "endCursor": "page-2"}
+    replay.add(unit)
+    replay.add(overflow_unit(unit, "labels", "page-2", [{"name": "b"}], 3, next_cursor="page-3"))
+    replay.add(overflow_unit(unit, "labels", "page-3", [{"name": "c"}], 3))
+    record = await hydrate_one(open_source, PREBID_JS, 12975)
+    assert record.labels == ("bugfix", "b", "c")
+    overflow = [seen for seen in replay.seen if is_overflow(seen)]
+    assert [seen.variables["after0"] for seen in overflow] == ["page-2", "page-3"]
+
+
+@pytest.mark.parametrize(("total", "compare"), [(250, False), (251, True)])
+def test_compare_starts_above_250_commits(total: int, compare: bool) -> None:
+    assert _uses_compare(total) is compare
 
 
 # --------------------------------------------------------------------------------------------
@@ -519,7 +576,12 @@ class TestInvariants:
             (("fullDatabaseId",), "1_2"),
             (("fullDatabaseId",), True),
             (("createdAt",), 1_700_000_000),
+            (("createdAt",), "1700000000"),
+            (("createdAt",), "2025-07-01 14:51:49Z"),
             (("author", "__typename"), "Ghost"),
+            (("state",), "QUEUED"),
+            (("additions",), "141"),
+            (("unexpectedField",), 1),
         ],
         ids=[
             "pending-review",
@@ -527,7 +589,12 @@ class TestInvariants:
             "bigint-with-underscore",
             "bigint-as-bool",
             "numeric-date",
+            "digit-string-date",
+            "space-separated-date",
             "unknown-actor",
+            "unknown-state",
+            "string-int",
+            "unselected-field",
         ],
     )
     async def test_a_value_the_models_reject(
@@ -549,13 +616,18 @@ class TestInvariants:
         assert isinstance(error, IdentityMismatch)
         assert error.field == "number"
 
-    async def test_the_repository_must_match(self, open_source, replay: Replay) -> None:
-        unit = pr_unit(replay, 13481)
-        unit.extra["repository_database_id"] = 1
-        replay.add(unit)
-        error = await failure(open_source, PREBID_JS, 13481)
-        assert isinstance(error, IdentityMismatch)
-        assert error.field == "repository"
+    async def test_a_batch_for_another_repository_fails_the_repository(
+        self, open_source, replay: Replay
+    ) -> None:
+        # Checked before any alias, so a missing number is not reported Gone for the impostor.
+        for number in (13481, 999999):
+            unit = pr_unit(replay, number)
+            unit.extra["repository_database_id"] = 1
+            replay.add(unit)
+        with pytest.raises(RepositoryChanged) as raised:
+            await hydrate(open_source, PREBID_JS, [13481, 999999])
+        assert (raised.value.resolved_id, raised.value.answered_id) == (39321023, 1)
+        assert len(batches(replay)) == 1
 
     async def test_an_alias_error_other_than_not_found(self, open_source, replay: Replay) -> None:
         unit = pr_unit(replay, 13481)
@@ -577,6 +649,52 @@ class TestInvariants:
         unit.errors = [{"type": "SERVICE_UNAVAILABLE", "path": ["files"], "message": "partial"}]
         replay.add(unit)
         assert isinstance(await failure(open_source, PREBID_JS, 13481), AliasError)
+
+    async def test_a_null_alias_without_errors(self, open_source, replay: Replay) -> None:
+        unit = pr_unit(replay, 13481)
+        unit.data = None
+        replay.add(unit)
+        error = await failure(open_source, PREBID_JS, 13481)
+        assert isinstance(error, AliasError)
+        assert error.error_type is None
+
+    async def test_a_continuation_without_nodes(self, open_source, replay: Replay) -> None:
+        unit = replay.unit("overflow", **COMMITS_PAGE_2)
+        unit.data["commits"]["nodes"] = None
+        replay.add(unit)
+        error = await failure(open_source, PREBID_JS, 11155)
+        assert isinstance(error, NullEntry)
+        assert error.connection == "commits"
+
+    async def test_a_continuation_the_models_reject(self, open_source, replay: Replay) -> None:
+        unit = replay.unit("overflow", **COMMITS_PAGE_2)
+        unit.data["headRefOid"] = None
+        replay.add(unit)
+        assert isinstance(await failure(open_source, PREBID_JS, 11155), ResponseShapeError)
+
+    async def test_a_later_continuation_does_not_clear_an_earlier_failure(
+        self, open_source, replay: Replay
+    ) -> None:
+        # Both continuations of one item share a request; the first fails once, the second
+        # succeeds. The item must fail in its batch and pass on its solo retry.
+        with_second_pages(replay, pr_unit(replay, 12975), ("labels", "closingIssuesReferences"))
+
+        def moved(body: dict[str, Any]) -> None:
+            body["data"]["o0_labels"]["headRefOid"] = "0" * 40
+
+        replay.modify(moved, when=is_overflow)
+        outcomes = await hydrate(open_source, PREBID_JS, [12975])
+        assert isinstance(outcomes[0], Hydrated)
+        assert batches(replay) == [[12975], [12975]]
+
+    async def test_a_failed_item_reads_no_compare(self, open_source, replay: Replay) -> None:
+        unit = with_second_pages(replay, pr_unit(replay, 8858), ("labels",))
+        page = replay.unit("overflow", id=unit.data["id"], connection="labels", after="page-2")
+        page.data["headRefOid"] = "0" * 40
+        replay.add(page)
+        error = await failure(open_source, PREBID_JS, 8858)
+        assert isinstance(error, ItemChangedDuringRead)
+        assert "rest" not in [seen.operation for seen in replay.seen]
 
     async def test_a_null_continuation_without_errors(self, open_source, replay: Replay) -> None:
         unit = replay.unit("overflow", **COMMITS_PAGE_2)
@@ -687,6 +805,55 @@ class TestCompare:
         assert isinstance(error, CompareRefused)
         assert error.status == status
 
+    async def test_a_failing_compare_request_fails_the_item(
+        self, open_source, replay: Replay, clock: FakeClock
+    ) -> None:
+        replay.fault(
+            lambda request: synthetic("server_error"),
+            when=lambda s: s.operation == "rest",
+            times=None,
+        )
+        error = await failure(open_source, PREBID_JS, 8858)
+        assert isinstance(error, ItemRequestFailed)
+        # One compare request and its retries; the item's own request is not retried again.
+        assert [seen.operation for seen in replay.seen].count("rest") == 4
+        assert clock.sleeps == list(SERVER_RETRY_DELAYS)
+
+    async def test_a_compare_page_the_models_reject(self, open_source, replay: Replay) -> None:
+        unit = self.compare_page(replay, 1)
+        unit.data["total_commits"] = "254"
+        replay.add(unit)
+        assert isinstance(await failure(open_source, PREBID_JS, 8858), ResponseShapeError)
+
+    async def test_compare_commits_map_from_their_wire_names(
+        self, open_source, replay: Replay
+    ) -> None:
+        pages = sorted(
+            (unit for unit in replay.units.values() if unit.kind == "compare"),
+            key=lambda unit: unit.key["page"],
+        )
+        expected = [
+            CommitRecord(
+                sha=commit["sha"],
+                author=LinkedAccount(
+                    github_id=commit["author"]["id"],
+                    node_id=commit["author"]["node_id"],
+                    login=commit["author"]["login"],
+                )
+                if commit["author"]
+                else None,
+                author_name=commit["commit"]["author"]["name"],
+                author_email=commit["commit"]["author"]["email"],
+                authored_at=datetime.fromisoformat(commit["commit"]["author"]["date"]),
+            )
+            for page in pages
+            for commit in page.data["commits"]
+        ]
+        record = await hydrate_one(open_source, PREBID_JS, 8858)
+        assert list(record.commits) == expected
+        assert any(commit.author is None for commit in expected)
+        assert any(commit.author is not None for commit in expected)
+
     async def test_an_empty_linked_account_is_none(self, open_source, replay: Replay) -> None:
         # GitHub's REST description types a commit's author as an account, {}, or null.
         unit = self.compare_page(replay, 1)
@@ -779,11 +946,40 @@ class TestSplitAndRetry:
         assert batches(replay) == [[15724, 13481], [13481]]
 
     async def test_a_single_item_whose_request_keeps_failing(
-        self, open_source, replay: Replay
+        self, open_source, replay: Replay, clock: FakeClock
     ) -> None:
+        # Alone, a timeout is retried like a server error; the failed request is not repeated
+        # by a solo retry.
         replay.fault(lambda request: synthetic("bad_gateway"), when=is_batch, times=None)
         error = await failure(open_source, PREBID_JS, 13481)
         assert isinstance(error, ItemRequestFailed)
+        assert isinstance(error.cause, RequestTooHeavy)
+        assert batches(replay) == [[13481]] * 4
+        assert clock.sleeps == list(SERVER_RETRY_DELAYS)
+
+    async def test_a_single_item_that_recovers_from_a_timeout(
+        self, open_source, replay: Replay, clock: FakeClock
+    ) -> None:
+        replay.fault(lambda request: synthetic("bad_gateway"), when=is_batch, times=2)
+        outcomes = await hydrate(open_source, PREBID_JS, [13481])
+        assert isinstance(outcomes[0], Hydrated)
+        assert clock.sleeps == list(SERVER_RETRY_DELAYS[:2])
+
+    async def test_a_resource_limit_with_partial_data_splits(
+        self, open_source, replay: Replay, clock: FakeClock
+    ) -> None:
+        # GitHub documents partial results "along with an error indicating that resource limits
+        # were exceeded"; the message and path are constructed.
+        def exceeded(body: dict[str, Any]) -> None:
+            body["errors"] = [
+                {"message": "Resource limits for this query exceeded.", "path": ["repository"]}
+            ]
+
+        replay.modify(exceeded, when=lambda s: is_batch(s) and len(s.numbers) > 1, times=None)
+        outcomes = await hydrate(open_source, PREBID_JS, [13481, 15724, 12975])
+        assert all(isinstance(outcome, Hydrated) for outcome in outcomes)
+        assert [len(batch) for batch in batches(replay)] == [3, 1, 2, 1, 1]
+        assert clock.sleeps == []
 
     async def test_a_failing_continuation_fails_its_item(self, open_source, replay: Replay) -> None:
         replay.fault(
@@ -795,6 +991,9 @@ class TestSplitAndRetry:
         assert isinstance(outcomes[0], Failed)
         assert isinstance(outcomes[0].error, ItemRequestFailed)
         assert isinstance(outcomes[1], Hydrated)
+        # The continuation was alone and retried by the transport; no solo retry repeats it.
+        assert [seen.operation for seen in replay.seen].count("Overflow") == 4
+        assert batches(replay) == [[11155, 13481]]
 
     async def test_a_failing_continuation_request_is_split(
         self, open_source, replay: Replay
@@ -855,9 +1054,13 @@ class TestSplitAndRetry:
                 [{"type": "FORBIDDEN", "path": ["repository"], "message": "no"}],
                 RepositoryShapeError,
             ),
+            (
+                [{"type": "NOT_FOUND", "path": ["repository", "p0"], "message": "gone"}],
+                RepositoryShapeError,
+            ),
             ([], RepositoryShapeError),
         ],
-        ids=["not-found", "forbidden", "no-error"],
+        ids=["not-found", "forbidden", "not-found-below", "no-error"],
     )
     async def test_a_null_repository_fails_the_repository(
         self, open_source, replay: Replay, errors: list, raised: type
@@ -926,25 +1129,32 @@ class TestBatches:
     async def test_continuations_are_grouped_per_request(self, open_source, replay: Replay) -> None:
         # Two continuations per item; one more than a request holds.
         items = OVERFLOW_ALIASES_PER_REQUEST // 2 + 1
-        second_pages = {
-            "labels": {"name": "extra"},
-            "closingIssuesReferences": {
-                "number": 1,
-                "repository": {"databaseId": 39321023, "nameWithOwner": "prebid/Prebid.js"},
-            },
-        }
         numbers = [900_001 + i for i in range(items)]
         for number in numbers:
-            unit = copied(replay, 12975, number)  # one label and one closing issue, recorded
-            for connection, node in second_pages.items():
-                page = unit.data[connection]
-                page["totalCount"] += 1
-                page["pageInfo"] = {"hasNextPage": True, "endCursor": "page-2"}
-                replay.add(overflow_unit(unit, connection, "page-2", [node], page["totalCount"]))
-            replay.add(unit)
+            with_second_pages(replay, copied(replay, 12975, number), tuple(SECOND_PAGES))
         outcomes = await hydrate(open_source, PREBID_JS, numbers)
         assert all(isinstance(outcome, Hydrated) for outcome in outcomes)
         assert overflow_sizes(replay) == [
             OVERFLOW_ALIASES_PER_REQUEST,
             2 * items - OVERFLOW_ALIASES_PER_REQUEST,
         ]
+
+    async def test_a_failed_item_gets_no_more_continuations(
+        self, open_source, replay: Replay
+    ) -> None:
+        # The last item's labels page is in the first request and fails; its closing-issue page
+        # would be the only alias of a second request.
+        items = OVERFLOW_ALIASES_PER_REQUEST // 2 + 1
+        numbers = [900_001 + i for i in range(items)]
+        for number in numbers:
+            with_second_pages(replay, copied(replay, 12975, number), tuple(SECOND_PAGES))
+        page = replay.unit(
+            "overflow", id=f"PR_copy_{numbers[-1]}", connection="labels", after="page-2"
+        )
+        page.data["headRefOid"] = "0" * 40
+        replay.add(page)
+        outcomes = await hydrate(open_source, PREBID_JS, numbers)
+        assert isinstance(outcomes[-1], Failed)
+        assert all(isinstance(outcome, Hydrated) for outcome in outcomes[:-1])
+        # The first round, then the solo retry's two continuations.
+        assert overflow_sizes(replay) == [OVERFLOW_ALIASES_PER_REQUEST, 2]

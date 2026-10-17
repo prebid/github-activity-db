@@ -104,18 +104,18 @@
   "errors": [],
   "extra": {},
   "headers": {
-    "date": "Sat, 17 Oct 2026 04:27:36 GMT",
+    "date": "Sat, 17 Oct 2026 05:18:35 GMT",
     "x-ratelimit-limit": "5000",
-    "x-ratelimit-remaining": "4651",
-    "x-ratelimit-reset": "1792212701",
+    "x-ratelimit-remaining": "4953",
+    "x-ratelimit-reset": "1792216302",
     "x-ratelimit-resource": "graphql",
-    "x-ratelimit-used": "349"
+    "x-ratelimit-used": "47"
   },
   "key": {
     "name": "salesagent",
     "owner": "prebid"
   },
   "kind": "resolve",
-  "recorded_at": "2026-10-17T04:27:28Z",
+  "recorded_at": "2026-10-17T05:18:27Z",
   "source": "live"
 }

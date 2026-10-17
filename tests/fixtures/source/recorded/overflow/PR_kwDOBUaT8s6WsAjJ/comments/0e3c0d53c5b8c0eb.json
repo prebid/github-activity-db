@@ -88,12 +88,12 @@
   "errors": [],
   "extra": {},
   "headers": {
-    "date": "Sat, 17 Oct 2026 04:27:40 GMT",
+    "date": "Sat, 17 Oct 2026 05:18:37 GMT",
     "x-ratelimit-limit": "5000",
-    "x-ratelimit-remaining": "4646",
-    "x-ratelimit-reset": "1792212701",
+    "x-ratelimit-remaining": "4949",
+    "x-ratelimit-reset": "1792216302",
     "x-ratelimit-resource": "graphql",
-    "x-ratelimit-used": "354"
+    "x-ratelimit-used": "51"
   },
   "key": {
     "after": "Y3Vyc29yOnYyOpHPAAAAAU7JU7k=",
@@ -101,6 +101,6 @@
     "id": "PR_kwDOBUaT8s6WsAjJ"
   },
   "kind": "overflow",
-  "recorded_at": "2026-10-17T04:27:28Z",
+  "recorded_at": "2026-10-17T05:18:27Z",
   "source": "live"
 }

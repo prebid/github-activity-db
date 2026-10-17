@@ -3,11 +3,13 @@
 By what the caller does next:
 
 - ``FatalSourceError``: stop the run (exit 1). Bad credentials, a missing permission, a response
-  this code does not understand, or a rate-limit wait no deadline bounds.
+  this code does not understand, an HTTP client that fails outside the network, or a rate-limit
+  wait no deadline bounds.
 - ``RepositoryError``: this repository fails for the run; other repositories continue.
-- ``ItemError``: one pull request or issue failed; the hydrator retries it alone once and then
-  reports it as a failed outcome, never by raising.
-- ``UserLookupFailed``: a ``nodes(ids:)`` lookup failed; the caller fails the items waiting on it.
+- ``ItemError``: one pull request or issue failed; the hydrator reports it as a failed outcome,
+  never by raising.
+- ``UserLookupFailed``: the lookup of one node id failed; reported in ``UserLookup.failed``, never
+  raised, and the caller fails the items waiting on that account.
 - ``DeadlineReached``: the run stops issuing requests and drains (redesign plan 5.3 step 4).
 
 ``RequestFailedError`` is internal: the transport raises it after its retries, and the operations
@@ -54,6 +56,11 @@ class UnexpectedResponse(FatalSourceError):
         self.status = status
 
 
+class ClientFailure(FatalSourceError):
+    """The HTTP client failed for a reason other than the network or GitHub's answer: a missing
+    dependency of an auth strategy, or a defect. Retrying cannot help."""
+
+
 class RateLimitWaitTooLong(FatalSourceError):
     """Without a deadline, a rate-limit wait exceeded the longest wait the run accepts."""
 
@@ -83,14 +90,16 @@ class LookupShapeError(SourceError):
 
 
 class UserLookupFailed(SourceError):
-    """A ``nodes(ids:)`` lookup still failed after its retries.
+    """The lookup of one node id failed: its request still failed after the transport's retries,
+    or GitHub's answer for that id was an error or did not match.
 
-    The source layer cannot tell which items wait on the lookup; the caller turns this into an
-    item error for each of them (redesign plan 5.3 step 4).
+    The source layer cannot tell which items wait on the account; the caller turns this into an
+    item error for each of them (redesign plan 5.2, 5.3 step 4).
     """
 
-    def __init__(self, cause: SourceError) -> None:
-        super().__init__(f"user lookup failed: {cause}")
+    def __init__(self, node_id: str, cause: SourceError) -> None:
+        super().__init__(f"user lookup for {node_id} failed: {cause}")
+        self.node_id = node_id
         self.cause = cause
 
 
@@ -125,6 +134,17 @@ class RepositoryRequestFailed(RepositoryError):
     def __init__(self, full_name: str, cause: SourceError) -> None:
         super().__init__(full_name, f"request failed: {cause}")
         self.cause = cause
+
+
+class RepositoryChanged(RepositoryError):
+    """A batch answered for another repository than the one resolved: renamed or replaced since."""
+
+    def __init__(self, full_name: str, resolved_id: int, answered_id: object) -> None:
+        super().__init__(
+            full_name, f"resolved as repository {resolved_id}, batch answered for {answered_id!r}"
+        )
+        self.resolved_id = resolved_id
+        self.answered_id = answered_id
 
 
 class RepositoryShapeError(RepositoryError):
@@ -265,7 +285,7 @@ class CompareCountMismatch(InvariantError):
 
 
 class IdentityMismatch(InvariantError):
-    """The response describes a different item or repository than the one requested."""
+    """The response describes a different item than the one requested."""
 
     def __init__(self, number: int, field: str, expected: object, actual: object) -> None:
         super().__init__(number, f"{field}: requested {expected}, received {actual}")

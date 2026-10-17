@@ -33,6 +33,7 @@ from .records import (
     PullRequestRecord,
     RepositoryRecord,
     Review,
+    UserLookup,
 )
 
 __all__ = [
@@ -63,5 +64,6 @@ __all__ = [
     "SourceError",
     "SystemClock",
     "Usage",
+    "UserLookup",
     "UserLookupFailed",
 ]

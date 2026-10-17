@@ -1,0 +1,343 @@
+{
+  "data": {
+    "databaseId": 23096959,
+    "defaultBranchRef": {
+      "name": "master"
+    },
+    "id": "MDEwOlJlcG9zaXRvcnkyMzA5Njk1OQ==",
+    "isArchived": false,
+    "isPrivate": false,
+    "labels": {
+      "nodes": [
+        {
+          "name": "Documentation"
+        },
+        {
+          "name": "ExpertNeeded"
+        },
+        {
+          "name": "GarbageCollector"
+        },
+        {
+          "name": "LanguageChange"
+        },
+        {
+          "name": "Performance"
+        },
+        {
+          "name": "RaceDetector"
+        },
+        {
+          "name": "Security"
+        },
+        {
+          "name": "Suggested"
+        },
+        {
+          "name": "Testing"
+        },
+        {
+          "name": "Thinking"
+        },
+        {
+          "name": "Unfortunate"
+        },
+        {
+          "name": "help wanted"
+        },
+        {
+          "name": "v2"
+        },
+        {
+          "name": "OS-Dragonfly"
+        },
+        {
+          "name": "OS-FreeBSD"
+        },
+        {
+          "name": "OS-Linux"
+        },
+        {
+          "name": "OS-Darwin"
+        },
+        {
+          "name": "OS-NaCl"
+        },
+        {
+          "name": "OS-NetBSD"
+        },
+        {
+          "name": "OS-OpenBSD"
+        },
+        {
+          "name": "OS-Plan9"
+        },
+        {
+          "name": "OS-Solaris"
+        },
+        {
+          "name": "OS-Windows"
+        },
+        {
+          "name": "Builders"
+        },
+        {
+          "name": "OS-Android"
+        },
+        {
+          "name": "Proposal"
+        },
+        {
+          "name": "Proposal-Accepted"
+        },
+        {
+          "name": "Vendoring"
+        },
+        {
+          "name": "WaitingForInfo"
+        },
+        {
+          "name": "ToolSpeed"
+        },
+        {
+          "name": "NeedsFix"
+        },
+        {
+          "name": "NeedsDecision"
+        },
+        {
+          "name": "NeedsInvestigation"
+        },
+        {
+          "name": "FeatureRequest"
+        },
+        {
+          "name": "FrozenDueToAge"
+        },
+        {
+          "name": "Proposal-Hold"
+        },
+        {
+          "name": "GoCommand"
+        },
+        {
+          "name": "Debugging"
+        },
+        {
+          "name": "DevExp"
+        },
+        {
+          "name": "early-in-cycle"
+        },
+        {
+          "name": "release-blocker"
+        },
+        {
+          "name": "mobile"
+        },
+        {
+          "name": "CherryPickApproved"
+        },
+        {
+          "name": "Community"
+        },
+        {
+          "name": "package-management"
+        },
+        {
+          "name": "cla: no"
+        },
+        {
+          "name": "cla: yes"
+        },
+        {
+          "name": "Proposal-Crypto"
+        },
+        {
+          "name": "CherryPickCandidate"
+        },
+        {
+          "name": "Soon"
+        },
+        {
+          "name": "arch-wasm"
+        },
+        {
+          "name": "modules"
+        },
+        {
+          "name": "OS-AIX"
+        },
+        {
+          "name": "new-builder"
+        },
+        {
+          "name": "OS-JS"
+        },
+        {
+          "name": "arch-riscv"
+        },
+        {
+          "name": "OS-Fuchsia"
+        },
+        {
+          "name": "arch-ppc64x"
+        },
+        {
+          "name": "gopls"
+        },
+        {
+          "name": "OS-illumos"
+        },
+        {
+          "name": "Proposal-FinalCommentPeriod"
+        },
+        {
+          "name": "Tools"
+        },
+        {
+          "name": "error-handling"
+        },
+        {
+          "name": "generics"
+        },
+        {
+          "name": "dotdotdot"
+        },
+        {
+          "name": "pkgsite"
+        },
+        {
+          "name": "arch-arm64"
+        },
+        {
+          "name": "UX"
+        },
+        {
+          "name": "arch-s390x"
+        },
+        {
+          "name": "binary-size"
+        },
+        {
+          "name": "upstream-tools"
+        },
+        {
+          "name": "okay-after-beta1"
+        },
+        {
+          "name": "website"
+        },
+        {
+          "name": "recurring"
+        },
+        {
+          "name": "umbrella"
+        },
+        {
+          "name": "arch-arm"
+        },
+        {
+          "name": "Analysis"
+        },
+        {
+          "name": "fuzz"
+        },
+        {
+          "name": "gopls/performance"
+        },
+        {
+          "name": "arch-386"
+        },
+        {
+          "name": "vulncheck or vulndb"
+        },
+        {
+          "name": "arch-mips"
+        },
+        {
+          "name": "gopls/parsing"
+        },
+        {
+          "name": "gopls/analysis"
+        },
+        {
+          "name": "gopls/metadata"
+        },
+        {
+          "name": "gopls/file-corruption"
+        },
+        {
+          "name": "Refactoring"
+        },
+        {
+          "name": "TypeInference"
+        },
+        {
+          "name": "gopls/workspace"
+        },
+        {
+          "name": "gopls/completion"
+        },
+        {
+          "name": "gopls/generics"
+        },
+        {
+          "name": "pkgsite/license"
+        },
+        {
+          "name": "pkgsite/frontend"
+        },
+        {
+          "name": "pkgsite/package-removal"
+        },
+        {
+          "name": "pkgsite/search"
+        },
+        {
+          "name": "pkgsite/cmd"
+        },
+        {
+          "name": "pkgsite/dochtml"
+        },
+        {
+          "name": "arch-loong64"
+        },
+        {
+          "name": "proxy.golang.org"
+        },
+        {
+          "name": "compiler/runtime"
+        }
+      ],
+      "pageInfo": {
+        "endCursor": "MTAw",
+        "hasNextPage": true
+      },
+      "totalCount": 144
+    },
+    "name": "go",
+    "nameWithOwner": "golang/go",
+    "owner": {
+      "login": "golang"
+    }
+  },
+  "document_sha256": "035aef891393ccd81c36161af0b0d2e10034e582cac4bae68e62c9e5b035790e",
+  "errors": [],
+  "extra": {},
+  "headers": {
+    "date": "Sat, 17 Oct 2026 05:18:38 GMT",
+    "x-ratelimit-limit": "5000",
+    "x-ratelimit-remaining": "4948",
+    "x-ratelimit-reset": "1792216302",
+    "x-ratelimit-resource": "graphql",
+    "x-ratelimit-used": "52"
+  },
+  "key": {
+    "name": "go",
+    "owner": "golang"
+  },
+  "kind": "resolve",
+  "recorded_at": "2026-10-17T05:18:27Z",
+  "source": "live"
+}

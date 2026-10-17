@@ -10,6 +10,6 @@
   "headers": {
     "date": "Sat, 17 Oct 2026 12:00:00 GMT"
   },
-  "source": "GitHub's generic GraphQL server error, without a timeout",
+  "source": "Constructed: GitHub's undocumented generic GraphQL error, without the timeout sentence of graphql_generic_timeout.json",
   "status": 200
 }

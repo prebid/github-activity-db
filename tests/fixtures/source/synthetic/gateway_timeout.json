@@ -5,6 +5,6 @@
   "headers": {
     "date": "Sat, 17 Oct 2026 12:00:00 GMT"
   },
-  "source": "GitHub REST and GraphQL docs: a request taking more than 10 seconds is terminated with a timeout response reporting \"We couldn't respond to your request in time\"; 504 is the gateway-timeout status",
+  "source": "GitHub GraphQL docs, 'Rate limits and query limits for the GraphQL API': as bad_gateway.json, with the 504 status the docs also name. The rest of the message text is constructed",
   "status": 504
 }

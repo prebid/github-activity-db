@@ -1,9 +1,10 @@
 """An httpx transport that answers the source layer from recorded units.
 
 It assembles each GraphQL request from per-unit recordings, checks every unit's document stamp
-against the request text, and lets a test inject failures in front of chosen requests. Anything
-it cannot answer is recorded in ``problems`` and answered with HTTP 418, which the source layer
-treats as fatal; the ``replay`` fixture fails the test when ``problems`` is not empty.
+against the request text and that each alias binds its own variables, and lets a test inject
+failures in front of chosen requests. Anything it cannot answer is recorded in ``problems`` and
+answered with HTTP 418, which the source layer treats as fatal; the ``replay`` fixture fails the
+test when ``problems`` is not empty, or when an injected fault was never served or not used up.
 """
 
 from __future__ import annotations
@@ -26,6 +27,7 @@ from tests.source.recordings import (
     Unit,
     canonical_batch,
     compare_key,
+    extract_block,
     overflow_stamp,
     pull_request_stamp,
     whole_stamp,
@@ -67,6 +69,7 @@ class Fault:
     matches: Callable[[Seen], bool]
     respond: Callable[[httpx.Request], httpx.Response]
     times: int | None = 1
+    served: int = 0
 
 
 @dataclass
@@ -147,6 +150,7 @@ class Replay:
             if fault.times != 0 and fault.matches(seen):
                 if fault.times is not None:
                     fault.times -= 1
+                fault.served += 1
                 return fault.respond(request)
         try:
             if seen.operation == "rest":
@@ -212,6 +216,7 @@ class Replay:
                     [(unit, ["repository"])],
                 )
             case "PullRequestBatch":
+                _check_batch_bindings(seen)
                 stamp = pull_request_stamp(seen.query)
                 container: dict[str, Any] = {}
                 units: list[tuple[Unit, list[Any]]] = []
@@ -226,6 +231,7 @@ class Replay:
                     seen, [unit for unit, _ in units], {"repository": container}, units
                 )
             case "Overflow":
+                _check_overflow_bindings(seen)
                 data: dict[str, Any] = {}
                 units = []
                 for alias in re.findall(r"\b(o\d+_\w+): node\(", seen.query):
@@ -263,6 +269,45 @@ class Replay:
 
 class _Miss(Exception):
     pass
+
+
+def unused_faults(replay: Replay) -> list[str]:
+    """Faults never served, or served fewer times than given: their predicate missed."""
+    return [
+        f"fault {index}: served {fault.served}, {fault.times} left"
+        for index, fault in enumerate(replay.faults)
+        if fault.served == 0 or fault.times not in (0, None)
+    ]
+
+
+def _check_batch_bindings(seen: Seen) -> None:
+    """Alias ``p<i>`` reads ``$n<i>``, and the document declares exactly the variables sent."""
+    text = documents.normalize(seen.query)
+    expected = [str(index) for index in range(len(seen.numbers))]
+    bound = re.findall(r"\bp(\d+): pullRequest\(number: \$n(\d+)\)", text)
+    declared = re.findall(r"\$n(\d+): Int!", text)
+    if [alias for alias, _ in bound] != expected or [var for _, var in bound] != expected:
+        raise _Miss(f"batch aliases do not each bind their own $n variable: {bound}")
+    if declared != expected:
+        raise _Miss(f"batch declares {declared}, sends n{expected}")
+
+
+def _check_overflow_bindings(seen: Seen) -> None:
+    """Alias ``o<i>_*`` reads ``$id<i>`` and ``$after<i>`` only, and each is declared once."""
+    text = documents.normalize(seen.query)
+    indexes = []
+    for alias, index, variable in re.findall(r"\b(o(\d+)_\w+): node\(id: \$id(\d+)\)", text):
+        cursors = set(re.findall(r"\$after(\d+)", extract_block(text, f"{alias}: node(")))
+        if variable != index or cursors != {index}:
+            raise _Miss(f"{alias} binds $id{variable} and $after{sorted(cursors)}")
+        indexes.append(index)
+    expected = [str(index) for index in range(len(indexes))]
+    declared = re.findall(r"\$id(\d+): ID! \$after(\d+): String!", text)
+    if indexes != expected or declared != [(index, index) for index in expected]:
+        raise _Miss(f"continuation aliases {indexes} and declarations {declared} disagree")
+    sent = sorted(name for name in seen.variables if re.fullmatch(r"(id|after)\d+", name))
+    if sent != sorted([f"id{i}" for i in expected] + [f"after{i}" for i in expected]):
+        raise _Miss(f"continuation variables {sent} do not match its aliases")
 
 
 def _graphql_response(

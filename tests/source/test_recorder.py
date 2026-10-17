@@ -6,11 +6,12 @@ import json
 from pathlib import Path
 from typing import Any
 
+import httpx
 import pytest
 
 from tests.source import recorder
-from tests.source.recorder import PrivateRepository, Scenario, record
-from tests.source.replay import Replay
+from tests.source.recorder import PrivateRepository, RecordingFailed, Scenario, record
+from tests.source.replay import Replay, synthetic
 
 
 async def test_recording_the_replay_gives_back_every_unit() -> None:
@@ -46,6 +47,29 @@ async def test_a_private_repository_stops_the_run_after_its_resolve() -> None:
     operations = [seen.operation for seen in replay.seen]
     # prebid-cache-java: resolve and two index pages; go-gdpr: its resolve only; no users.
     assert operations == ["Resolve", "PullRequestIndex", "PullRequestIndex", "Resolve"]
+
+
+async def test_a_failed_item_stops_the_recording() -> None:
+    replay = Replay.from_fixtures()
+    replay.fault(
+        lambda request: httpx.Response(404, json={"message": "Not Found"}),
+        when=lambda seen: seen.operation == "rest",
+        times=None,
+    )
+    scenarios = (Scenario("prebid", "Prebid.js", numbers=(8858,)),)
+    with pytest.raises(RecordingFailed, match="compare answered 404"):
+        await record("test-token", inner=replay.transport(), scenarios=scenarios, users=())
+
+
+async def test_a_failed_user_lookup_stops_the_recording() -> None:
+    replay = Replay.from_fixtures()
+    replay.fault(
+        lambda request: synthetic("server_error"),
+        when=lambda seen: seen.operation == "UserLookup",
+        times=None,
+    )
+    with pytest.raises(RecordingFailed, match="user lookup"):
+        await record("test-token", inner=replay.transport(), scenarios=())
 
 
 async def test_a_listed_private_repository_is_never_requested() -> None:

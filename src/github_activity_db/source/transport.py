@@ -1,46 +1,51 @@
 """The one module in ``source`` that sends requests to GitHub (redesign plan 5.3 step 4, 5.7).
 
-Every request goes through ``Transport._send``, which keeps one request in flight, waits on the
-budget and on any rate-limit pause, classifies each failure, and retries server errors. Callers
-see only results and ``source.errors`` exceptions.
+Every request goes through ``Transport._send``, which keeps one request in flight, checks the
+deadline, waits on the budget and on any rate-limit pause, classifies each failure, and retries
+server errors. Callers see only results and ``source.errors`` exceptions.
 
 Failure classes:
 
 - rate limited: GraphQL ``RATE_LIMITED`` or a secondary-limit message (HTTP 200 or 403); REST
   403/429 with ``retry-after``, ``x-ratelimit-remaining: 0``, or a secondary-limit message.
-  Wait for ``retry-after``; else, when the primary limit is exhausted, until the reset; else 60 s,
-  doubling while it repeats. The pause holds every request on this transport and is never
-  counted as an attempt.
-- timeout or resource limit: HTTP 502/504, or a GraphQL timeout or resource-limit error.
-  ``RequestTooHeavy`` at once for a splittable request; retried like a server error otherwise.
-- server or transport error: other 5xx, connection errors, client timeouts, malformed bodies.
+  Wait for ``retry-after``; else, when the primary limit is exhausted, until the reset; else 60 s.
+  Each further limit before a success waits at least 60 s doubled per repeat, so a limit that
+  never lifts reaches the longest accepted wait. The pause holds every request on this transport
+  and is never counted as an attempt.
+- timeout or resource limit: HTTP 502/504, or a GraphQL error at any path reporting a timeout or
+  exceeded resource limits. ``RequestTooHeavy`` at once for a splittable request; retried like a
+  server error otherwise.
+- server or transport error: other 5xx, network errors, client timeouts, malformed responses.
   Retried after 2, 4, and 8 s (with jitter), then ``ServerError``.
-- 401, a failed credential request, or 403 without a rate-limit signal: ``Unauthorized`` or
-  ``Forbidden``, both fatal.
+- fatal: 401 or a failed credential request (``Unauthorized``), 403 without a rate-limit signal
+  (``Forbidden``), an HTTP client failure outside the network (``ClientFailure``), a response this
+  code does not understand (``UnexpectedResponse``).
 """
 
 from __future__ import annotations
 
 import asyncio
+import json
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from email.utils import parsedate_to_datetime
 from typing import TYPE_CHECKING, Any, Literal, TypeVar
 
+import httpx
 from githubkit.exception import (
     AuthCredentialError,
     AuthExpiredError,
     RateLimitExceeded,
     RequestError,
     RequestFailed,
-    RequestTimeout,
 )
 from pydantic import ValidationError
 
 from .budget import BudgetPool, Usage
 from .clock import Clock, SystemClock
 from .errors import (
+    ClientFailure,
     DeadlineReached,
     Forbidden,
     RateLimitWaitTooLong,
@@ -61,19 +66,24 @@ from .limits import (
 from .models import RateLimitReading
 
 if TYPE_CHECKING:
-    import httpx
     from githubkit import GitHub
     from githubkit.response import Response
 
-# GitHub's wording for secondary limits ("You have exceeded a secondary rate limit") and for
-# GraphQL requests stopped at its 10 s limit ("We couldn't respond to your request in time";
-# "This may be the result of a timeout").
+# GitHub's wording for secondary limits ("You have exceeded a secondary rate limit").
 _SECONDARY_LIMIT = "secondary rate limit"
-_TIMEOUT_MESSAGES = ("in time", "timeout", "timed out")
-_RESOURCE_LIMIT_TYPES = frozenset({"MAX_NODE_LIMIT_EXCEEDED", "RESOURCE_LIMITS_EXCEEDED"})
-_TIMEOUT_STATUSES = frozenset({502, 504})
-# "Something went wrong while executing your query. Please include ... when reporting this issue."
+# GitHub documents "We couldn't respond to your request in time" for a request stopped at its 10 s
+# limit, and partial results "along with an error indicating that resource limits were exceeded".
+# Its generic error "Something went wrong while executing your query. This may be the result of a
+# timeout, or it could be a GitHub bug." is undocumented. MAX_NODE_LIMIT_EXCEEDED was observed
+# live (plan section 7, "Node limit").
+_TIMEOUT_FRAGMENTS = ("in time", "timeout", "resource limit")
+_TIMEOUT_TYPES = frozenset({"MAX_NODE_LIMIT_EXCEEDED"})
 _SERVER_FAULT = "something went wrong"
+# GitHub documents 502 and 504 for a request that timed out.
+_TIMEOUT_STATUSES = frozenset({502, 504})
+# Waits are clamped so time arithmetic cannot overflow; a wait this long fails the run at
+# MAX_RATE_LIMIT_WAIT or at any deadline less than a year away.
+_LONGEST_WAIT = 366 * 24 * 3600.0
 
 
 @dataclass(frozen=True)
@@ -120,7 +130,7 @@ class _Failure:
 
     kind: Literal["rate_limited", "timeout", "server"]
     reason: str
-    # Rate limited only: seconds GitHub asks for; None means the doubling fallback.
+    # Rate limited only: seconds GitHub asks for; None when it does not say.
     wait: float | None = None
 
 
@@ -129,7 +139,8 @@ class _Pause:
     """The rate-limit pause every request on the transport honours."""
 
     until: datetime | None = None
-    fallback_waits: int = 0
+    # Rate-limited responses since the last success.
+    repeats: int = 0
 
 
 ResultT = TypeVar("ResultT", GraphQLResult, RestResult)
@@ -165,12 +176,20 @@ class Transport:
     async def graphql(
         self, document: str, variables: Mapping[str, object], *, splittable: bool
     ) -> GraphQLResult:
-        """Send a GraphQL query; path-level errors come back in the result."""
-        payload = {"query": document, "variables": dict(variables)}
+        """Send a GraphQL query; path-level errors come back in the result.
+
+        Raises ``ValueError`` or ``TypeError`` before any request when ``variables`` cannot be
+        encoded as JSON (NaN, infinity, or a value JSON has no type for).
+        """
+        content = json.dumps(
+            {"query": document, "variables": dict(variables)}, allow_nan=False
+        ).encode()
 
         async def call() -> Response[Any]:
             self.usage.graphql_requests += 1
-            return await self._github.arequest("POST", "/graphql", json=payload)
+            return await self._github.arequest(
+                "POST", "/graphql", content=content, headers={"Content-Type": "application/json"}
+            )
 
         result = await self._send(call, self._read_graphql, self.graphql_budget, splittable)
         if isinstance(result, RestRefused):
@@ -202,10 +221,10 @@ class Transport:
     ) -> ResultT | RestRefused:
         retries = 0
         while True:
-            self._check_deadline()
             async with self._in_flight:
-                # Checked while holding the slot, so a request queued behind one that hit a
-                # rate limit sees the pause it set.
+                # Checked while holding the slot, so a request queued behind another sees the
+                # deadline, the pause, and the budget that request left.
+                self._check_deadline()
                 hold = self._hold(budget)
                 if hold is None:
                     outcome = await self._attempt(call, read, budget)
@@ -213,7 +232,7 @@ class Transport:
                 await self._wait(hold)
                 continue
             if not isinstance(outcome, _Failure):
-                self._pause.fallback_waits = 0
+                self._pause.repeats = 0
                 return outcome
             if outcome.kind == "rate_limited":
                 self._pause_for(outcome)
@@ -238,12 +257,22 @@ class Transport:
         return None
 
     def _pause_for(self, failure: _Failure) -> None:
-        """Hold every request until the rate limit is expected to have lifted."""
-        wait = failure.wait
-        if wait is None:
-            wait = RATE_LIMIT_FALLBACK_WAIT * 2**self._pause.fallback_waits
-            self._pause.fallback_waits += 1
-        until = self._clock.now() + timedelta(seconds=wait)
+        """Hold every request until the rate limit is expected to have lifted.
+
+        The first limit waits as GitHub asks, or 60 s when it does not say. A further limit
+        before any success waits at least 60 s doubled per repeat: GitHub advises an
+        exponentially increasing wait while a limit persists, then an error.
+        """
+        self._pause.repeats += 1
+        backoff = RATE_LIMIT_FALLBACK_WAIT * 2 ** (self._pause.repeats - 1)
+        if failure.wait is None:
+            wait = backoff
+        elif self._pause.repeats == 1:
+            wait = failure.wait
+        else:
+            wait = max(failure.wait, backoff)
+        until = self._clock.now() + timedelta(seconds=min(wait, _LONGEST_WAIT))
+        # With more than one request in flight, a later and shorter limit keeps the longer pause.
         if self._pause.until is None or until > self._pause.until:
             self._pause.until = until
 
@@ -259,32 +288,47 @@ class Transport:
             return self._rate_limited(e.response.headers, budget, primary=False, reason=repr(e))
         except RequestFailed as e:
             return self._classify_status(e.response, budget)
-        except RequestTimeout as e:
-            return _Failure("server", f"client timeout: {e!r}")
         except RequestError as e:
             return self._classify_wrapped(e, budget)
-        except ValueError as e:
-            # githubkit parses retry-after with int() inside arequest; a value GitHub's docs
-            # do not allow (an HTTP date) surfaces here.
-            return _Failure("rate_limited", f"unparseable rate-limit header: {e}")
+        except (ValueError, OverflowError, TypeError) as e:
+            # githubkit reads the headers and body of a 403/429 itself, with int(), timedelta,
+            # fromtimestamp, and `in`; values GitHub's docs do not allow (an HTTP-date
+            # retry-after, a reset out of range, a null message) raise there. The request is
+            # encoded before the call, so nothing else in it raises these.
+            return _Failure(
+                "rate_limited", f"githubkit could not read a rate-limit response: {e!r}"
+            )
         return read(response)
 
     def _classify_wrapped(self, error: RequestError[Any], budget: BudgetPool) -> _Failure:
-        """A failure githubkit wrapped: raised inside the HTTP client, such as the auth flow.
+        """A failure githubkit wrapped: anything raised inside the HTTP client.
 
-        An installation-token mint runs inside the client and can fail with its own response,
-        so a credential failure arrives here wrapped rather than as a status.
+        That includes the network and requests the client makes itself: an App installation-
+        token mint runs inside the auth flow and can fail with its own response.
         """
         inner = error.exc
         if isinstance(inner, RateLimitExceeded):
             return self._rate_limited(
                 inner.response.headers, budget, primary=False, reason=repr(inner)
             )
-        if isinstance(inner, RequestFailed) and inner.response.status_code < 500:
+        if isinstance(inner, RequestFailed):
+            status = inner.response.status_code
+            body = _ErrorBody.read(inner.response)
+            if body.rate_limit_signal(status):
+                return self._rate_limited(
+                    inner.response.headers,
+                    budget,
+                    primary=body.rate_limited_type,
+                    reason=f"credential request, HTTP {status}: {body.summary}",
+                )
+            if status >= 500:
+                return _Failure("server", f"credential request, HTTP {status}: {body.summary}")
             raise Unauthorized(f"credential request failed: {inner!r}")
         if isinstance(inner, AuthCredentialError | AuthExpiredError):
             raise Unauthorized(f"credentials rejected: {inner!r}")
-        return _Failure("server", f"transport error: {error!r}")
+        if isinstance(inner, httpx.RequestError):
+            return _Failure("server", f"transport error: {inner!r}")
+        raise ClientFailure(f"HTTP client failed: {inner!r}") from error
 
     def _classify_status(
         self, response: Response[Any], budget: BudgetPool
@@ -293,14 +337,14 @@ class Transport:
         body = _ErrorBody.read(response)
         if status == 401:
             raise Unauthorized(f"GitHub answered 401: {body.summary}")
-        if status in (403, 429):
-            if status == 429 or body.mentions_secondary_limit or body.rate_limited_type:
-                return self._rate_limited(
-                    response.headers,
-                    budget,
-                    primary=body.rate_limited_type,
-                    reason=f"HTTP {status}: {body.summary}",
-                )
+        if body.rate_limit_signal(status):
+            return self._rate_limited(
+                response.headers,
+                budget,
+                primary=body.rate_limited_type,
+                reason=f"HTTP {status}: {body.summary}",
+            )
+        if status == 403:
             raise Forbidden(f"GitHub answered 403: {body.summary}")
         if status in _TIMEOUT_STATUSES:
             return _Failure("timeout", f"HTTP {status}: {body.summary}")
@@ -319,9 +363,18 @@ class Transport:
             body = response.json()
         except ValueError as e:
             return _Failure("server", f"GraphQL body is not JSON: {e}")
-        if date is None or not isinstance(body, dict):
-            return _Failure("server", "GraphQL response without a Date header or a JSON object")
-        errors = tuple(_graphql_error(entry) for entry in body.get("errors") or ())
+        if date is None:
+            return _Failure("server", "GraphQL response without a readable Date header")
+        if not isinstance(body, dict):
+            return _Failure("server", "GraphQL body is not a JSON object")
+        raw_errors = body.get("errors") or []
+        data = body.get("data")
+        if not isinstance(raw_errors, list) or not isinstance(data, dict | None):
+            return _Failure("server", "GraphQL body has malformed data or errors")
+        errors = tuple(_graphql_error(entry) for entry in raw_errors)
+        if data is not None and data.get("rateLimit") is not None:
+            # Counted whenever present, also on a response that fails below.
+            self._record_graphql_budget(data["rateLimit"])
         limited = [
             error
             for error in errors
@@ -335,19 +388,17 @@ class Transport:
                 primary=primary,
                 reason=f"GraphQL: {limited[0].message}",
             )
-        data = body.get("data")
-        request_level = [error for error in errors if not error.path]
-        if request_level or not isinstance(data, dict):
-            failure = _request_level_failure(request_level or list(errors))
-            if failure is not None:
-                return failure
-            detail = "; ".join(error.message for error in errors) or "no data"
+        failure = _whole_request_failure(errors)
+        if failure is not None:
+            return failure
+        if data is None and not errors:
+            return _Failure("server", "GraphQL response without data or errors")
+        if data is None or any(not error.path for error in errors):
+            detail = "; ".join(error.message for error in errors)
             raise UnexpectedResponse(f"GraphQL request rejected: {detail}")
-        reading = data.get("rateLimit")
-        if reading is None:
+        if data.get("rateLimit") is None:
             # Every document selects rateLimit; without it points go uncounted (plan 5.3 step 4).
             raise UnexpectedResponse("GraphQL response has no rateLimit")
-        self._record_graphql_budget(reading)
         return GraphQLResult(data=data, errors=errors, date=date)
 
     def _read_rest(self, response: Response[Any]) -> RestResult | _Failure:
@@ -357,7 +408,7 @@ class Transport:
         except ValueError as e:
             return _Failure("server", f"REST body is not JSON: {e}")
         if date is None:
-            return _Failure("server", "REST response without a Date header")
+            return _Failure("server", "REST response without a readable Date header")
         remaining = _int_header(response.headers, "x-ratelimit-remaining")
         reset = _reset_header(response.headers)
         if remaining is not None and reset is not None:
@@ -391,7 +442,7 @@ class Transport:
         return _Failure("rate_limited", reason)
 
     async def _wait(self, seconds: float) -> None:
-        seconds = max(seconds, 0.0)
+        seconds = min(max(seconds, 0.0), _LONGEST_WAIT)
         if self.deadline is not None:
             if self._clock.now() + timedelta(seconds=seconds) > self.deadline:
                 raise DeadlineReached(self.deadline)
@@ -420,10 +471,21 @@ class _ErrorBody:
         if not isinstance(body, dict):
             return cls(messages=(str(body)[:200],), rate_limited_type=False)
         messages = [body["message"]] if isinstance(body.get("message"), str) else []
-        errors = [entry for entry in body.get("errors") or () if isinstance(entry, dict)]
+        raw_errors = body.get("errors")
+        errors = (
+            [entry for entry in raw_errors if isinstance(entry, dict)]
+            if isinstance(raw_errors, list)
+            else []
+        )
         messages.extend(str(entry.get("message", "")) for entry in errors)
         rate_limited = any(entry.get("type") == "RATE_LIMITED" for entry in errors)
         return cls(messages=tuple(messages), rate_limited_type=rate_limited)
+
+    def rate_limit_signal(self, status: int) -> bool:
+        """A 429, or a 403 naming a rate limit (plan 5.3 step 4)."""
+        if status == 429:
+            return True
+        return status == 403 and (self.mentions_secondary_limit or self.rate_limited_type)
 
     @property
     def mentions_secondary_limit(self) -> bool:
@@ -437,21 +499,26 @@ class _ErrorBody:
 def _graphql_error(entry: object) -> GraphQLError:
     if not isinstance(entry, dict):
         return GraphQLError(type=None, message=str(entry), path=())
-    path = entry.get("path") or ()
+    path = entry.get("path")
     error_type = entry.get("type")
     return GraphQLError(
         type=error_type if isinstance(error_type, str) else None,
         message=str(entry.get("message", "")),
-        path=tuple(part for part in path if isinstance(part, str | int)),
+        path=tuple(part for part in path if isinstance(part, str | int))
+        if isinstance(path, list)
+        else (),
     )
 
 
-def _request_level_failure(errors: list[GraphQLError]) -> _Failure | None:
-    """A timeout or server failure among request-level errors; None for a rejected query."""
+def _whole_request_failure(errors: tuple[GraphQLError, ...]) -> _Failure | None:
+    """A timeout, resource limit, or server fault among the errors, at any path.
+
+    These describe the request rather than one alias, so they fail it whole.
+    """
     for error in errors:
         message = error.message.lower()
-        if error.type in _RESOURCE_LIMIT_TYPES or any(
-            fragment in message for fragment in _TIMEOUT_MESSAGES
+        if error.type in _TIMEOUT_TYPES or any(
+            fragment in message for fragment in _TIMEOUT_FRAGMENTS
         ):
             return _Failure("timeout", f"GraphQL: {error.message}")
     for error in errors:
@@ -472,7 +539,12 @@ def _int_header(headers: httpx.Headers, name: str) -> int | None:
 
 def _reset_header(headers: httpx.Headers) -> datetime | None:
     reset = _int_header(headers, "x-ratelimit-reset")
-    return datetime.fromtimestamp(reset, tz=UTC) if reset is not None else None
+    if reset is None:
+        return None
+    try:
+        return datetime.fromtimestamp(reset, tz=UTC)
+    except (OverflowError, OSError, ValueError):
+        return None
 
 
 def _retry_after(headers: httpx.Headers, now: datetime) -> float | None:

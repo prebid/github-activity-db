@@ -1,0 +1,164 @@
+{
+  "data": {
+    "id": "MDEwOlJlcG9zaXRvcnkyMzA5Njk1OQ==",
+    "labels": {
+      "nodes": [
+        {
+          "name": "x/vuln"
+        },
+        {
+          "name": "okay-after-rc1"
+        },
+        {
+          "name": "allstar"
+        },
+        {
+          "name": "dependencies"
+        },
+        {
+          "name": "gopls/incremental"
+        },
+        {
+          "name": "OS-iOS"
+        },
+        {
+          "name": "Proposal-Security"
+        },
+        {
+          "name": "telemetry"
+        },
+        {
+          "name": "gopls/imports"
+        },
+        {
+          "name": "Telemetry-Proposal"
+        },
+        {
+          "name": "Telemetry-Accepted"
+        },
+        {
+          "name": "Telemetry-Declined"
+        },
+        {
+          "name": "gopls/telemetry"
+        },
+        {
+          "name": "gopls/telemetry-wins"
+        },
+        {
+          "name": "FixPending"
+        },
+        {
+          "name": "BadErrorMessage"
+        },
+        {
+          "name": "arch-amd64"
+        },
+        {
+          "name": "Access"
+        },
+        {
+          "name": "Friction"
+        },
+        {
+          "name": "Critical"
+        },
+        {
+          "name": "gabywins"
+        },
+        {
+          "name": "LanguageChangeReview"
+        },
+        {
+          "name": "Scalability"
+        },
+        {
+          "name": "invalid"
+        },
+        {
+          "name": "compiler/telemetry-wins"
+        },
+        {
+          "name": "LanguageProposal"
+        },
+        {
+          "name": "LibraryProposal"
+        },
+        {
+          "name": "ToolProposal"
+        },
+        {
+          "name": "AccessRequest"
+        },
+        {
+          "name": "Automation"
+        },
+        {
+          "name": "Backport"
+        },
+        {
+          "name": "Implementation"
+        },
+        {
+          "name": "Question"
+        },
+        {
+          "name": "WorkingAsIntended"
+        },
+        {
+          "name": "Other"
+        },
+        {
+          "name": "gopls/survey-candidate"
+        },
+        {
+          "name": "BugReport"
+        },
+        {
+          "name": "TelemetryProposal"
+        },
+        {
+          "name": "gopls/memory-corruption"
+        },
+        {
+          "name": "Go Command Working Group"
+        },
+        {
+          "name": "meeting-minutes"
+        },
+        {
+          "name": "pkgsite/api"
+        },
+        {
+          "name": "okay-after-rc2"
+        },
+        {
+          "name": "cgo"
+        }
+      ],
+      "pageInfo": {
+        "endCursor": "MTQ0",
+        "hasNextPage": false
+      },
+      "totalCount": 144
+    }
+  },
+  "document_sha256": "b4b471b4a4ae008f32082b791774dc31d2687633a2527e146c1916cc7c159e82",
+  "errors": [],
+  "extra": {},
+  "headers": {
+    "date": "Sat, 17 Oct 2026 05:18:38 GMT",
+    "x-ratelimit-limit": "5000",
+    "x-ratelimit-remaining": "4947",
+    "x-ratelimit-reset": "1792216302",
+    "x-ratelimit-resource": "graphql",
+    "x-ratelimit-used": "53"
+  },
+  "key": {
+    "after": "MTAw",
+    "id": "MDEwOlJlcG9zaXRvcnkyMzA5Njk1OQ=="
+  },
+  "kind": "repository_labels",
+  "recorded_at": "2026-10-17T05:18:27Z",
+  "source": "live"
+}
