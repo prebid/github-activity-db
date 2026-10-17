@@ -317,9 +317,13 @@ equals time ordering.
 Consumer interface: the `v_*` views, every column of which is consumer, and the table columns the
 data dictionary marks consumer (Step 3). The dictionary has an entry for every table, view, and
 column at head, view columns and `alembic_version` included and SQLite's own `sqlite_*` tables
-excluded, each marked consumer or internal. Integer
-row ids and sync bookkeeping are internal and change on a rebuild; consumers join on `github_id` or
-(`repositories.full_name`, `number`). `PRAGMA user_version` holds `schema_version`, set by
+excluded, each marked consumer or internal. Sync bookkeeping
+and the tag tables are internal. Integer row ids change on a rebuild, but a pull request's labels,
+reviews, comments, commits, files, and closing links, and its author and merger, are reachable
+only through them, so in tables holding consumer data the row ids and the columns referencing
+them are consumer, valid within one file: consumers never store one or compare it across files,
+where rows are identified by `github_id` or (`repositories.full_name`, `number`). Views carry no
+row ids. `PRAGMA user_version` holds `schema_version`, set by
 migrations (1 from Step 3) and bumped when an interface column is removed, renamed, or changes
 meaning; additive changes do not bump it. A lock file maps each `schema_version` to its consumer
 (table or view, column) pairs. A test fails when the current version's entry differs from the

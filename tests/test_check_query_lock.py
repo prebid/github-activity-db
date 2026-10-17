@@ -15,6 +15,7 @@ SCRIPT = Path(__file__).resolve().parent.parent / "scripts" / "check_query_lock.
 GIT = shutil.which("git")
 BASH = shutil.which("bash")
 LOCK = "tests/query_versions.json"
+SCHEMA_LOCK = "tests/schema_versions.json"
 
 
 def git(repo: Path, *args: str) -> None:
@@ -116,7 +117,7 @@ def test_an_absolute_lock_path_is_an_error_not_a_pass(repo: Path) -> None:
         text=True,
     )
     assert result.returncode == 2
-    assert "relative" in result.stderr
+    assert "is not one of tests/query_versions.json" in result.stderr
 
 
 def test_the_checker_runs_isolated_from_site_packages(repo: Path) -> None:
@@ -189,7 +190,7 @@ def test_a_lock_path_outside_the_repository_is_an_error_not_a_pass(repo: Path) -
         text=True,
     )
     assert result.returncode == 2
-    assert "relative" in result.stderr
+    assert "is not one of tests/query_versions.json" in result.stderr
 
 
 def test_without_git_the_check_is_an_error_not_a_pass(repo: Path) -> None:
@@ -206,11 +207,117 @@ def test_without_git_the_check_is_an_error_not_a_pass(repo: Path) -> None:
     assert "git is not on PATH" in result.stderr
 
 
+def write_schema_lock(repo: Path, entries: dict[str, list[list[str]]]) -> None:
+    path = repo / SCHEMA_LOCK
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(entries))
+
+
+V1 = {"1": [["pull_requests", "number"], ["v_pr_reviewers", "final_verdict"]]}
+
+
+class TestSchemaLock:
+    """tests/schema_versions.json: entries and their pairs are kept; pairs may be added."""
+
+    def test_an_added_pair_and_an_added_version_pass(self, repo: Path) -> None:
+        write_schema_lock(repo, V1)
+        commit(repo)
+        write_schema_lock(
+            repo,
+            {
+                "1": [*V1["1"], ["pull_requests", "title"]],
+                "2": [["pull_requests", "number"]],
+            },
+        )
+        result = check(repo)
+        assert result.returncode == 0, result.stderr
+        assert "tests/schema_versions.json: 1 entries at main kept; 2 entries now" in result.stdout
+
+    def test_a_pair_removed_from_a_base_entry_fails(self, repo: Path) -> None:
+        write_schema_lock(repo, V1)
+        commit(repo)
+        write_schema_lock(repo, {"1": [["pull_requests", "number"]]})
+        result = check(repo)
+        assert result.returncode == 1
+        assert "schema version 1 lost v_pr_reviewers.final_verdict" in result.stderr
+
+    def test_a_renamed_pair_fails(self, repo: Path) -> None:
+        write_schema_lock(repo, V1)
+        commit(repo)
+        write_schema_lock(repo, {"1": [["pull_requests", "pr_number"], V1["1"][1]]})
+        result = check(repo)
+        assert result.returncode == 1
+        assert "schema version 1 lost pull_requests.number" in result.stderr
+
+    def test_a_removed_entry_fails(self, repo: Path) -> None:
+        write_schema_lock(repo, {**V1, "2": V1["1"]})
+        commit(repo)
+        write_schema_lock(repo, {"2": V1["1"]})
+        result = check(repo)
+        assert result.returncode == 1
+        assert "schema version 1 was removed" in result.stderr
+
+    def test_a_deleted_lock_removes_every_entry(self, repo: Path) -> None:
+        write_schema_lock(repo, V1)
+        commit(repo)
+        (repo / SCHEMA_LOCK).unlink()
+        result = check(repo)
+        assert result.returncode == 1
+        assert "schema version 1 was removed" in result.stderr
+
+    @pytest.mark.parametrize(
+        "text",
+        ['{"1": "pull_requests.number"}', '{"1": [["pull_requests"]]}', '{"1": [[1, 2]]}', "[]"],
+        ids=["string entry", "short pair", "non-string pair", "not an object"],
+    )
+    def test_a_malformed_lock_is_an_error_not_a_pass(self, repo: Path, text: str) -> None:
+        write_schema_lock(repo, V1)
+        commit(repo)
+        (repo / SCHEMA_LOCK).write_text(text)
+        result = check(repo)
+        assert result.returncode == 2, result.stderr
+
+    def test_both_locks_are_checked_by_default(self, repo: Path) -> None:
+        write_lock(repo, {"pull_request:1": "a" * 64})
+        write_schema_lock(repo, V1)
+        commit(repo)
+        write_lock(repo, {"pull_request:1": "c" * 64})
+        write_schema_lock(repo, {"1": []})
+        result = check(repo)
+        assert result.returncode == 1
+        assert "pull_request:1 changed" in result.stderr
+        assert "schema version 1 lost pull_requests.number" in result.stderr
+
+    def test_lock_selects_one(self, repo: Path) -> None:
+        write_lock(repo, {"pull_request:1": "a" * 64})
+        write_schema_lock(repo, V1)
+        commit(repo)
+        write_lock(repo, {"pull_request:1": "c" * 64})
+        result = subprocess.run(
+            [sys.executable, str(SCRIPT), "--base", "main", "--lock", SCHEMA_LOCK],
+            cwd=repo,
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode == 0, result.stderr
+        assert "query_versions" not in result.stdout + result.stderr
+
+    def test_the_repository_lock_passes_against_itself(self) -> None:
+        root = SCRIPT.parent.parent
+        result = subprocess.run(
+            [sys.executable, str(SCRIPT), "--base", "HEAD"],
+            cwd=root,
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode == 0, result.stderr
+
+
 # --------------------------------------------------------------------------------------------
 # The CI step itself, run against shallow merge checkouts like the one actions/checkout makes
 # --------------------------------------------------------------------------------------------
 WORKFLOW = Path(__file__).resolve().parent.parent / ".github" / "workflows" / "check.yml"
-STEP = "Hydration-version lock entries are append-only"
+STEP = "Hydration and schema version lock entries are kept"
 
 
 def lock_step_script() -> str:
@@ -346,6 +453,19 @@ def test_the_step_uses_the_pull_requests_checker_where_the_base_has_none(
     assert result.returncode == 0, result.stdout + result.stderr
     assert "running scripts/check_query_lock.py" in result.stdout
     assert "does not exist at" in result.stdout
+
+
+def test_the_step_fails_a_pair_removed_from_a_schema_entry(tmp_path: Path, origin: Path) -> None:
+    work = work_clone(tmp_path, origin, "work")
+    write_schema_lock(work, V1)
+    push_main(work, checker=True, entries={"pull_request:1": "a" * 64})
+
+    def remove_pair(target: Path) -> None:
+        write_schema_lock(target, {"1": V1["1"][:1]})
+
+    result = run_step_on_merge(tmp_path, origin, work, remove_pair)
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert "schema version 1 lost v_pr_reviewers.final_verdict" in result.stderr
 
 
 def test_the_step_fails_without_a_merge_commit(tmp_path: Path, origin: Path) -> None:

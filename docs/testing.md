@@ -202,6 +202,11 @@ repository has more than 100.
   version's entry; on pull requests, CI runs the base commit's copy of
   `scripts/check_query_lock.py` (the pull request's own copy where the base has none), which
   rejects an edited or removed entry, so a document change needs a new version.
+- **Schema version**: `tests/schema_versions.json` maps each schema version (`PRAGMA
+  user_version`) to its consumer (table or view, column) pairs. `tests/test_data_dictionary.py`
+  fails when the current entry differs from the columns `docs/data-dictionary.md` marks
+  consumer, and the same CI step rejects a removed entry or a pair removed from one, so removing
+  or renaming a consumer column needs a new schema version. Pairs may be added.
 
 ### Key Fixtures
 
@@ -536,7 +541,8 @@ uv run pre-commit install
 
 - `lint and types`: `uv lock --locked` (uv.lock matches pyproject.toml), then pre-commit over
   all files; on pull requests, the base commit's `scripts/check_query_lock.py` (the pull
-  request's own copy where the base has none) against the hydration-version lock.
+  request's own copy where the base has none) against the hydration-version and schema-version
+  locks.
 - `tests (Python 3.12 / 3.13)`: pytest with JUnit output; `scripts/check_junit.py --max-skipped 0`,
   which fails unless at least one test ran and none failed, errored, or was skipped (pytest
   reports `xfail` as skipped, so an `xfail` also fails the job); and `alembic upgrade head` plus

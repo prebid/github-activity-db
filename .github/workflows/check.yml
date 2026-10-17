@@ -34,7 +34,7 @@ jobs:
         run: uv sync --frozen --extra dev
       - name: pre-commit (ruff, mypy, file checks, quality gates)
         run: uv run --no-sync pre-commit run --all-files --show-diff-on-failure
-      - name: Hydration-version lock entries are append-only
+      - name: Hydration and schema version lock entries are kept
         if: github.event_name == 'pull_request'
         # Compares with the base commit the merge ref was built on, its first parent. The base
         # commit's copy of the checker runs, isolated from the pull request's environment
