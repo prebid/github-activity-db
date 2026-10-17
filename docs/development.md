@@ -204,6 +204,7 @@ uv run pre-commit run mypy --all-files
 | `suppression-caps` | Fail above 5 `type: ignore` or 3 `noqa` comments in src/ (`scripts/count_suppressions.py`) |
 | `tracked-db-rollback-journal` | `github_activity.db` stays in rollback-journal mode (`scripts/check_db_journal.py`, D20) |
 | `tracked-db-frozen` | `github_activity.db` keeps its pinned pre-Step-3 content (`scripts/check_frozen_db.py`, D26) |
+| `tracked-db-no-sidecar` | No journal, WAL, or shared-memory file of `github_activity.db` is committed |
 | `prevent-any-aliases` | Block `TypeName = Any` patterns |
 | `log-placeholders` | loguru messages use `{}` placeholders, not `%` (`scripts/check_log_placeholders.py`) |
 

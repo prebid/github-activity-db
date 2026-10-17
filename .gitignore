@@ -103,6 +103,9 @@ site/
 *.db-journal
 *.db-wal
 *.db-shm
+*.sqlite*-journal
+*.sqlite*-wal
+*.sqlite*-shm
 
 # Exception: the tracked database at the repository root only, frozen until Step 6c of
 # docs/redesign-plan.md (D26). The local database, github_activity.local.db, stays ignored.

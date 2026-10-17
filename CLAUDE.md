@@ -153,7 +153,8 @@ Pre-commit (run locally and by CI) fails on:
   `Optional`/`Annotated` forms; `scripts/check_any_aliases.py`); use TYPE_CHECKING instead
 - files over 1000 KB anywhere in the repository (`github_activity.db` exempt while tracked)
 - `github_activity.db` in WAL mode (`scripts/check_db_journal.py`; redesign plan D20)
-- `github_activity.db` content other than its pinned SHA-256 (`scripts/check_frozen_db.py`; D26)
+- `github_activity.db` content other than its pinned SHA-256 (`scripts/check_frozen_db.py`; D26),
+  or a committed `-journal`, `-wal`, or `-shm` file beside it
 - loguru calls with `%`-style placeholders (`scripts/check_log_placeholders.py`)
 
 `scripts/count_suppressions.py` counts comment tokens and decorators in `.py` and `.pyi` files,

@@ -68,6 +68,16 @@ class TestRateLimit:
         for name in recorded:
             assert f" {name} " in f" {out} ", name
 
+    def test_fields_github_adds_to_rest_rate_limit_are_ignored(self, replay: Replay) -> None:
+        """REST returns what GitHub adds over time; an added field is not a failed reading."""
+        unit = replay.unit("rest_rate_limit")
+        unit.data["resources"]["core"]["added_field"] = 1
+        unit.data["added_top_level"] = {"x": 1}
+        replay.add(unit)
+        result = runner.invoke(app, ["github", "rate-limit"])
+        assert result.exit_code == 0, result.output
+        assert "core 4931 5000 69 2026-10-17 20:19:29 UTC" in _plain(result.stdout)
+
     def test_a_refused_rate_limit_request_exits_1(self, replay: Replay) -> None:
         replay.fault(
             lambda request: httpx.Response(404, json={"message": "Not Found"}),

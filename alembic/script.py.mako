@@ -24,5 +24,7 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    """Downgrade schema."""
-    ${downgrades if downgrades else "pass"}
+    raise RuntimeError(
+        "migrations are never downgraded; recover from a database the code cannot upgrade with "
+        "a bootstrap (redesign plan 5.4)"
+    )

@@ -149,6 +149,47 @@ class TestModelsComparison:
         )
         assert schema_of(tampered)["pr_reviews"] != schema_of(models_database)["pr_reviews"]
 
+    @pytest.mark.parametrize(
+        ("first", "second"),
+        [
+            pytest.param(
+                ["CREATE INDEX ix_probe ON pr_labels (name) WHERE name <> 'a'"],
+                ["CREATE INDEX ix_probe ON pr_labels (name) WHERE name <> 'b'"],
+                id="partial index WHERE",
+            ),
+            pytest.param(
+                ["CREATE INDEX ix_probe ON pr_labels (lower(name))"],
+                ["CREATE INDEX ix_probe ON pr_labels (upper(name))"],
+                id="expression index",
+            ),
+            pytest.param(
+                [],
+                ["CREATE TRIGGER tr_probe AFTER DELETE ON pr_labels BEGIN SELECT 1; END"],
+                id="trigger",
+            ),
+        ],
+    )
+    def test_index_sql_and_triggers_are_compared(
+        self, head_template: Path, tmp_path: Path, first: list[str], second: list[str]
+    ) -> None:
+        """Shapes no pragma reports: a partial index's WHERE, an expression, a trigger."""
+        one = _tampered(head_template, tmp_path / "one.db", *first)
+        two = _tampered(head_template, tmp_path / "two.db", *second)
+        assert schema_of(one)["pr_labels"] != schema_of(two)["pr_labels"]
+
+    def test_a_strict_table_is_reported(
+        self, head_template: Path, models_database: Path, tmp_path: Path
+    ) -> None:
+        tampered = _tampered(
+            head_template,
+            tmp_path / "tampered.db",
+            *_redefined(head_template, "pr_labels", "\n)", "\n) STRICT"),
+        )
+        assert (
+            schema_of(tampered)["pr_labels"]["flags"]
+            != schema_of(models_database)["pr_labels"]["flags"]
+        )
+
 
 class TestViews:
     def test_views_match_the_newest_frozen_sql(self, head_template: Path) -> None:
@@ -284,6 +325,11 @@ CHECKS: dict[str, tuple[Write, tuple[str, ...], str]] = {
         lambda seed, value: seed.automation_email(value),
         ("noreply@anthropic.com",),
         "NoReply@Anthropic.com",
+    ),
+    "ck_automation_emails_email_ascii": (
+        lambda seed, value: seed.automation_email(value),
+        ("noreply@anthropic.com", "dev+bot@example.org"),
+        "émile@example.org",
     ),
     "ck_sync_runs_status": (
         lambda seed, value: _sync_run(seed, status=value),

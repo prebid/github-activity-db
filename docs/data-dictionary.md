@@ -9,21 +9,27 @@ entry here, or an entry names one that does not exist.
 - The interface is the `v_*` views, every column of which is consumer, and the table columns
   marked consumer below.
 - Internal columns can change in any migration.
-- Row ids (`id`, and the `*_id` columns that reference one) join rows within one file: a pull
-  request's labels, reviews, and commits by `pr_id`, its author by `author_id`. They change on
-  every rebuild, so never store one or compare it across files; across files, identify rows by
-  `github_id` or by (`repositories.full_name`, `pull_requests.number`).
-- `PRAGMA user_version` holds the schema version (1). It is bumped when a consumer column is
-  removed, renamed, or changes meaning; an added column or view does not bump it.
+- Row ids join rows within one file: a pull request's labels, reviews, and commits by `pr_id`,
+  its author by `author_id`. The `*_id` columns of consumer tables, and the `id` columns they
+  reference, are consumer; other row ids are internal. Row ids change on a rebuild, so never
+  store one or compare it across files. Across files, identify a row by its `github_id`
+  (`repositories.github_id`, `pull_requests.github_id`, ...); (`repositories.full_name`,
+  `pull_requests.number`) identifies a pull request among tracked repositories within one file,
+  and changes when the repository is renamed.
+- `PRAGMA user_version` holds the schema version (`SCHEMA_VERSION` in
+  `src/github_activity_db/db/schema.py`). It is bumped when a consumer column is removed,
+  renamed, or changes meaning; an added column or view does not bump it.
   `tests/schema_versions.json` lists each version's consumer columns, and on pull requests CI
   fails when an entry, or a column of one, that exists on the base branch is removed.
 - Timestamps are UTC, stored as `YYYY-MM-DD HH:MM:SS.ffffff` text, so text order is time order.
   Booleans are stored as 0 and 1.
 - An account is automation when its `type` is `Bot` or its `github_id` is in
-  `automation_accounts`; a commit is automation when its linked account is, or its lowercased
-  author email is in `automation_emails`.
-- An actor the database cannot attribute (a deleted account it never stored) is a null
-  reference, and its reviews and comments are left out of the views (D24, D28).
+  `automation_accounts`; a commit is automation when its linked account is, or its author email,
+  with ASCII letters lowercased, is in `automation_emails`.
+- A stored reference to an account is kept when GitHub later returns the actor as null (D28). A
+  null reference means GitHub returned no account and the row had no stored reference: an
+  account deleted before this row was written, which may still be stored for other rows. Reviews
+  and comments with a null reference are left out of the views (D24, D28).
 
 The decisions cited (D3, D17, ...) are in [docs/redesign-plan.md](redesign-plan.md).
 
@@ -39,12 +45,12 @@ One row per repository the sync has resolved.
 | `github_id` | consumer | GitHub's numeric repository id |
 | `owner` | consumer | Owner login, in GitHub's spelling |
 | `name` | consumer | Repository name, in GitHub's spelling |
-| `full_name` | consumer | `owner/name`; with a pull request's `number` it identifies the pull request among tracked repositories |
+| `full_name` | consumer | `owner/name`; changes when the repository is renamed. With a pull request's `number` it identifies the pull request among tracked repositories |
 | `repo_group` | consumer | The group `tracking.toml` assigns (`Client`, `Server`, `Mobile`, `Docs`, `Agentic`, `Tools`) |
 | `is_private` | consumer | Whether the repository is private |
 | `is_archived` | consumer | Whether the repository is archived |
 | `default_branch` | consumer | The default branch's name |
-| `is_tracked` | consumer | 1 while `tracking.toml` lists the repository; an untracked repository's rows stay until `ghactivity sync --prune-untracked` (D27) |
+| `is_tracked` | consumer | 1 when `tracking.toml` listed the repository at the last sync that checked (redesign plan 5.3 step 1); an untracked repository's rows stay until `ghactivity sync --prune-untracked` (D27) |
 
 ### `github_users`
 
@@ -55,14 +61,14 @@ Every account the database has stored, kept after GitHub deletes it (D28).
 | `id` | consumer | Row id |
 | `github_id` | consumer | GitHub's numeric account id |
 | `node_id` | consumer | GitHub's GraphQL node id |
-| `login` | consumer | Last known login; each sync refreshes accounts last refreshed more than 24 hours ago |
+| `login` | consumer | Last known login, not unique; each sync refreshes accounts last refreshed more than 24 hours ago |
 | `type` | consumer | `User`, `Bot`, `Organization`, or `Mannequin` |
 | `refreshed_at` | internal | When the row was inserted or last refreshed |
 | `deleted_at` | consumer | When a lookup found the account deleted; null otherwise. References to the account stay |
 
 ### `pull_requests`
 
-Open and merged pull requests; one closed without merge is not stored (D3).
+Pull requests in coverage: open ones, and ones merged on or after the coverage floor in `tracking.toml` (redesign plan section 3). One closed without merge is not stored (D3).
 
 | Column | Use | Meaning |
 |--------|-----|---------|
@@ -75,11 +81,11 @@ Open and merged pull requests; one closed without merge is not stored (D3).
 | `is_draft` | consumer | Whether the pull request is a draft |
 | `title` | consumer | Title |
 | `body` | consumer | Description, empty when there is none (D19) |
-| `author_id` | consumer | Row id of the author's account; null when the account was never stored |
+| `author_id` | consumer | Row id of the author's account; null when GitHub returned no author and the row had none stored |
 | `author_association` | consumer | GitHub's current value (`MEMBER`, `CONTRIBUTOR`, ...), stored as given |
 | `created_at` | consumer | When the pull request was opened |
 | `merged_at` | consumer | When it was merged; set exactly when `state` is `MERGED` |
-| `merged_by_id` | consumer | Row id of the merger's account; null when GitHub reports none or the account was never stored |
+| `merged_by_id` | consumer | Row id of the merger's account; null when GitHub returned no merger and the row had none stored |
 | `base_ref` | consumer | Name of the base branch |
 | `targets_default_branch` | consumer | Whether `base_ref` is the repository's current default branch |
 | `is_cross_repository` | consumer | Whether the head branch is in another repository |
@@ -92,7 +98,7 @@ Open and merged pull requests; one closed without merge is not stored (D3).
 | `comments_total` | consumer | Number of conversation comments (`pr_comments` rows) |
 | `labels_total` | consumer | Number of labels applied (`pr_labels` rows) |
 | `closing_issues_total` | consumer | Number of issues the pull request closes (`pr_closing_issues` rows) |
-| `github_updated_at` | consumer | GitHub's `updatedAt` when the row was written |
+| `github_updated_at` | consumer | GitHub's `updatedAt` as of the hydration that wrote the row; updates from the index alone leave it |
 | `hydrated_at` | internal | GitHub's response time for the request that read the pull request |
 | `hydration_version` | internal | Version of the queries that read the pull request; a change re-reads every pull request |
 
@@ -111,10 +117,10 @@ Submitted reviews; pending reviews are not stored (D4). Review order is `github_
 
 | Column | Use | Meaning |
 |--------|-----|---------|
-| `id` | consumer | Row id |
+| `id` | internal | Row id |
 | `github_id` | consumer | GitHub's numeric review id |
 | `pr_id` | consumer | Row id of the pull request |
-| `reviewer_id` | consumer | Row id of the reviewer's account; null when the account was never stored |
+| `reviewer_id` | consumer | Row id of the reviewer's account; null when GitHub returned no reviewer and the row had none stored |
 | `state` | consumer | `APPROVED`, `CHANGES_REQUESTED`, `COMMENTED`, or `DISMISSED` |
 
 ### `pr_comments`
@@ -123,10 +129,10 @@ Conversation comments, one row each, without their text (D5, D24).
 
 | Column | Use | Meaning |
 |--------|-----|---------|
-| `id` | consumer | Row id |
+| `id` | internal | Row id |
 | `github_id` | consumer | GitHub's numeric comment id |
 | `pr_id` | consumer | Row id of the pull request |
-| `author_id` | consumer | Row id of the author's account; null when the account was never stored |
+| `author_id` | consumer | Row id of the author's account; null when GitHub returned no author and the row had none stored |
 
 ### `pr_commits`
 
@@ -136,7 +142,7 @@ The pull request's commits; co-authors are not stored (D15).
 |--------|-----|---------|
 | `pr_id` | consumer | Row id of the pull request |
 | `sha` | consumer | Commit SHA |
-| `author_id` | consumer | Row id of the account GitHub links the commit to; null when there is none |
+| `author_id` | consumer | Row id of the account GitHub links the commit to; null when GitHub links none and the row had none stored |
 | `author_name` | consumer | Git author name |
 | `author_email` | consumer | Git author email |
 | `authored_at` | consumer | Git author date, set by the committer's client (D6) |
@@ -171,7 +177,7 @@ The `[automation].accounts` list of `tracking.toml`, copied at the start of ever
 
 | Column | Use | Meaning |
 |--------|-----|---------|
-| `id` | consumer | Row id |
+| `id` | internal | Row id |
 | `github_id` | consumer | GitHub's numeric account id |
 | `login` | consumer | Login as `tracking.toml` gives it |
 | `reason` | consumer | Why the account counts as automation |
@@ -182,8 +188,8 @@ The `[automation].emails` list of `tracking.toml`, copied at the start of every 
 
 | Column | Use | Meaning |
 |--------|-----|---------|
-| `id` | consumer | Row id |
-| `email` | consumer | Commit author email, lowercase |
+| `id` | internal | Row id |
+| `email` | consumer | Commit author email, lowercase ASCII |
 | `reason` | consumer | Why commits from the address count as automation |
 
 ### `sync_runs`

@@ -369,6 +369,10 @@ def upgrade() -> None:
         sa.CheckConstraint(
             "email = lower(email)", name=op.f("ck_automation_emails_email_lowercase")
         ),
+        # The views compare with lower(author_email), which folds only ASCII letters.
+        sa.CheckConstraint(
+            "email NOT GLOB '*[^ -~]*'", name=op.f("ck_automation_emails_email_ascii")
+        ),
     )
 
     op.create_table(

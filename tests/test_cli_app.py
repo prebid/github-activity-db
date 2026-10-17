@@ -13,6 +13,7 @@ import pytest
 import typer
 from typer.testing import CliRunner
 
+from github_activity_db.cli import common
 from github_activity_db.cli.app import ExitCodeGroup, app
 from github_activity_db.config import get_settings
 
@@ -23,10 +24,31 @@ GHACTIVITY = Path(sys.executable).parent / "ghactivity"
 # typer forces Rich terminal styling when GITHUB_ACTIONS, FORCE_COLOR, or PY_COLORS is set,
 # which splits option names with ANSI escape sequences. Assert on the text without styling.
 _ANSI_ESCAPE = re.compile(r"\x1b\[[0-9;?]*[ -/]*[@-~]")
+_BOX_DRAWING = re.compile(r"[\u2500-\u257f]")
 
 
 def _plain(text: str) -> str:
     return _ANSI_ESCAPE.sub("", text)
+
+
+def _words(text: str) -> str:
+    """The output's words, without styling, Rich panel borders, or line layout."""
+    return " ".join(_BOX_DRAWING.sub(" ", _plain(text)).split())
+
+
+# A usage error is click's own: its message names the problem. Each case asserts the message,
+# so an exit 1 from the token check or from a crash does not pass for one.
+USAGE_ERRORS = [
+    pytest.param(["--no-such-option"], "No such option: --no-such-option", id="unknown option"),
+    pytest.param(["no-such-command"], "No such command 'no-such-command'", id="unknown command"),
+    pytest.param(["github", "test"], "Missing option '--pr'", id="missing required option"),
+    pytest.param(["github", "test", "--pr", "0"], "Invalid value for '--pr'", id="out of range"),
+    pytest.param(
+        ["github", "test", "--pr", "1", "--pr", "x"],
+        "Invalid value for '--pr'",
+        id="value not a number",
+    ),
+]
 
 
 def _has_option(help_text: str, option: str) -> bool:
@@ -34,11 +56,22 @@ def _has_option(help_text: str, option: str) -> bool:
     return re.search(rf"(?<![\w-]){re.escape(option)}(?![\w-])", help_text) is not None
 
 
+def _no_requests(token: str) -> object:
+    raise AssertionError("this command line must not reach GitHub")
+
+
 @pytest.fixture(autouse=True)
 def isolated_settings(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Iterator[None]:
     """No .env, no token, and the packaged tracking.toml, whatever the developer's shell has."""
     monkeypatch.chdir(tmp_path)
-    for name in ("GITHUB_TOKEN", "TRACKING_CONFIG_PATH", "LOG_LEVEL", "DATABASE_URL"):
+    for name in (
+        "GITHUB_TOKEN",
+        "TRACKING_CONFIG_PATH",
+        "LOG_LEVEL",
+        "DATABASE_URL",
+        "LOGGING",
+        "LOGGING__SERIALIZE",
+    ):
         monkeypatch.delenv(name, raising=False)
     get_settings.cache_clear()
     yield
@@ -68,24 +101,34 @@ class TestGlobalFlags:
 class TestExitCodes:
     """A command line that never starts its work exits 1, not click's 2 (plan 5.3 step 8)."""
 
-    @pytest.mark.parametrize(
-        "args",
-        [
-            pytest.param(["--no-such-option"], id="unknown option"),
-            pytest.param(["no-such-command"], id="unknown command"),
-            pytest.param(["github", "test"], id="missing required option"),
-            pytest.param(["github", "test", "--pr", "0"], id="value out of range"),
-            pytest.param(["github", "test", "--pr", "1", "--pr", "x"], id="value not a number"),
-        ],
-    )
-    def test_usage_errors_exit_1(self, args: list[str]) -> None:
+    @pytest.mark.parametrize(("args", "message"), USAGE_ERRORS)
+    def test_usage_errors_exit_1(
+        self, args: list[str], message: str, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # A token is set and GitHub unreachable, so neither the token check nor a request
+        # can be what exits.
+        monkeypatch.setenv("GITHUB_TOKEN", "test-token")
+        monkeypatch.setattr(common, "open_source", _no_requests)
         result = runner.invoke(app, args)
         assert result.exit_code == 1, result.output
+        assert isinstance(result.exception, SystemExit), result.exception
+        assert message in _words(result.stderr)
 
     def test_a_missing_token_exits_1(self) -> None:
         result = runner.invoke(app, ["github", "rate-limit"])
         assert result.exit_code == 1
         assert "GITHUB_TOKEN is not set" in _plain(result.stderr)
+
+    @pytest.mark.parametrize("separator", ["\n", " ", "\t", "\x1b"])
+    def test_a_token_with_whitespace_or_a_control_character_exits_1_unshown(
+        self, separator: str, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("GITHUB_TOKEN", f"ghp_SECRETPART1{separator}SECRETPART2")
+        monkeypatch.setattr(common, "open_source", _no_requests)
+        result = runner.invoke(app, ["github", "rate-limit"])
+        assert result.exit_code == 1
+        assert "GITHUB_TOKEN contains whitespace or a control character" in _words(result.stderr)
+        assert "SECRETPART" not in result.stdout + result.stderr
 
     def test_an_invalid_tracking_config_exits_1_without_a_traceback(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
@@ -99,12 +142,20 @@ class TestExitCodes:
         stderr = _plain(result.stderr)
         assert "invalid tracking config" in stderr
         assert "[type=missing" in stderr  # pydantic's text survives, not read as markup
-        assert "Traceback" not in stderr
+        assert isinstance(result.exception, SystemExit), result.exception
 
-    def test_invalid_settings_exit_1(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("LOG_LEVEL", "LOUD")
+    @pytest.mark.parametrize(
+        ("name", "value"),
+        [("LOG_LEVEL", "LOUD"), ("LOGGING", "notjson"), ("LOGGING__SERIALIZE", "maybe")],
+        ids=["invalid value", "unparsable JSON", "invalid nested value"],
+    )
+    def test_invalid_settings_exit_1(
+        self, name: str, value: str, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv(name, value)
         result = runner.invoke(app, ["github", "rate-limit"])
         assert result.exit_code == 1
+        assert isinstance(result.exception, SystemExit), result.exception
         assert "invalid settings" in _plain(result.stderr)
 
     def test_a_commands_own_exit_code_passes_through(self) -> None:
@@ -142,10 +193,18 @@ class TestInstalledEntryPoint:
     def test_the_console_script_is_installed(self) -> None:
         assert GHACTIVITY.exists(), GHACTIVITY
 
-    @pytest.mark.parametrize("args", [["--no-such-option"], ["github", "test"]])
-    def test_usage_errors_exit_1(self, args: list[str], tmp_path: Path) -> None:
+    @pytest.mark.parametrize(("args", "message"), USAGE_ERRORS)
+    def test_usage_errors_exit_1(self, args: list[str], message: str, tmp_path: Path) -> None:
         result = _installed(*args, env={}, cwd=tmp_path)
         assert result.returncode == 1, result.stderr
+        assert message in _words(result.stderr)
+        assert "Traceback" not in result.stderr
+
+    def test_unparsable_settings_exit_1_without_a_traceback(self, tmp_path: Path) -> None:
+        result = _installed("github", "rate-limit", env={"LOGGING": "notjson"}, cwd=tmp_path)
+        assert result.returncode == 1
+        assert "invalid settings" in _words(result.stderr)
+        assert "Traceback" not in result.stderr
 
     def test_a_missing_token_exits_1(self, tmp_path: Path) -> None:
         result = _installed("github", "rate-limit", env={}, cwd=tmp_path)

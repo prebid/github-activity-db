@@ -44,13 +44,22 @@ def parse_repo_string(full_name: str) -> tuple[str, str]:
 
 
 def github_token() -> str:
-    """The configured GitHub token, for a command that calls GitHub; exits 1 when none is set."""
+    """The configured GitHub token, for a command that calls GitHub; exits 1 when none is set.
+
+    A token with whitespace or a control character inside is refused without being shown: as an
+    HTTP header it would fail inside the HTTP client, whose error quotes the header value.
+    """
     token = get_settings().github_token
     value = token.get_secret_value().strip() if token is not None else ""
     if not value:
         error_console.print(
             "[red]Error:[/red] GITHUB_TOKEN is not set "
             '(for example GITHUB_TOKEN="$(gh auth token)")'
+        )
+        raise typer.Exit(1)
+    if any(character.isspace() or not character.isprintable() for character in value):
+        error_console.print(
+            "[red]Error:[/red] GITHUB_TOKEN contains whitespace or a control character"
         )
         raise typer.Exit(1)
     return value

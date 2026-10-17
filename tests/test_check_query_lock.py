@@ -20,7 +20,7 @@ SCHEMA_LOCK = "tests/schema_versions.json"
 
 def git(repo: Path, *args: str) -> None:
     assert GIT is not None
-    subprocess.run([GIT, *args], cwd=repo, check=True, capture_output=True)
+    subprocess.run([GIT, *args], cwd=repo, check=True, capture_output=True, timeout=60)
 
 
 @pytest.fixture
@@ -45,7 +45,11 @@ def commit(repo: Path) -> None:
 
 def check(repo: Path, base: str = "main") -> subprocess.CompletedProcess[str]:
     return subprocess.run(
-        [sys.executable, str(SCRIPT), "--base", base], cwd=repo, capture_output=True, text=True
+        [sys.executable, str(SCRIPT), "--base", base],
+        cwd=repo,
+        capture_output=True,
+        text=True,
+        timeout=60,
     )
 
 
@@ -115,6 +119,7 @@ def test_an_absolute_lock_path_is_an_error_not_a_pass(repo: Path) -> None:
         cwd=repo,
         capture_output=True,
         text=True,
+        timeout=60,
     )
     assert result.returncode == 2
     assert "is not one of tests/query_versions.json" in result.stderr
@@ -130,6 +135,7 @@ def test_the_checker_runs_isolated_from_site_packages(repo: Path) -> None:
         cwd=repo,
         capture_output=True,
         text=True,
+        timeout=60,
     )
     assert result.returncode == 1
     assert "pull_request:1 changed" in result.stderr
@@ -165,6 +171,7 @@ def test_the_verdict_does_not_depend_on_the_working_directory(repo: Path) -> Non
         cwd=repo / "tests",
         capture_output=True,
         text=True,
+        timeout=60,
     )
     assert result.returncode == 1, result.stdout + result.stderr
     assert "pull_request:1 changed" in result.stderr
@@ -188,6 +195,7 @@ def test_a_lock_path_outside_the_repository_is_an_error_not_a_pass(repo: Path) -
         cwd=repo,
         capture_output=True,
         text=True,
+        timeout=60,
     )
     assert result.returncode == 2
     assert "is not one of tests/query_versions.json" in result.stderr
@@ -202,6 +210,7 @@ def test_without_git_the_check_is_an_error_not_a_pass(repo: Path) -> None:
         capture_output=True,
         text=True,
         env={"PATH": str(repo / "no-such-bin")},
+        timeout=60,
     )
     assert result.returncode == 2
     assert "git is not on PATH" in result.stderr
@@ -298,19 +307,23 @@ class TestSchemaLock:
             cwd=repo,
             capture_output=True,
             text=True,
+            timeout=60,
         )
         assert result.returncode == 0, result.stderr
         assert "query_versions" not in result.stdout + result.stderr
 
-    def test_the_repository_lock_passes_against_itself(self) -> None:
+    def test_the_repository_locks_are_read_by_their_rules(self, repo: Path) -> None:
+        """The real lock files parse under the rule the checker gives each, in a scratch
+        repository whose base commit holds them."""
         root = SCRIPT.parent.parent
-        result = subprocess.run(
-            [sys.executable, str(SCRIPT), "--base", "HEAD"],
-            cwd=root,
-            capture_output=True,
-            text=True,
-        )
+        for lock in (LOCK, SCHEMA_LOCK):
+            (repo / lock).parent.mkdir(parents=True, exist_ok=True)
+            (repo / lock).write_text((root / lock).read_text())
+        commit(repo)
+        result = check(repo)
         assert result.returncode == 0, result.stderr
+        assert "tests/schema_versions.json: 1 entries at main kept; 1 entries now" in result.stdout
+        assert "tests/query_versions.json: 1 entries at main kept; 1 entries now" in result.stdout
 
 
 # --------------------------------------------------------------------------------------------
@@ -397,6 +410,7 @@ def run_step(checkout: Path, runner_temp: Path) -> subprocess.CompletedProcess[s
         capture_output=True,
         text=True,
         env={**os.environ, "RUNNER_TEMP": str(runner_temp)},
+        timeout=60,
     )
 
 

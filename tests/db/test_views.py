@@ -118,6 +118,18 @@ class TestReviewers:
             ("reviewer", verdict)
         ]
 
+    def test_each_pull_request_has_its_own_verdict(self, seed: Seed) -> None:
+        repository = seed.repository(REPO)
+        reviewer = seed.user("reviewer")
+        first = seed.pull_request(repository, 1, None)
+        second = seed.pull_request(repository, 2, None)
+        seed.review(first, seed.next_id(), reviewer, "APPROVED")
+        seed.review(second, seed.next_id(), reviewer, "CHANGES_REQUESTED")
+        # The later review id is on the second PR; a verdict not scoped to its PR would leak.
+        assert rows(
+            seed, "SELECT pr_number, final_verdict FROM v_pr_reviewers ORDER BY pr_number"
+        ) == [(1, "APPROVED"), (2, "CHANGES_REQUESTED")]
+
     def test_excludes_the_author_automation_and_null_reviewers(self, seed: Seed) -> None:
         author = seed.user("author")
         bot = seed.user("dependabot", type="Bot")
@@ -177,6 +189,17 @@ class TestCommenters:
             (REPO, 7, 77, github_id(seed, commenter), "commenter", 3)
         ]
 
+    def test_counts_are_per_pull_request(self, seed: Seed) -> None:
+        repository = seed.repository(REPO)
+        commenter = seed.user("commenter")
+        first = seed.pull_request(repository, 1, None)
+        second = seed.pull_request(repository, 2, None)
+        for pr in (first, first, second):
+            seed.comment(pr, commenter)
+        assert rows(
+            seed, "SELECT pr_number, comment_count FROM v_pr_commenters ORDER BY pr_number"
+        ) == [(1, 2), (2, 1)]
+
     def test_a_pull_request_without_an_author_keeps_every_commenter(self, seed: Seed) -> None:
         pr = seed.pull_request(seed.repository(REPO), 1, None)
         seed.comment(pr, seed.user("commenter"))
@@ -186,6 +209,17 @@ class TestCommenters:
 
 
 class TestGitHubUsers:
+    def test_identifies_accounts_by_github_ids_not_row_ids(self, seed: Seed) -> None:
+        seed.user("first", github_id=583231, node_id="MDQ6VXNlcjU4MzIzMQ==")
+        seed.user("second", github_id=49699333, node_id="MDM6Qm90NDk2OTkzMzM=")
+        assert rows(seed, "SELECT id FROM github_users ORDER BY id") == [(1,), (2,)]
+        assert rows(
+            seed, "SELECT github_id, node_id, login FROM v_github_users ORDER BY login"
+        ) == [
+            (583231, "MDQ6VXNlcjU4MzIzMQ==", "first"),
+            (49699333, "MDM6Qm90NDk2OTkzMzM=", "second"),
+        ]
+
     def test_flags_bots_and_listed_accounts(self, seed: Seed) -> None:
         seed.user("person")
         seed.user("dependabot", type="Bot")
@@ -229,6 +263,22 @@ class TestCommitAuthors:
             (REPO, 3, 33, "4" * 40, None, 1),
             (REPO, 3, 33, "5" * 40, None, 0),
         ]
+
+    def test_an_automation_email_flags_a_commit_linked_to_a_person(self, seed: Seed) -> None:
+        """The email arm applies to linked commits too: a person's account committing as
+        noreply@anthropic.com is automation for that commit only."""
+        person = seed.user("person")
+        seed.automation_email("noreply@anthropic.com")
+        pr = seed.pull_request(seed.repository(REPO), 3, person)
+        seed.commit(pr, "1" * 40, person, author_email="noreply@anthropic.com")
+        seed.commit(pr, "2" * 40, person, author_email="person@example.com")
+        assert rows(
+            seed, "SELECT sha, author_github_id, is_automation FROM v_commit_authors ORDER BY sha"
+        ) == [
+            ("1" * 40, github_id(seed, person), 1),
+            ("2" * 40, github_id(seed, person), 0),
+        ]
+        assert rows(seed, "SELECT is_automation FROM v_github_users") == [(0,)]
 
     def test_carries_the_git_author_fields(self, seed: Seed) -> None:
         pr = seed.pull_request(seed.repository(REPO), 3, None)

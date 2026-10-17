@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import sqlite3
+from contextlib import closing
 from pathlib import Path
 
 import pytest
@@ -75,22 +77,34 @@ class TestDictionary:
         for table in INTERNAL_TABLES:
             assert set(entries[table].values()) == {"internal"}, table
 
-    def test_a_consumer_tables_row_ids_are_consumer(
+    def test_row_ids_are_consumer_exactly_where_consumers_join_on_them(
         self, entries: dict[str, dict[str, str]]
     ) -> None:
-        """Its rows join their children and accounts only by row id (plan 5.1)."""
+        """A consumer table's foreign keys, and the row ids they reference, are consumer: a pull
+        request's labels, reviews, and author are reachable only through them (plan 5.1). Any
+        other row id is internal."""
         consumer_tables = {
             name for name, columns in entries.items() if "consumer" in columns.values()
         }
-        assert "pr_labels" in consumer_tables
+        foreign_keys = [
+            foreign_key
+            for table in Base.metadata.tables.values()
+            if table.name in consumer_tables
+            for foreign_key in table.foreign_keys
+        ]
+        joins = {(fk.parent.table.name, fk.parent.name) for fk in foreign_keys}
+        joins |= {(fk.column.table.name, fk.column.name) for fk in foreign_keys}
+        assert {("pr_labels", "pr_id"), ("pull_requests", "id")} <= joins
+        assert ("pr_reviews", "id") not in joins
+        assert all(table in consumer_tables for table, _column in joins), joins
         for table in Base.metadata.tables.values():
             if table.name not in consumer_tables:
                 continue
-            joins = {"id"} & set(table.c.keys())
-            joins |= {foreign_key.parent.name for foreign_key in table.foreign_keys}
-            assert {entries[table.name][column] for column in joins} == {"consumer"}, table.name
-            for foreign_key in table.foreign_keys:
-                assert foreign_key.column.table.name in consumer_tables, foreign_key
+            for column in table.columns:
+                if column.name != "id" and not column.foreign_keys:
+                    continue
+                expected = "consumer" if (table.name, column.name) in joins else "internal"
+                assert entries[table.name][column.name] == expected, (table.name, column.name)
 
     @pytest.mark.parametrize(
         ("database", "expected"),
@@ -142,6 +156,30 @@ class TestDictionary:
     def test_rejects_shapes_it_does_not_model(self, text: str, message: str) -> None:
         with pytest.raises(DictionaryError, match=message):
             read_dictionary(text)
+
+
+def test_database_columns_reads_every_user_object(tmp_path: Path) -> None:
+    """Names that look like SQLite's own are kept, SQLite's own are not, generated columns
+    are listed."""
+    path = tmp_path / "planted.db"
+    with closing(sqlite3.connect(path)) as connection:
+        connection.execute("CREATE TABLE sqliteXstats (x INTEGER)")
+        connection.execute("CREATE TABLE SQLite1 (x INTEGER)")
+        connection.execute("CREATE TABLE counted (id INTEGER PRIMARY KEY AUTOINCREMENT)")
+        connection.execute("CREATE TABLE t (a INTEGER, g INTEGER GENERATED ALWAYS AS (a + 1))")
+        connection.execute("CREATE VIEW v_t AS SELECT g FROM t")
+        connection.execute("INSERT INTO counted DEFAULT VALUES")
+        connection.commit()
+        assert connection.execute(
+            "SELECT 1 FROM sqlite_master WHERE name = 'sqlite_sequence'"
+        ).fetchall() == [(1,)]
+    assert database_columns(path) == {
+        "SQLite1": ["x"],
+        "counted": ["id"],
+        "sqliteXstats": ["x"],
+        "t": ["a", "g"],
+        "v_t": ["g"],
+    }
 
 
 class TestSchemaLock:

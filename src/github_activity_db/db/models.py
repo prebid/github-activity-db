@@ -242,12 +242,17 @@ class AutomationAccount(Base):
 
 
 class AutomationEmail(Base):
-    """A ``[automation].emails`` entry of tracking.toml, stored lowercase."""
+    """A ``[automation].emails`` entry of tracking.toml, stored lowercase.
+
+    ASCII only: the views compare it with ``lower(author_email)``, and SQLite's ``lower()``
+    folds only ASCII letters.
+    """
 
     __tablename__ = "automation_emails"
     __table_args__ = (
         UniqueConstraint("email", name="uq_automation_emails_email"),
         CheckConstraint("email = lower(email)", name="email_lowercase"),
+        CheckConstraint("email NOT GLOB '*[^ -~]*'", name="email_ascii"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)

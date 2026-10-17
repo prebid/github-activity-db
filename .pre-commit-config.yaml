@@ -74,6 +74,14 @@ repos:
         language: system
         files: ^github_activity\.db$
 
+      # A journal, WAL, or shared-memory file beside the database changes what SQLite reads
+      # from it, past the pinned digest, the next time the database is opened.
+      - id: tracked-db-no-sidecar
+        name: no journal, WAL, or shared-memory file of github_activity.db in git (D20, D26)
+        entry: remove it from git; SQLite would apply it to github_activity.db on the next open
+        language: fail
+        files: ^github_activity\.db-(journal|wal|shm)$
+
       - id: prevent-any-aliases
         name: Prevent new Any type aliases
         entry: uv run --no-sync python scripts/check_any_aliases.py src

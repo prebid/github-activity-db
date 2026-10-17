@@ -4,6 +4,7 @@ scripts/check_db_journal.py and scripts/check_frozen_db.py also run as pre-commi
 github_activity.db. Step 6 moves the database out of git and revisits these tests.
 """
 
+import re
 import shutil
 import sqlite3
 import subprocess
@@ -17,7 +18,9 @@ SCRIPT = REPO_ROOT / "scripts" / "check_db_journal.py"
 
 
 def _check(path: Path) -> subprocess.CompletedProcess[str]:
-    return subprocess.run([sys.executable, str(SCRIPT), str(path)], capture_output=True, text=True)
+    return subprocess.run(
+        [sys.executable, str(SCRIPT), str(path)], capture_output=True, text=True, timeout=60
+    )
 
 
 def test_tracked_database_is_in_rollback_journal_mode() -> None:
@@ -54,7 +57,7 @@ GIT = shutil.which("git")
 
 def _frozen(*paths: Path) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
-        [sys.executable, str(FROZEN), *map(str, paths)], capture_output=True, text=True
+        [sys.executable, str(FROZEN), *map(str, paths)], capture_output=True, text=True, timeout=60
     )
 
 
@@ -101,6 +104,7 @@ class TestGitignore:
             cwd=REPO_ROOT,
             capture_output=True,
             text=True,
+            timeout=60,
         )
         assert result.returncode in (0, 1), result.stderr
         return result.returncode == 0
@@ -111,5 +115,41 @@ class TestGitignore:
     def test_other_database_files_are_ignored(self, path: str) -> None:
         assert self._ignored(path)
 
+    @pytest.mark.parametrize(
+        "path", ["x.db-journal", "x.sqlite-journal", "x.sqlite3-wal", "x.sqlite-shm"]
+    )
+    def test_transient_files_are_ignored(self, path: str) -> None:
+        assert self._ignored(path)
+
     def test_the_tracked_file_is_not_ignored(self) -> None:
         assert not self._ignored("github_activity.db")
+
+
+class TestNoSidecarFiles:
+    """A journal, WAL, or shared-memory file beside github_activity.db would change what SQLite
+    reads from it on the next open, past the pinned digest."""
+
+    SIDECARS = ("github_activity.db-journal", "github_activity.db-wal", "github_activity.db-shm")
+
+    def test_none_is_tracked(self) -> None:
+        assert GIT is not None
+        result = subprocess.run(
+            [GIT, "ls-files", "--", *self.SIDECARS],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=60,
+        )
+        assert result.stdout == ""
+
+    def test_the_hook_refuses_each(self) -> None:
+        config = (REPO_ROOT / ".pre-commit-config.yaml").read_text()
+        (pattern,) = re.findall(
+            r"- id: tracked-db-no-sidecar\n(?:\s+\w+: .*\n)*?\s+files: (\S+)\n", config
+        )
+        assert "language: fail" in config.split("- id: tracked-db-no-sidecar")[1].split("- id:")[0]
+        for name in self.SIDECARS:
+            assert re.search(pattern, name), name
+        for name in ("github_activity.db", "github_activity.local.db-journal"):
+            assert not re.search(pattern, name), name

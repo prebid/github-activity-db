@@ -9,6 +9,7 @@ from typing import Annotated, Any, NoReturn
 import click
 import typer
 from pydantic import ValidationError
+from pydantic_settings import SettingsError
 from rich.console import Console
 from rich.markup import escape
 from typer import rich_utils
@@ -95,7 +96,7 @@ def main(
     """GitHub Activity DB - Store and search GitHub PR data."""
     try:
         settings = get_settings()
-    except ValidationError as e:
+    except (ValidationError, SettingsError) as e:  # SettingsError: an unparsable JSON value
         error_console.print(
             f"[red]Error:[/red] invalid settings:\n{escape(str(e))}", highlight=False
         )

@@ -7,9 +7,10 @@ this: its logging rules model the standard library, which formats with %.
 Flagged: a call `<receiver>.<level>(message, argument, ...)`, where level is one of trace, debug,
 info, success, warning, error, critical, or exception, or `<receiver>.log(level, message,
 argument, ...)`, when the message is a string literal (implicitly concatenated literals included)
-that holds a %-directive and at least one positional argument follows it. A literal `%%` is not a
-directive. Not flagged: a message that is not a string literal (a variable or an f-string), and a
-call without positional arguments, since loguru then formats nothing.
+that holds a %-directive and at least one positional or keyword argument follows it (loguru
+formats with both: `logger.info("found {n}", n=3)`). A literal `%%` is not a directive. Not
+flagged: a message that is not a string literal (a variable or an f-string), and a call without
+arguments after the message, since loguru then formats nothing.
 
 Usage: python scripts/check_log_placeholders.py PATH...
 """
@@ -53,7 +54,9 @@ def percent_placeholders(source: bytes) -> Iterator[tuple[int, str]]:
             message_index = 1
         else:
             continue
-        if len(node.args) <= message_index + 1:
+        if len(node.args) <= message_index or (
+            len(node.args) == message_index + 1 and not node.keywords
+        ):
             continue
         message = node.args[message_index]
         if isinstance(message, ast.Constant) and isinstance(message.value, str):

@@ -63,16 +63,23 @@ def _rows(database: Path, sql: str, *parameters: object) -> list[tuple[Any, ...]
         return [tuple(row) for row in connection.execute(sql, parameters).fetchall()]
 
 
-def schema_tables(database: Path) -> list[str]:
-    """Tables a migration or ``create_all`` creates: not SQLite's own, not alembic's."""
+def user_objects(database: Path, kind: str) -> list[str]:
+    """Tables or views, by name, except SQLite's own ``sqlite_`` objects (``_`` escaped, since
+    LIKE reads it as any character)."""
     return [
         str(name)
         for (name,) in _rows(
             database,
-            "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' "
-            "AND name <> 'alembic_version' ORDER BY name",
+            "SELECT name FROM sqlite_master WHERE type = ? AND name NOT LIKE 'sqlite\\_%' "
+            "ESCAPE '\\' ORDER BY name",
+            kind,
         )
     ]
+
+
+def schema_tables(database: Path) -> list[str]:
+    """Tables a migration or ``create_all`` creates: not SQLite's own, not alembic's."""
+    return [name for name in user_objects(database, "table") if name != "alembic_version"]
 
 
 def views(database: Path) -> dict[str, str]:
@@ -83,19 +90,27 @@ def views(database: Path) -> dict[str, str]:
 
 
 def schema_of(database: Path) -> dict[str, dict[str, Any]]:
-    """Per table: columns in order, indexes, foreign keys, and every item of its definition.
+    """Per table: columns in order, indexes, foreign keys, every item of its definition, its
+    STRICT and WITHOUT ROWID flags, and its triggers.
 
     Indexes behind UNIQUE and PRIMARY KEY constraints are compared by structure, since SQLite
-    numbers them (``sqlite_autoindex_<table>_N``) in definition order; foreign keys by their
-    columns and actions, since ``PRAGMA foreign_key_list`` numbers them too. Constraint names,
-    which no pragma reports, and CHECK text come from the definition items.
+    numbers them (``sqlite_autoindex_<table>_N``) in definition order; a created index also by
+    its SQL, which holds an expression or a partial index's WHERE. Foreign keys are compared by
+    their columns and actions, since ``PRAGMA foreign_key_list`` numbers them too. Constraint
+    names, which no pragma reports, and CHECK text come from the definition items.
     """
     schema: dict[str, dict[str, Any]] = {}
     for table in schema_tables(database):
         indexes = []
         for _seq, name, unique, origin, partial in _rows(database, f'PRAGMA index_list("{table}")'):
             keys = tuple(_rows(database, f'PRAGMA index_xinfo("{name}")'))
-            indexes.append((name if origin == "c" else None, unique, origin, partial, keys))
+            created = None
+            if origin == "c":
+                ((created,),) = _rows(
+                    database, "SELECT sql FROM sqlite_master WHERE name = ?", name
+                )
+                created = (name, normalized(str(created)))
+            indexes.append((created, unique, origin, partial, keys))
         foreign_keys: dict[int, list[tuple[Any, ...]]] = {}
         for fk_id, *rest in _rows(database, f'PRAGMA foreign_key_list("{table}")'):
             foreign_keys.setdefault(fk_id, []).append(tuple(rest))
@@ -107,6 +122,16 @@ def schema_of(database: Path) -> dict[str, dict[str, Any]]:
                 (tuple(sorted(rows)) for rows in foreign_keys.values()), key=repr
             ),
             "definition": sorted(create_table_items(str(sql))),
+            # (type, ncol, without rowid, strict)
+            "flags": [row[2:] for row in _rows(database, f'PRAGMA table_list("{table}")')],
+            "triggers": sorted(
+                (str(name), normalized(str(trigger)))
+                for name, trigger in _rows(
+                    database,
+                    "SELECT name, sql FROM sqlite_master WHERE type = 'trigger' AND tbl_name = ?",
+                    table,
+                )
+            ),
         }
     return schema
 

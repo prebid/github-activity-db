@@ -1,11 +1,9 @@
 {
   "1": [
     ["automation_accounts", "github_id"],
-    ["automation_accounts", "id"],
     ["automation_accounts", "login"],
     ["automation_accounts", "reason"],
     ["automation_emails", "email"],
-    ["automation_emails", "id"],
     ["automation_emails", "reason"],
     ["github_users", "deleted_at"],
     ["github_users", "github_id"],
@@ -19,7 +17,6 @@
     ["pr_closing_issues", "pr_id"],
     ["pr_comments", "author_id"],
     ["pr_comments", "github_id"],
-    ["pr_comments", "id"],
     ["pr_comments", "pr_id"],
     ["pr_commits", "author_email"],
     ["pr_commits", "author_id"],
@@ -36,7 +33,6 @@
     ["pr_labels", "name"],
     ["pr_labels", "pr_id"],
     ["pr_reviews", "github_id"],
-    ["pr_reviews", "id"],
     ["pr_reviews", "pr_id"],
     ["pr_reviews", "reviewer_id"],
     ["pr_reviews", "state"],

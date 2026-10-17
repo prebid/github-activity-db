@@ -8,6 +8,8 @@ import sqlite3
 from contextlib import closing
 from pathlib import Path
 
+from tests.db.schema_support import user_objects
+
 ROOT = Path(__file__).resolve().parents[1]
 DICTIONARY = ROOT / "docs" / "data-dictionary.md"
 SCHEMA_LOCK = ROOT / "tests" / "schema_versions.json"
@@ -56,17 +58,14 @@ def read_dictionary(text: str) -> dict[str, dict[str, str]]:
 
 
 def database_columns(database: Path) -> dict[str, list[str]]:
-    """Every table and view with its columns, SQLite's own ``sqlite_*`` tables excluded."""
+    """Every table and view with its columns, SQLite's own ``sqlite_*`` tables excluded.
+
+    ``table_xinfo``, unlike ``table_info``, also lists generated and hidden columns.
+    """
+    names = user_objects(database, "table") + user_objects(database, "view")
     with closing(sqlite3.connect(database)) as connection:
-        names = [
-            row[0]
-            for row in connection.execute(
-                "SELECT name FROM sqlite_master WHERE type IN ('table', 'view') "
-                "AND name NOT LIKE 'sqlite_%' ORDER BY name"
-            )
-        ]
         return {
-            name: [row[1] for row in connection.execute(f'PRAGMA table_info("{name}")')]
+            name: [row[1] for row in connection.execute(f'PRAGMA table_xinfo("{name}")')]
             for name in names
         }
 

@@ -10,6 +10,8 @@ from pathlib import Path
 from alembic import command
 from alembic.config import Config
 
+from tests.db.schema_support import user_objects
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 VERSIONS = REPO_ROOT / "alembic" / "versions"
 FIRST_SCHEMA_HEAD = "b3c4d5e6f7g8"
@@ -77,10 +79,4 @@ def query(database: Path, sql: str) -> list[tuple[object, ...]]:
 
 
 def table_names(database: Path) -> set[str]:
-    return {
-        str(row[0])
-        for row in query(
-            database,
-            "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'",
-        )
-    }
+    return set(user_objects(database, "table"))

@@ -6,7 +6,9 @@ added after the head through ``version_locations``.
 
 from __future__ import annotations
 
+import ast
 import hashlib
+import importlib.util
 import itertools
 import shutil
 import sqlite3
@@ -36,6 +38,7 @@ from tests.db.alembic_support import (
 )
 from tests.db.schema_support import named_constraints, schema_of
 from tests.db.seed import T0, Seed, connect
+from tests.test_import_boundaries import imported_modules
 
 TRACKED = REPO_ROOT / "github_activity.db"
 TEST_REVISION = "f1e57000a001"
@@ -304,6 +307,65 @@ class TestOneTransaction:
         assert snapshot(first_schema) == before
 
 
+ORPHAN = "op.execute(\"INSERT INTO pr_labels (pr_id, name) VALUES (999, 'orphan')\")"
+
+
+class TestTransactionControl:
+    """Only env.py opens, commits, and rolls back the upgrade's transaction (plan 5.1)."""
+
+    @pytest.mark.parametrize(
+        "body",
+        [
+            pytest.param(f"{ORPHAN}\nop.execute('COMMIT')", id="COMMIT"),
+            pytest.param(f"{ORPHAN}\nop.execute('END')", id="END"),
+            pytest.param(f"{ORPHAN}\nop.execute('ROLLBACK')\n{ORPHAN}", id="ROLLBACK"),
+            pytest.param(f"op.execute('BEGIN')\n{ORPHAN}", id="BEGIN"),
+            pytest.param(
+                f"with op.get_context().autocommit_block():\n    {ORPHAN}", id="autocommit_block"
+            ),
+        ],
+    )
+    def test_a_revision_cannot_end_the_transaction(
+        self, first_schema: Path, tmp_path: Path, body: str
+    ) -> None:
+        versions = tmp_path / "versions"
+        write_revision(versions, TEST_REVISION, HEAD_REVISION, body)
+        before = snapshot(first_schema)
+        with pytest.raises(Exception, match="not authorized"):
+            upgrade(first_schema, test_versions=versions)
+        assert snapshot(first_schema) == before
+
+    def test_the_upgrade_takes_the_write_lock_before_any_revision_runs(
+        self, migrated_database: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """BEGIN IMMEDIATE: while another connection holds the write lock, no revision runs."""
+        marker = tmp_path / "revision-ran"
+        versions = tmp_path / "versions"
+        write_revision(
+            versions,
+            TEST_REVISION,
+            HEAD_REVISION,
+            f"import pathlib\npathlib.Path({str(marker)!r}).write_text('ran')\n{ORPHAN}",
+        )
+        before = snapshot(migrated_database)
+        real_connect = sqlite3.dbapi2.connect
+
+        def connect_with_a_short_timeout(*args: Any, **kwargs: Any) -> sqlite3.Connection:
+            return real_connect(*args, **{**kwargs, "timeout": 0.1})
+
+        holder = sqlite3.connect(migrated_database, isolation_level=None)
+        try:
+            holder.execute("BEGIN IMMEDIATE")
+            monkeypatch.setattr(sqlite3.dbapi2, "connect", connect_with_a_short_timeout)
+            with pytest.raises(Exception, match="database is locked"):
+                upgrade(migrated_database, test_versions=versions)
+            monkeypatch.undo()
+        finally:
+            holder.close()
+        assert not marker.exists()
+        assert snapshot(migrated_database) == before
+
+
 def _batch_alter_revision(views_sql: tuple[tuple[str, str], ...] | None) -> str:
     """A revision that batch-recreates pull_requests; with ``views_sql`` it drops and recreates
     the views reading it, from that frozen copy, as plan 5.1 requires."""
@@ -427,22 +489,31 @@ class TestRefusals:
         yield
         assert (digest(TRACKED), TRACKED.stat().st_mtime_ns) == before
 
-    @pytest.mark.parametrize("spelling", ["absolute", "relative", "dotted", "symlink"])
+    @pytest.mark.parametrize(
+        "spelling", ["absolute", "relative", "dotted", "symlink", "after /tmp/..", "URI"]
+    )
     def test_refuses_the_tracked_file(
         self, spelling: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        if spelling == "absolute":
-            target = TRACKED
-        elif spelling == "relative":
+        url = f"sqlite+aiosqlite:///{TRACKED}"
+        if spelling == "relative":
             monkeypatch.chdir(REPO_ROOT)
-            target = Path("github_activity.db")
+            url = "sqlite+aiosqlite:///github_activity.db"
         elif spelling == "dotted":
-            target = REPO_ROOT / "alembic" / ".." / "github_activity.db"
-        else:
-            target = tmp_path / "link.db"
-            target.symlink_to(TRACKED)
+            url = f"sqlite+aiosqlite:///{REPO_ROOT / 'alembic' / '..' / 'github_activity.db'}"
+        elif spelling == "symlink":
+            (tmp_path / "link.db").symlink_to(TRACKED)
+            url = f"sqlite+aiosqlite:///{tmp_path / 'link.db'}"
+        elif spelling == "after /tmp/..":
+            # The driver drops `..` as text; on macOS /tmp is a symlink, so following it first
+            # names a file that does not exist.
+            url = f"sqlite+aiosqlite:////tmp/..{TRACKED}"
+        elif spelling == "URI":
+            url = f"sqlite+aiosqlite:///file:{TRACKED}?uri=true"
+        config = alembic_config(tmp_path / "unused.db")
+        config.attributes["database_url"] = url
         with pytest.raises(RuntimeError) as error:
-            upgrade(target)
+            command.upgrade(config, "head")
         assert "refusing to migrate" in refusal(error)
 
     def test_refuses_the_tracked_file_named_by_database_url(
@@ -456,8 +527,11 @@ class TestRefusals:
             command.upgrade(config, "head")
         assert "refusing to migrate" in refusal(error)
 
-    def test_refuses_a_hard_link_to_the_tracked_file(
-        self, tmp_path: Path, first_schema: Path
+    @pytest.mark.parametrize(
+        "spelling", ["hard link", "symlinked directory then ..", "another checkout's file"]
+    )
+    def test_refuses_the_tracked_file_of_a_copied_checkout(
+        self, tmp_path: Path, first_schema: Path, spelling: str
     ) -> None:
         """Through a copy of alembic/, whose env.py takes the copy's parent as the checkout."""
         checkout = tmp_path / "checkout"
@@ -466,14 +540,29 @@ class TestRefusals:
             checkout / "alembic",
             ignore=shutil.ignore_patterns("__pycache__"),
         )
-        shutil.copyfile(first_schema, checkout / "github_activity.db")
-        linked = tmp_path / "linked.db"
-        linked.hardlink_to(checkout / "github_activity.db")
-        before = snapshot(linked)
+        tracked = checkout / "github_activity.db"
+        shutil.copyfile(first_schema, tracked)
+        if spelling == "hard link":
+            target = tmp_path / "linked.db"
+            target.hardlink_to(tracked)
+            database = str(target)
+        elif spelling == "symlinked directory then ..":
+            (tmp_path / "far" / "deep").mkdir(parents=True)
+            (checkout / "link").symlink_to(tmp_path / "far" / "deep")
+            target = tracked
+            database = f"{checkout}/link/../github_activity.db"
+        else:
+            target = tmp_path / "other-checkout" / "github_activity.db"
+            target.parent.mkdir()
+            shutil.copyfile(first_schema, target)
+            database = str(target)
+        before = snapshot(target)
+        config = alembic_config(tmp_path / "unused.db", script_location=checkout / "alembic")
+        config.attributes["database_url"] = f"sqlite+aiosqlite:///{database}"
         with pytest.raises(RuntimeError) as error:
-            upgrade(linked, script_location=checkout / "alembic")
+            command.upgrade(config, "head")
         assert "refusing to migrate" in refusal(error)
-        assert snapshot(linked) == before
+        assert snapshot(target) == before
         # Positive control: the copied environment migrates a file that is not the tracked one.
         other = tmp_path / "other.db"
         shutil.copyfile(first_schema, other)
@@ -499,32 +588,104 @@ class TestRefusals:
         assert "offline --sql mode is not supported" in refusal(error)
         assert not target.exists()
 
-    @pytest.mark.parametrize(
-        ("url", "message"),
-        [
-            ("postgresql://localhost/activity", "only SQLite is supported, not 'postgresql'"),
-            ("sqlite+aiosqlite:///activity.db?mode=ro", "query parameters are not supported"),
-            (
-                "sqlite+aiosqlite:///file:github_activity.db?uri=true",
-                "query parameters are not supported",
-            ),
-            (
-                "sqlite+aiosqlite:///file:github_activity.db",
-                "SQLite URI filenames are not supported",
-            ),
-        ],
-    )
-    def test_refuses_urls_it_does_not_model(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, url: str, message: str
-    ) -> None:
+    def test_refuses_other_databases(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.chdir(tmp_path)
         config = alembic_config(tmp_path / "unused.db")
-        config.attributes["database_url"] = url
+        config.attributes["database_url"] = "postgresql://localhost/activity"
         with pytest.raises(RuntimeError) as error:
             command.upgrade(config, "head")
-        assert message in refusal(error)
+        assert "only SQLite is supported, not 'postgresql'" in refusal(error)
         assert list(tmp_path.iterdir()) == []
 
 
 def test_head_tables_are_the_models_tables(head_template: Path) -> None:
     assert table_names(head_template) == set(Base.metadata.tables) | {"alembic_version"}
+
+
+def revision_source_problems(path: Path) -> list[str]:
+    """Plan 5.1's rules for a revision file: it imports only the standard library, alembic, and
+    SQLAlchemy (no application code, no relative import), and its ``VIEWS`` is a literal."""
+    tree = ast.parse(path.read_bytes())
+    problems = [
+        f"{path.name}:{line}: imports {module}"
+        for line, module in imported_modules(path)
+        if module.split(".")[0] not in REVISION_IMPORTS | sys.stdlib_module_names
+    ]
+    problems += [
+        f"{path.name}:{node.lineno}: relative import"
+        for node in ast.walk(tree)
+        if isinstance(node, ast.ImportFrom) and node.level > 0
+    ]
+    for node in tree.body:
+        if isinstance(node, ast.Assign):
+            targets, value = node.targets, node.value
+        elif isinstance(node, ast.AnnAssign) and node.value is not None:
+            targets, value = [node.target], node.value
+        else:
+            continue
+        if any(isinstance(t, ast.Name) and t.id == "VIEWS" for t in targets):
+            try:
+                ast.literal_eval(value)
+            except ValueError:
+                problems.append(f"{path.name}:{node.lineno}: VIEWS is not a literal")
+    return problems
+
+
+REVISION_IMPORTS = frozenset({"alembic", "sqlalchemy"})
+
+
+class TestRevisionSources:
+    def test_every_revision_follows_the_rules(self) -> None:
+        revisions = sorted((REPO_ROOT / "alembic" / "versions").glob("*.py"))
+        assert len(revisions) == len(MIGRATION_REVISIONS)
+        assert [problem for path in revisions for problem in revision_source_problems(path)] == []
+
+    def test_the_head_revision_has_a_literal_views_constant(self) -> None:
+        """Positive control: the rule reads the VIEWS the chain actually has."""
+        (path,) = (REPO_ROOT / "alembic" / "versions").glob(f"{HEAD_REVISION}_*.py")
+        tree = ast.parse(path.read_bytes())
+        assert any(
+            isinstance(node, ast.AnnAssign)
+            and isinstance(node.target, ast.Name)
+            and node.target.id == "VIEWS"
+            for node in tree.body
+        )
+
+    @pytest.mark.parametrize(
+        ("source", "flagged"),
+        [
+            ("import json\nimport sqlalchemy as sa\nfrom alembic import op\n", False),
+            ("VIEWS = (('v', 'CREATE VIEW v AS SELECT 1'),)\n", False),
+            ("from typing import Final\nVIEWS: Final = (('v', 'SELECT 1'),)\n", False),
+            ("from github_activity_db.db import models\n", True),
+            ("import githubkit\n", True),
+            ("from . import shared\n", True),
+            ("import importlib\nimportlib.import_module('github_activity_db')\n", True),
+            ("VIEWS = SHARED_VIEWS\n", True),
+            ("VIEWS: tuple = tuple(view for view in ())\n", True),
+            ("VIEWS = (('v', 'CREATE VIEW v AS SELECT ' + '1'),)\n", True),
+        ],
+    )
+    def test_flags_each_rule_on_planted_files(
+        self, tmp_path: Path, source: str, flagged: bool
+    ) -> None:
+        path = tmp_path / "f00000000001_planted.py"
+        path.write_text(source)
+        assert bool(revision_source_problems(path)) is flagged
+
+
+def test_a_generated_revision_raises_in_downgrade_and_follows_the_rules(tmp_path: Path) -> None:
+    """``alembic revision`` writes from alembic/script.py.mako."""
+    versions = tmp_path / "versions"
+    versions.mkdir()
+    config = alembic_config(tmp_path / "unused.db", test_versions=versions)
+    command.revision(config, message="probe", rev_id=TEST_REVISION, version_path=str(versions))
+    (path,) = versions.glob(f"{TEST_REVISION}_*.py")
+    assert revision_source_problems(path) == []
+    spec = importlib.util.spec_from_file_location("generated_revision", path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    assert module.down_revision == HEAD_REVISION
+    with pytest.raises(RuntimeError, match="migrations are never downgraded"):
+        module.downgrade()

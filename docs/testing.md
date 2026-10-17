@@ -15,8 +15,9 @@ How the test suite is built and what it counts as evidence. The plan of record i
   checks; a fix comes with a regression test that fails against the parent commit's code.
 - **No skipped tests** (D22). CI runs `scripts/check_junit.py --max-skipped 0`, which fails a run
   where any test was skipped (pytest reports `xfail` as skipped) or none ran.
-- **No sleeping.** Source tests pass a `FakeClock`, so waits and retries are asserted, never
-  slept; each wait on a thread or subprocess has an explicit timeout.
+- **Time.** Source tests pass a `FakeClock`, so waits and retries are asserted, never slept.
+  Each wait on a thread or subprocess has an explicit timeout; `tests/test_suite_rules.py`
+  fails on a subprocess call without one.
 
 ---
 

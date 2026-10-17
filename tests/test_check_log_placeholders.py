@@ -15,7 +15,9 @@ def _run(tmp_path: Path, source: str) -> subprocess.CompletedProcess[str]:
     root = tmp_path / "pkg"
     root.mkdir()
     (root / "module.py").write_text(source)
-    return subprocess.run([sys.executable, str(SCRIPT), str(root)], capture_output=True, text=True)
+    return subprocess.run(
+        [sys.executable, str(SCRIPT), str(root)], capture_output=True, text=True, timeout=60
+    )
 
 
 FLAGGED = [
@@ -28,6 +30,9 @@ FLAGGED = [
     'logger.success("done " "in %ss", seconds)\n',
     'logger.trace("%5d", n)\n',
     "def f():\n    logger.critical('%s', x)\n",
+    'logger.info("found %(n)s items", n=3)\n',  # loguru formats keyword arguments too
+    'logger.warning("retry %s", attempt=2)\n',
+    'logger.log("INFO", "found %s", count=3)\n',
 ]
 ACCEPTED = [
     'logger.info("found {} items", count)\n',
@@ -39,6 +44,8 @@ ACCEPTED = [
     'logger.log("INFO", "found {}", count)\n',
     "DECOY = \"logger.info('found %s', count)\"\n",
     'logger.info("a % b", count)\n',  # `% b` is a space flag without a conversion
+    'logger.info("found {n} items", n=3)\n',
+    "logger.info(**fields)\n",  # no message at all
 ]
 
 
@@ -69,7 +76,10 @@ def test_reports_each_site(tmp_path: Path) -> None:
 def test_no_python_files_is_an_error(tmp_path: Path) -> None:
     (tmp_path / "empty").mkdir()
     result = subprocess.run(
-        [sys.executable, str(SCRIPT), str(tmp_path / "empty")], capture_output=True, text=True
+        [sys.executable, str(SCRIPT), str(tmp_path / "empty")],
+        capture_output=True,
+        text=True,
+        timeout=60,
     )
     assert result.returncode == 1
     assert "no Python files" in result.stderr
@@ -77,6 +87,8 @@ def test_no_python_files_is_an_error(tmp_path: Path) -> None:
 
 def test_src_has_no_percent_style_messages() -> None:
     src = Path(__file__).resolve().parents[1] / "src"
-    result = subprocess.run([sys.executable, str(SCRIPT), str(src)], capture_output=True, text=True)
+    result = subprocess.run(
+        [sys.executable, str(SCRIPT), str(src)], capture_output=True, text=True, timeout=60
+    )
     assert result.returncode == 0, result.stdout
     assert "%-style loguru messages: 0" in result.stdout

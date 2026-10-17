@@ -2,8 +2,11 @@
 
 Only ``source/`` imports githubkit: the scan covers ``src/`` outside ``source/``, ``scripts/``,
 and ``alembic/``, imports at any scope (``TYPE_CHECKING`` blocks and function bodies included),
-and ``importlib.import_module`` and ``__import__`` called with a string literal. Tests are
-exempt: they build githubkit's own errors.
+and ``import_module`` and ``__import__`` called with a string literal, as an attribute
+(``importlib.import_module``, ``builtins.__import__``), by name, or under the alias a
+``from importlib import import_module as load`` gives it. Out of scope: a callable rebound by
+assignment, a name built at run time, and ``exec``/``eval``. Tests are exempt: they build
+githubkit's own errors.
 
 ``source/`` imports neither SQLAlchemy nor ``github_activity_db.db``, relative imports included,
 so fetchers cannot touch the database.
@@ -48,7 +51,17 @@ def imported_modules(path: Path, src: Path | None = None) -> Iterator[tuple[int,
     Relative imports resolve against the file's package when ``src`` (the directory above the
     top-level package) is given; otherwise they are skipped.
     """
-    for node in ast.walk(ast.parse(path.read_bytes())):
+    tree = ast.parse(path.read_bytes())
+    # Names the dynamic importers are bound to in this file, aliases included.
+    importers = {"import_module", "__import__"}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and node.module in ("importlib", "builtins"):
+            importers |= {
+                alias.asname or alias.name
+                for alias in node.names
+                if alias.name in ("import_module", "__import__")
+            }
+    for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             for alias in node.names:
                 yield node.lineno, alias.name
@@ -66,13 +79,11 @@ def imported_modules(path: Path, src: Path | None = None) -> Iterator[tuple[int,
                 yield node.lineno, f"{base}.{alias.name}"
         elif isinstance(node, ast.Call) and node.args:
             target = node.args[0]
-            is_import_module = isinstance(node.func, ast.Attribute) and node.func.attr == (
-                "import_module"
-            )
-            is_dunder_import = isinstance(node.func, ast.Name) and node.func.id == "__import__"
-            if (is_import_module or is_dunder_import) and (
-                isinstance(target, ast.Constant) and isinstance(target.value, str)
-            ):
+            is_importer = (
+                isinstance(node.func, ast.Attribute)
+                and node.func.attr in ("import_module", "__import__")
+            ) or (isinstance(node.func, ast.Name) and node.func.id in importers)
+            if is_importer and isinstance(target, ast.Constant) and isinstance(target.value, str):
                 yield node.lineno, target.value
 
 
@@ -125,6 +136,10 @@ def test_the_scan_sees_source_importing_githubkit() -> None:
         "def f():\n    from githubkit import GitHub\n",
         "from typing import TYPE_CHECKING\nif TYPE_CHECKING:\n    from githubkit import GitHub\n",
         "import importlib\nimportlib.import_module('githubkit')\n",
+        "from importlib import import_module\nimport_module('githubkit')\n",
+        "from importlib import import_module as load\nload('githubkit')\n",
+        "import builtins\nbuiltins.__import__('githubkit')\n",
+        "from builtins import __import__ as imp\nimp('githubkit')\n",
         "__import__('githubkit.versions')\n",
         "class C:\n    import githubkit\n",
     ],
@@ -141,6 +156,7 @@ def test_flags_every_githubkit_import_spelling(tmp_path: Path, source: str) -> N
         "import githubkit_extensions\n",
         "# import githubkit\n",
         "import importlib\nname = 'githubkit'\nimportlib.import_module(name)\n",
+        "def load(name):\n    return name\nload('githubkit')\n",
     ],
 )
 def test_does_not_flag_other_text(tmp_path: Path, source: str) -> None:

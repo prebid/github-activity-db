@@ -50,10 +50,12 @@ converted to UTC, and returns aware UTC values. Defaults are `utc_now()`, never 
   the pragma does not take effect or a transaction is already open.
 - `BEGIN IMMEDIATE` opens the transaction and `PRAGMA foreign_key_check` runs after the last
   revision, before the commit. A failed revision, or a violation, leaves the file at the
-  revision the upgrade started from.
-- Refused: offline `--sql` mode, the tracked `github_activity.db` (also through a relative
-  path, a symlink, or a hard link), non-SQLite URLs, URL query parameters, and `file:` URI
-  filenames.
+  revision the upgrade started from. A revision cannot end the transaction early: an SQLite
+  authorizer refuses any `BEGIN`, `COMMIT`, `END`, or `ROLLBACK` but the upgrade's own.
+- Refused: offline `--sql` mode, databases other than SQLite, and the tracked
+  `github_activity.db`. The connect listener asks SQLite which file it opened, so the tracked
+  file is refused through any path, URI, symlink, or hard link, and so is any file named
+  `github_activity.db`, such as another checkout's copy.
 - `downgrade()` raises: migrations are never downgraded, and a database the code cannot upgrade
   is rebuilt (redesign plan 5.4).
 
@@ -61,7 +63,8 @@ converted to UTC, and returns aware UTC values. Defaults are `utc_now()`, never 
 
 A migration changes the models (`db/models.py`), the chain, and the documents together:
 
-- Import only alembic and SQLAlchemy. Name every index, CHECK constraint, and foreign key
+- Raise in `downgrade()`, as `alembic/script.py.mako` generates it.
+- Import only alembic, SQLAlchemy, and the standard library. Name every index, CHECK constraint, and foreign key
   through `op.f()` with the name `NAMING_CONVENTION` in `db/models.py` gives it, and every unique
   constraint explicitly (`uq_<table>_<columns>`): batch mode keeps named CHECKs and drops
   unnamed ones (gap 72).
@@ -77,8 +80,9 @@ A migration changes the models (`db/models.py`), the chain, and the documents to
   bumps that kind's hydration version (plan 5.1).
 
 The tests that hold these: `tests/db/test_schema.py` compares a migrated database with the
-models (CHECK names and text included) and each view with its frozen SQL;
-`tests/db/test_migrations.py` covers the chain and `env.py`; `tests/test_data_dictionary.py`
+models (CHECK names and text, index SQL, and triggers included) and each view with its frozen
+SQL; `tests/db/test_migrations.py` covers the chain, `env.py`, and each revision's imports and
+`VIEWS` constant; `tests/test_data_dictionary.py`
 covers the dictionary and the schema-version lock. CI also runs `alembic check`.
 
 | Revision | Description |
