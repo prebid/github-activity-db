@@ -38,11 +38,12 @@ def _package(tmp_path: Path, *sources: str) -> Path:
     root = tmp_path / "pkg"
     (root / "sub").mkdir(parents=True)
     for i, source in enumerate(sources):
-        (root / ("sub" if i % 2 else ".") / f"module_{i}.py").write_text(source)
+        (root / ("sub" if i % 2 else ".") / f"module_{i}.py").write_text(source, encoding="utf-8")
     return root
 
 
-# Spellings that ruff 0.14 and mypy 1.19 honor as suppressions.
+# Spellings counted as suppressions; ruff 0.14.11 and mypy 1.19.1 honor each one except where a
+# comment below says otherwise.
 NOQA_SPELLINGS = [
     "import os  # noqa\n",
     "import os  # NOQA\n",
@@ -60,10 +61,14 @@ NOQA_SPELLINGS = [
     "import sys  # isort: skip\nimport os\n",
     "# ruff: isort: skip_file\nimport sys\nimport os\n",
     "# ruff: isort: off\nimport sys\nimport os\n",
-    # Range suppressions, which ruff 0.14 honors only in preview.
+    # Range suppressions, which ruff 0.14.11 honors only in preview.
     "# ruff: disable[F401]\nimport os\n",
     "#ruff:disable[F401, E501]\nimport os\n",
     "# ruff: disable [F401]\nimport os\n",
+    "# ruff : disable[F401]\nimport os\n",
+    "#\truff:\tdisable\t[F401]\nimport os\n",
+    "#　ruff:　disable[F401]\nimport os\n",
+    "# ruff: disable[ F401, ]  # reason\nimport os\n",
     "def f() -> None:\n    # ruff: disable[F401]\n    import os\n",
     "# ruff: disable[F401]\nimport os\n# ruff: enable[F401]\n",
     # Not honored by ruff (uppercase), counted so that no honored spelling escapes.
@@ -151,6 +156,67 @@ def test_at_the_cap_passes_and_one_more_fails(
     assert len(listed) == len(sources)
     assert all(re.fullmatch(r".+\.py:\d+", site) for site in listed)
     assert f"{kind} comments: {len(sources)}" in over_cap.stdout
+
+
+# Files ruff reads differently from tokenize, or lints without a lowercase .py/.pyi suffix.
+REFUSED = [
+    pytest.param(
+        "module.py",
+        "# coding: latin-1\n# ruff:\u3000disable[F401]\nimport os\n".encode(),
+        False,
+        id="latin-1 declaration",
+    ),
+    pytest.param(
+        "module.py",
+        b'# coding: unicode_escape\n# \\x0a"""\n# ruff: noqa: F401\n# \\x0a"""\n',
+        False,
+        id="unicode_escape declaration",
+    ),
+    pytest.param("module.py", b"# coding: no-such-codec\nimport os\n", False, id="unknown codec"),
+    pytest.param("module.py", b'"""Doc."""\r# ruff: noqa: F401\rimport os\r', False, id="lone CR"),
+    pytest.param("module.PY", b"import os  # noqa: F401\n", False, id="uppercase suffix"),
+    pytest.param(
+        "tool", b"#!/usr/bin/env python3\nimport os  # noqa: F401\n", True, id="python shebang"
+    ),
+]
+ACCEPTED = [
+    pytest.param("module.py", b"# -*- coding: utf-8 -*-\nimport os\n", False, id="utf-8"),
+    pytest.param("module.py", b"\xef\xbb\xbfimport os\n", False, id="byte-order mark"),
+    pytest.param("module.py", b"import os\r\nimport sys\r\n", False, id="CRLF"),
+    pytest.param(
+        "tool", b"#!/usr/bin/env python3\nimport os\n", False, id="shebang, not executable"
+    ),
+    pytest.param("tool.sh", b"#!/bin/sh\necho python\n", True, id="shell script"),
+]
+
+
+@pytest.mark.parametrize(("name", "content", "executable"), REFUSED)
+def test_refuses_a_file_it_cannot_read_as_ruff_does(
+    tmp_path: Path, name: str, content: bytes, executable: bool
+) -> None:
+    root = _package(tmp_path, "import os\n")
+    path = root / name
+    path.write_bytes(content)
+    if executable:
+        path.chmod(0o755)
+    result = _run(root)
+    assert result.returncode == 1
+    assert f"{path}: refused:" in result.stderr
+    assert "comments:" not in result.stdout
+
+
+@pytest.mark.parametrize(("name", "content", "executable"), ACCEPTED)
+def test_accepts_files_it_reads_as_ruff_does(
+    tmp_path: Path, name: str, content: bytes, executable: bool
+) -> None:
+    root = _package(tmp_path, "import os\n")
+    path = root / name
+    path.write_bytes(content)
+    if executable:
+        path.chmod(0o755)
+    result = _run(root)
+    assert result.returncode == 0, result.stderr
+    assert "refused" not in result.stderr
 
 
 def test_no_python_files_is_an_error(tmp_path: Path) -> None:

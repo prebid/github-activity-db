@@ -174,6 +174,7 @@ Pre-commit (run locally and by CI) fails on:
 - `github_activity.db` in WAL mode (`scripts/check_db_journal.py`; redesign plan D20)
 
 `scripts/count_suppressions.py` counts comment tokens and decorators in `.py` and `.pyi` files,
-in the spellings its docstring lists; text inside strings is not counted.
+in the spellings its docstring lists; text inside strings is not counted. It refuses (exit 1) a
+file it cannot read as ruff does, such as one with a non-UTF-8 coding declaration.
 
 ruff and mypy run from `uv.lock` through `uv run --no-sync`, so local and CI versions match.
