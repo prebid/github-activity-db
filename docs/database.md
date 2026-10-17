@@ -51,11 +51,14 @@ converted to UTC, and returns aware UTC values. Defaults are `utc_now()`, never 
 - `BEGIN IMMEDIATE` opens the transaction and `PRAGMA foreign_key_check` runs after the last
   revision, before the commit. A failed revision, or a violation, leaves the file at the
   revision the upgrade started from. A revision cannot end the transaction early: an SQLite
-  authorizer refuses any `BEGIN`, `COMMIT`, `END`, or `ROLLBACK` but the upgrade's own.
+  authorizer refuses any `BEGIN`, `COMMIT`, `END`, or `ROLLBACK` but the upgrade's own, every
+  statement once SQLite has ended the transaction by itself (`INSERT OR ROLLBACK`,
+  `RAISE(ROLLBACK)`), and `ATTACH`.
 - Refused: offline `--sql` mode, databases other than SQLite, and the tracked
   `github_activity.db`. The connect listener asks SQLite which file it opened, so the tracked
   file is refused through any path, URI, symlink, or hard link, and so is any file named
-  `github_activity.db`, such as another checkout's copy.
+  `github_activity.db`, such as another checkout's copy; a missing path of that name is refused
+  before SQLite would create it.
 - `downgrade()` raises: migrations are never downgraded, and a database the code cannot upgrade
   is rebuilt (redesign plan 5.4).
 

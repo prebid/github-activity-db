@@ -177,13 +177,14 @@ class TestModelsComparison:
         two = _tampered(head_template, tmp_path / "two.db", *second)
         assert schema_of(one)["pr_labels"] != schema_of(two)["pr_labels"]
 
-    def test_a_strict_table_is_reported(
-        self, head_template: Path, models_database: Path, tmp_path: Path
+    @pytest.mark.parametrize("option", ["STRICT", "WITHOUT ROWID"])
+    def test_a_table_option_is_reported(
+        self, head_template: Path, models_database: Path, tmp_path: Path, option: str
     ) -> None:
         tampered = _tampered(
             head_template,
             tmp_path / "tampered.db",
-            *_redefined(head_template, "pr_labels", "\n)", "\n) STRICT"),
+            *_redefined(head_template, "pr_labels", "\n)", f"\n) {option}"),
         )
         assert (
             schema_of(tampered)["pr_labels"]["flags"]

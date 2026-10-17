@@ -13,7 +13,8 @@ entry here, or an entry names one that does not exist.
   its author by `author_id`. The `*_id` columns of consumer tables, and the `id` columns they
   reference, are consumer; other row ids are internal. Row ids change on a rebuild, so never
   store one or compare it across files. Across files, identify a row by its `github_id`
-  (`repositories.github_id`, `pull_requests.github_id`, ...); (`repositories.full_name`,
+  (`repositories.github_id`, `pull_requests.github_id`, ...), and a label, commit, file, or
+  closing link by its pull request's `github_id` and its own key; (`repositories.full_name`,
   `pull_requests.number`) identifies a pull request among tracked repositories within one file,
   and changes when the repository is renamed.
 - `PRAGMA user_version` holds the schema version (`SCHEMA_VERSION` in
@@ -28,8 +29,9 @@ entry here, or an entry names one that does not exist.
   with ASCII letters lowercased, is in `automation_emails`.
 - A stored reference to an account is kept when GitHub later returns the actor as null (D28). A
   null reference means GitHub returned no account and the row had no stored reference: an
-  account deleted before this row was written, which may still be stored for other rows. Reviews
-  and comments with a null reference are left out of the views (D24, D28).
+  account deleted before this row was written, which may still be stored for other rows; on a
+  commit, also an email GitHub links to no account; and `merged_by_id` is null on an open pull
+  request. Reviews and comments with a null reference are left out of the views (D24, D28).
 
 The decisions cited (D3, D17, ...) are in [docs/redesign-plan.md](redesign-plan.md).
 

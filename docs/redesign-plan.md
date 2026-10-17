@@ -206,8 +206,8 @@ revision the upgrade started from, with no revision of that upgrade applied. `PR
 foreign_key_check` runs inside that transaction after the last revision and raises on any row,
 before the commit. A migration that batch-alters a table a view reads drops those views first and
 recreates them afterwards from its own frozen SQL; `legacy_alter_table` stays off, so a view left
-in place fails the migration (gap 71). Migrations import only alembic and SQLAlchemy, never
-application code, and name every index, CHECK constraint, and foreign key they create through
+in place fails the migration (gap 71). Migrations import only the standard library, alembic, and
+SQLAlchemy, never application code, and name every index, CHECK constraint, and foreign key they create through
 `op.f()`: env.py passes
 `Base.metadata` as `target_metadata`, and alembic applies its naming convention to every migration's
 operations, old revisions included (on a fresh build, the unnamed foreign keys of `01421d8dfaeb`
@@ -221,8 +221,11 @@ link, and any file named `github_activity.db`, such as another checkout's copy. 
 from the URL is not enough: the driver drops `..` as text, so a path through a symlinked directory
 names another file once symlinks are followed. It migrates SQLite only. An SQLite authorizer on
 the migration connection allows `BEGIN` only to open the upgrade's transaction, `COMMIT` only
-after `foreign_key_check` passed, and `ROLLBACK` only once the upgrade failed, so no revision
-can commit part of an upgrade.
+after `foreign_key_check` passed, and `ROLLBACK` only once the upgrade or its commit failed; it
+refuses every statement while the upgrade is open and no transaction is (SQLite ends one by
+itself on `INSERT OR ROLLBACK` or `RAISE(ROLLBACK)`), and refuses `ATTACH`. So no SQL a revision
+runs commits part of an upgrade; Python code in a revision can still remove the authorizer, which
+no check here prevents.
 
 `Base.metadata` names indexes, CHECK constraints, and foreign keys by convention, and every CHECK has
 a name: batch recreate keeps named CHECKs and drops unnamed ones (gap 72). Migrations pass names
@@ -332,9 +335,10 @@ and the tag tables are internal. Integer row ids change on a rebuild, but a pull
 reviews, comments, commits, files, and closing links, and its author and merger, are reachable
 only through them, so the foreign-key columns of consumer tables and the row ids they reference
 are consumer, valid within one file; other row ids are internal. Consumers never store a row id
-or compare one across files, where a row is identified by its `github_id`; (`full_name`,
-`number`) identifies a pull request among tracked repositories within one file and changes with
-a rename. Views carry no row ids. `PRAGMA user_version` holds `schema_version`, set by
+or compare one across files, where a row is identified by its `github_id`, and a child row
+without one (a label, commit, file, or closing link) by its pull request's `github_id` and its own
+key; (`full_name`, `number`) identifies a pull request among tracked repositories within one file
+and changes with a rename. Views carry no row ids. `PRAGMA user_version` holds `schema_version`, set by
 migrations (1 from Step 3) and bumped when an interface column is removed, renamed, or changes
 meaning; additive changes do not bump it. A lock file maps each `schema_version` to its consumer
 (table or view, column) pairs. A test fails when the current version's entry differs from the

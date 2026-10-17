@@ -323,6 +323,27 @@ class TestTransactionControl:
             pytest.param(
                 f"with op.get_context().autocommit_block():\n    {ORPHAN}", id="autocommit_block"
             ),
+            pytest.param(
+                # SQLite rolls back by itself; the revision swallows the error and goes on.
+                "op.execute('CREATE TABLE early (x INTEGER)')\n"
+                "try:\n"
+                '    op.execute("INSERT OR ROLLBACK INTO alembic_version "\n'
+                f"               \"VALUES ('{HEAD_REVISION}')\")\n"
+                "except Exception:\n"
+                "    pass\n"
+                f"op.execute('CREATE TABLE late (x INTEGER)')\n{ORPHAN}",
+                id="INSERT OR ROLLBACK",
+            ),
+            pytest.param(
+                "op.execute('CREATE TRIGGER stop BEFORE INSERT ON pr_labels "
+                "BEGIN SELECT RAISE(ROLLBACK, \\'stop\\'); END')\n"
+                "try:\n"
+                f"    {ORPHAN}\n"
+                "except Exception:\n"
+                "    pass\n"
+                "op.execute('CREATE TABLE late (x INTEGER)')",
+                id="RAISE(ROLLBACK)",
+            ),
         ],
     )
     def test_a_revision_cannot_end_the_transaction(
@@ -334,6 +355,58 @@ class TestTransactionControl:
         with pytest.raises(Exception, match="not authorized"):
             upgrade(first_schema, test_versions=versions)
         assert snapshot(first_schema) == before
+
+    def test_a_revision_cannot_attach_another_database(
+        self, migrated_database: Path, tmp_path: Path
+    ) -> None:
+        """ATTACH would let a revision write a file the refusals never saw, such as another
+        checkout's github_activity.db."""
+        other = tmp_path / "other-checkout" / "github_activity.db"
+        other.parent.mkdir()
+        versions = tmp_path / "versions"
+        write_revision(
+            versions,
+            TEST_REVISION,
+            HEAD_REVISION,
+            f'op.execute("ATTACH DATABASE {str(other)!r} AS other")\n'
+            "op.execute('CREATE TABLE other.probe (x INTEGER)')",
+        )
+        before = snapshot(migrated_database)
+        with pytest.raises(Exception, match="not authorized"):
+            upgrade(migrated_database, test_versions=versions)
+        assert snapshot(migrated_database) == before
+        assert not other.exists()
+
+    def test_a_failed_commit_rolls_back_cleanly(
+        self,
+        migrated_database: Path,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """A reader's lock makes the COMMIT fail; the rollback that follows is env.py's own."""
+        versions = tmp_path / "versions"
+        write_revision(
+            versions, TEST_REVISION, HEAD_REVISION, "op.execute('CREATE TABLE probe (x INTEGER)')"
+        )
+        before = snapshot(migrated_database)
+        real_connect = sqlite3.dbapi2.connect
+
+        def connect_with_a_short_timeout(*args: Any, **kwargs: Any) -> sqlite3.Connection:
+            return real_connect(*args, **{**kwargs, "timeout": 0.1})
+
+        reader = sqlite3.connect(migrated_database, isolation_level=None)
+        try:
+            reader.execute("BEGIN")
+            reader.execute("SELECT COUNT(*) FROM pr_labels").fetchall()  # holds a shared lock
+            monkeypatch.setattr(sqlite3.dbapi2, "connect", connect_with_a_short_timeout)
+            with pytest.raises(Exception, match="database is locked"):
+                upgrade(migrated_database, test_versions=versions)
+            monkeypatch.undo()
+        finally:
+            reader.close()
+        assert snapshot(migrated_database) == before
+        assert not [record for record in caplog.records if "not authorized" in str(record.exc_info)]
 
     def test_the_upgrade_takes_the_write_lock_before_any_revision_runs(
         self, migrated_database: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -489,33 +562,6 @@ class TestRefusals:
         yield
         assert (digest(TRACKED), TRACKED.stat().st_mtime_ns) == before
 
-    @pytest.mark.parametrize(
-        "spelling", ["absolute", "relative", "dotted", "symlink", "after /tmp/..", "URI"]
-    )
-    def test_refuses_the_tracked_file(
-        self, spelling: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        url = f"sqlite+aiosqlite:///{TRACKED}"
-        if spelling == "relative":
-            monkeypatch.chdir(REPO_ROOT)
-            url = "sqlite+aiosqlite:///github_activity.db"
-        elif spelling == "dotted":
-            url = f"sqlite+aiosqlite:///{REPO_ROOT / 'alembic' / '..' / 'github_activity.db'}"
-        elif spelling == "symlink":
-            (tmp_path / "link.db").symlink_to(TRACKED)
-            url = f"sqlite+aiosqlite:///{tmp_path / 'link.db'}"
-        elif spelling == "after /tmp/..":
-            # The driver drops `..` as text; on macOS /tmp is a symlink, so following it first
-            # names a file that does not exist.
-            url = f"sqlite+aiosqlite:////tmp/..{TRACKED}"
-        elif spelling == "URI":
-            url = f"sqlite+aiosqlite:///file:{TRACKED}?uri=true"
-        config = alembic_config(tmp_path / "unused.db")
-        config.attributes["database_url"] = url
-        with pytest.raises(RuntimeError) as error:
-            command.upgrade(config, "head")
-        assert "refusing to migrate" in refusal(error)
-
     def test_refuses_the_tracked_file_named_by_database_url(
         self, monkeypatch: pytest.MonkeyPatch, isolated_settings: None
     ) -> None:
@@ -528,12 +574,25 @@ class TestRefusals:
         assert "refusing to migrate" in refusal(error)
 
     @pytest.mark.parametrize(
-        "spelling", ["hard link", "symlinked directory then ..", "another checkout's file"]
+        "spelling",
+        [
+            "absolute",
+            "relative",
+            "dotted",
+            "symlink",
+            "after /tmp/..",
+            "URI",
+            "hard link",
+            "symlinked directory then ..",
+            "symlinked directory then .. to a hard link",
+            "another checkout's file",
+        ],
     )
     def test_refuses_the_tracked_file_of_a_copied_checkout(
-        self, tmp_path: Path, first_schema: Path, spelling: str
+        self, tmp_path: Path, first_schema: Path, spelling: str, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """Through a copy of alembic/, whose env.py takes the copy's parent as the checkout."""
+        """Through a copy of alembic/, whose env.py takes the copy's parent as the checkout, so
+        a regression migrates a stand-in, never the repository's own tracked file."""
         checkout = tmp_path / "checkout"
         shutil.copytree(
             REPO_ROOT / "alembic",
@@ -542,15 +601,34 @@ class TestRefusals:
         )
         tracked = checkout / "github_activity.db"
         shutil.copyfile(first_schema, tracked)
-        if spelling == "hard link":
-            target = tmp_path / "linked.db"
-            target.hardlink_to(tracked)
-            database = str(target)
+        target = tracked
+        (tmp_path / "far" / "deep").mkdir(parents=True)
+        (checkout / "link").symlink_to(tmp_path / "far" / "deep")
+        database = str(tracked)
+        if spelling == "relative":
+            monkeypatch.chdir(checkout)
+            database = "github_activity.db"
+        elif spelling == "dotted":
+            database = f"{checkout}/alembic/../github_activity.db"
+        elif spelling == "symlink":
+            (tmp_path / "symlink.db").symlink_to(tracked)
+            database = str(tmp_path / "symlink.db")
+        elif spelling == "after /tmp/..":
+            # The driver drops `..` as text; where /tmp is a symlink (macOS), following it
+            # first names a file that does not exist.
+            database = f"/tmp/..{tracked}"  # noqa: S108 - the spelling under test
+        elif spelling == "URI":
+            database = f"file:{tracked}?uri=true"
+        elif spelling == "hard link":
+            (tmp_path / "linked.db").hardlink_to(tracked)
+            database = str(tmp_path / "linked.db")
         elif spelling == "symlinked directory then ..":
-            (tmp_path / "far" / "deep").mkdir(parents=True)
-            (checkout / "link").symlink_to(tmp_path / "far" / "deep")
-            target = tracked
             database = f"{checkout}/link/../github_activity.db"
+        elif spelling == "symlinked directory then .. to a hard link":
+            # Only the check of the file SQLite opened refuses this: the name is not the
+            # tracked one, and the path resolved through the symlink names a missing file.
+            (checkout / "linked.db").hardlink_to(tracked)
+            database = f"{checkout}/link/../linked.db"
         else:
             target = tmp_path / "other-checkout" / "github_activity.db"
             target.parent.mkdir()
@@ -568,6 +646,16 @@ class TestRefusals:
         shutil.copyfile(first_schema, other)
         upgrade(other, script_location=checkout / "alembic")
         assert revision_of(other) == HEAD_REVISION
+
+    def test_a_missing_file_of_that_name_is_refused_before_it_is_created(
+        self, tmp_path: Path
+    ) -> None:
+        target = tmp_path / "fresh" / "github_activity.db"
+        target.parent.mkdir()
+        with pytest.raises(RuntimeError) as error:
+            upgrade(target)
+        assert "refusing to migrate" in refusal(error)
+        assert list(target.parent.iterdir()) == []
 
     def test_the_alembic_command_refuses_the_tracked_file(self) -> None:
         result = subprocess.run(

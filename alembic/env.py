@@ -5,7 +5,7 @@
 - Only SQLite is migrated. The tracked ``github_activity.db`` is refused while D26 freezes it
   (gap 73): the connect listener asks SQLite which file it opened, so no spelling of the path
   or URL reaches it, and it also refuses any file named ``github_activity.db``, such as another
-  checkout's copy.
+  checkout's copy; a path of that name is refused before SQLite would create it.
 - Foreign keys are off while migrating: batch mode drops and recreates tables, and an enforced
   drop cascades into child rows. The connect listener, which runs before SQLAlchemy's own
   connect handling, sets the pragma, which has no effect inside a transaction, and refuses the
@@ -16,9 +16,12 @@
   ``transactional_ddl=True``, so a failed revision leaves the file at the revision the upgrade
   started from. ``PRAGMA foreign_key_check`` runs after the last revision, before the commit.
   An SQLite authorizer gives the transaction to env.py alone: ``BEGIN`` only to open it,
-  ``COMMIT`` only after the check passed, ``ROLLBACK`` only once the upgrade failed, so a
-  revision cannot end it early. Nothing runs on the connection before ``context.configure()``:
-  alembic would treat the transaction as the caller's and never commit it.
+  ``COMMIT`` only after the check passed, ``ROLLBACK`` only once the upgrade failed or its
+  commit did. While the upgrade is open it refuses every statement once no transaction is open,
+  which covers SQLite ending one by itself (``INSERT OR ROLLBACK``, ``RAISE(ROLLBACK)``), and it
+  refuses ``ATTACH``, so a revision writes no file the refusals did not see. Nothing runs on the
+  connection before ``context.configure()``: alembic would treat the transaction as the
+  caller's and never commit it.
 - ``legacy_alter_table`` stays off, so batch-altering a table a view reads fails unless the
   migration drops the view first and recreates it from its own frozen SQL (gap 71).
 
@@ -51,6 +54,7 @@ TRANSACTION_STATE = "migration_transaction"
 ALLOWED_TRANSACTION_STATEMENTS = {
     ("BEGIN", "connected"),
     ("COMMIT", "checked"),
+    ("ROLLBACK", "checked"),  # the commit failed
     ("ROLLBACK", "failed"),
 }
 
@@ -64,7 +68,20 @@ def database_url() -> URL:
     url = make_url(config.attributes.get("database_url") or get_settings().database_url)
     if url.get_backend_name() != "sqlite":
         raise MigrationRefused(f"only SQLite is supported, not {url.get_backend_name()!r}")
+    database = url.database or ""
+    # Before SQLite would create a missing file; refuse_tracked_file decides for the rest.
+    if database and not database.startswith("file:") and database != ":memory:":
+        if Path(database).name.lower() == TRACKED_DATABASE.name:
+            raise MigrationRefused(refusal(database))
     return url.set(drivername="sqlite+pysqlite")
+
+
+def refusal(path: str) -> str:
+    return (
+        f"refusing to migrate {path}: the tracked github_activity.db keeps its pre-Step-3 "
+        "content (D26), and no other file of that name is migrated. Set DATABASE_URL to another "
+        "file, for example sqlite+aiosqlite:///./github_activity.local.db"
+    )
 
 
 def refuse_tracked_file(dbapi_connection: sqlite3.Connection) -> None:
@@ -83,20 +100,24 @@ def refuse_tracked_file(dbapi_connection: sqlite3.Connection) -> None:
         TRACKED_DATABASE.exists() and real.samefile(TRACKED_DATABASE)
     )
     if tracked:
-        raise MigrationRefused(
-            f"refusing to migrate {opened}: the tracked github_activity.db keeps its pre-Step-3 "
-            "content (D26), and no other file of that name is migrated. Set DATABASE_URL to "
-            "another file, for example sqlite+aiosqlite:///./github_activity.local.db"
-        )
+        raise MigrationRefused(refusal(opened))
 
 
-def transaction_guard(info: MutableMapping[str, object]) -> Callable[..., int]:
-    """An SQLite authorizer allowing only env.py's own transaction statements."""
+def transaction_guard(
+    dbapi_connection: sqlite3.Connection, info: MutableMapping[str, object]
+) -> Callable[..., int]:
+    """An SQLite authorizer: env.py's own transaction statements only, no statement outside the
+    open upgrade's transaction, and no ATTACH."""
 
     def authorize(action: int, statement: str | None, *_: object) -> int:
+        state = info.get(TRANSACTION_STATE)
+        if action == sqlite3.SQLITE_ATTACH:
+            return sqlite3.SQLITE_DENY
+        if state == "open" and not dbapi_connection.in_transaction:
+            return sqlite3.SQLITE_DENY  # the transaction ended without env.py
         if action != sqlite3.SQLITE_TRANSACTION:
             return sqlite3.SQLITE_OK
-        allowed = (statement, info.get(TRANSACTION_STATE)) in ALLOWED_TRANSACTION_STATEMENTS
+        allowed = (statement, state) in ALLOWED_TRANSACTION_STATEMENTS
         return sqlite3.SQLITE_OK if allowed else sqlite3.SQLITE_DENY
 
     return authorize
@@ -120,7 +141,7 @@ def configure_connection(dbapi_connection: sqlite3.Connection, record: Connectio
         if dbapi_connection.in_transaction:
             raise MigrationRefused("the migration connection is already inside a transaction")
         record.info[TRANSACTION_STATE] = "connected"
-        dbapi_connection.set_authorizer(transaction_guard(record.info))
+        dbapi_connection.set_authorizer(transaction_guard(dbapi_connection, record.info))
         # Last: this commits any transaction open on the connection.
         dbapi_connection.isolation_level = None
     except BaseException:

@@ -4,8 +4,9 @@ Only ``source/`` imports githubkit: the scan covers ``src/`` outside ``source/``
 and ``alembic/``, imports at any scope (``TYPE_CHECKING`` blocks and function bodies included),
 and ``import_module`` and ``__import__`` called with a string literal, as an attribute
 (``importlib.import_module``, ``builtins.__import__``), by name, or under the alias a
-``from importlib import import_module as load`` gives it. Out of scope: a callable rebound by
-assignment, a name built at run time, and ``exec``/``eval``. Tests are exempt: they build
+``from importlib import import_module as load`` gives it, with the name as the first argument
+or ``name=``. Out of scope: a callable rebound by assignment, a name built at run time,
+``runpy``, and ``exec``/``eval``. Tests are exempt: they build
 githubkit's own errors.
 
 ``source/`` imports neither SQLAlchemy nor ``github_activity_db.db``, relative imports included,
@@ -77,8 +78,9 @@ def imported_modules(path: Path, src: Path | None = None) -> Iterator[tuple[int,
             yield node.lineno, base
             for alias in node.names:
                 yield node.lineno, f"{base}.{alias.name}"
-        elif isinstance(node, ast.Call) and node.args:
-            target = node.args[0]
+        elif isinstance(node, ast.Call):
+            named = [keyword.value for keyword in node.keywords if keyword.arg == "name"]
+            target = node.args[0] if node.args else (named[0] if named else None)
             is_importer = (
                 isinstance(node.func, ast.Attribute)
                 and node.func.attr in ("import_module", "__import__")
@@ -140,6 +142,8 @@ def test_the_scan_sees_source_importing_githubkit() -> None:
         "from importlib import import_module as load\nload('githubkit')\n",
         "import builtins\nbuiltins.__import__('githubkit')\n",
         "from builtins import __import__ as imp\nimp('githubkit')\n",
+        "import importlib\nimportlib.import_module(name='githubkit')\n",
+        "__import__(name='githubkit')\n",
         "__import__('githubkit.versions')\n",
         "class C:\n    import githubkit\n",
     ],
