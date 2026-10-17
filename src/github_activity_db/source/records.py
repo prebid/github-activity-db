@@ -105,9 +105,14 @@ class Review:
 
 
 @dataclass(frozen=True, slots=True)
-class Commenter:
-    account: Account
-    comment_count: int
+class Comment:
+    """A conversation comment: its id and author, never its text (D28).
+
+    The author is None for an account GitHub reports as deleted.
+    """
+
+    github_id: int
+    author: Account | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -166,8 +171,7 @@ class PullRequestRecord:
     labels: tuple[str, ...]
     closing_issues: tuple[ClosingIssue, ...]
     reviews: tuple[Review, ...]
-    commenters: tuple[Commenter, ...]
-    deleted_author_comment_count: int
+    comments: tuple[Comment, ...]
     commits: tuple[CommitRecord, ...]
     commits_source: CommitSource
     files: tuple[FileChange, ...]
@@ -178,10 +182,10 @@ class PullRequestRecord:
     hydration_version: int
 
     def accounts(self) -> tuple[Account, ...]:
-        """Every actor sighting: author, merger, reviewers, commenters."""
+        """Every actor sighting, in order: author, merger, reviewers, comment authors."""
         seen = [self.author, self.merged_by]
         seen.extend(review.reviewer for review in self.reviews)
-        seen.extend(commenter.account for commenter in self.commenters)
+        seen.extend(comment.author for comment in self.comments)
         return tuple(account for account in seen if account is not None)
 
     def commit_links(self) -> tuple[LinkedAccount, ...]:

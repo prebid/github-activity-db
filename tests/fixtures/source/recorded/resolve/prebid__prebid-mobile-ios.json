@@ -83,18 +83,18 @@
   "errors": [],
   "extra": {},
   "headers": {
-    "date": "Sat, 17 Oct 2026 11:05:15 GMT",
+    "date": "Sat, 17 Oct 2026 12:09:27 GMT",
     "x-ratelimit-limit": "5000",
-    "x-ratelimit-remaining": "4965",
-    "x-ratelimit-reset": "1792235352",
+    "x-ratelimit-remaining": "4989",
+    "x-ratelimit-reset": "1792242556",
     "x-ratelimit-resource": "graphql",
-    "x-ratelimit-used": "35"
+    "x-ratelimit-used": "11"
   },
   "key": {
     "name": "prebid-mobile-ios",
     "owner": "prebid"
   },
   "kind": "resolve",
-  "recorded_at": "2026-10-17T11:05:08Z",
+  "recorded_at": "2026-10-17T12:09:19Z",
   "source": "live"
 }

@@ -17,7 +17,7 @@ import pytest
 from github_activity_db.source import (
     Account,
     ClosingIssue,
-    Commenter,
+    Comment,
     CommitRecord,
     ConnectionTotals,
     Failed,
@@ -41,6 +41,7 @@ from github_activity_db.source.errors import (
     CompareRefused,
     ConnectionCountMismatch,
     DeadlineReached,
+    DuplicateEntry,
     IdentityMismatch,
     ItemChangedDuringRead,
     ItemRequestFailed,
@@ -172,8 +173,7 @@ class TestRecordedScenarios:
     async def test_null_author_and_a_deleted_commenter(self, open_source) -> None:
         record = await hydrate_one(open_source, PREBID_JS, 12975)
         assert record.author is None
-        assert record.deleted_author_comment_count == 1
-        assert sum(commenter.comment_count for commenter in record.commenters) == 1
+        assert [comment.author is None for comment in record.comments] == [False, True]
         assert record.totals.comments == 2
 
     async def test_null_merger(self, open_source) -> None:
@@ -236,8 +236,7 @@ class TestRecordedScenarios:
         fetched = {
             "files": len(record.files),
             "reviews": len(record.reviews),
-            "comments": sum(c.comment_count for c in record.commenters)
-            + record.deleted_author_comment_count,
+            "comments": len(record.comments),
         }
         assert fetched[connection] == total
 
@@ -355,6 +354,11 @@ async def test_every_field_maps_from_its_wire_name(open_source, unit: Unit) -> N
         for node in data["reviews"]["nodes"]
     ]
     assert list(record.reviews[: len(reviews)]) == reviews
+    comments = [
+        Comment(github_id=int(node["fullDatabaseId"]), author=wire_account(node["author"]))
+        for node in data["comments"]["nodes"]
+    ]
+    assert list(record.comments[: len(comments)]) == comments
     files = [
         FileChange(
             path=node["path"],
@@ -739,21 +743,40 @@ class TestInvariants:
         assert isinstance(error, ConnectionCountMismatch)
         assert (error.connection, error.fetched, error.total_count) == ("commits", 102, 101)
 
-    async def test_commenters_are_counted_by_id_not_login(
-        self, open_source, replay: Replay
-    ) -> None:
+    async def test_each_comment_keeps_its_id_and_author(self, open_source, replay: Replay) -> None:
+        # One account under two logins (a rename between comments) stays two sightings of one id.
         unit = pr_unit(replay, 12975)
         author = unit.data["comments"]["nodes"][0]["author"]
         renamed = {**author, "login": "dgirardi-renamed"}
-        unit.data["comments"]["nodes"] = [{"author": author}, {"author": None}, {"author": renamed}]
+        unit.data["comments"]["nodes"] = [
+            {"fullDatabaseId": "11", "author": author},
+            {"fullDatabaseId": "12", "author": None},
+            {"fullDatabaseId": "13", "author": renamed},
+        ]
         unit.data["comments"]["totalCount"] = 3
         replay.add(unit)
         record = await hydrate_one(open_source, PREBID_JS, 12975)
-        latest = wire_account(renamed)
-        assert latest is not None
-        # One account, two comments; the latest sighting supplies the login.
-        assert record.commenters == (Commenter(account=latest, comment_count=2),)
-        assert record.deleted_author_comment_count == 1
+        assert record.comments == (
+            Comment(github_id=11, author=wire_account(author)),
+            Comment(github_id=12, author=None),
+            Comment(github_id=13, author=wire_account(renamed)),
+        )
+
+    @pytest.mark.parametrize(
+        "connection", ["labels", "closingIssuesReferences", "reviews", "comments", "commits"]
+    )
+    async def test_an_entry_listed_twice_fails_the_item(
+        self, open_source, replay: Replay, connection: str
+    ) -> None:
+        # The count still matches: only the key check sees the duplicate.
+        unit = pr_unit(replay, 12975)
+        page = unit.data[connection]
+        page["nodes"].append(dict(page["nodes"][0]))
+        page["totalCount"] += 1
+        replay.add(unit)
+        error = await failure(open_source, PREBID_JS, 12975)
+        assert isinstance(error, DuplicateEntry)
+        assert error.connection == connection
 
 
 class TestCompare:
@@ -813,6 +836,17 @@ class TestCompare:
         # One compare request and its retries; the item's own request is not retried again.
         assert [seen.operation for seen in replay.seen].count("rest") == 4
         assert clock.sleeps == list(SERVER_RETRY_DELAYS)
+
+    async def test_a_compare_commit_listed_twice_fails_the_item(
+        self, open_source, replay: Replay
+    ) -> None:
+        first = self.compare_page(replay, 1).data["commits"][0]
+        unit = self.compare_page(replay, 3)
+        unit.data["commits"][-1] = first
+        replay.add(unit)
+        error = await failure(open_source, PREBID_JS, 8858)
+        assert isinstance(error, DuplicateEntry)
+        assert (error.connection, error.key) == ("commits", first["sha"])
 
     async def test_a_compare_page_the_models_reject(self, open_source, replay: Replay) -> None:
         unit = self.compare_page(replay, 1)

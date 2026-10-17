@@ -15,7 +15,7 @@ progress.
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator, Sequence
+from collections.abc import AsyncIterator, Hashable, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
 from math import ceil
@@ -39,6 +39,7 @@ from .errors import (
     CompareCountMismatch,
     CompareRefused,
     ConnectionCountMismatch,
+    DuplicateEntry,
     IdentityMismatch,
     ItemChangedDuringRead,
     ItemError,
@@ -71,8 +72,7 @@ from .models import (
     ReviewNode,
 )
 from .records import (
-    Account,
-    Commenter,
+    Comment,
     CommitRecord,
     CommitSource,
     ConnectionTotals,
@@ -402,19 +402,22 @@ class PullRequestHydrator:
             )
             for review in item.reviews.nodes
         )
-        comment_authors = [
-            account(comment.author, number=number, role="commenter")
+        comments = tuple(
+            Comment(
+                github_id=comment.full_database_id,
+                author=account(comment.author, number=number, role="commenter"),
+            )
             for comment in item.comments.nodes
-        ]
-        # Counted by GitHub id: identity never joins on login (plan 5.2). The last sighting wins.
-        by_id: dict[int, tuple[Account, int]] = {}
-        for author in comment_authors:
-            if author is not None:
-                count = by_id.get(author.github_id, (author, 0))[1]
-                by_id[author.github_id] = (author, count + 1)
-        commenters = tuple(
-            Commenter(account=author, comment_count=count) for author, count in by_id.values()
         )
+        labels = tuple(label.name for label in item.labels.nodes)
+        closing_issues = tuple(closing_issue(link) for link in item.closing_issues.nodes)
+        # The database keys these entries, so a duplicate standing in for a missing entry would
+        # pass the count check and drop a row.
+        _check_distinct(number, "labels", labels)
+        _check_distinct(number, "closingIssuesReferences", closing_issues)
+        _check_distinct(number, "reviews", [review.github_id for review in reviews])
+        _check_distinct(number, "comments", [comment.github_id for comment in comments])
+        _check_distinct(number, "commits", [commit.sha for commit in commits])
         return PullRequestRecord(
             repository=self._repository.full_name,
             github_id=node.full_database_id,
@@ -434,11 +437,10 @@ class PullRequestHydrator:
             additions=node.additions,
             deletions=node.deletions,
             changed_files=node.changed_files,
-            labels=tuple(label.name for label in item.labels.nodes),
-            closing_issues=tuple(closing_issue(link) for link in item.closing_issues.nodes),
+            labels=labels,
+            closing_issues=closing_issues,
             reviews=reviews,
-            commenters=commenters,
-            deleted_author_comment_count=sum(1 for author in comment_authors if author is None),
+            comments=comments,
             commits=tuple(commits),
             commits_source=commit_source,
             files=tuple(
@@ -531,6 +533,14 @@ def _apply_continuation(
     else:
         collected.cursor = None
     return None
+
+
+def _check_distinct(number: int, connection: str, keys: Sequence[Hashable]) -> None:
+    seen: set[Hashable] = set()
+    for key in keys:
+        if key in seen:
+            raise DuplicateEntry(number, connection, key)
+        seen.add(key)
 
 
 def _check_complete(number: int, name: str, collected: _Collected[Any]) -> None:

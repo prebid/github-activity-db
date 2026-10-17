@@ -73,7 +73,8 @@ REVIEWS: Final = Connection(
     "states: [APPROVED, CHANGES_REQUESTED, COMMENTED, DISMISSED]",
     "fullDatabaseId state author { ...Actor }",
 )
-COMMENTS: Final = Connection("comments", "", "author { ...Actor }")
+# Each comment's id and author, never its text (D28).
+COMMENTS: Final = Connection("comments", "", "fullDatabaseId author { ...Actor }")
 # No connection inside `commits`: GraphQL charges for every possible nested node (D15).
 COMMITS: Final = Connection(
     "commits",

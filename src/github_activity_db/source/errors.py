@@ -255,6 +255,15 @@ class PagingStalled(InvariantError):
         self.cursor = cursor
 
 
+class DuplicateEntry(InvariantError):
+    """A connection listed an entry twice by the key the database stores it under."""
+
+    def __init__(self, number: int, connection: str, key: object) -> None:
+        super().__init__(number, f"{connection}: {key!r} listed twice")
+        self.connection = connection
+        self.key = key
+
+
 class NullEntry(InvariantError):
     """A connection, or an entry in one, was null; never counted as zero."""
 

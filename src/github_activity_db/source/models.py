@@ -191,6 +191,7 @@ class ReviewNode(GraphQLModel):
 
 
 class CommentNode(GraphQLModel):
+    full_database_id: BigInt = Field(alias="fullDatabaseId")
     author: Actor | None
 
 

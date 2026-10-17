@@ -36,7 +36,8 @@
             "databaseId": 43144390,
             "id": "MDM6Qm90NDMxNDQzOTA=",
             "login": "lgtm-com"
-          }
+          },
+          "fullDatabaseId": "1218564961"
         },
         {
           "author": {
@@ -44,7 +45,8 @@
             "databaseId": 43144390,
             "id": "MDM6Qm90NDMxNDQzOTA=",
             "login": "lgtm-com"
-          }
+          },
+          "fullDatabaseId": "1224930038"
         },
         {
           "author": {
@@ -52,7 +54,8 @@
             "databaseId": 12138319,
             "id": "MDQ6VXNlcjEyMTM4MzE5",
             "login": "karimMourra"
-          }
+          },
+          "fullDatabaseId": "1225865343"
         },
         {
           "author": {
@@ -60,7 +63,8 @@
             "databaseId": 12138319,
             "id": "MDQ6VXNlcjEyMTM4MzE5",
             "login": "karimMourra"
-          }
+          },
+          "fullDatabaseId": "1225943941"
         },
         {
           "author": {
@@ -68,7 +72,8 @@
             "databaseId": 1683175,
             "id": "MDQ6VXNlcjE2ODMxNzU=",
             "login": "patmmccann"
-          }
+          },
+          "fullDatabaseId": "1278019297"
         },
         {
           "author": {
@@ -76,7 +81,8 @@
             "databaseId": 12138319,
             "id": "MDQ6VXNlcjEyMTM4MzE5",
             "login": "karimMourra"
-          }
+          },
+          "fullDatabaseId": "1287311445"
         },
         {
           "author": {
@@ -84,7 +90,8 @@
             "databaseId": 1683175,
             "id": "MDQ6VXNlcjE2ODMxNzU=",
             "login": "patmmccann"
-          }
+          },
+          "fullDatabaseId": "1287322330"
         }
       ],
       "pageInfo": {
@@ -2048,16 +2055,16 @@
     "title": "Video Module: Initial Release",
     "updatedAt": "2022-11-04T18:11:19Z"
   },
-  "document_sha256": "199ed73f6d5ba2a5a330b9fbd6ed0ca1cecac86adc6839df6b34e896cb5c8e8d",
+  "document_sha256": "39fd2b5d7744d57be4fd58ba38b2fcf50319c5bd19e1c3796ae4771203af3ea0",
   "errors": [],
   "extra": {},
   "headers": {
-    "date": "Sat, 17 Oct 2026 11:05:12 GMT",
+    "date": "Sat, 17 Oct 2026 12:09:24 GMT",
     "x-ratelimit-limit": "5000",
-    "x-ratelimit-remaining": "4970",
-    "x-ratelimit-reset": "1792235352",
+    "x-ratelimit-remaining": "4929",
+    "x-ratelimit-reset": "1792241340",
     "x-ratelimit-resource": "graphql",
-    "x-ratelimit-used": "30"
+    "x-ratelimit-used": "71"
   },
   "key": {
     "name": "Prebid.js",
@@ -2065,6 +2072,6 @@
     "owner": "prebid"
   },
   "kind": "pull_request",
-  "recorded_at": "2026-10-17T11:05:08Z",
+  "recorded_at": "2026-10-17T12:09:19Z",
   "source": "live"
 }

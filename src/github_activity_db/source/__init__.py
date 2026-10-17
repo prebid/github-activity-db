@@ -19,7 +19,7 @@ from .errors import (
 from .records import (
     Account,
     ClosingIssue,
-    Commenter,
+    Comment,
     CommitRecord,
     ConnectionTotals,
     Failed,
@@ -42,7 +42,7 @@ __all__ = [
     "Account",
     "ClosingIssue",
     "Clock",
-    "Commenter",
+    "Comment",
     "CommitRecord",
     "ConnectionTotals",
     "DeadlineReached",
