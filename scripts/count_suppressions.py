@@ -5,10 +5,12 @@ inside a string does not count. Both .py and .pyi files are scanned.
 
 A file the counter may read differently from ruff is refused (exit 1, naming the file), not
 counted: a file without a lowercase `.py` or `.pyi` suffix that pre-commit's file tagging
-(identify) marks python or pyi, such as `module.PY`, `app.wsgi`, or an executable with a python
-shebang (pre-commit passes these to ruff); any coding declaration other than UTF-8 (ruff reads
-every file as UTF-8, tokenize follows the declaration); and a lone CR line ending (ruff ends a
-line there, tokenize does not).
+(identify) marks python or pyi, such as `module.PY`, `stub.PYI`, `app.wsgi`, or an executable
+with a `#!/usr/bin/env python3` shebang (pre-commit passes these to ruff), or that identify cannot
+read; any coding declaration other than UTF-8 (ruff reads every file as UTF-8, tokenize follows
+the declaration); and a lone CR line ending (ruff ends a line there, tokenize does not). Entries
+named `*.py` or `*.pyi` that are not regular files (a directory, a broken symlink) are skipped, as
+pre-commit skips them.
 
 - noqa: line-level `# noqa`, `#NOQA`, `# noqa: F401`; file-level `# ruff: noqa`,
   `# ruff: noqa: F401`, `# flake8: noqa`, in any letter case; range suppressions
@@ -60,8 +62,8 @@ LONE_CR = re.compile(rb"\r(?!\n)")
 def python_files(paths: list[Path]) -> Iterator[Path]:
     for path in paths:
         if path.is_dir():
-            yield from sorted(p for p in path.rglob("*") if p.suffix in SUFFIXES)
-        elif path.suffix in SUFFIXES:
+            yield from sorted(p for p in path.rglob("*") if p.suffix in SUFFIXES and p.is_file())
+        elif path.suffix in SUFFIXES and path.is_file():
             yield path
 
 
@@ -76,8 +78,12 @@ def all_files(paths: list[Path]) -> Iterator[Path]:
 def refusal(path: Path) -> str | None:
     """Why the counter may read this file differently from ruff, or None."""
     if path.suffix not in SUFFIXES:
-        if {"python", "pyi"} & tags_from_path(str(path)):
-            return "identify tags it python without a .py/.pyi suffix, so ruff lints it"
+        try:
+            tags = tags_from_path(str(path))
+        except OSError as e:
+            return f"identify cannot read it to tag it ({e.strerror})"
+        if {"python", "pyi"} & tags:
+            return "identify tags it python or pyi without a lowercase .py/.pyi suffix"
         return None
     source = path.read_bytes()
     if LONE_CR.search(source):

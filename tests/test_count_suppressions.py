@@ -1,5 +1,6 @@
 """The suppression-comment caps that pre-commit enforces on src/."""
 
+import os
 import re
 import subprocess
 import sys
@@ -178,6 +179,9 @@ REFUSED = [
     pytest.param("module.py", b'"""Doc."""\r# ruff: noqa: F401\rimport os\r', False, id="lone CR"),
     pytest.param("module.PY", b"import os  # noqa: F401\n", False, id="uppercase suffix"),
     pytest.param(
+        "stub.PYI", b"x: int = undefined_name  # noqa: F821\n", False, id="uppercase stub suffix"
+    ),
+    pytest.param(
         "tool", b"#!/usr/bin/env python3\nimport os  # noqa: F401\n", True, id="python shebang"
     ),
     pytest.param("app.wsgi", b"import os  # noqa: F401\n", False, id="wsgi suffix"),
@@ -229,6 +233,34 @@ def test_accepts_files_it_reads_as_ruff_does(
     result = _run(root)
     assert result.returncode == 0, result.stderr
     assert "refused" not in result.stderr
+
+
+def test_refuses_a_file_identify_cannot_read(tmp_path: Path) -> None:
+    root = _package(tmp_path, "import os\n")
+    locked = root / "LOCK"
+    locked.write_bytes(b"data\n")
+    locked.chmod(0o000)
+    try:
+        readable = os.access(locked, os.R_OK)  # True only for root, which ignores the mode
+        result = _run(root)
+    finally:
+        locked.chmod(0o644)
+    if readable:
+        assert result.returncode == 0, result.stderr
+    else:
+        assert result.returncode == 1
+        assert f"{locked}: refused: identify cannot read it" in result.stderr
+
+
+def test_skips_entries_named_py_that_are_not_files(tmp_path: Path) -> None:
+    root = _package(tmp_path, "import os  # noqa: F401\n")
+    (root / "pkg.py").mkdir()
+    (root / "pkg.py" / "inner.py").write_text("import sys\n")
+    (root / "gone.py").symlink_to(root / "missing.py")
+    result = _run(root)
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.startswith("scanned 2 files")
+    assert _counts(result) == (0, 1)
 
 
 def test_no_python_files_is_an_error(tmp_path: Path) -> None:
