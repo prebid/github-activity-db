@@ -1,0 +1,2072 @@
+{
+  "data": {
+    "additions": 18938,
+    "author": {
+      "__typename": "User",
+      "databaseId": 12138319,
+      "id": "MDQ6VXNlcjEyMTM4MzE5",
+      "login": "karimMourra"
+    },
+    "authorAssociation": "COLLABORATOR",
+    "baseRefName": "master",
+    "baseRefOid": "6c63c6f00267f396176e5b96629b6fc570e40805",
+    "body": "## Type of change\r\n<!-- Remove items that don't apply and/or select an item by changing [ ] to [x] -->\r\n- [x] Feature\r\n\r\n## Description of change\r\n\r\nThe objective of this PR is to implement the Video Module proposed in https://github.com/prebid/Prebid.js/issues/6271 and detailed in the [official proposal doc](https://docs.google.com/document/d/1sueL8EXnD-DViTIEBNayAzNNrYocdHtmEl7433g0f5I/edit?usp=sharing).\r\n\r\n<!-- For new bidder adapters, please provide the following \r\n- test parameters for validating bids\r\n```\r\n{\r\n  bidder: '<bidder name>',\r\n  params: {\r\n    // ...\r\n  }\r\n}\r\n```\r\n\r\nBe sure to test the integration with your adserver using the [Hello World](/integrationExamples/gpt/hello_world.html) sample page.-->\r\n\r\n- contact email of the adapter’s maintainer\r\n karim mourra - karim@jwplayer.com\r\n\r\n<!--For any changes that affect user-facing APIs or example code documented on http://prebid.org, please provide:\r\n\r\n- A link to a PR on the docs repo at https://github.com/prebid/prebid.github.io/\r\n TBD-->\r\nDocumentation PR: https://github.com/prebid/prebid.github.io/pull/4100\r\n\r\n## Other information\r\n<!-- References to related PR or issue #s, @mentions of the person or team responsible for reviewing changes, etc. -->\r\nfulfills [proposal](https://docs.google.com/document/d/1sueL8EXnD-DViTIEBNayAzNNrYocdHtmEl7433g0f5I/edit?usp=sharing)\r\nAddresses:\r\nhttps://github.com/prebid/Prebid.js/issues/6271\r\n#5696\r\n\r\n",
+    "changedFiles": 49,
+    "closingIssuesReferences": {
+      "nodes": [
+        {
+          "number": 5696,
+          "repository": {
+            "databaseId": 39321023,
+            "nameWithOwner": "prebid/Prebid.js"
+          }
+        }
+      ],
+      "pageInfo": {
+        "endCursor": "MQ",
+        "hasNextPage": false
+      },
+      "totalCount": 1
+    },
+    "comments": {
+      "nodes": [
+        {
+          "author": {
+            "__typename": "Bot",
+            "databaseId": 43144390,
+            "id": "MDM6Qm90NDMxNDQzOTA=",
+            "login": "lgtm-com"
+          }
+        },
+        {
+          "author": {
+            "__typename": "Bot",
+            "databaseId": 43144390,
+            "id": "MDM6Qm90NDMxNDQzOTA=",
+            "login": "lgtm-com"
+          }
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 12138319,
+            "id": "MDQ6VXNlcjEyMTM4MzE5",
+            "login": "karimMourra"
+          }
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 12138319,
+            "id": "MDQ6VXNlcjEyMTM4MzE5",
+            "login": "karimMourra"
+          }
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 1683175,
+            "id": "MDQ6VXNlcjE2ODMxNzU=",
+            "login": "patmmccann"
+          }
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 12138319,
+            "id": "MDQ6VXNlcjEyMTM4MzE5",
+            "login": "karimMourra"
+          }
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 1683175,
+            "id": "MDQ6VXNlcjE2ODMxNzU=",
+            "login": "patmmccann"
+          }
+        }
+      ],
+      "pageInfo": {
+        "endCursor": "Y3Vyc29yOnYyOpHOTLr62g==",
+        "hasNextPage": false
+      },
+      "totalCount": 7
+    },
+    "commits": {
+      "nodes": [
+        {
+          "commit": {
+            "author": {
+              "email": "karimJWP@github.com",
+              "name": "karimJWP",
+              "user": null
+            },
+            "authoredDate": "2021-08-04T15:02:15Z",
+            "oid": "336cc368d0776c4ed5834008792878d7f2ae163e"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "karimJWP@github.com",
+              "name": "karimJWP",
+              "user": null
+            },
+            "authoredDate": "2021-08-04T18:15:11Z",
+            "oid": "d106e515c2c88562d9dabdb0a3fda7b468d6c764"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "karimJWP@github.com",
+              "name": "karimJWP",
+              "user": null
+            },
+            "authoredDate": "2021-08-04T18:24:24Z",
+            "oid": "00738fb42b64d2bf823445cc492e39bf508fe544"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "karimJWP@github.com",
+              "name": "karimJWP",
+              "user": null
+            },
+            "authoredDate": "2021-08-04T19:01:57Z",
+            "oid": "2193d74fdaacd502d76d91cf317bf1b403fbf165"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "karimJWP@github.com",
+              "name": "karimJWP",
+              "user": null
+            },
+            "authoredDate": "2021-08-04T19:34:37Z",
+            "oid": "f6f749e6fb714d945812c70d99397dbfce431ed5"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "karimJWP@github.com",
+              "name": "karimJWP",
+              "user": null
+            },
+            "authoredDate": "2021-08-04T20:02:43Z",
+            "oid": "3c73c2710c87f77a23ceaa8a6532a7ee0461bcc2"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "karimJWP@github.com",
+              "name": "karimJWP",
+              "user": null
+            },
+            "authoredDate": "2021-08-05T19:25:12Z",
+            "oid": "5b7ff156b0e9f95a335e66f331d4aa3ddaff4a21"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "karimJWP@github.com",
+              "name": "karimJWP",
+              "user": null
+            },
+            "authoredDate": "2021-08-09T19:27:47Z",
+            "oid": "d8259d9e26a095209fecaa154e21fdc0fa6cb145"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "karimJWP@github.com",
+              "name": "karimJWP",
+              "user": null
+            },
+            "authoredDate": "2021-08-09T20:19:25Z",
+            "oid": "8795a732ffd7277e9a718e95fdfffd67862cc5db"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "karimJWP@github.com",
+              "name": "karimJWP",
+              "user": null
+            },
+            "authoredDate": "2021-08-09T21:19:13Z",
+            "oid": "95d68a7ff543cfc573555721366bc326425409c7"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "karimJWP@github.com",
+              "name": "karimJWP",
+              "user": null
+            },
+            "authoredDate": "2021-08-09T21:52:12Z",
+            "oid": "6a5f0f1599caed4591755feb06436702e38f2d43"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "karimJWP@github.com",
+              "name": "karimJWP",
+              "user": null
+            },
+            "authoredDate": "2021-08-10T00:24:10Z",
+            "oid": "743d99ac44b24617f87746495a6500d2a34754a3"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "karimJWP@github.com",
+              "name": "karimJWP",
+              "user": null
+            },
+            "authoredDate": "2021-08-10T19:42:10Z",
+            "oid": "9084143af417f208603674163aeef9ebc25ade03"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "karimJWP@github.com",
+              "name": "karimJWP",
+              "user": null
+            },
+            "authoredDate": "2021-08-10T20:29:58Z",
+            "oid": "7050786ec37d45284e5b8a6ad7eaa4aebde0888b"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "karimJWP@github.com",
+              "name": "karimJWP",
+              "user": null
+            },
+            "authoredDate": "2021-08-10T22:15:59Z",
+            "oid": "d2177ff3f55e7719c09bdc1afedd7eef3c85c9e5"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "karimJWP@github.com",
+              "name": "karimJWP",
+              "user": null
+            },
+            "authoredDate": "2021-08-11T14:54:48Z",
+            "oid": "b8f2d69091a7c7331c04b4d2a4e41f4ec9428c41"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "karimJWP@github.com",
+              "name": "karimJWP",
+              "user": null
+            },
+            "authoredDate": "2021-08-13T19:58:06Z",
+            "oid": "1113b154a18cbd10086d706970d9b294b0692e49"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "karimJWP@github.com",
+              "name": "karimJWP",
+              "user": null
+            },
+            "authoredDate": "2021-08-13T20:01:35Z",
+            "oid": "f10476f62f1275547518766121af5026563b32be"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "karimJWP@github.com",
+              "name": "karimJWP",
+              "user": null
+            },
+            "authoredDate": "2021-08-20T01:45:33Z",
+            "oid": "93c2a57773251be7795e30c530795d91d90c0dd9"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "karimJWP@github.com",
+              "name": "karimJWP",
+              "user": null
+            },
+            "authoredDate": "2021-08-20T02:21:55Z",
+            "oid": "0ce3c734aa0180c9b3be011dfc1f4e1fc746cbc6"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "karim@jwplayer.com",
+              "name": "Karim Mourra",
+              "user": {
+                "databaseId": 12138319,
+                "id": "MDQ6VXNlcjEyMTM4MzE5",
+                "login": "karimMourra"
+              }
+            },
+            "authoredDate": "2021-08-31T22:54:21Z",
+            "oid": "61cbf09a3ac0eb291d1981d941ea96c30f02ee52"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "karim@jwplayer.com",
+              "name": "Karim Mourra",
+              "user": {
+                "databaseId": 12138319,
+                "id": "MDQ6VXNlcjEyMTM4MzE5",
+                "login": "karimMourra"
+              }
+            },
+            "authoredDate": "2021-08-31T22:54:35Z",
+            "oid": "ac8f9f448f1a82d717909ce74e200ef43518d88b"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "karim@jwplayer.com",
+              "name": "Karim Mourra",
+              "user": {
+                "databaseId": 12138319,
+                "id": "MDQ6VXNlcjEyMTM4MzE5",
+                "login": "karimMourra"
+              }
+            },
+            "authoredDate": "2021-09-01T19:51:57Z",
+            "oid": "3477515379ba38b8cf78a5bac0b3d4b141a985a4"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "karim@jwplayer.com",
+              "name": "Karim Mourra",
+              "user": {
+                "databaseId": 12138319,
+                "id": "MDQ6VXNlcjEyMTM4MzE5",
+                "login": "karimMourra"
+              }
+            },
+            "authoredDate": "2021-09-01T19:52:06Z",
+            "oid": "58dcf57c5dff70c3717f3e2a9fa611f77218d636"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "karim@jwplayer.com",
+              "name": "Karim Mourra",
+              "user": {
+                "databaseId": 12138319,
+                "id": "MDQ6VXNlcjEyMTM4MzE5",
+                "login": "karimMourra"
+              }
+            },
+            "authoredDate": "2021-09-01T22:32:52Z",
+            "oid": "d40f47899fe9232c46e2d1f767f12153d7dd82a7"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "karim@jwplayer.com",
+              "name": "Karim Mourra",
+              "user": {
+                "databaseId": 12138319,
+                "id": "MDQ6VXNlcjEyMTM4MzE5",
+                "login": "karimMourra"
+              }
+            },
+            "authoredDate": "2021-09-01T22:42:47Z",
+            "oid": "b166b00af4d5a4e28363e440a47eaf981e905fa0"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "karim@jwplayer.com",
+              "name": "Karim Mourra",
+              "user": {
+                "databaseId": 12138319,
+                "id": "MDQ6VXNlcjEyMTM4MzE5",
+                "login": "karimMourra"
+              }
+            },
+            "authoredDate": "2021-09-01T22:50:06Z",
+            "oid": "972bb4d997576a4952ff3b44df7f6f75891cccaa"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "karim@jwplayer.com",
+              "name": "Karim Mourra",
+              "user": {
+                "databaseId": 12138319,
+                "id": "MDQ6VXNlcjEyMTM4MzE5",
+                "login": "karimMourra"
+              }
+            },
+            "authoredDate": "2021-09-02T19:24:24Z",
+            "oid": "227807be5ac65f51d15f4db8520048c8782c8798"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "karim@jwplayer.com",
+              "name": "Karim Mourra",
+              "user": {
+                "databaseId": 12138319,
+                "id": "MDQ6VXNlcjEyMTM4MzE5",
+                "login": "karimMourra"
+              }
+            },
+            "authoredDate": "2021-09-02T23:23:49Z",
+            "oid": "805e8a8d7b9808f9483969642149956993eda98c"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "karim@jwplayer.com",
+              "name": "Karim Mourra",
+              "user": {
+                "databaseId": 12138319,
+                "id": "MDQ6VXNlcjEyMTM4MzE5",
+                "login": "karimMourra"
+              }
+            },
+            "authoredDate": "2021-09-07T20:19:27Z",
+            "oid": "cb2c4ec889ccbce54bd23b61ef21d735e99db3b2"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "karim@jwplayer.com",
+              "name": "Karim Mourra",
+              "user": {
+                "databaseId": 12138319,
+                "id": "MDQ6VXNlcjEyMTM4MzE5",
+                "login": "karimMourra"
+              }
+            },
+            "authoredDate": "2021-09-07T20:43:51Z",
+            "oid": "a925e565b24b5390ee2b90edde58dfca507e614e"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "karim@jwplayer.com",
+              "name": "Karim Mourra",
+              "user": {
+                "databaseId": 12138319,
+                "id": "MDQ6VXNlcjEyMTM4MzE5",
+                "login": "karimMourra"
+              }
+            },
+            "authoredDate": "2021-09-07T20:53:20Z",
+            "oid": "02a4b7d6e6f3c3c20d3c3be9eaecd98d1d1750ce"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "karim@jwplayer.com",
+              "name": "Karim Mourra",
+              "user": {
+                "databaseId": 12138319,
+                "id": "MDQ6VXNlcjEyMTM4MzE5",
+                "login": "karimMourra"
+              }
+            },
+            "authoredDate": "2021-09-07T22:11:02Z",
+            "oid": "7afb97a28414ccef777d17c86609af34063553a9"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "karim@jwplayer.com",
+              "name": "Karim Mourra",
+              "user": {
+                "databaseId": 12138319,
+                "id": "MDQ6VXNlcjEyMTM4MzE5",
+                "login": "karimMourra"
+              }
+            },
+            "authoredDate": "2021-10-07T18:27:26Z",
+            "oid": "3ba4787a9f96ba4ea45a74f68a279c5d8f2705ab"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "karim@jwplayer.com",
+              "name": "Karim Mourra",
+              "user": {
+                "databaseId": 12138319,
+                "id": "MDQ6VXNlcjEyMTM4MzE5",
+                "login": "karimMourra"
+              }
+            },
+            "authoredDate": "2021-10-07T19:27:02Z",
+            "oid": "44abd5f056bc9dd73ad19555b9f8e4117f9a0d3c"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "karim@jwplayer.com",
+              "name": "Karim Mourra",
+              "user": {
+                "databaseId": 12138319,
+                "id": "MDQ6VXNlcjEyMTM4MzE5",
+                "login": "karimMourra"
+              }
+            },
+            "authoredDate": "2021-10-07T19:50:41Z",
+            "oid": "ccc2783033f23a1a175d90e78f89319731e732de"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "karim@jwplayer.com",
+              "name": "Karim Mourra",
+              "user": {
+                "databaseId": 12138319,
+                "id": "MDQ6VXNlcjEyMTM4MzE5",
+                "login": "karimMourra"
+              }
+            },
+            "authoredDate": "2021-10-08T19:55:54Z",
+            "oid": "76e2d44c20a9d590a6fa0e7510cfda99e48d91eb"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "karim@jwplayer.com",
+              "name": "Karim Mourra",
+              "user": {
+                "databaseId": 12138319,
+                "id": "MDQ6VXNlcjEyMTM4MzE5",
+                "login": "karimMourra"
+              }
+            },
+            "authoredDate": "2021-10-08T19:58:54Z",
+            "oid": "1025e0f211df1211cdd6dd89759d87b1d41177a6"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "karim@jwplayer.com",
+              "name": "Karim Mourra",
+              "user": {
+                "databaseId": 12138319,
+                "id": "MDQ6VXNlcjEyMTM4MzE5",
+                "login": "karimMourra"
+              }
+            },
+            "authoredDate": "2021-10-08T20:16:43Z",
+            "oid": "deb2d9b2d970dea31ee5415419f17a313acca211"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "karim@jwplayer.com",
+              "name": "Karim Mourra",
+              "user": {
+                "databaseId": 12138319,
+                "id": "MDQ6VXNlcjEyMTM4MzE5",
+                "login": "karimMourra"
+              }
+            },
+            "authoredDate": "2021-10-08T21:18:35Z",
+            "oid": "9216a73428161b1c6bfdae3fcddf2139d407d8c9"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "karim@jwplayer.com",
+              "name": "Karim Mourra",
+              "user": {
+                "databaseId": 12138319,
+                "id": "MDQ6VXNlcjEyMTM4MzE5",
+                "login": "karimMourra"
+              }
+            },
+            "authoredDate": "2021-10-08T21:42:23Z",
+            "oid": "4f81a069fdad96804a2c42db44520e11f780aa8f"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "karim@jwplayer.com",
+              "name": "Karim Mourra",
+              "user": {
+                "databaseId": 12138319,
+                "id": "MDQ6VXNlcjEyMTM4MzE5",
+                "login": "karimMourra"
+              }
+            },
+            "authoredDate": "2021-10-11T21:30:03Z",
+            "oid": "a2c9846672c174f03c28901d94622be4fa11c0bf"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "karim@jwplayer.com",
+              "name": "Karim Mourra",
+              "user": {
+                "databaseId": 12138319,
+                "id": "MDQ6VXNlcjEyMTM4MzE5",
+                "login": "karimMourra"
+              }
+            },
+            "authoredDate": "2021-10-11T22:12:52Z",
+            "oid": "27a0017b0410f66860c4f0ffad529e29ac75ab24"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "karim@jwplayer.com",
+              "name": "Karim Mourra",
+              "user": {
+                "databaseId": 12138319,
+                "id": "MDQ6VXNlcjEyMTM4MzE5",
+                "login": "karimMourra"
+              }
+            },
+            "authoredDate": "2021-10-12T20:15:20Z",
+            "oid": "16acf42c963be3b69efe9b4f80dc0fb68907f990"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "karim@jwplayer.com",
+              "name": "Karim Mourra",
+              "user": {
+                "databaseId": 12138319,
+                "id": "MDQ6VXNlcjEyMTM4MzE5",
+                "login": "karimMourra"
+              }
+            },
+            "authoredDate": "2021-10-12T20:32:20Z",
+            "oid": "aacb0fc191bfce70c900c2673ea1c1d5ce6de108"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "karim@jwplayer.com",
+              "name": "Karim Mourra",
+              "user": {
+                "databaseId": 12138319,
+                "id": "MDQ6VXNlcjEyMTM4MzE5",
+                "login": "karimMourra"
+              }
+            },
+            "authoredDate": "2021-10-22T15:19:09Z",
+            "oid": "942fc2d3ea78d451f71e48157d2a2125adc5484c"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "karim@jwplayer.com",
+              "name": "Karim Mourra",
+              "user": {
+                "databaseId": 12138319,
+                "id": "MDQ6VXNlcjEyMTM4MzE5",
+                "login": "karimMourra"
+              }
+            },
+            "authoredDate": "2021-10-22T18:59:21Z",
+            "oid": "ea0853ca25d273eea9ec6ddb139a50a3d54fcb1c"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "karim@jwplayer.com",
+              "name": "Karim Mourra",
+              "user": {
+                "databaseId": 12138319,
+                "id": "MDQ6VXNlcjEyMTM4MzE5",
+                "login": "karimMourra"
+              }
+            },
+            "authoredDate": "2021-10-22T21:24:26Z",
+            "oid": "486e5bf958efd128c474dd7d5adf2207c0e7bf3c"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "karim@jwplayer.com",
+              "name": "Karim Mourra",
+              "user": {
+                "databaseId": 12138319,
+                "id": "MDQ6VXNlcjEyMTM4MzE5",
+                "login": "karimMourra"
+              }
+            },
+            "authoredDate": "2021-10-22T21:30:00Z",
+            "oid": "8aaeafc39e83ae93c02ef4b0d831bf6d5c4be397"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "karim@jwplayer.com",
+              "name": "Karim Mourra",
+              "user": {
+                "databaseId": 12138319,
+                "id": "MDQ6VXNlcjEyMTM4MzE5",
+                "login": "karimMourra"
+              }
+            },
+            "authoredDate": "2021-11-01T19:54:03Z",
+            "oid": "2105b5b775217a2dc529154f7971db58c08b85cc"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "karim@jwplayer.com",
+              "name": "Karim Mourra",
+              "user": {
+                "databaseId": 12138319,
+                "id": "MDQ6VXNlcjEyMTM4MzE5",
+                "login": "karimMourra"
+              }
+            },
+            "authoredDate": "2021-11-01T19:54:28Z",
+            "oid": "82e925aa1d9f7fdf6c2b36b39a6e57655681002c"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "karim@jwplayer.com",
+              "name": "Karim Mourra",
+              "user": {
+                "databaseId": 12138319,
+                "id": "MDQ6VXNlcjEyMTM4MzE5",
+                "login": "karimMourra"
+              }
+            },
+            "authoredDate": "2021-11-01T21:27:53Z",
+            "oid": "dd622c1ac463b170f4d336ebd44d49bbd4d8ed40"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "karim@jwplayer.com",
+              "name": "Karim Mourra",
+              "user": {
+                "databaseId": 12138319,
+                "id": "MDQ6VXNlcjEyMTM4MzE5",
+                "login": "karimMourra"
+              }
+            },
+            "authoredDate": "2021-11-01T22:50:17Z",
+            "oid": "4e8d7daafe7234227e6b12086425fe5270864ff9"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "karim@jwplayer.com",
+              "name": "Karim Mourra",
+              "user": {
+                "databaseId": 12138319,
+                "id": "MDQ6VXNlcjEyMTM4MzE5",
+                "login": "karimMourra"
+              }
+            },
+            "authoredDate": "2021-11-01T23:16:20Z",
+            "oid": "e01d34ae501ddc738b38fe6e47bbe97adb386dd4"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "karim@jwplayer.com",
+              "name": "Karim Mourra",
+              "user": {
+                "databaseId": 12138319,
+                "id": "MDQ6VXNlcjEyMTM4MzE5",
+                "login": "karimMourra"
+              }
+            },
+            "authoredDate": "2021-11-01T23:43:05Z",
+            "oid": "d520bb65f3bccccb02cef5345498d634621a878d"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "karim@jwplayer.com",
+              "name": "Karim Mourra",
+              "user": {
+                "databaseId": 12138319,
+                "id": "MDQ6VXNlcjEyMTM4MzE5",
+                "login": "karimMourra"
+              }
+            },
+            "authoredDate": "2021-11-01T23:50:09Z",
+            "oid": "bc0366ad94ca6177cd5d87adf3f1cf06c9040f81"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "karim@jwplayer.com",
+              "name": "Karim Mourra",
+              "user": {
+                "databaseId": 12138319,
+                "id": "MDQ6VXNlcjEyMTM4MzE5",
+                "login": "karimMourra"
+              }
+            },
+            "authoredDate": "2021-11-02T18:02:22Z",
+            "oid": "d75bf7d17134e8ad1e7d563aeaadd8c70caa4c26"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "karim@jwplayer.com",
+              "name": "Karim Mourra",
+              "user": {
+                "databaseId": 12138319,
+                "id": "MDQ6VXNlcjEyMTM4MzE5",
+                "login": "karimMourra"
+              }
+            },
+            "authoredDate": "2021-11-02T19:43:03Z",
+            "oid": "cea37a3898c5d7be82d729052dd4de3caab558ed"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "karim@jwplayer.com",
+              "name": "Karim Mourra",
+              "user": {
+                "databaseId": 12138319,
+                "id": "MDQ6VXNlcjEyMTM4MzE5",
+                "login": "karimMourra"
+              }
+            },
+            "authoredDate": "2021-11-02T21:38:57Z",
+            "oid": "b9d0f4d1dbe3f19963d8cd16aadcc4196649b144"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "karim@jwplayer.com",
+              "name": "Karim Mourra",
+              "user": {
+                "databaseId": 12138319,
+                "id": "MDQ6VXNlcjEyMTM4MzE5",
+                "login": "karimMourra"
+              }
+            },
+            "authoredDate": "2021-11-02T22:12:08Z",
+            "oid": "48308fc3a383e4c11999f3da08d6c413d9b0b488"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "karim@jwplayer.com",
+              "name": "Karim Mourra",
+              "user": {
+                "databaseId": 12138319,
+                "id": "MDQ6VXNlcjEyMTM4MzE5",
+                "login": "karimMourra"
+              }
+            },
+            "authoredDate": "2021-11-03T18:16:39Z",
+            "oid": "be52af3a0b4443f70b40ab9e3b5a689408e68ba4"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "karim@jwplayer.com",
+              "name": "Karim Mourra",
+              "user": {
+                "databaseId": 12138319,
+                "id": "MDQ6VXNlcjEyMTM4MzE5",
+                "login": "karimMourra"
+              }
+            },
+            "authoredDate": "2021-12-31T21:19:58Z",
+            "oid": "60c3c4c3ddf6ab0a4437abe196fa83fff343bd78"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "karim@jwplayer.com",
+              "name": "Karim Mourra",
+              "user": {
+                "databaseId": 12138319,
+                "id": "MDQ6VXNlcjEyMTM4MzE5",
+                "login": "karimMourra"
+              }
+            },
+            "authoredDate": "2022-01-05T18:40:54Z",
+            "oid": "2712a5279ffd10d3f6651ee4411eb339832df199"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "karim@jwplayer.com",
+              "name": "Karim Mourra",
+              "user": {
+                "databaseId": 12138319,
+                "id": "MDQ6VXNlcjEyMTM4MzE5",
+                "login": "karimMourra"
+              }
+            },
+            "authoredDate": "2022-01-11T18:32:23Z",
+            "oid": "e58f071cf8da6bc2ff98ffd29d4aab134d52d710"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "karim@jwplayer.com",
+              "name": "Karim Mourra",
+              "user": {
+                "databaseId": 12138319,
+                "id": "MDQ6VXNlcjEyMTM4MzE5",
+                "login": "karimMourra"
+              }
+            },
+            "authoredDate": "2022-01-25T18:50:54Z",
+            "oid": "fe4128a2b39936cc23cfea872a5545aeeb358a32"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "karim@jwplayer.com",
+              "name": "Karim Mourra",
+              "user": {
+                "databaseId": 12138319,
+                "id": "MDQ6VXNlcjEyMTM4MzE5",
+                "login": "karimMourra"
+              }
+            },
+            "authoredDate": "2022-02-02T21:05:38Z",
+            "oid": "73c3548f46e2dd048daf53dcd6376f6c94afdd70"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "karim@jwplayer.com",
+              "name": "Karim Mourra",
+              "user": {
+                "databaseId": 12138319,
+                "id": "MDQ6VXNlcjEyMTM4MzE5",
+                "login": "karimMourra"
+              }
+            },
+            "authoredDate": "2022-02-02T22:41:43Z",
+            "oid": "23c66826cd531a51dd3fded36fe5e537ded49fc7"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "karim@jwplayer.com",
+              "name": "Karim Mourra",
+              "user": {
+                "databaseId": 12138319,
+                "id": "MDQ6VXNlcjEyMTM4MzE5",
+                "login": "karimMourra"
+              }
+            },
+            "authoredDate": "2022-02-03T15:39:11Z",
+            "oid": "4b9637cf5aaed54d925e8e41268262eabc92fd3a"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "karim@jwplayer.com",
+              "name": "Karim Mourra",
+              "user": {
+                "databaseId": 12138319,
+                "id": "MDQ6VXNlcjEyMTM4MzE5",
+                "login": "karimMourra"
+              }
+            },
+            "authoredDate": "2022-02-04T18:23:17Z",
+            "oid": "05f4bc1adf85738fd5c13203ddf1274e2cacf55e"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "karim@jwplayer.com",
+              "name": "Karim Mourra",
+              "user": {
+                "databaseId": 12138319,
+                "id": "MDQ6VXNlcjEyMTM4MzE5",
+                "login": "karimMourra"
+              }
+            },
+            "authoredDate": "2022-02-04T19:10:13Z",
+            "oid": "dc5aa6f6c3ea8c3f2c42f79b4d77fc9dd3ee9632"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "karim@jwplayer.com",
+              "name": "Karim Mourra",
+              "user": {
+                "databaseId": 12138319,
+                "id": "MDQ6VXNlcjEyMTM4MzE5",
+                "login": "karimMourra"
+              }
+            },
+            "authoredDate": "2022-02-04T20:51:13Z",
+            "oid": "946a4cf24dd9336a7c5f9f1c62a0eaec83b45425"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "karim@jwplayer.com",
+              "name": "Karim Mourra",
+              "user": {
+                "databaseId": 12138319,
+                "id": "MDQ6VXNlcjEyMTM4MzE5",
+                "login": "karimMourra"
+              }
+            },
+            "authoredDate": "2022-02-04T22:51:50Z",
+            "oid": "00c582b93aae00e5ac060d2783b8012828eadc37"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "karim@jwplayer.com",
+              "name": "Karim Mourra",
+              "user": {
+                "databaseId": 12138319,
+                "id": "MDQ6VXNlcjEyMTM4MzE5",
+                "login": "karimMourra"
+              }
+            },
+            "authoredDate": "2022-02-04T22:53:34Z",
+            "oid": "8dd5735cf316a835c93a593a55f16ed5c2f72d27"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "karim@jwplayer.com",
+              "name": "Karim Mourra",
+              "user": {
+                "databaseId": 12138319,
+                "id": "MDQ6VXNlcjEyMTM4MzE5",
+                "login": "karimMourra"
+              }
+            },
+            "authoredDate": "2022-02-07T19:23:50Z",
+            "oid": "6697679e07ab0dcdb04e8bd1af4beb98454bb0f4"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "karim@jwplayer.com",
+              "name": "Karim Mourra",
+              "user": {
+                "databaseId": 12138319,
+                "id": "MDQ6VXNlcjEyMTM4MzE5",
+                "login": "karimMourra"
+              }
+            },
+            "authoredDate": "2022-02-08T18:55:34Z",
+            "oid": "e0cba988523169bdb8714129769286e4e8279bbe"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "karim@jwplayer.com",
+              "name": "Karim Mourra",
+              "user": {
+                "databaseId": 12138319,
+                "id": "MDQ6VXNlcjEyMTM4MzE5",
+                "login": "karimMourra"
+              }
+            },
+            "authoredDate": "2022-02-08T20:34:07Z",
+            "oid": "a08bf29f763c43e637c1c45cde2bd9cea6b99f15"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "karim@jwplayer.com",
+              "name": "Karim Mourra",
+              "user": {
+                "databaseId": 12138319,
+                "id": "MDQ6VXNlcjEyMTM4MzE5",
+                "login": "karimMourra"
+              }
+            },
+            "authoredDate": "2022-02-08T21:18:36Z",
+            "oid": "b4578ac89da64f89df46ec11a164a10f5a3adf33"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "karim@jwplayer.com",
+              "name": "Karim Mourra",
+              "user": {
+                "databaseId": 12138319,
+                "id": "MDQ6VXNlcjEyMTM4MzE5",
+                "login": "karimMourra"
+              }
+            },
+            "authoredDate": "2022-02-08T21:38:13Z",
+            "oid": "52bf82de264fe6e8582260ca9647a33ccd0d372b"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "karim@jwplayer.com",
+              "name": "Karim Mourra",
+              "user": {
+                "databaseId": 12138319,
+                "id": "MDQ6VXNlcjEyMTM4MzE5",
+                "login": "karimMourra"
+              }
+            },
+            "authoredDate": "2022-02-08T22:58:12Z",
+            "oid": "2b16a6f07281cd02e83b06f872b4b6323ca3e8ff"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "karim@jwplayer.com",
+              "name": "Karim Mourra",
+              "user": {
+                "databaseId": 12138319,
+                "id": "MDQ6VXNlcjEyMTM4MzE5",
+                "login": "karimMourra"
+              }
+            },
+            "authoredDate": "2022-02-09T17:51:46Z",
+            "oid": "5394ae0fa92f90cdefa4acae5b36a91fc9b2782a"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "karim@jwplayer.com",
+              "name": "Karim Mourra",
+              "user": {
+                "databaseId": 12138319,
+                "id": "MDQ6VXNlcjEyMTM4MzE5",
+                "login": "karimMourra"
+              }
+            },
+            "authoredDate": "2022-02-09T22:09:03Z",
+            "oid": "50f39042792c9587e4a0cbb9a953f512b21b487f"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "karim@jwplayer.com",
+              "name": "Karim Mourra",
+              "user": {
+                "databaseId": 12138319,
+                "id": "MDQ6VXNlcjEyMTM4MzE5",
+                "login": "karimMourra"
+              }
+            },
+            "authoredDate": "2022-02-10T22:16:25Z",
+            "oid": "f48f52049ccc09a394227734420a56e844f027bf"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "karim@jwplayer.com",
+              "name": "Karim Mourra",
+              "user": {
+                "databaseId": 12138319,
+                "id": "MDQ6VXNlcjEyMTM4MzE5",
+                "login": "karimMourra"
+              }
+            },
+            "authoredDate": "2022-02-22T21:27:04Z",
+            "oid": "47faf18c9faa7231ac531ad55d9782c116d21951"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "karim@jwplayer.com",
+              "name": "Karim Mourra",
+              "user": {
+                "databaseId": 12138319,
+                "id": "MDQ6VXNlcjEyMTM4MzE5",
+                "login": "karimMourra"
+              }
+            },
+            "authoredDate": "2022-02-23T20:32:16Z",
+            "oid": "fa1e07bc27ad3901efcf99d4b8fa20f6c8d82211"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "karim@jwplayer.com",
+              "name": "Karim Mourra",
+              "user": {
+                "databaseId": 12138319,
+                "id": "MDQ6VXNlcjEyMTM4MzE5",
+                "login": "karimMourra"
+              }
+            },
+            "authoredDate": "2022-02-23T21:31:20Z",
+            "oid": "4f3004e91012c53216750c793b4df5c0353176aa"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "karim@jwplayer.com",
+              "name": "Karim Mourra",
+              "user": {
+                "databaseId": 12138319,
+                "id": "MDQ6VXNlcjEyMTM4MzE5",
+                "login": "karimMourra"
+              }
+            },
+            "authoredDate": "2022-02-23T22:40:49Z",
+            "oid": "39ea7f47436d52b90554a982e45f9d93baf8b18e"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "karim@jwplayer.com",
+              "name": "Karim Mourra",
+              "user": {
+                "databaseId": 12138319,
+                "id": "MDQ6VXNlcjEyMTM4MzE5",
+                "login": "karimMourra"
+              }
+            },
+            "authoredDate": "2022-02-24T20:30:47Z",
+            "oid": "39a5dcfd4975df56aec244dd97a55a13e369684d"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "karim@jwplayer.com",
+              "name": "Karim Mourra",
+              "user": {
+                "databaseId": 12138319,
+                "id": "MDQ6VXNlcjEyMTM4MzE5",
+                "login": "karimMourra"
+              }
+            },
+            "authoredDate": "2022-02-24T21:27:05Z",
+            "oid": "c6b28d43f153ebd56bf2752f30eef044c9790ab5"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "karim@jwplayer.com",
+              "name": "Karim Mourra",
+              "user": {
+                "databaseId": 12138319,
+                "id": "MDQ6VXNlcjEyMTM4MzE5",
+                "login": "karimMourra"
+              }
+            },
+            "authoredDate": "2022-03-04T14:50:17Z",
+            "oid": "f43bd87fa93ca71a4e1b0b501e4d2c61d8ac67e0"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "karim@jwplayer.com",
+              "name": "Karim Mourra",
+              "user": {
+                "databaseId": 12138319,
+                "id": "MDQ6VXNlcjEyMTM4MzE5",
+                "login": "karimMourra"
+              }
+            },
+            "authoredDate": "2022-03-04T18:56:12Z",
+            "oid": "ca2812989f0bb9fb6bda78a037b5fc0ae2e51333"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "karim@jwplayer.com",
+              "name": "Karim Mourra",
+              "user": {
+                "databaseId": 12138319,
+                "id": "MDQ6VXNlcjEyMTM4MzE5",
+                "login": "karimMourra"
+              }
+            },
+            "authoredDate": "2022-03-07T20:11:06Z",
+            "oid": "50e9ef374ad622bd5c2c9cfccfe1bcf3fe5fa111"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "karim@jwplayer.com",
+              "name": "Karim Mourra",
+              "user": {
+                "databaseId": 12138319,
+                "id": "MDQ6VXNlcjEyMTM4MzE5",
+                "login": "karimMourra"
+              }
+            },
+            "authoredDate": "2022-03-07T21:39:55Z",
+            "oid": "fdb46b92449e7b0d2f3381f1407b25b4bd8ce0a5"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "karim@jwplayer.com",
+              "name": "Karim Mourra",
+              "user": {
+                "databaseId": 12138319,
+                "id": "MDQ6VXNlcjEyMTM4MzE5",
+                "login": "karimMourra"
+              }
+            },
+            "authoredDate": "2022-03-08T17:52:40Z",
+            "oid": "66c8ed89c72f5d5cec3855841dac92ff4a67c5b1"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "karim@jwplayer.com",
+              "name": "Karim Mourra",
+              "user": {
+                "databaseId": 12138319,
+                "id": "MDQ6VXNlcjEyMTM4MzE5",
+                "login": "karimMourra"
+              }
+            },
+            "authoredDate": "2022-03-09T14:16:54Z",
+            "oid": "4e6c0069bddd341b0c002d4189eaf83e8af4c8b9"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "karim@jwplayer.com",
+              "name": "Karim Mourra",
+              "user": {
+                "databaseId": 12138319,
+                "id": "MDQ6VXNlcjEyMTM4MzE5",
+                "login": "karimMourra"
+              }
+            },
+            "authoredDate": "2022-03-09T15:05:32Z",
+            "oid": "2bff9aaf27747a907c0cee2ae36d2210f85afad8"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "karim@jwplayer.com",
+              "name": "Karim Mourra",
+              "user": {
+                "databaseId": 12138319,
+                "id": "MDQ6VXNlcjEyMTM4MzE5",
+                "login": "karimMourra"
+              }
+            },
+            "authoredDate": "2022-03-09T15:34:26Z",
+            "oid": "07f474dc7a4b15206369a65f4d5772266ebbffd3"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "karim@jwplayer.com",
+              "name": "Karim Mourra",
+              "user": {
+                "databaseId": 12138319,
+                "id": "MDQ6VXNlcjEyMTM4MzE5",
+                "login": "karimMourra"
+              }
+            },
+            "authoredDate": "2022-03-23T19:59:17Z",
+            "oid": "ccc34889915272f7523df9e88095c97ffe87d3a0"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "karim@jwplayer.com",
+              "name": "Karim Mourra",
+              "user": {
+                "databaseId": 12138319,
+                "id": "MDQ6VXNlcjEyMTM4MzE5",
+                "login": "karimMourra"
+              }
+            },
+            "authoredDate": "2022-03-25T21:56:35Z",
+            "oid": "592f160d82d46db539384ee6776e921e2e5b5bb5"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "karim@jwplayer.com",
+              "name": "Karim Mourra",
+              "user": {
+                "databaseId": 12138319,
+                "id": "MDQ6VXNlcjEyMTM4MzE5",
+                "login": "karimMourra"
+              }
+            },
+            "authoredDate": "2022-03-25T22:04:49Z",
+            "oid": "c47c0b427158c6527965275513d666e96ac95026"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "karim@jwplayer.com",
+              "name": "Karim Mourra",
+              "user": {
+                "databaseId": 12138319,
+                "id": "MDQ6VXNlcjEyMTM4MzE5",
+                "login": "karimMourra"
+              }
+            },
+            "authoredDate": "2022-03-25T22:18:56Z",
+            "oid": "2927fa129816d9f894e2e379e5c0f4c363269f03"
+          }
+        }
+      ],
+      "pageInfo": {
+        "endCursor": "MTAw",
+        "hasNextPage": true
+      },
+      "totalCount": 254
+    },
+    "createdAt": "2022-08-17T19:44:18Z",
+    "deletions": 808,
+    "files": {
+      "nodes": [
+        {
+          "additions": 98,
+          "changeType": "ADDED",
+          "deletions": 0,
+          "path": "integrationExamples/videoModule/jwplayer/bidMarkedAsUsed.html"
+        },
+        {
+          "additions": 89,
+          "changeType": "ADDED",
+          "deletions": 0,
+          "path": "integrationExamples/videoModule/jwplayer/bidRequestScheduling.html"
+        },
+        {
+          "additions": 244,
+          "changeType": "ADDED",
+          "deletions": 0,
+          "path": "integrationExamples/videoModule/jwplayer/eventListeners.html"
+        },
+        {
+          "additions": 122,
+          "changeType": "ADDED",
+          "deletions": 0,
+          "path": "integrationExamples/videoModule/jwplayer/gamAdServerMediation.html"
+        },
+        {
+          "additions": 80,
+          "changeType": "ADDED",
+          "deletions": 0,
+          "path": "integrationExamples/videoModule/jwplayer/mediaMetadata.html"
+        },
+        {
+          "additions": 122,
+          "changeType": "ADDED",
+          "deletions": 0,
+          "path": "integrationExamples/videoModule/jwplayer/playlist.html"
+        },
+        {
+          "additions": 126,
+          "changeType": "ADDED",
+          "deletions": 0,
+          "path": "integrationExamples/videoModule/videojs/bidMarkedAsUsed.html"
+        },
+        {
+          "additions": 132,
+          "changeType": "ADDED",
+          "deletions": 0,
+          "path": "integrationExamples/videoModule/videojs/bidRequestScheduling.html"
+        },
+        {
+          "additions": 238,
+          "changeType": "ADDED",
+          "deletions": 0,
+          "path": "integrationExamples/videoModule/videojs/eventListeners.html"
+        },
+        {
+          "additions": 138,
+          "changeType": "ADDED",
+          "deletions": 0,
+          "path": "integrationExamples/videoModule/videojs/gamAdServerMediation.html"
+        },
+        {
+          "additions": 103,
+          "changeType": "ADDED",
+          "deletions": 0,
+          "path": "integrationExamples/videoModule/videojs/mediaMetadata.html"
+        },
+        {
+          "additions": 151,
+          "changeType": "ADDED",
+          "deletions": 0,
+          "path": "integrationExamples/videoModule/videojs/playlist.html"
+        },
+        {
+          "additions": 5,
+          "changeType": "ADDED",
+          "deletions": 0,
+          "path": "libraries/video/constants/enums.js"
+        },
+        {
+          "additions": 97,
+          "changeType": "ADDED",
+          "deletions": 0,
+          "path": "libraries/video/constants/events.js"
+        },
+        {
+          "additions": 169,
+          "changeType": "ADDED",
+          "deletions": 0,
+          "path": "libraries/video/constants/ortb.js"
+        },
+        {
+          "additions": 6,
+          "changeType": "ADDED",
+          "deletions": 0,
+          "path": "libraries/video/constants/vendorCodes.js"
+        },
+        {
+          "additions": 18,
+          "changeType": "ADDED",
+          "deletions": 0,
+          "path": "libraries/video/shared/eventHandler.js"
+        },
+        {
+          "additions": 82,
+          "changeType": "ADDED",
+          "deletions": 0,
+          "path": "libraries/video/shared/parentModule.js"
+        },
+        {
+          "additions": 47,
+          "changeType": "ADDED",
+          "deletions": 0,
+          "path": "libraries/video/shared/state.js"
+        },
+        {
+          "additions": 77,
+          "changeType": "ADDED",
+          "deletions": 0,
+          "path": "libraries/video/shared/vastXmlBuilder.js"
+        },
+        {
+          "additions": 115,
+          "changeType": "ADDED",
+          "deletions": 0,
+          "path": "libraries/video/shared/vastXmlEditor.js"
+        },
+        {
+          "additions": 5,
+          "changeType": "MODIFIED",
+          "deletions": 1,
+          "path": "modules/.submodules.json"
+        },
+        {
+          "additions": 38,
+          "changeType": "MODIFIED",
+          "deletions": 1,
+          "path": "modules/appnexusBidAdapter.js"
+        },
+        {
+          "additions": 10,
+          "changeType": "MODIFIED",
+          "deletions": 14,
+          "path": "modules/gridNMBidAdapter.js"
+        },
+        {
+          "additions": 929,
+          "changeType": "ADDED",
+          "deletions": 0,
+          "path": "modules/jwplayerVideoProvider.js"
+        },
+        {
+          "additions": 25,
+          "changeType": "ADDED",
+          "deletions": 0,
+          "path": "modules/jwplayerVideoProvider.md"
+        },
+        {
+          "additions": 16,
+          "changeType": "MODIFIED",
+          "deletions": 15,
+          "path": "modules/spotxBidAdapter.js"
+        },
+        {
+          "additions": 1,
+          "changeType": "MODIFIED",
+          "deletions": 1,
+          "path": "modules/synacormediaBidAdapter.js"
+        },
+        {
+          "additions": 521,
+          "changeType": "ADDED",
+          "deletions": 0,
+          "path": "modules/videoModule/addingSubmodule.md"
+        },
+        {
+          "additions": 234,
+          "changeType": "ADDED",
+          "deletions": 0,
+          "path": "modules/videoModule/coreVideo.js"
+        },
+        {
+          "additions": 27,
+          "changeType": "ADDED",
+          "deletions": 0,
+          "path": "modules/videoModule/gamAdServerSubmodule.js"
+        },
+        {
+          "additions": 244,
+          "changeType": "ADDED",
+          "deletions": 0,
+          "path": "modules/videoModule/index.js"
+        },
+        {
+          "additions": 206,
+          "changeType": "ADDED",
+          "deletions": 0,
+          "path": "modules/videoModule/videoImpressionVerifier.js"
+        },
+        {
+          "additions": 854,
+          "changeType": "ADDED",
+          "deletions": 0,
+          "path": "modules/videojsVideoProvider.js"
+        },
+        {
+          "additions": 17,
+          "changeType": "ADDED",
+          "deletions": 0,
+          "path": "modules/videojsVideoProvider.md"
+        },
+        {
+          "additions": 11231,
+          "changeType": "MODIFIED",
+          "deletions": 696,
+          "path": "package-lock.json"
+        },
+        {
+          "additions": 4,
+          "changeType": "MODIFIED",
+          "deletions": 0,
+          "path": "package.json"
+        },
+        {
+          "additions": 5,
+          "changeType": "MODIFIED",
+          "deletions": 1,
+          "path": "src/events.js"
+        },
+        {
+          "additions": 91,
+          "changeType": "MODIFIED",
+          "deletions": 78,
+          "path": "src/prebid.js"
+        },
+        {
+          "additions": 98,
+          "changeType": "ADDED",
+          "deletions": 0,
+          "path": "test/spec/modules/videoModule/coreVideo_spec.js"
+        },
+        {
+          "additions": 362,
+          "changeType": "ADDED",
+          "deletions": 0,
+          "path": "test/spec/modules/videoModule/pbVideo_spec.js"
+        },
+        {
+          "additions": 73,
+          "changeType": "ADDED",
+          "deletions": 0,
+          "path": "test/spec/modules/videoModule/shared/parentModule_spec.js"
+        },
+        {
+          "additions": 26,
+          "changeType": "ADDED",
+          "deletions": 0,
+          "path": "test/spec/modules/videoModule/shared/state_spec.js"
+        },
+        {
+          "additions": 103,
+          "changeType": "ADDED",
+          "deletions": 0,
+          "path": "test/spec/modules/videoModule/shared/vastXmlBuilder_spec.js"
+        },
+        {
+          "additions": 209,
+          "changeType": "ADDED",
+          "deletions": 0,
+          "path": "test/spec/modules/videoModule/shared/vastXmlEditor_spec.js"
+        },
+        {
+          "additions": 846,
+          "changeType": "ADDED",
+          "deletions": 0,
+          "path": "test/spec/modules/videoModule/submodules/jwplayerVideoProvider_spec.js"
+        },
+        {
+          "additions": 391,
+          "changeType": "ADDED",
+          "deletions": 0,
+          "path": "test/spec/modules/videoModule/submodules/videojsVideoProvider_spec.js"
+        },
+        {
+          "additions": 112,
+          "changeType": "ADDED",
+          "deletions": 0,
+          "path": "test/spec/modules/videoModule/videoImpressionVerifier_spec.js"
+        },
+        {
+          "additions": 1,
+          "changeType": "MODIFIED",
+          "deletions": 1,
+          "path": "test/spec/unit/pbjs_api_spec.js"
+        }
+      ],
+      "pageInfo": {
+        "endCursor": "NDk",
+        "hasNextPage": false
+      },
+      "totalCount": 49
+    },
+    "fullDatabaseId": "1029239745",
+    "headRefOid": "896a11a8ca80aef3156c06df76f460ca42ab3c75",
+    "id": "PR_kwDOAlf9v849WPPB",
+    "isCrossRepository": true,
+    "isDraft": false,
+    "labels": {
+      "nodes": [
+        {
+          "name": "feature"
+        },
+        {
+          "name": "needs docs"
+        }
+      ],
+      "pageInfo": {
+        "endCursor": "Mg",
+        "hasNextPage": false
+      },
+      "totalCount": 2
+    },
+    "mergedAt": "2022-10-21T18:46:45Z",
+    "mergedBy": {
+      "__typename": "User",
+      "databaseId": 1683175,
+      "id": "MDQ6VXNlcjE2ODMxNzU=",
+      "login": "patmmccann"
+    },
+    "number": 8858,
+    "reviews": {
+      "nodes": [
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 10151381,
+            "id": "MDQ6VXNlcjEwMTUxMzgx",
+            "login": "dgirardi"
+          },
+          "fullDatabaseId": "1093743340",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 10151381,
+            "id": "MDQ6VXNlcjEwMTUxMzgx",
+            "login": "dgirardi"
+          },
+          "fullDatabaseId": "1093805343",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 12138319,
+            "id": "MDQ6VXNlcjEyMTM4MzE5",
+            "login": "karimMourra"
+          },
+          "fullDatabaseId": "1098238013",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 10151381,
+            "id": "MDQ6VXNlcjEwMTUxMzgx",
+            "login": "dgirardi"
+          },
+          "fullDatabaseId": "1098271117",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 12138319,
+            "id": "MDQ6VXNlcjEyMTM4MzE5",
+            "login": "karimMourra"
+          },
+          "fullDatabaseId": "1099487050",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 12138319,
+            "id": "MDQ6VXNlcjEyMTM4MzE5",
+            "login": "karimMourra"
+          },
+          "fullDatabaseId": "1099498157",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 10151381,
+            "id": "MDQ6VXNlcjEwMTUxMzgx",
+            "login": "dgirardi"
+          },
+          "fullDatabaseId": "1099569099",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 12138319,
+            "id": "MDQ6VXNlcjEyMTM4MzE5",
+            "login": "karimMourra"
+          },
+          "fullDatabaseId": "1099580395",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 12138319,
+            "id": "MDQ6VXNlcjEyMTM4MzE5",
+            "login": "karimMourra"
+          },
+          "fullDatabaseId": "1099741899",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 12138319,
+            "id": "MDQ6VXNlcjEyMTM4MzE5",
+            "login": "karimMourra"
+          },
+          "fullDatabaseId": "1099754755",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 12138319,
+            "id": "MDQ6VXNlcjEyMTM4MzE5",
+            "login": "karimMourra"
+          },
+          "fullDatabaseId": "1104482119",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 12138319,
+            "id": "MDQ6VXNlcjEyMTM4MzE5",
+            "login": "karimMourra"
+          },
+          "fullDatabaseId": "1104482264",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 12138319,
+            "id": "MDQ6VXNlcjEyMTM4MzE5",
+            "login": "karimMourra"
+          },
+          "fullDatabaseId": "1104482393",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 12138319,
+            "id": "MDQ6VXNlcjEyMTM4MzE5",
+            "login": "karimMourra"
+          },
+          "fullDatabaseId": "1104482767",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 12138319,
+            "id": "MDQ6VXNlcjEyMTM4MzE5",
+            "login": "karimMourra"
+          },
+          "fullDatabaseId": "1104483227",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 10151381,
+            "id": "MDQ6VXNlcjEwMTUxMzgx",
+            "login": "dgirardi"
+          },
+          "fullDatabaseId": "1128626704",
+          "state": "APPROVED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 12138319,
+            "id": "MDQ6VXNlcjEyMTM4MzE5",
+            "login": "karimMourra"
+          },
+          "fullDatabaseId": "1128833378",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 2507535,
+            "id": "MDQ6VXNlcjI1MDc1MzU=",
+            "login": "bwschmidt"
+          },
+          "fullDatabaseId": "1150022918",
+          "state": "APPROVED"
+        }
+      ],
+      "pageInfo": {
+        "endCursor": "Y3Vyc29yOnYyOpO0MjAyMi0xMC0yMFQyMTo0MDowOVq0MjAyMi0xMC0yMFQyMTo0MDowOVrORIv1Bg==",
+        "hasNextPage": false
+      },
+      "totalCount": 18
+    },
+    "state": "MERGED",
+    "title": "Video Module: Initial Release",
+    "updatedAt": "2022-11-04T18:11:19Z"
+  },
+  "document_sha256": "e0376cea8685e41c5e18368d5f43610f07e83ae7dcb7cb32e879877fc61aec04",
+  "errors": [],
+  "extra": {
+    "repository_database_id": 39321023
+  },
+  "headers": {
+    "date": "Sat, 17 Oct 2026 03:31:45 GMT",
+    "x-ratelimit-limit": "5000",
+    "x-ratelimit-remaining": "4770",
+    "x-ratelimit-reset": "1792208984",
+    "x-ratelimit-resource": "graphql",
+    "x-ratelimit-used": "230"
+  },
+  "key": {
+    "name": "Prebid.js",
+    "number": 8858,
+    "owner": "prebid"
+  },
+  "kind": "pull_request",
+  "recorded_at": "2026-10-17T03:31:41Z",
+  "source": "live"
+}

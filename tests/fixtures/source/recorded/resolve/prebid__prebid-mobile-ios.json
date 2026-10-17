@@ -1,0 +1,100 @@
+{
+  "data": {
+    "databaseId": 96349829,
+    "defaultBranchRef": {
+      "name": "master"
+    },
+    "id": "MDEwOlJlcG9zaXRvcnk5NjM0OTgyOQ==",
+    "isArchived": false,
+    "isPrivate": false,
+    "labels": {
+      "nodes": [
+        {
+          "name": "bug"
+        },
+        {
+          "name": "duplicate"
+        },
+        {
+          "name": "enhancement"
+        },
+        {
+          "name": "invalid"
+        },
+        {
+          "name": "question"
+        },
+        {
+          "name": "needs docs"
+        },
+        {
+          "name": "in progress"
+        },
+        {
+          "name": "Intent to Implement"
+        },
+        {
+          "name": "feature"
+        },
+        {
+          "name": "draft issue"
+        },
+        {
+          "name": "PMC discussion required"
+        },
+        {
+          "name": "in review"
+        },
+        {
+          "name": "iOS & Android"
+        },
+        {
+          "name": "PBMSDK 3.0"
+        },
+        {
+          "name": "run-full-tests"
+        },
+        {
+          "name": "4.0 Creatives Standardization"
+        },
+        {
+          "name": "4.0 In-App Header Bidding"
+        },
+        {
+          "name": "product reliability"
+        },
+        {
+          "name": "4.0 In-App Platform"
+        }
+      ],
+      "pageInfo": {
+        "endCursor": "MTk",
+        "hasNextPage": false
+      },
+      "totalCount": 19
+    },
+    "name": "prebid-mobile-ios",
+    "nameWithOwner": "prebid/prebid-mobile-ios",
+    "owner": {
+      "login": "prebid"
+    }
+  },
+  "document_sha256": "035aef891393ccd81c36161af0b0d2e10034e582cac4bae68e62c9e5b035790e",
+  "errors": [],
+  "extra": {},
+  "headers": {
+    "date": "Sat, 17 Oct 2026 03:31:48 GMT",
+    "x-ratelimit-limit": "5000",
+    "x-ratelimit-remaining": "4766",
+    "x-ratelimit-reset": "1792208984",
+    "x-ratelimit-resource": "graphql",
+    "x-ratelimit-used": "234"
+  },
+  "key": {
+    "name": "prebid-mobile-ios",
+    "owner": "prebid"
+  },
+  "kind": "resolve",
+  "recorded_at": "2026-10-17T03:31:41Z",
+  "source": "live"
+}

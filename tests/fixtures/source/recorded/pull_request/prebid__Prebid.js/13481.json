@@ -1,0 +1,198 @@
+{
+  "data": {
+    "additions": 141,
+    "author": {
+      "__typename": "User",
+      "databaseId": 10151381,
+      "id": "MDQ6VXNlcjEwMTUxMzgx",
+      "login": "dgirardi"
+    },
+    "authorAssociation": "MEMBER",
+    "baseRefName": "master",
+    "baseRefOid": "55cbaa384a204334a72c264dc3344593dd13de2e",
+    "body": "- **bump coveralls**\n- **make symlink**\n- **Fix symlink**\n\n<!--\nThank you for your pull request! \n\nPlease title your pull request like this: 'Module: Change', eg 'Fraggles Bid Adapter: support fragglerock'\n\nPlease make sure this PR is scoped to one change or you may be asked to resubmit. \n \nPlease make sure any added or changed code includes tests with greater than 80% code coverage. \n\nSee https://github.com/prebid/Prebid.js/blob/master/CONTRIBUTING.md#testing-prebidjs for documentation on testing Prebid.js.\n\nFor any user facing change, submit a link to a PR on the docs repo at https://github.com/prebid/prebid.github.io/\n-->\n\n## Type of change\n<!-- Remove items that don't apply and/or select an item by changing [ ] to [x] -->\n- [ ] Bugfix\n- [ ] Feature\n- [ ] New bidder adapter  <!--  IMPORTANT: also submit your bidder parameter documentation as noted in https://docs.prebid.org/dev-docs/bidder-adaptor.html#submitting-your-adapter -->\n- [ ] Updated bidder adapter  <!--  IMPORTANT: (1) consider whether you need to upgrade your bidder parameter documentation in https://github.com/prebid/prebid.github.io/tree/master/dev-docs/bidders and (2) if you have a Prebid Server adapter, please consider whether that should be updated as well. --> \n- [ ] Code style update (formatting, local variables)\n- [ ] Refactoring (no functional changes, no api changes)\n- [ ] Build related changes\n- [ ] CI related changes\n\n- [ ] Does this change affect user-facing APIs or examples documented on http://prebid.org?\n- [ ] Other\n\n## Description of change\n<!-- Describe the change proposed in this pull request -->\n\n<!-- For new bidder adapters, please provide the following\n- contact email of the adapter’s maintainer\n- test parameters for validating bids:\n```\n{\n  bidder: '<bidder name>',\n  params: {\n    // ...\n  }\n}\n```\n\nBe sure to test the integration with your adserver using the [Hello World](https://github.com/prebid/Prebid.js/blob/master/integrationExamples/gpt/hello_world.html) sample page. -->\n\n\n## Other information\n<!-- References to related PR or issue #s, @mentions of the person or team responsible for reviewing changes, etc. -->\n",
+    "changedFiles": 2,
+    "closingIssuesReferences": {
+      "nodes": [],
+      "pageInfo": {
+        "endCursor": null,
+        "hasNextPage": false
+      },
+      "totalCount": 0
+    },
+    "comments": {
+      "nodes": [],
+      "pageInfo": {
+        "endCursor": null,
+        "hasNextPage": false
+      },
+      "totalCount": 0
+    },
+    "commits": {
+      "nodes": [
+        {
+          "commit": {
+            "author": {
+              "email": "patmmccann@gmail.com",
+              "name": "Patrick McCann",
+              "user": {
+                "databaseId": 1683175,
+                "id": "MDQ6VXNlcjE2ODMxNzU=",
+                "login": "patmmccann"
+              }
+            },
+            "authoredDate": "2025-06-11T12:45:31Z",
+            "oid": "54466d46dcda742a8678fe975a844a7e9daa26af"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "patmmccann@gmail.com",
+              "name": "Patrick McCann",
+              "user": {
+                "databaseId": 1683175,
+                "id": "MDQ6VXNlcjE2ODMxNzU=",
+                "login": "patmmccann"
+              }
+            },
+            "authoredDate": "2025-07-01T14:07:34Z",
+            "oid": "c0d7d2cff7989243964e5b0c6f2e6dc81c2e50df"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "dgirardi@prebid.org",
+              "name": "Demetrio Girardi",
+              "user": {
+                "databaseId": 10151381,
+                "id": "MDQ6VXNlcjEwMTUxMzgx",
+                "login": "dgirardi"
+              }
+            },
+            "authoredDate": "2025-07-01T14:50:50Z",
+            "oid": "8ee0fc1bbc99bedd370697b93a63001a097ffd46"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "dgirardi@prebid.org",
+              "name": "Demetrio Girardi",
+              "user": {
+                "databaseId": 10151381,
+                "id": "MDQ6VXNlcjEwMTUxMzgx",
+                "login": "dgirardi"
+              }
+            },
+            "authoredDate": "2025-07-01T14:52:41Z",
+            "oid": "cfa0b27d26e3f4bdd0cce3750ec0290b7ecfaf12"
+          }
+        }
+      ],
+      "pageInfo": {
+        "endCursor": "NA",
+        "hasNextPage": false
+      },
+      "totalCount": 4
+    },
+    "createdAt": "2025-07-01T14:51:49Z",
+    "deletions": 381,
+    "files": {
+      "nodes": [
+        {
+          "additions": 0,
+          "changeType": "DELETED",
+          "deletions": 1,
+          "path": "CLAUDE.md"
+        },
+        {
+          "additions": 1,
+          "changeType": "ADDED",
+          "deletions": 0,
+          "path": "CLAUDE.md"
+        },
+        {
+          "additions": 140,
+          "changeType": "MODIFIED",
+          "deletions": 380,
+          "path": "package-lock.json"
+        }
+      ],
+      "pageInfo": {
+        "endCursor": "Mw",
+        "hasNextPage": false
+      },
+      "totalCount": 3
+    },
+    "fullDatabaseId": "2632763795",
+    "headRefOid": "cfa0b27d26e3f4bdd0cce3750ec0290b7ecfaf12",
+    "id": "PR_kwDOAlf9v86c7MmT",
+    "isCrossRepository": false,
+    "isDraft": false,
+    "labels": {
+      "nodes": [
+        {
+          "name": "maintenance"
+        }
+      ],
+      "pageInfo": {
+        "endCursor": "MQ",
+        "hasNextPage": false
+      },
+      "totalCount": 1
+    },
+    "mergedAt": "2025-07-01T14:55:24Z",
+    "mergedBy": {
+      "__typename": "User",
+      "databaseId": 1683175,
+      "id": "MDQ6VXNlcjE2ODMxNzU=",
+      "login": "patmmccann"
+    },
+    "number": 13481,
+    "reviews": {
+      "nodes": [
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 1683175,
+            "id": "MDQ6VXNlcjE2ODMxNzU=",
+            "login": "patmmccann"
+          },
+          "fullDatabaseId": "2975840076",
+          "state": "APPROVED"
+        }
+      ],
+      "pageInfo": {
+        "endCursor": "Y3Vyc29yOnYyOpO0MjAyNS0wNy0wMVQxNDo1NDo0N1q0MjAyNS0wNy0wMVQxNDo1NDo0N1rOsV-3TA==",
+        "hasNextPage": false
+      },
+      "totalCount": 1
+    },
+    "state": "MERGED",
+    "title": "link CLAUDE.md to AGENTS.md",
+    "updatedAt": "2025-07-01T14:55:26Z"
+  },
+  "document_sha256": "e0376cea8685e41c5e18368d5f43610f07e83ae7dcb7cb32e879877fc61aec04",
+  "errors": [],
+  "extra": {
+    "repository_database_id": 39321023
+  },
+  "headers": {
+    "date": "Sat, 17 Oct 2026 03:31:45 GMT",
+    "x-ratelimit-limit": "5000",
+    "x-ratelimit-remaining": "4770",
+    "x-ratelimit-reset": "1792208984",
+    "x-ratelimit-resource": "graphql",
+    "x-ratelimit-used": "230"
+  },
+  "key": {
+    "name": "Prebid.js",
+    "number": 13481,
+    "owner": "prebid"
+  },
+  "kind": "pull_request",
+  "recorded_at": "2026-10-17T03:31:41Z",
+  "source": "live"
+}

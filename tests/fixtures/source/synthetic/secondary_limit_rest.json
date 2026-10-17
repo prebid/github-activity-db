@@ -1,0 +1,12 @@
+{
+  "body": {
+    "documentation_url": "https://docs.github.com/free-pro-team@latest/rest/overview/rate-limits-for-the-rest-api#about-secondary-rate-limits",
+    "message": "You have exceeded a secondary rate limit. Please wait a few minutes before you try again."
+  },
+  "headers": {
+    "date": "Sat, 17 Oct 2026 12:00:00 GMT",
+    "x-ratelimit-remaining": "4000"
+  },
+  "source": "GitHub REST docs: 'you will receive a 403 or 429 response and an error message that indicates that you exceeded a secondary rate limit'; message text as returned by the search API on 2026-10-16",
+  "status": 403
+}

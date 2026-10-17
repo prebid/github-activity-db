@@ -34,6 +34,13 @@ jobs:
         run: uv sync --frozen --extra dev
       - name: pre-commit (ruff, mypy, file checks, quality gates)
         run: uv run --no-sync pre-commit run --all-files --show-diff-on-failure
+      - name: Hydration-version lock entries are append-only
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          git fetch --no-tags --depth=1 origin "$BASE_REF"
+          uv run --no-sync python scripts/check_query_lock.py --base FETCH_HEAD
 
   test:
     name: tests (Python ${{ matrix.python-version }})

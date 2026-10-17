@@ -1,0 +1,30 @@
+{
+  "body": {
+    "errors": [
+      {
+        "extensions": {
+          "code": "undefinedField",
+          "fieldName": "noSuchField",
+          "typeName": "Repository"
+        },
+        "locations": [
+          {
+            "column": 1,
+            "line": 1
+          }
+        ],
+        "message": "Field 'noSuchField' doesn't exist on type 'Repository'",
+        "path": [
+          "query Resolve",
+          "repository",
+          "noSuchField"
+        ]
+      }
+    ]
+  },
+  "headers": {
+    "date": "Sat, 17 Oct 2026 12:00:00 GMT"
+  },
+  "source": "A GraphQL validation error: the document asks for a field that does not exist",
+  "status": 200
+}

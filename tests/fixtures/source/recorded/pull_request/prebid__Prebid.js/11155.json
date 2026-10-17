@@ -1,0 +1,1349 @@
+{
+  "data": {
+    "additions": 43,
+    "author": {
+      "__typename": "User",
+      "databaseId": 159261864,
+      "id": "U_kgDOCX4kqA",
+      "login": "bhasker-ddh"
+    },
+    "authorAssociation": "CONTRIBUTOR",
+    "baseRefName": "master",
+    "baseRefOid": "b97b55a75b7d76292f08fc15c0d75d15ae284d91",
+    "body": "<!--\r\nThank you for your pull request! \r\n\r\nPlease title your pull request like this: 'Module: Change', eg 'Fraggles Bid Adapter: support fragglerock'\r\n\r\nPlease make sure this PR is scoped to one change or you may be asked to resubmit. \r\n \r\nPlease make sure any added or changed code includes tests with greater than 80% code coverage. \r\n\r\nSee https://github.com/prebid/Prebid.js/blob/master/CONTRIBUTING.md#testing-prebidjs for documentation on testing Prebid.js.\r\n\r\nFor any user facing change, submit a link to a PR on the docs repo at https://github.com/prebid/prebid.github.io/\r\n-->\r\n\r\n## Type of change\r\n<!-- Remove items that don't apply and/or select an item by changing [ ] to [x] -->\r\n- [x] Bugfix\r\n- [ ] Feature\r\n- [ ] New bidder adapter  <!--  IMPORTANT: if checking here, also submit your bidder params documentation here https://github.com/prebid/prebid.github.io/tree/master/dev-docs/bidders --> \r\n- [ ] Code style update (formatting, local variables)\r\n- [ ] Refactoring (no functional changes, no api changes)\r\n- [ ] Build related changes\r\n- [ ] CI related changes\r\n\r\n- [ ] Does this change affect user-facing APIs or examples documented on http://prebid.org?\r\n- [ ] Other\r\n\r\n## Description of change\r\n<!-- Describe the change proposed in this pull request -->\r\n\r\n<!-- For new bidder adapters, please provide the following\r\n- contact email of the adapter’s maintainer\r\n- test parameters for validating bids:\r\n```\r\n{\r\n  bidder: '<bidder name>',\r\n  params: {\r\n    // ...\r\n  }\r\n}\r\n```\r\n\r\nBe sure to test the integration with your adserver using the [Hello World](/integrationExamples/gpt/hello_world.html) sample page. -->\r\n\r\n\r\n## Other information\r\n<!-- References to related PR or issue #s, @mentions of the person or team responsible for reviewing changes, etc. -->\r\n",
+    "changedFiles": 2,
+    "closingIssuesReferences": {
+      "nodes": [],
+      "pageInfo": {
+        "endCursor": null,
+        "hasNextPage": false
+      },
+      "totalCount": 0
+    },
+    "comments": {
+      "nodes": [
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 34142758,
+            "id": "MDQ6VXNlcjM0MTQyNzU4",
+            "login": "ncolletti"
+          }
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 159261864,
+            "id": "U_kgDOCX4kqA",
+            "login": "bhasker-ddh"
+          }
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 34142758,
+            "id": "MDQ6VXNlcjM0MTQyNzU4",
+            "login": "ncolletti"
+          }
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 159261864,
+            "id": "U_kgDOCX4kqA",
+            "login": "bhasker-ddh"
+          }
+        }
+      ],
+      "pageInfo": {
+        "endCursor": "Y3Vyc29yOnYyOpHOdfkMuQ==",
+        "hasNextPage": false
+      },
+      "totalCount": 4
+    },
+    "commits": {
+      "nodes": [
+        {
+          "commit": {
+            "author": {
+              "email": "vladis@smartyads.com",
+              "name": "Vladislav Isaiko",
+              "user": {
+                "databaseId": 28923476,
+                "id": "MDQ6VXNlcjI4OTIzNDc2",
+                "login": "vladis-teqblaze"
+              }
+            },
+            "authoredDate": "2018-03-26T08:58:02Z",
+            "oid": "b87237c692bac0bd1c6ecce486eb933d0bdd5543"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "vladis@smartyads.com",
+              "name": "Vladislav Isaiko",
+              "user": {
+                "databaseId": 28923476,
+                "id": "MDQ6VXNlcjI4OTIzNDc2",
+                "login": "vladis-teqblaze"
+              }
+            },
+            "authoredDate": "2018-04-10T08:31:46Z",
+            "oid": "1ca4e288a57162e3798e0630c52018b16c6f5235"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "vladis@smartyads.com",
+              "name": "Vladislav Isaiko",
+              "user": {
+                "databaseId": 28923476,
+                "id": "MDQ6VXNlcjI4OTIzNDc2",
+                "login": "vladis-teqblaze"
+              }
+            },
+            "authoredDate": "2018-04-22T12:31:36Z",
+            "oid": "b5c1850d5e3ab48230f3646ae5df53669cfde480"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "vladis@smartyads.com",
+              "name": "Vladislav Isaiko",
+              "user": {
+                "databaseId": 28923476,
+                "id": "MDQ6VXNlcjI4OTIzNDc2",
+                "login": "vladis-teqblaze"
+              }
+            },
+            "authoredDate": "2018-04-22T12:42:06Z",
+            "oid": "e969f275ba3542678eaa9d23a1c3fec868c01aa9"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "vladis@smartyads.com",
+              "name": "Vladislav Isaiko",
+              "user": {
+                "databaseId": 28923476,
+                "id": "MDQ6VXNlcjI4OTIzNDc2",
+                "login": "vladis-teqblaze"
+              }
+            },
+            "authoredDate": "2018-04-22T12:48:02Z",
+            "oid": "67693e13013234f50c82e75749187a7b6b2c61a8"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "artem.iholkin@smartyads.com",
+              "name": "Aiholkin",
+              "user": null
+            },
+            "authoredDate": "2019-11-18T09:18:14Z",
+            "oid": "e7ab418f8a059f89616ab1d11313e5099a0d727a"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "artem.iholkin@smartyads.com",
+              "name": "Aiholkin",
+              "user": null
+            },
+            "authoredDate": "2019-11-18T09:27:08Z",
+            "oid": "3320c68679f700affaf3d3ac75ea0fe4ea8f059e"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "artem.iholkin@smartyads.com",
+              "name": "Aiholkin",
+              "user": null
+            },
+            "authoredDate": "2019-11-18T10:17:48Z",
+            "oid": "44e59b808401d0e47eac888bf16ca19f3eca8934"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "artem.iholkin@smartyads.com",
+              "name": "Aiholkin",
+              "user": null
+            },
+            "authoredDate": "2019-11-18T11:52:47Z",
+            "oid": "7133a7236db94349c283337b0cb48030caa29583"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "artem.iholkin@smartyads.com",
+              "name": "Aiholkin",
+              "user": null
+            },
+            "authoredDate": "2019-11-18T15:25:44Z",
+            "oid": "3dba3aca3309bc5687802b2b29132befc5033dd8"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "artem.iholkin@smartyads.com",
+              "name": "Aiholkin",
+              "user": null
+            },
+            "authoredDate": "2019-11-18T15:29:25Z",
+            "oid": "7f14e4d885743e62da3d8116d0decf265fba1daa"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "artem.iholkin@smartyads.com",
+              "name": "Aiholkin",
+              "user": null
+            },
+            "authoredDate": "2019-11-18T15:44:56Z",
+            "oid": "78609ff339d2a87135b92c5c8421e47bf133c432"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "artem.iholkin@smartyads.com",
+              "name": "Aiholkin",
+              "user": null
+            },
+            "authoredDate": "2019-11-20T10:01:44Z",
+            "oid": "4c5d7110225de80a27675fa9836ad1eeb1ab0036"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "artem.iholkin@smartyads.com",
+              "name": "Aiholkin",
+              "user": null
+            },
+            "authoredDate": "2019-11-21T08:08:56Z",
+            "oid": "1027b54dcd96cddbe4e27406a3e9e83bea76593d"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "artem.iholkin@smartyads.com",
+              "name": "Aiholkin",
+              "user": null
+            },
+            "authoredDate": "2019-12-05T12:41:32Z",
+            "oid": "684639c7ca30b24a0f7e28fc94a6df41e3b1c07e"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "artem.iholkin@smartyads.com",
+              "name": "Aiholkin",
+              "user": null
+            },
+            "authoredDate": "2019-12-05T12:59:41Z",
+            "oid": "1c6681cfebae037787f06a0e35022ed6e761f484"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "artem.iholkin@smartyads.com",
+              "name": "Aiholkin",
+              "user": null
+            },
+            "authoredDate": "2019-12-05T13:13:25Z",
+            "oid": "436ff0fc075c21a6a973875ce43ded49315aa50d"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "artem.iholkin@smartyads.com",
+              "name": "Aiholkin",
+              "user": null
+            },
+            "authoredDate": "2019-12-05T13:14:20Z",
+            "oid": "2f9efee32a20fe28999ab5beff3f197132f78d27"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "huddled.masses1650@gmail.com",
+              "name": "Bill Newman",
+              "user": null
+            },
+            "authoredDate": "2019-12-09T07:59:08Z",
+            "oid": "c40dbe388c663f25f13649b1882c06f384c72c8c"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "huddled.masses1650@gmail.com",
+              "name": "Bill Newman",
+              "user": null
+            },
+            "authoredDate": "2019-12-10T08:38:38Z",
+            "oid": "7d2e9f3f5ebbc25c1f134bd59d726e3afe781124"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "artem.iholkin@smartyads.com",
+              "name": "Aiholkin",
+              "user": null
+            },
+            "authoredDate": "2020-02-28T08:58:43Z",
+            "oid": "8055e57cf68a58470e4edf89d4b0b5f972369ada"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "artem.iholkin@smartyads.com",
+              "name": "Aiholkin",
+              "user": null
+            },
+            "authoredDate": "2020-02-28T09:52:00Z",
+            "oid": "53bb18eee83bdfc9a6d84978d35c0cc1f4d6ee17"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "artem.iholkin@smartyads.com",
+              "name": "Aiholkin",
+              "user": null
+            },
+            "authoredDate": "2020-02-28T10:06:28Z",
+            "oid": "51faedc47963f85123f8f63ea150ef27f74bdce1"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "huddled.masses1650@gmail.com",
+              "name": "huddled.masses",
+              "user": null
+            },
+            "authoredDate": "2020-03-06T15:04:55Z",
+            "oid": "6cee3e711c6c7801fa5cd88b664ea4f42e51955c"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "huddled.masses1650@gmail.com",
+              "name": "huddled.masses",
+              "user": null
+            },
+            "authoredDate": "2020-03-06T15:09:11Z",
+            "oid": "461e4ff6eb62086f461d26e0267431b48d1e9c22"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "huddled.masses1650@gmail.com",
+              "name": "huddled.masses",
+              "user": null
+            },
+            "authoredDate": "2020-03-06T15:10:13Z",
+            "oid": "e78a9dcf73de14e226bde777fd7ddae3ee2e362a"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "huddled.masses1650@gmail.com",
+              "name": "huddled.masses",
+              "user": null
+            },
+            "authoredDate": "2020-03-06T15:18:01Z",
+            "oid": "1547d0a2c24a5da8969eb0eb9fae7d9cae615931"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "huddled.masses1650@gmail.com",
+              "name": "huddled.masses",
+              "user": null
+            },
+            "authoredDate": "2020-03-06T15:25:55Z",
+            "oid": "803be443f2eb0834c6be669cbf0c2869a51c9137"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "huddled.masses1650@gmail.com",
+              "name": "huddled.masses",
+              "user": null
+            },
+            "authoredDate": "2020-03-10T09:14:05Z",
+            "oid": "47a78af0f42252562f12a2d8894e89a9f62e7f8f"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "huddled.masses1650@gmail.com",
+              "name": "huddled.masses",
+              "user": null
+            },
+            "authoredDate": "2020-03-10T09:17:50Z",
+            "oid": "9ff6f10164eb7dab3973f0beffc1b4fb69f1c248"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "huddled.masses1650@gmail.com",
+              "name": "huddled.masses",
+              "user": null
+            },
+            "authoredDate": "2020-03-10T09:19:07Z",
+            "oid": "b02455a9aa3271ed17fa3958c078311d9be485cd"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "huddled.masses1650@gmail.com",
+              "name": "huddled.masses",
+              "user": null
+            },
+            "authoredDate": "2020-03-10T09:26:22Z",
+            "oid": "a4b93a1686588fb3f3ea266af3a2fe445dbd11de"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "huddled.masses1650@gmail.com",
+              "name": "huddled.masses",
+              "user": null
+            },
+            "authoredDate": "2020-03-10T09:33:37Z",
+            "oid": "1e741691b56ae5ad35026b7d9269563043be52b2"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "huddled.masses1650@gmail.com",
+              "name": "huddled.masses",
+              "user": null
+            },
+            "authoredDate": "2020-03-10T10:03:38Z",
+            "oid": "74a42cd6bb09d35281f642245359c1a788ef095b"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "huddled.masses1650@gmail.com",
+              "name": "huddled.masses",
+              "user": null
+            },
+            "authoredDate": "2020-03-10T10:05:44Z",
+            "oid": "d65984e0fa3d1a45a038f4d92a8001962ad931c6"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "huddled.masses1650@gmail.com",
+              "name": "huddled.masses",
+              "user": null
+            },
+            "authoredDate": "2020-03-10T10:07:53Z",
+            "oid": "1595a00f13bfa47f20b1c843e09bb5ee89fb33aa"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "huddled.masses1650@gmail.com",
+              "name": "huddled.masses",
+              "user": null
+            },
+            "authoredDate": "2020-03-10T12:28:44Z",
+            "oid": "42c5e53bdf2bfbb98f47540b3700bd9e718ff83b"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "huddled.masses1650@gmail.com",
+              "name": "huddled.masses",
+              "user": null
+            },
+            "authoredDate": "2020-03-10T12:42:40Z",
+            "oid": "480f127411e775498449fcaf726c5af575955555"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "huddled.masses1650@gmail.com",
+              "name": "huddled.masses",
+              "user": null
+            },
+            "authoredDate": "2020-03-30T05:50:15Z",
+            "oid": "5d9299c8f3d44e1e8f61c201f32d646100364c34"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "huddled.masses1650@gmail.com",
+              "name": "huddled.masses",
+              "user": null
+            },
+            "authoredDate": "2020-04-14T07:59:51Z",
+            "oid": "3a4c32ca7608b2bb311f99bee1921830163ebd99"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "huddled.masses1650@gmail.com",
+              "name": "huddled.masses",
+              "user": null
+            },
+            "authoredDate": "2020-04-16T16:19:53Z",
+            "oid": "a51a3e13ba1a0269366f75bf512ee8e85f2a6486"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "huddled.masses1650@gmail.com",
+              "name": "Bill Newman",
+              "user": null
+            },
+            "authoredDate": "2021-01-15T15:46:14Z",
+            "oid": "562a1e597ea6255f290f2cfa716f7aea935a4b51"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "huddled.masses1650@gmail.com",
+              "name": "Bill Newman",
+              "user": null
+            },
+            "authoredDate": "2021-01-15T15:50:19Z",
+            "oid": "3a999982b64a4d8ec0064112ba9fbba3f7986f74"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "huddled.masses1650@gmail.com",
+              "name": "Bill Newman",
+              "user": null
+            },
+            "authoredDate": "2021-01-15T16:00:43Z",
+            "oid": "ffdefbdf0672ad2335c153d6e33914b30f37f95f"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "huddled.masses1650@gmail.com",
+              "name": "Bill Newman",
+              "user": null
+            },
+            "authoredDate": "2021-01-15T16:10:35Z",
+            "oid": "0cb39f163d3edca2e8ad67481338f2481aa4dd5f"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "huddled.masses1650@gmail.com",
+              "name": "Bill Newman",
+              "user": null
+            },
+            "authoredDate": "2021-01-15T20:53:48Z",
+            "oid": "38182c0f09f78dda5f6af89d98206da6afd7e4d6"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "huddled.masses1650@gmail.com",
+              "name": "Bill Newman",
+              "user": null
+            },
+            "authoredDate": "2021-01-15T21:14:05Z",
+            "oid": "d2b3331306bd12e3fcc84d0c3cc0ddb819ca5e07"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "huddled.masses1650@gmail.com",
+              "name": "Bill Newman",
+              "user": null
+            },
+            "authoredDate": "2021-01-15T21:56:36Z",
+            "oid": "6e2a64b68adae1840462ec1bd8da387d7e48c710"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "artem.iholkin@smartyads.com",
+              "name": "Aiholkin",
+              "user": null
+            },
+            "authoredDate": "2021-01-20T15:32:04Z",
+            "oid": "32c71f2888ebc4f0cec1d016366622ac71ee2d6a"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "artem.iholkin@smartyads.com",
+              "name": "Aiholkin",
+              "user": null
+            },
+            "authoredDate": "2021-01-20T19:20:40Z",
+            "oid": "f0c5c248627567e669d8eed4f2bb9a26a857e2ad"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "artem.iholkin@smartyads.com",
+              "name": "Aiholkin",
+              "user": null
+            },
+            "authoredDate": "2021-01-20T19:22:46Z",
+            "oid": "586367d7c575d070f813ecfd3ee10e303c0fa605"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "artem.iholkin@smartyads.com",
+              "name": "Aiholkin",
+              "user": null
+            },
+            "authoredDate": "2021-01-20T19:24:38Z",
+            "oid": "4fa75ddf8ee4173d0a77a637b321ba2f04243923"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "m.yaremchuk@smartyads.com",
+              "name": "Mykhailo Yaremchuk",
+              "user": null
+            },
+            "authoredDate": "2021-08-02T01:18:28Z",
+            "oid": "4e16010973e3869550d3e4c55630d3c53db4a303"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "huddled.masses1650@gmail.com",
+              "name": "HuddledMasses",
+              "user": null
+            },
+            "authoredDate": "2021-08-02T06:59:22Z",
+            "oid": "3f62aa0b30605b5d69889d95113c6640d4936eda"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "huddled.masses1650@gmail.com",
+              "name": "HuddledMasses",
+              "user": null
+            },
+            "authoredDate": "2021-08-02T08:15:02Z",
+            "oid": "d8e9722bf0570804f7d60422f4a2c81ebf54f9d3"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "huddled.masses1650@gmail.com",
+              "name": "HuddledMasses",
+              "user": null
+            },
+            "authoredDate": "2021-08-29T11:13:09Z",
+            "oid": "00dd7a4962a3f85135e29d80b688bb446eee3394"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "huddled.masses1650@gmail.com",
+              "name": "HuddledMasses",
+              "user": null
+            },
+            "authoredDate": "2021-08-29T11:24:24Z",
+            "oid": "bb93f94a9d4fa29704dcbe0e6c375bb55237abc6"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "huddled.masses1650@gmail.com",
+              "name": "HuddledMasses",
+              "user": null
+            },
+            "authoredDate": "2021-08-29T11:25:31Z",
+            "oid": "be17cfeed30d93671ef4c8ec1d8e1555ad2e3158"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "huddled.masses1650@gmail.com",
+              "name": "HuddledMasses",
+              "user": null
+            },
+            "authoredDate": "2021-09-23T13:07:16Z",
+            "oid": "58b13810e321bb13f75ab14937eac4563f272642"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "huddled.masses1650@gmail.com",
+              "name": "HuddledMasses",
+              "user": null
+            },
+            "authoredDate": "2021-09-23T16:06:09Z",
+            "oid": "a30eff4db807f93bced3d6fcb9f0c25cdaeae60e"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "huddled.masses1650@gmail.com",
+              "name": "HuddledMasses",
+              "user": null
+            },
+            "authoredDate": "2021-11-25T09:13:55Z",
+            "oid": "97f9e69dbf72cdb01b0cf3910c68ebe74cfd4bf7"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "huddled.masses1650@gmail.com",
+              "name": "HuddledMasses",
+              "user": null
+            },
+            "authoredDate": "2021-11-25T09:14:18Z",
+            "oid": "3459b8db33163636659fffe20973cdf1a8966147"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "huddled.masses1650@gmail.com",
+              "name": "HuddledMasses",
+              "user": null
+            },
+            "authoredDate": "2021-11-25T11:03:32Z",
+            "oid": "5597d4589f34d49e9b30becff22e9d8c90a00b4f"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "huddled.masses1650@gmail.com",
+              "name": "HuddledMasses",
+              "user": null
+            },
+            "authoredDate": "2021-11-25T11:06:39Z",
+            "oid": "afdc2db4cfe343e9da9e7134eb2e0005e10d5324"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "huddled.masses1650@gmail.com",
+              "name": "HuddledMasses",
+              "user": null
+            },
+            "authoredDate": "2021-12-01T22:24:09Z",
+            "oid": "df5163b80f77b9f385b318c827177d6d7c92d0df"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "huddled.masses1650@gmail.com",
+              "name": "HuddledMasses",
+              "user": null
+            },
+            "authoredDate": "2021-12-01T22:25:43Z",
+            "oid": "7aa74cb3d4461320c9b9ad3a63757e348bd3a86a"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "huddled.masses1650@gmail.com",
+              "name": "HuddledMasses",
+              "user": null
+            },
+            "authoredDate": "2022-01-05T11:09:11Z",
+            "oid": "b039e902a23c59108e70ff4436b3a573c99343af"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "huddled.masses1650@gmail.com",
+              "name": "HuddledMasses",
+              "user": null
+            },
+            "authoredDate": "2022-01-06T12:14:00Z",
+            "oid": "d57e12951738927fa7a9fb431fceb13a0e1bb4be"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "huddled.masses1650@gmail.com",
+              "name": "HuddledMasses",
+              "user": null
+            },
+            "authoredDate": "2022-01-10T10:47:15Z",
+            "oid": "e63a8e3cd75eda616d24c2b3882d9a5110bf1d29"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "huddled.masses1650@gmail.com",
+              "name": "HuddledMasses",
+              "user": null
+            },
+            "authoredDate": "2022-02-10T20:19:55Z",
+            "oid": "aae3d003df3fe7d90799ef25a5b20170f7ae7a54"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "huddled.masses1650@gmail.com",
+              "name": "HuddledMasses",
+              "user": null
+            },
+            "authoredDate": "2022-02-11T06:36:22Z",
+            "oid": "93e99652aef4d3459fc01feb7b01bfbcaada5cef"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "huddled.masses1650@gmail.com",
+              "name": "HuddledMasses",
+              "user": null
+            },
+            "authoredDate": "2022-03-30T08:33:03Z",
+            "oid": "1bbfe4d70a7a4688aa055665c6389dfcb61cb922"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "huddled.masses1650@gmail.com",
+              "name": "HuddledMasses",
+              "user": null
+            },
+            "authoredDate": "2022-03-30T08:46:10Z",
+            "oid": "1aa001d2bb2a0407a6737dfe4321011eee1feccb"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "huddled.masses1650@gmail.com",
+              "name": "HuddledMasses",
+              "user": null
+            },
+            "authoredDate": "2022-03-30T08:54:30Z",
+            "oid": "ef3fde73e6630c0b8713b1526aa09a7b15dbcbeb"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "huddled.masses1650@gmail.com",
+              "name": "HuddledMasses",
+              "user": null
+            },
+            "authoredDate": "2022-04-08T15:11:05Z",
+            "oid": "c3a5f04f714023e27d08fa776d244ecdf231a1d0"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "huddled.masses1650@gmail.com",
+              "name": "HuddledMasses",
+              "user": null
+            },
+            "authoredDate": "2022-04-08T15:14:23Z",
+            "oid": "a5ce3016f75a742e618de633f43865cb3844494a"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "huddled.masses1650@gmail.com",
+              "name": "HuddledMasses",
+              "user": null
+            },
+            "authoredDate": "2022-04-08T15:17:48Z",
+            "oid": "06d1707488a9d41776ca31941c080914a79ec606"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "huddled.masses1650@gmail.com",
+              "name": "HuddledMasses",
+              "user": null
+            },
+            "authoredDate": "2022-04-08T15:21:54Z",
+            "oid": "9640dcc91e72ca5b309cc0e0c5991203cf3b2751"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "huddled.masses1650@gmail.com",
+              "name": "HuddledMasses",
+              "user": null
+            },
+            "authoredDate": "2022-04-20T00:06:34Z",
+            "oid": "310f4c8984cfaac23e7041df7cdf76f74dedd82b"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "huddled.masses1650@gmail.com",
+              "name": "HuddledMasses",
+              "user": null
+            },
+            "authoredDate": "2022-07-04T08:02:56Z",
+            "oid": "a85ae838776691be0f27716345f54bf74c3d5559"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "huddled.masses1650@gmail.com",
+              "name": "HuddledMasses",
+              "user": null
+            },
+            "authoredDate": "2022-07-21T11:21:50Z",
+            "oid": "1634c2fb982df4adb2247281e437d08235289f51"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "huddled.masses1650@gmail.com",
+              "name": "HuddledMasses",
+              "user": null
+            },
+            "authoredDate": "2022-07-21T11:57:46Z",
+            "oid": "8ad6b98f18ce14e23c208de11b9e611296449c09"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "huddled.masses1650@gmail.com",
+              "name": "HuddledMasses",
+              "user": null
+            },
+            "authoredDate": "2022-09-29T13:11:42Z",
+            "oid": "7885e6a7288620a4865a76c2446601fbec6f1141"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "huddled.masses1650@gmail.com",
+              "name": "HuddledMasses",
+              "user": null
+            },
+            "authoredDate": "2022-09-30T07:07:49Z",
+            "oid": "932c7a241f861a9687816fdfd632eee013e7dd55"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "huddled.masses1650@gmail.com",
+              "name": "HuddledMasses",
+              "user": null
+            },
+            "authoredDate": "2022-09-30T10:20:45Z",
+            "oid": "8e84f532385dff7d54b92ec68d63b873380639ea"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "huddled.masses1650@gmail.com",
+              "name": "HuddledMasses",
+              "user": null
+            },
+            "authoredDate": "2022-12-08T11:16:15Z",
+            "oid": "12091e4ad74d3a3f8d642dcff9331b0e47b66b54"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "huddled.masses1650@gmail.com",
+              "name": "HuddledMasses",
+              "user": null
+            },
+            "authoredDate": "2022-12-08T12:06:58Z",
+            "oid": "c1a2e00c985602fe8fb019f6a83f2d324562f702"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "huddled.masses1650@gmail.com",
+              "name": "HuddledMasses",
+              "user": null
+            },
+            "authoredDate": "2022-12-08T18:51:53Z",
+            "oid": "1cfcc9dc11e59375d7bd1802c6375e90038c9f84"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "huddled.masses1650@gmail.com",
+              "name": "HuddledMasses",
+              "user": null
+            },
+            "authoredDate": "2022-12-08T23:19:03Z",
+            "oid": "4af0892601823a40adfbe39c68def56d0fe99d2f"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "huddled.masses1650@gmail.com",
+              "name": "HuddledMasses",
+              "user": null
+            },
+            "authoredDate": "2022-12-08T23:20:27Z",
+            "oid": "2d487337146fcaac76fff8153825a0e564ceb998"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "huddled.masses1650@gmail.com",
+              "name": "HuddledMasses",
+              "user": null
+            },
+            "authoredDate": "2022-12-13T23:42:55Z",
+            "oid": "9d261b10d9f12bee6d505efb7c69824203795f5c"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "huddled.masses1650@gmail.com",
+              "name": "HuddledMasses",
+              "user": null
+            },
+            "authoredDate": "2022-12-14T14:57:53Z",
+            "oid": "17f00a5b6bf411c434f8097a58c04e698f0e7938"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "huddled.masses1650@gmail.com",
+              "name": "HuddledMasses",
+              "user": null
+            },
+            "authoredDate": "2023-06-13T13:20:09Z",
+            "oid": "fd2bbb9caeab81b3704ecd78811593cb0752a1ce"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "huddled.masses1650@gmail.com",
+              "name": "HuddledMasses",
+              "user": null
+            },
+            "authoredDate": "2023-06-13T21:30:29Z",
+            "oid": "d758d1dd54338728a47e2c41c99f31646cc04820"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "bhasker@gytworkz.com",
+              "name": "kottapally",
+              "user": {
+                "databaseId": 179467089,
+                "id": "U_kgDOCrJzUQ",
+                "login": "bhasker-gyt"
+              }
+            },
+            "authoredDate": "2024-02-28T14:31:19Z",
+            "oid": "dcd3c43d439c52802d50bb020c1321b0c75be25d"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "bhasker@gytworkz.com",
+              "name": "kottapally",
+              "user": {
+                "databaseId": 179467089,
+                "id": "U_kgDOCrJzUQ",
+                "login": "bhasker-gyt"
+              }
+            },
+            "authoredDate": "2024-02-29T11:22:45Z",
+            "oid": "ec42d23206d555c31d1bdb5af70873b3bce35e31"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "bhasker@gytworkz.com",
+              "name": "kottapally",
+              "user": {
+                "databaseId": 179467089,
+                "id": "U_kgDOCrJzUQ",
+                "login": "bhasker-gyt"
+              }
+            },
+            "authoredDate": "2024-03-04T03:56:12Z",
+            "oid": "151cbd099cdf110c63e33366571ccd151e806b2b"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "bhasker@gytworkz.com",
+              "name": "kottapally",
+              "user": {
+                "databaseId": 179467089,
+                "id": "U_kgDOCrJzUQ",
+                "login": "bhasker-gyt"
+              }
+            },
+            "authoredDate": "2024-03-04T08:59:35Z",
+            "oid": "dfaed095ad1909774f08094622e8f8158472501c"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "bhasker@gytworkz.com",
+              "name": "kottapally",
+              "user": {
+                "databaseId": 179467089,
+                "id": "U_kgDOCrJzUQ",
+                "login": "bhasker-gyt"
+              }
+            },
+            "authoredDate": "2024-03-04T15:27:27Z",
+            "oid": "7bffa6ce703ee8b2d333e316b59868e075d33b1b"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "bhasker@gytworkz.com",
+              "name": "kottapally",
+              "user": {
+                "databaseId": 179467089,
+                "id": "U_kgDOCrJzUQ",
+                "login": "bhasker-gyt"
+              }
+            },
+            "authoredDate": "2024-03-05T15:19:04Z",
+            "oid": "99ce27bcd90e17c423e4410910b44ce018be5ad6"
+          }
+        }
+      ],
+      "pageInfo": {
+        "endCursor": "MTAw",
+        "hasNextPage": true
+      },
+      "totalCount": 101
+    },
+    "createdAt": "2024-02-29T09:47:30Z",
+    "deletions": 10,
+    "files": {
+      "nodes": [
+        {
+          "additions": 1,
+          "changeType": "MODIFIED",
+          "deletions": 1,
+          "path": "modules/colossussspBidAdapter.js"
+        },
+        {
+          "additions": 42,
+          "changeType": "MODIFIED",
+          "deletions": 9,
+          "path": "test/spec/modules/colossussspBidAdapter_spec.js"
+        }
+      ],
+      "pageInfo": {
+        "endCursor": "Mg",
+        "hasNextPage": false
+      },
+      "totalCount": 2
+    },
+    "fullDatabaseId": "1749393683",
+    "headRefOid": "4acfb10fdd4915a916f8c62ba9978b5fc7738731",
+    "id": "PR_kwDOAlf9v85oRaET",
+    "isCrossRepository": true,
+    "isDraft": false,
+    "labels": {
+      "nodes": [
+        {
+          "name": "bugfix"
+        }
+      ],
+      "pageInfo": {
+        "endCursor": "MQ",
+        "hasNextPage": false
+      },
+      "totalCount": 1
+    },
+    "mergedAt": "2024-03-06T21:05:23Z",
+    "mergedBy": {
+      "__typename": "User",
+      "databaseId": 34142758,
+      "id": "MDQ6VXNlcjM0MTQyNzU4",
+      "login": "ncolletti"
+    },
+    "number": 11155,
+    "reviews": {
+      "nodes": [
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 34142758,
+            "id": "MDQ6VXNlcjM0MTQyNzU4",
+            "login": "ncolletti"
+          },
+          "fullDatabaseId": "1914599493",
+          "state": "APPROVED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 34142758,
+            "id": "MDQ6VXNlcjM0MTQyNzU4",
+            "login": "ncolletti"
+          },
+          "fullDatabaseId": "1914601441",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 159261864,
+            "id": "U_kgDOCX4kqA",
+            "login": "bhasker-ddh"
+          },
+          "fullDatabaseId": "1914653889",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 34142758,
+            "id": "MDQ6VXNlcjM0MTQyNzU4",
+            "login": "ncolletti"
+          },
+          "fullDatabaseId": "1917310385",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 159261864,
+            "id": "U_kgDOCX4kqA",
+            "login": "bhasker-ddh"
+          },
+          "fullDatabaseId": "1917354492",
+          "state": "COMMENTED"
+        }
+      ],
+      "pageInfo": {
+        "endCursor": "Y3Vyc29yOnYyOpO0MjAyNC0wMy0wNVQxNToyMzo1Nlq0MjAyNC0wMy0wNVQxNToyMzo1NlrOckiB_A==",
+        "hasNextPage": false
+      },
+      "totalCount": 5
+    },
+    "state": "MERGED",
+    "title": "Colossus Bid Adapter: Add GPP Support and Accept eids from publisher request",
+    "updatedAt": "2024-03-06T21:05:23Z"
+  },
+  "document_sha256": "e0376cea8685e41c5e18368d5f43610f07e83ae7dcb7cb32e879877fc61aec04",
+  "errors": [],
+  "extra": {
+    "repository_database_id": 39321023
+  },
+  "headers": {
+    "date": "Sat, 17 Oct 2026 03:31:45 GMT",
+    "x-ratelimit-limit": "5000",
+    "x-ratelimit-remaining": "4770",
+    "x-ratelimit-reset": "1792208984",
+    "x-ratelimit-resource": "graphql",
+    "x-ratelimit-used": "230"
+  },
+  "key": {
+    "name": "Prebid.js",
+    "number": 11155,
+    "owner": "prebid"
+  },
+  "kind": "pull_request",
+  "recorded_at": "2026-10-17T03:31:41Z",
+  "source": "live"
+}

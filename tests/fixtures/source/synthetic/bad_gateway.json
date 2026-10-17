@@ -1,0 +1,15 @@
+{
+  "body": {
+    "data": null,
+    "errors": [
+      {
+        "message": "Something went wrong while executing your query. This may be the result of a timeout, or it could be a GitHub bug."
+      }
+    ]
+  },
+  "headers": {
+    "date": "Sat, 17 Oct 2026 12:00:00 GMT"
+  },
+  "source": "GitHub answers a GraphQL request that runs past its limit with 502",
+  "status": 502
+}

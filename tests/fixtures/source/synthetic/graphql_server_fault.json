@@ -1,0 +1,15 @@
+{
+  "body": {
+    "data": null,
+    "errors": [
+      {
+        "message": "Something went wrong while executing your query. Please include `0000:0000:0000000:0000000:00000000` when reporting this issue."
+      }
+    ]
+  },
+  "headers": {
+    "date": "Sat, 17 Oct 2026 12:00:00 GMT"
+  },
+  "source": "GitHub's generic GraphQL server error, without a timeout",
+  "status": 200
+}

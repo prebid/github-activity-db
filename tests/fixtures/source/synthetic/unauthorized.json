@@ -1,0 +1,11 @@
+{
+  "body": {
+    "documentation_url": "https://docs.github.com/rest",
+    "message": "Bad credentials"
+  },
+  "headers": {
+    "date": "Sat, 17 Oct 2026 12:00:00 GMT"
+  },
+  "source": "GitHub answers 401 with 'Bad credentials' for a revoked token (observed with the repository's .env token on 2026-10-16)",
+  "status": 401
+}

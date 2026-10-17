@@ -1,0 +1,1297 @@
+{
+  "data": {
+    "additions": 1981,
+    "author": {
+      "__typename": "User",
+      "databaseId": 283858362,
+      "id": "U_kgDOEOtVug",
+      "login": "mkostromin-sigma"
+    },
+    "authorAssociation": "COLLABORATOR",
+    "baseRefName": "main",
+    "baseRefOid": "6c378a6763d4fbf21451607ee7af0457cbf5fdbd",
+    "body": "## Summary\n- Extract shared `tests.e2e.stack_readiness.wait_for_e2e_stack` with ordered hard gate **postgres → creative-agent → adcp `/health`** and a single structured compose log dump.\n- Wire both `docker_services_e2e` paths (verify-only when `ADCP_TESTING=true` / `--skip-docker`, and standalone after self-`up`) through that helper; dedupe `wait_for_server_readiness` as a thin delegate.\n- Add architecture guard `tests/unit/test_architecture_e2e_stack_readiness.py` plus behavioral coverage in `tests/unit/test_e2e_stack_readiness_behavior.py` (mutation self-tests, oracles, compose argv SSOT).\n\nCloses #1668\n\n## Scope\n**#1668 only** — rebased onto latest `main` (2026-09-02). IPR / CI pre-start / free-disk work stays on **#1669** and is **not** in this diff.\n\n## Spec-Grounding\nN/A — test infrastructure only (no AdCP protocol behavior change).\n\n## Test plan\n- [x] `uv run pytest tests/unit/test_architecture_e2e_stack_readiness.py tests/unit/test_e2e_stack_readiness_behavior.py`\n- [x] Mutation proofs via guard self-tests (probe registry, call sites, no divergent wait loops)\n- [ ] CI on this tip\n\n## Out of scope\n- #1669 IPR verify/sign, `.github/workflows` pre-start E2E, `_free-disk`, zizmor/actionlint\n- Parent epic #1666 closure",
+    "changedFiles": 12,
+    "closingIssuesReferences": {
+      "nodes": [
+        {
+          "number": 1668,
+          "repository": {
+            "databaseId": 1025117899,
+            "nameWithOwner": "prebid/salesagent"
+          }
+        }
+      ],
+      "pageInfo": {
+        "endCursor": "MQ",
+        "hasNextPage": false
+      },
+      "totalCount": 1
+    },
+    "comments": {
+      "nodes": [
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 3444727,
+            "id": "MDQ6VXNlcjM0NDQ3Mjc=",
+            "login": "ChrisHuie"
+          }
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 283858362,
+            "id": "U_kgDOEOtVug",
+            "login": "mkostromin-sigma"
+          }
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 283858362,
+            "id": "U_kgDOEOtVug",
+            "login": "mkostromin-sigma"
+          }
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 283858362,
+            "id": "U_kgDOEOtVug",
+            "login": "mkostromin-sigma"
+          }
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 283858362,
+            "id": "U_kgDOEOtVug",
+            "login": "mkostromin-sigma"
+          }
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 283858362,
+            "id": "U_kgDOEOtVug",
+            "login": "mkostromin-sigma"
+          }
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 283858362,
+            "id": "U_kgDOEOtVug",
+            "login": "mkostromin-sigma"
+          }
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 283858362,
+            "id": "U_kgDOEOtVug",
+            "login": "mkostromin-sigma"
+          }
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 283858362,
+            "id": "U_kgDOEOtVug",
+            "login": "mkostromin-sigma"
+          }
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 283858362,
+            "id": "U_kgDOEOtVug",
+            "login": "mkostromin-sigma"
+          }
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 283858362,
+            "id": "U_kgDOEOtVug",
+            "login": "mkostromin-sigma"
+          }
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 283858362,
+            "id": "U_kgDOEOtVug",
+            "login": "mkostromin-sigma"
+          }
+        }
+      ],
+      "pageInfo": {
+        "endCursor": "Y3Vyc29yOnYyOpHPAAAAAULDmmI=",
+        "hasNextPage": false
+      },
+      "totalCount": 12
+    },
+    "commits": {
+      "nodes": [
+        {
+          "commit": {
+            "author": {
+              "email": "maksim.kostromin@sigma.software",
+              "name": "Maksim Kostromin",
+              "user": {
+                "databaseId": 283858362,
+                "id": "U_kgDOEOtVug",
+                "login": "mkostromin-sigma"
+              }
+            },
+            "authoredDate": "2026-09-02T01:06:07Z",
+            "oid": "9c337ab1d7d3e63ca5b76ce5e5e4618ae3622380"
+          }
+        }
+      ],
+      "pageInfo": {
+        "endCursor": "MQ",
+        "hasNextPage": false
+      },
+      "totalCount": 1
+    },
+    "createdAt": "2026-07-22T14:43:04Z",
+    "deletions": 189,
+    "files": {
+      "nodes": [
+        {
+          "additions": 8,
+          "changeType": "MODIFIED",
+          "deletions": 0,
+          "path": "tests/e2e/README.md"
+        },
+        {
+          "additions": 4,
+          "changeType": "MODIFIED",
+          "deletions": 4,
+          "path": "tests/e2e/_webhook_capture.py"
+        },
+        {
+          "additions": 76,
+          "changeType": "MODIFIED",
+          "deletions": 140,
+          "path": "tests/e2e/conftest.py"
+        },
+        {
+          "additions": 509,
+          "changeType": "ADDED",
+          "deletions": 0,
+          "path": "tests/e2e/stack_readiness.py"
+        },
+        {
+          "additions": 6,
+          "changeType": "MODIFIED",
+          "deletions": 3,
+          "path": "tests/e2e/test_delivery_webhooks_e2e.py"
+        },
+        {
+          "additions": 35,
+          "changeType": "MODIFIED",
+          "deletions": 27,
+          "path": "tests/e2e/utils.py"
+        },
+        {
+          "additions": 95,
+          "changeType": "MODIFIED",
+          "deletions": 0,
+          "path": "tests/unit/_architecture_helpers.py"
+        },
+        {
+          "additions": 7,
+          "changeType": "MODIFIED",
+          "deletions": 7,
+          "path": "tests/unit/test_architecture_e2e_compose_tls_origins.py"
+        },
+        {
+          "additions": 543,
+          "changeType": "ADDED",
+          "deletions": 0,
+          "path": "tests/unit/test_architecture_e2e_stack_readiness.py"
+        },
+        {
+          "additions": 53,
+          "changeType": "MODIFIED",
+          "deletions": 5,
+          "path": "tests/unit/test_architecture_helpers_contract.py"
+        },
+        {
+          "additions": 3,
+          "changeType": "MODIFIED",
+          "deletions": 3,
+          "path": "tests/unit/test_bdd_e2e_stack_probe.py"
+        },
+        {
+          "additions": 642,
+          "changeType": "ADDED",
+          "deletions": 0,
+          "path": "tests/unit/test_e2e_stack_readiness_behavior.py"
+        }
+      ],
+      "pageInfo": {
+        "endCursor": "MTI",
+        "hasNextPage": false
+      },
+      "totalCount": 12
+    },
+    "fullDatabaseId": "4109134584",
+    "headRefOid": "9c337ab1d7d3e63ca5b76ce5e5e4618ae3622380",
+    "id": "PR_kwDOPRoOy8707Gr4",
+    "isCrossRepository": true,
+    "isDraft": false,
+    "labels": {
+      "nodes": [
+        {
+          "name": "2.0 Release"
+        }
+      ],
+      "pageInfo": {
+        "endCursor": "MQ",
+        "hasNextPage": false
+      },
+      "totalCount": 1
+    },
+    "mergedAt": null,
+    "mergedBy": null,
+    "number": 1699,
+    "reviews": {
+      "nodes": [
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 138468,
+            "id": "MDQ6VXNlcjEzODQ2OA==",
+            "login": "KonstantinMirin"
+          },
+          "fullDatabaseId": "4788551832",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 283858362,
+            "id": "U_kgDOEOtVug",
+            "login": "mkostromin-sigma"
+          },
+          "fullDatabaseId": "4791684064",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 283858362,
+            "id": "U_kgDOEOtVug",
+            "login": "mkostromin-sigma"
+          },
+          "fullDatabaseId": "4791684214",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 283858362,
+            "id": "U_kgDOEOtVug",
+            "login": "mkostromin-sigma"
+          },
+          "fullDatabaseId": "4791684417",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 283858362,
+            "id": "U_kgDOEOtVug",
+            "login": "mkostromin-sigma"
+          },
+          "fullDatabaseId": "4791684626",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 283858362,
+            "id": "U_kgDOEOtVug",
+            "login": "mkostromin-sigma"
+          },
+          "fullDatabaseId": "4791684806",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 283858362,
+            "id": "U_kgDOEOtVug",
+            "login": "mkostromin-sigma"
+          },
+          "fullDatabaseId": "4791684944",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 283858362,
+            "id": "U_kgDOEOtVug",
+            "login": "mkostromin-sigma"
+          },
+          "fullDatabaseId": "4791685085",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 283858362,
+            "id": "U_kgDOEOtVug",
+            "login": "mkostromin-sigma"
+          },
+          "fullDatabaseId": "4791685206",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 283858362,
+            "id": "U_kgDOEOtVug",
+            "login": "mkostromin-sigma"
+          },
+          "fullDatabaseId": "4791685310",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 138468,
+            "id": "MDQ6VXNlcjEzODQ2OA==",
+            "login": "KonstantinMirin"
+          },
+          "fullDatabaseId": "4795811824",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 283858362,
+            "id": "U_kgDOEOtVug",
+            "login": "mkostromin-sigma"
+          },
+          "fullDatabaseId": "4801294576",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 283858362,
+            "id": "U_kgDOEOtVug",
+            "login": "mkostromin-sigma"
+          },
+          "fullDatabaseId": "4801294731",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 283858362,
+            "id": "U_kgDOEOtVug",
+            "login": "mkostromin-sigma"
+          },
+          "fullDatabaseId": "4801294863",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 283858362,
+            "id": "U_kgDOEOtVug",
+            "login": "mkostromin-sigma"
+          },
+          "fullDatabaseId": "4801295008",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 283858362,
+            "id": "U_kgDOEOtVug",
+            "login": "mkostromin-sigma"
+          },
+          "fullDatabaseId": "4801295144",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 283858362,
+            "id": "U_kgDOEOtVug",
+            "login": "mkostromin-sigma"
+          },
+          "fullDatabaseId": "4801295269",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 283858362,
+            "id": "U_kgDOEOtVug",
+            "login": "mkostromin-sigma"
+          },
+          "fullDatabaseId": "4801295422",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 283858362,
+            "id": "U_kgDOEOtVug",
+            "login": "mkostromin-sigma"
+          },
+          "fullDatabaseId": "4801295550",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 283858362,
+            "id": "U_kgDOEOtVug",
+            "login": "mkostromin-sigma"
+          },
+          "fullDatabaseId": "4801295715",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 283858362,
+            "id": "U_kgDOEOtVug",
+            "login": "mkostromin-sigma"
+          },
+          "fullDatabaseId": "4801295928",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 283858362,
+            "id": "U_kgDOEOtVug",
+            "login": "mkostromin-sigma"
+          },
+          "fullDatabaseId": "4801296091",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 283858362,
+            "id": "U_kgDOEOtVug",
+            "login": "mkostromin-sigma"
+          },
+          "fullDatabaseId": "4801296234",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 283858362,
+            "id": "U_kgDOEOtVug",
+            "login": "mkostromin-sigma"
+          },
+          "fullDatabaseId": "4801296377",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 138468,
+            "id": "MDQ6VXNlcjEzODQ2OA==",
+            "login": "KonstantinMirin"
+          },
+          "fullDatabaseId": "4808021734",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 283858362,
+            "id": "U_kgDOEOtVug",
+            "login": "mkostromin-sigma"
+          },
+          "fullDatabaseId": "4813013670",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 283858362,
+            "id": "U_kgDOEOtVug",
+            "login": "mkostromin-sigma"
+          },
+          "fullDatabaseId": "4813013856",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 283858362,
+            "id": "U_kgDOEOtVug",
+            "login": "mkostromin-sigma"
+          },
+          "fullDatabaseId": "4813013988",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 283858362,
+            "id": "U_kgDOEOtVug",
+            "login": "mkostromin-sigma"
+          },
+          "fullDatabaseId": "4813014119",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 283858362,
+            "id": "U_kgDOEOtVug",
+            "login": "mkostromin-sigma"
+          },
+          "fullDatabaseId": "4813014253",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 283858362,
+            "id": "U_kgDOEOtVug",
+            "login": "mkostromin-sigma"
+          },
+          "fullDatabaseId": "4813014518",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 138468,
+            "id": "MDQ6VXNlcjEzODQ2OA==",
+            "login": "KonstantinMirin"
+          },
+          "fullDatabaseId": "4831653563",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 283858362,
+            "id": "U_kgDOEOtVug",
+            "login": "mkostromin-sigma"
+          },
+          "fullDatabaseId": "4832686865",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 283858362,
+            "id": "U_kgDOEOtVug",
+            "login": "mkostromin-sigma"
+          },
+          "fullDatabaseId": "4832686955",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 283858362,
+            "id": "U_kgDOEOtVug",
+            "login": "mkostromin-sigma"
+          },
+          "fullDatabaseId": "4832687036",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 283858362,
+            "id": "U_kgDOEOtVug",
+            "login": "mkostromin-sigma"
+          },
+          "fullDatabaseId": "4832687116",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 283858362,
+            "id": "U_kgDOEOtVug",
+            "login": "mkostromin-sigma"
+          },
+          "fullDatabaseId": "4832687179",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 283858362,
+            "id": "U_kgDOEOtVug",
+            "login": "mkostromin-sigma"
+          },
+          "fullDatabaseId": "4832687251",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 138468,
+            "id": "MDQ6VXNlcjEzODQ2OA==",
+            "login": "KonstantinMirin"
+          },
+          "fullDatabaseId": "4847059699",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 283858362,
+            "id": "U_kgDOEOtVug",
+            "login": "mkostromin-sigma"
+          },
+          "fullDatabaseId": "4849194622",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 283858362,
+            "id": "U_kgDOEOtVug",
+            "login": "mkostromin-sigma"
+          },
+          "fullDatabaseId": "4849194735",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 283858362,
+            "id": "U_kgDOEOtVug",
+            "login": "mkostromin-sigma"
+          },
+          "fullDatabaseId": "4849194843",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 283858362,
+            "id": "U_kgDOEOtVug",
+            "login": "mkostromin-sigma"
+          },
+          "fullDatabaseId": "4849194938",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 138468,
+            "id": "MDQ6VXNlcjEzODQ2OA==",
+            "login": "KonstantinMirin"
+          },
+          "fullDatabaseId": "4853894302",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 138468,
+            "id": "MDQ6VXNlcjEzODQ2OA==",
+            "login": "KonstantinMirin"
+          },
+          "fullDatabaseId": "4864604017",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 283858362,
+            "id": "U_kgDOEOtVug",
+            "login": "mkostromin-sigma"
+          },
+          "fullDatabaseId": "4910214096",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 283858362,
+            "id": "U_kgDOEOtVug",
+            "login": "mkostromin-sigma"
+          },
+          "fullDatabaseId": "4910214270",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 283858362,
+            "id": "U_kgDOEOtVug",
+            "login": "mkostromin-sigma"
+          },
+          "fullDatabaseId": "4910214448",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 283858362,
+            "id": "U_kgDOEOtVug",
+            "login": "mkostromin-sigma"
+          },
+          "fullDatabaseId": "4910214651",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 283858362,
+            "id": "U_kgDOEOtVug",
+            "login": "mkostromin-sigma"
+          },
+          "fullDatabaseId": "4910214876",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 283858362,
+            "id": "U_kgDOEOtVug",
+            "login": "mkostromin-sigma"
+          },
+          "fullDatabaseId": "4910215113",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 283858362,
+            "id": "U_kgDOEOtVug",
+            "login": "mkostromin-sigma"
+          },
+          "fullDatabaseId": "4910215392",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 283858362,
+            "id": "U_kgDOEOtVug",
+            "login": "mkostromin-sigma"
+          },
+          "fullDatabaseId": "4910215598",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 283858362,
+            "id": "U_kgDOEOtVug",
+            "login": "mkostromin-sigma"
+          },
+          "fullDatabaseId": "4910215800",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 138468,
+            "id": "MDQ6VXNlcjEzODQ2OA==",
+            "login": "KonstantinMirin"
+          },
+          "fullDatabaseId": "4919621730",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 283858362,
+            "id": "U_kgDOEOtVug",
+            "login": "mkostromin-sigma"
+          },
+          "fullDatabaseId": "4921978267",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 283858362,
+            "id": "U_kgDOEOtVug",
+            "login": "mkostromin-sigma"
+          },
+          "fullDatabaseId": "4921978426",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 283858362,
+            "id": "U_kgDOEOtVug",
+            "login": "mkostromin-sigma"
+          },
+          "fullDatabaseId": "4921978544",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 3444727,
+            "id": "MDQ6VXNlcjM0NDQ3Mjc=",
+            "login": "ChrisHuie"
+          },
+          "fullDatabaseId": "4939454540",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 138468,
+            "id": "MDQ6VXNlcjEzODQ2OA==",
+            "login": "KonstantinMirin"
+          },
+          "fullDatabaseId": "4954124662",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 283858362,
+            "id": "U_kgDOEOtVug",
+            "login": "mkostromin-sigma"
+          },
+          "fullDatabaseId": "5021868717",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 283858362,
+            "id": "U_kgDOEOtVug",
+            "login": "mkostromin-sigma"
+          },
+          "fullDatabaseId": "5021868992",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 283858362,
+            "id": "U_kgDOEOtVug",
+            "login": "mkostromin-sigma"
+          },
+          "fullDatabaseId": "5021869282",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 283858362,
+            "id": "U_kgDOEOtVug",
+            "login": "mkostromin-sigma"
+          },
+          "fullDatabaseId": "5021869524",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 283858362,
+            "id": "U_kgDOEOtVug",
+            "login": "mkostromin-sigma"
+          },
+          "fullDatabaseId": "5021869767",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 283858362,
+            "id": "U_kgDOEOtVug",
+            "login": "mkostromin-sigma"
+          },
+          "fullDatabaseId": "5021870019",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 283858362,
+            "id": "U_kgDOEOtVug",
+            "login": "mkostromin-sigma"
+          },
+          "fullDatabaseId": "5021870283",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 283858362,
+            "id": "U_kgDOEOtVug",
+            "login": "mkostromin-sigma"
+          },
+          "fullDatabaseId": "5021870559",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 283858362,
+            "id": "U_kgDOEOtVug",
+            "login": "mkostromin-sigma"
+          },
+          "fullDatabaseId": "5021870860",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 283858362,
+            "id": "U_kgDOEOtVug",
+            "login": "mkostromin-sigma"
+          },
+          "fullDatabaseId": "5021871159",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 283858362,
+            "id": "U_kgDOEOtVug",
+            "login": "mkostromin-sigma"
+          },
+          "fullDatabaseId": "5021871425",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 283858362,
+            "id": "U_kgDOEOtVug",
+            "login": "mkostromin-sigma"
+          },
+          "fullDatabaseId": "5021871728",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 283858362,
+            "id": "U_kgDOEOtVug",
+            "login": "mkostromin-sigma"
+          },
+          "fullDatabaseId": "5021872050",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 283858362,
+            "id": "U_kgDOEOtVug",
+            "login": "mkostromin-sigma"
+          },
+          "fullDatabaseId": "5021872366",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 283858362,
+            "id": "U_kgDOEOtVug",
+            "login": "mkostromin-sigma"
+          },
+          "fullDatabaseId": "5021872619",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 283858362,
+            "id": "U_kgDOEOtVug",
+            "login": "mkostromin-sigma"
+          },
+          "fullDatabaseId": "5021872894",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 283858362,
+            "id": "U_kgDOEOtVug",
+            "login": "mkostromin-sigma"
+          },
+          "fullDatabaseId": "5021873150",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 283858362,
+            "id": "U_kgDOEOtVug",
+            "login": "mkostromin-sigma"
+          },
+          "fullDatabaseId": "5021873473",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 283858362,
+            "id": "U_kgDOEOtVug",
+            "login": "mkostromin-sigma"
+          },
+          "fullDatabaseId": "5021873747",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 283858362,
+            "id": "U_kgDOEOtVug",
+            "login": "mkostromin-sigma"
+          },
+          "fullDatabaseId": "5021874020",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 283858362,
+            "id": "U_kgDOEOtVug",
+            "login": "mkostromin-sigma"
+          },
+          "fullDatabaseId": "5021874262",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 283858362,
+            "id": "U_kgDOEOtVug",
+            "login": "mkostromin-sigma"
+          },
+          "fullDatabaseId": "5021874543",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 283858362,
+            "id": "U_kgDOEOtVug",
+            "login": "mkostromin-sigma"
+          },
+          "fullDatabaseId": "5021874808",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 283858362,
+            "id": "U_kgDOEOtVug",
+            "login": "mkostromin-sigma"
+          },
+          "fullDatabaseId": "5021875109",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 283858362,
+            "id": "U_kgDOEOtVug",
+            "login": "mkostromin-sigma"
+          },
+          "fullDatabaseId": "5021875387",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 283858362,
+            "id": "U_kgDOEOtVug",
+            "login": "mkostromin-sigma"
+          },
+          "fullDatabaseId": "5021875673",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 283858362,
+            "id": "U_kgDOEOtVug",
+            "login": "mkostromin-sigma"
+          },
+          "fullDatabaseId": "5021875970",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 283858362,
+            "id": "U_kgDOEOtVug",
+            "login": "mkostromin-sigma"
+          },
+          "fullDatabaseId": "5021876203",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 283858362,
+            "id": "U_kgDOEOtVug",
+            "login": "mkostromin-sigma"
+          },
+          "fullDatabaseId": "5021876509",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 283858362,
+            "id": "U_kgDOEOtVug",
+            "login": "mkostromin-sigma"
+          },
+          "fullDatabaseId": "5021876741",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 283858362,
+            "id": "U_kgDOEOtVug",
+            "login": "mkostromin-sigma"
+          },
+          "fullDatabaseId": "5021876993",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 283858362,
+            "id": "U_kgDOEOtVug",
+            "login": "mkostromin-sigma"
+          },
+          "fullDatabaseId": "5021877292",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 283858362,
+            "id": "U_kgDOEOtVug",
+            "login": "mkostromin-sigma"
+          },
+          "fullDatabaseId": "5021877570",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 283858362,
+            "id": "U_kgDOEOtVug",
+            "login": "mkostromin-sigma"
+          },
+          "fullDatabaseId": "5021877851",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 283858362,
+            "id": "U_kgDOEOtVug",
+            "login": "mkostromin-sigma"
+          },
+          "fullDatabaseId": "5021878075",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 283858362,
+            "id": "U_kgDOEOtVug",
+            "login": "mkostromin-sigma"
+          },
+          "fullDatabaseId": "5021878369",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 283858362,
+            "id": "U_kgDOEOtVug",
+            "login": "mkostromin-sigma"
+          },
+          "fullDatabaseId": "5021878641",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 283858362,
+            "id": "U_kgDOEOtVug",
+            "login": "mkostromin-sigma"
+          },
+          "fullDatabaseId": "5021878855",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 283858362,
+            "id": "U_kgDOEOtVug",
+            "login": "mkostromin-sigma"
+          },
+          "fullDatabaseId": "5021879167",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 283858362,
+            "id": "U_kgDOEOtVug",
+            "login": "mkostromin-sigma"
+          },
+          "fullDatabaseId": "5021879465",
+          "state": "COMMENTED"
+        }
+      ],
+      "pageInfo": {
+        "endCursor": "Y3Vyc29yOnYyOpO0MjAyNi0wOC0yNVQxNzoyMzowMFq0MjAyNi0wOC0yNVQxNzoyMzowMFrPAAAAAStTzKk=",
+        "hasNextPage": true
+      },
+      "totalCount": 106
+    },
+    "state": "OPEN",
+    "title": "fix(e2e): align local docker_services_e2e with shared readiness helper",
+    "updatedAt": "2026-09-03T20:04:19Z"
+  },
+  "document_sha256": "e0376cea8685e41c5e18368d5f43610f07e83ae7dcb7cb32e879877fc61aec04",
+  "errors": [],
+  "extra": {
+    "repository_database_id": 1025117899
+  },
+  "headers": {
+    "date": "Sat, 17 Oct 2026 03:31:50 GMT",
+    "x-ratelimit-limit": "5000",
+    "x-ratelimit-remaining": "4762",
+    "x-ratelimit-reset": "1792208984",
+    "x-ratelimit-resource": "graphql",
+    "x-ratelimit-used": "238"
+  },
+  "key": {
+    "name": "salesagent",
+    "number": 1699,
+    "owner": "prebid"
+  },
+  "kind": "pull_request",
+  "recorded_at": "2026-10-17T03:31:41Z",
+  "source": "live"
+}

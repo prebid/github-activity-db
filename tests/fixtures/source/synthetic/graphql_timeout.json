@@ -1,0 +1,15 @@
+{
+  "body": {
+    "data": null,
+    "errors": [
+      {
+        "message": "We couldn't respond to your request in time. Sorry about that. Please try resubmitting your request and contact us if the problem persists."
+      }
+    ]
+  },
+  "headers": {
+    "date": "Sat, 17 Oct 2026 12:00:00 GMT"
+  },
+  "source": "GitHub GraphQL docs: a request taking more than 10 seconds is terminated with a message reporting that \"We couldn't respond to your request in time\"",
+  "status": 200
+}

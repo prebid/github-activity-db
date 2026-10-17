@@ -1,0 +1,10 @@
+{
+  "body": {
+    "message": "Too many requests"
+  },
+  "headers": {
+    "date": "Sat, 17 Oct 2026 12:00:00 GMT"
+  },
+  "source": "GitHub REST docs: a secondary limit can answer 429",
+  "status": 429
+}

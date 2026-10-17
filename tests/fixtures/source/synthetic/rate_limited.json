@@ -1,0 +1,17 @@
+{
+  "body": {
+    "data": null,
+    "errors": [
+      {
+        "message": "API rate limit already exceeded for user ID 1.",
+        "type": "RATE_LIMITED"
+      }
+    ]
+  },
+  "headers": {
+    "date": "Sat, 17 Oct 2026 12:00:00 GMT",
+    "x-ratelimit-remaining": "0"
+  },
+  "source": "GitHub GraphQL docs, 'Rate limits and query limits for the GraphQL API': a request over the primary limit returns HTTP 200 with errors[].type RATE_LIMITED",
+  "status": 200
+}
