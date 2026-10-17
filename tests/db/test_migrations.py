@@ -1,45 +1,530 @@
-"""Migrations must produce exactly the schema the ORM models declare."""
+"""The migration chain and alembic/env.py (redesign plan 5.1, Step 3a).
 
+Every upgrade here runs the repository's own env.py and revisions; test-only revisions are
+added after the head through ``version_locations``.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import itertools
+import shutil
 import sqlite3
+import subprocess
+import sys
+from collections.abc import Iterator
+from contextlib import closing
 from pathlib import Path
+from typing import Any
 
 import pytest
 from alembic import command
-from alembic.config import Config
 from alembic.script import ScriptDirectory
 
 from github_activity_db.config import get_settings
+from github_activity_db.db.models import Base
+from github_activity_db.db.schema import HEAD_REVISION, MIGRATION_REVISIONS, SCHEMA_VERSION
+from tests.db.alembic_support import (
+    FIRST_SCHEMA_HEAD,
+    REPO_ROOT,
+    alembic_config,
+    query,
+    revision_of,
+    table_names,
+    upgrade,
+    write_revision,
+)
+from tests.db.schema_support import named_constraints, schema_of
+from tests.db.seed import T0, Seed, connect
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
+TRACKED = REPO_ROOT / "github_activity.db"
+TEST_REVISION = "f1e57000a001"
+VIEWS_READING_PULL_REQUESTS = ("v_pr_reviewers", "v_pr_commenters", "v_commit_authors")
+PULL_REQUEST_INDEXES = (
+    "SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'pull_requests' "
+    "ORDER BY name"
+)
 
 
-def _alembic_config(database_path: Path) -> Config:
-    config = Config(str(REPO_ROOT / "alembic.ini"))
-    config.attributes["database_url"] = f"sqlite+aiosqlite:///{database_path}"
-    config.attributes["configure_logger"] = False
-    return config
+def snapshot(database: Path) -> tuple[Any, ...]:
+    """Everything an upgrade could change: the schema, every table's rows, and user_version."""
+    with closing(sqlite3.connect(database)) as connection:
+        schema = sorted(
+            (tuple(row) for row in connection.execute("SELECT * FROM sqlite_master")), key=repr
+        )
+        rows = {
+            name: sorted(map(tuple, connection.execute(f'SELECT * FROM "{name}"')), key=repr)
+            for kind, name, *_rest in schema
+            if kind == "table"
+        }
+        (user_version,) = connection.execute("PRAGMA user_version").fetchone()
+    return schema, rows, user_version
 
 
-def test_migrations_match_models(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Upgrading a fresh database to head leaves no autogenerate diff against the models."""
-    target = tmp_path / "migrations.db"
-    # If env.py ignored the database_url attribute it would migrate DATABASE_URL instead
-    # (by default the tracked github_activity.db); point that at a decoy to make it visible.
-    decoy = tmp_path / "decoy.db"
-    monkeypatch.setenv("DATABASE_URL", f"sqlite+aiosqlite:///{decoy}")
+def digest(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def refusal(error: pytest.ExceptionInfo[BaseException]) -> str:
+    """env.py is loaded fresh by every command, so its error class is matched by name."""
+    assert type(error.value).__name__ == "MigrationRefused", repr(error.value)
+    return str(error.value)
+
+
+@pytest.fixture(scope="module")
+def first_schema_template(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """A database at the first schema's head holding a repository, a PR, and a sync failure."""
+    path = tmp_path_factory.mktemp("first-schema") / "first.db"
+    upgrade(path, FIRST_SCHEMA_HEAD)
+    with closing(sqlite3.connect(path)) as connection, connection:
+        connection.execute(
+            "INSERT INTO repositories (id, owner, name, full_name, is_active, created_at) "
+            "VALUES (1, 'prebid', 'Prebid.js', 'prebid/Prebid.js', 1, '2026-01-01 00:00:00')"
+        )
+        connection.execute(
+            "INSERT INTO pull_requests (id, repository_id, number, link, open_date, submitter, "
+            "title, last_update_date, state, files_changed, lines_added, lines_deleted, "
+            "commits_count, github_labels, file_changes, commits_breakdown, reviewers, "
+            "assignees, participants, created_at, updated_at) VALUES (1, 1, 13481, "
+            "'https://github.com/prebid/Prebid.js/pull/13481', '2026-01-01 00:00:00', "
+            "'dgirardi', 'link CLAUDE.md', '2026-01-02 00:00:00', 'MERGED', 3, 1, 1, 4, '[]', "
+            "'[]', '[]', '[]', '[]', '{}', '2026-01-01 00:00:00', '2026-01-01 00:00:00')"
+        )
+        connection.execute(
+            "INSERT INTO sync_failures (repository_id, pr_number, error_message, error_type, "
+            "retry_count, status, failed_at, created_at) VALUES (1, 7, 'e', 'ValueError', 0, "
+            "'PENDING', '2026-01-01 00:00:00', '2026-01-01 00:00:00')"
+        )
+    path.chmod(0o444)
+    return path
+
+
+@pytest.fixture
+def first_schema(first_schema_template: Path, tmp_path: Path) -> Path:
+    path = tmp_path / "first.db"
+    shutil.copyfile(first_schema_template, path)
+    return path
+
+
+@pytest.fixture
+def isolated_settings(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
     get_settings.cache_clear()
-    config = _alembic_config(target)
-    try:
-        command.upgrade(config, "head")
-        # Raises AutogenerateDiffsDetected when models and migrations disagree.
-        command.check(config)
-    finally:
-        get_settings.cache_clear()
+    yield
+    get_settings.cache_clear()
 
-    assert not decoy.exists()
-    connection = sqlite3.connect(target)
-    try:
-        (version,) = connection.execute("SELECT version_num FROM alembic_version").fetchone()
-    finally:
-        connection.close()
-    assert version == ScriptDirectory.from_config(config).get_current_head()
+
+class TestChain:
+    def test_upgrade_builds_head_with_no_autogenerate_diff(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, isolated_settings: None
+    ) -> None:
+        target = tmp_path / "migrations.db"
+        # If env.py ignored the database_url attribute it would migrate DATABASE_URL instead;
+        # point that at a decoy to make it visible.
+        decoy = tmp_path / "decoy.db"
+        monkeypatch.setenv("DATABASE_URL", f"sqlite+aiosqlite:///{decoy}")
+        config = alembic_config(target)
+        command.upgrade(config, "head")
+        command.check(config)  # raises AutogenerateDiffsDetected when models and chain disagree
+        assert not decoy.exists()
+        assert revision_of(target) == HEAD_REVISION
+
+    def test_the_packaged_revision_tuple_equals_the_chain(self, tmp_path: Path) -> None:
+        script = ScriptDirectory.from_config(alembic_config(tmp_path / "unused.db"))
+        revisions = list(reversed(list(script.walk_revisions())))
+        assert tuple(revision.revision for revision in revisions) == MIGRATION_REVISIONS
+        assert script.get_heads() == [HEAD_REVISION]
+        for previous, revision in itertools.pairwise(revisions):
+            assert revision.down_revision == previous.revision
+
+    def test_user_version_holds_schema_version(self, head_template: Path) -> None:
+        assert query(head_template, "PRAGMA user_version") == [(SCHEMA_VERSION,)]
+
+    def test_downgrade_raises_and_changes_nothing(self, migrated_database: Path) -> None:
+        before = snapshot(migrated_database)
+        with pytest.raises(RuntimeError, match="migrations are never downgraded"):
+            command.downgrade(alembic_config(migrated_database), FIRST_SCHEMA_HEAD)
+        assert snapshot(migrated_database) == before
+
+
+class TestStep3Migration:
+    def test_upgrades_a_seeded_first_schema_database(self, first_schema: Path) -> None:
+        user_tags = query(first_schema, "SELECT sql FROM sqlite_master WHERE name = 'user_tags'")
+        upgrade(first_schema)
+        assert revision_of(first_schema) == HEAD_REVISION
+        for table in ("repositories", "pull_requests", "sync_failures", "pr_user_tags"):
+            assert query(first_schema, f"SELECT COUNT(*) FROM {table}") == [(0,)], table
+        assert "link" not in {
+            row[1] for row in query(first_schema, "PRAGMA table_info(pull_requests)")
+        }
+        # user_tags is kept as it was; the rest matches a fresh build.
+        assert (
+            query(first_schema, "SELECT sql FROM sqlite_master WHERE name = 'user_tags'")
+            == user_tags
+        )
+        assert query(first_schema, "PRAGMA foreign_key_check") == []
+
+    def test_matches_a_fresh_build(self, first_schema: Path, head_template: Path) -> None:
+        upgrade(first_schema)
+        assert schema_of(first_schema) == schema_of(head_template)
+        assert query(
+            first_schema, "SELECT name, sql FROM sqlite_master WHERE type = 'view' ORDER BY name"
+        ) == query(
+            head_template, "SELECT name, sql FROM sqlite_master WHERE type = 'view' ORDER BY name"
+        )
+
+    def test_upgrades_a_scratch_copy_of_the_tracked_file(self, tmp_path: Path) -> None:
+        tracked_digest = digest(TRACKED)
+        copy = tmp_path / "tracked-copy.db"
+        shutil.copyfile(TRACKED, copy)
+        assert revision_of(copy) == FIRST_SCHEMA_HEAD
+        upgrade(copy)
+        assert revision_of(copy) == HEAD_REVISION
+        assert query(copy, "PRAGMA integrity_check") == [("ok",)]
+        assert query(copy, "PRAGMA foreign_key_check") == []
+        assert query(copy, "PRAGMA user_version") == [(SCHEMA_VERSION,)]
+        assert digest(TRACKED) == tracked_digest
+
+    @pytest.mark.parametrize(
+        ("insert", "held"),
+        [
+            pytest.param(
+                "INSERT INTO user_tags (name, created_at) VALUES ('keep', '2026-01-01 00:00:00')",
+                "user_tags 1, pr_user_tags 0",
+                id="user_tags",
+            ),
+            pytest.param(
+                # Foreign keys are off on this connection: a link whose tag row is missing.
+                "INSERT INTO pr_user_tags (pr_id, user_tag_id) VALUES (1, 99)",
+                "user_tags 0, pr_user_tags 1",
+                id="pr_user_tags",
+            ),
+        ],
+    )
+    def test_aborts_while_a_tag_table_holds_rows(
+        self, first_schema: Path, insert: str, held: str
+    ) -> None:
+        with closing(sqlite3.connect(first_schema)) as connection, connection:
+            connection.execute(insert)
+        before = snapshot(first_schema)
+        with pytest.raises(RuntimeError, match=rf"tag rows would be lost \({held}\)"):
+            upgrade(first_schema)
+        assert snapshot(first_schema) == before
+
+
+class TestOneTransaction:
+    def test_a_failure_in_the_second_revision_applies_neither(
+        self, first_schema: Path, tmp_path: Path
+    ) -> None:
+        versions = tmp_path / "versions"
+        write_revision(
+            versions, TEST_REVISION, HEAD_REVISION, "raise RuntimeError('planted failure')"
+        )
+        before = snapshot(first_schema)
+        with pytest.raises(RuntimeError, match="planted failure"):
+            upgrade(first_schema, test_versions=versions)
+        assert snapshot(first_schema) == before
+        assert revision_of(first_schema) == FIRST_SCHEMA_HEAD
+
+    def test_a_foreign_key_violation_fails_the_upgrade_before_commit(
+        self, migrated_database: Path, tmp_path: Path
+    ) -> None:
+        versions = tmp_path / "versions"
+        write_revision(
+            versions,
+            TEST_REVISION,
+            HEAD_REVISION,
+            "op.execute(\"INSERT INTO pr_labels (pr_id, name) VALUES (999, 'orphan')\")",
+        )
+        before = snapshot(migrated_database)
+        with pytest.raises(RuntimeError) as error:
+            upgrade(migrated_database, test_versions=versions)
+        assert "1 foreign-key violations after the upgrade" in refusal(error)
+        assert "('pr_labels', 1, 'pull_requests', 0)" in refusal(error)
+        assert snapshot(migrated_database) == before
+
+    def test_the_migration_connection_has_foreign_keys_off_inside_one_transaction(
+        self, migrated_database: Path, tmp_path: Path
+    ) -> None:
+        versions = tmp_path / "versions"
+        write_revision(
+            versions,
+            TEST_REVISION,
+            HEAD_REVISION,
+            """
+            bind = op.get_bind()
+            dbapi = bind.connection.dbapi_connection
+            foreign_keys = bind.exec_driver_sql("PRAGMA foreign_keys").scalar_one()
+            op.execute(
+                "CREATE TABLE probe (foreign_keys INTEGER, in_transaction INTEGER, "
+                "autocommit INTEGER)"
+            )
+            bind.exec_driver_sql(
+                "INSERT INTO probe VALUES (?, ?, ?)",
+                (foreign_keys, dbapi.in_transaction, dbapi.isolation_level is None),
+            )
+            """,
+        )
+        upgrade(migrated_database, test_versions=versions)
+        assert query(migrated_database, "SELECT * FROM probe") == [(0, 1, 1)]
+
+    @pytest.mark.parametrize(
+        ("foreign_keys", "message"),
+        [
+            pytest.param("ON", "PRAGMA foreign_keys reads 1 after turning it off", id="fk on"),
+            pytest.param("OFF", "already inside a transaction", id="fk off"),
+        ],
+    )
+    def test_a_connection_already_inside_a_transaction_is_refused(
+        self,
+        first_schema: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        foreign_keys: str,
+        message: str,
+    ) -> None:
+        """Planted through env.py's own engine: the DBAPI connect function SQLAlchemy calls."""
+        real_connect = sqlite3.dbapi2.connect
+        planted: list[sqlite3.Connection] = []
+
+        def connect_inside_a_transaction(*args: Any, **kwargs: Any) -> sqlite3.Connection:
+            connection = real_connect(*args, **kwargs)
+            connection.execute(f"PRAGMA foreign_keys={foreign_keys}")
+            connection.execute("BEGIN")
+            planted.append(connection)
+            return connection
+
+        before = snapshot(first_schema)
+        monkeypatch.setattr(sqlite3.dbapi2, "connect", connect_inside_a_transaction)
+        with pytest.raises(RuntimeError) as error:
+            upgrade(first_schema)
+        monkeypatch.undo()
+        assert message in refusal(error)
+        assert len(planted) == 1
+        with pytest.raises(sqlite3.ProgrammingError, match="closed database"):
+            planted[0].execute("SELECT 1")
+        assert snapshot(first_schema) == before
+
+
+def _batch_alter_revision(views_sql: tuple[tuple[str, str], ...] | None) -> str:
+    """A revision that batch-recreates pull_requests; with ``views_sql`` it drops and recreates
+    the views reading it, from that frozen copy, as plan 5.1 requires."""
+    drop = recreate = ""
+    if views_sql is not None:
+        drop = (
+            f"for name in {VIEWS_READING_PULL_REQUESTS!r}:\n    op.execute(f'DROP VIEW {{name}}')\n"
+        )
+        recreate = f"for _name, sql in {views_sql!r}:\n    op.execute(sql)\n"
+    return (
+        drop
+        + "with op.batch_alter_table('pull_requests', recreate='always') as batch:\n"
+        + "    batch.add_column(sa.Column('probe', sa.Integer(), nullable=True))\n"
+        + recreate
+    )
+
+
+def _seed_a_pull_request_with_children(database: Path) -> None:
+    with connect(database) as connection:
+        seed = Seed(connection)
+        repository = seed.repository()
+        author = seed.user("author")
+        reviewer = seed.user("reviewer")
+        pr = seed.pull_request(repository, 13481, author, state="MERGED", merged_at=T0)
+        seed.review(pr, 1, reviewer, "APPROVED")
+        seed.comment(pr, reviewer)
+        seed.comment(pr, seed.user("commenter"))
+        seed.commit(pr, "a" * 40, author)
+        connection.exec_driver_sql(f"INSERT INTO pr_labels (pr_id, name) VALUES ({pr}, 'bug')")
+        connection.exec_driver_sql(
+            "INSERT INTO pr_files (pr_id, ordinal, path, change_type, additions, deletions) "
+            f"VALUES ({pr}, 0, 'a.js', 'MODIFIED', 1, 1)"
+        )
+        connection.exec_driver_sql(
+            "INSERT INTO pr_closing_issues VALUES "
+            f"({pr}, {repository + 1000}, 'prebid/Prebid.js', 1)"
+        )
+        connection.exec_driver_sql(
+            "INSERT INTO user_tags (id, name, created_at) "
+            "VALUES (1, 'kept', '2026-01-01 00:00:00.000000')"
+        )
+        connection.exec_driver_sql(
+            f"INSERT INTO pr_user_tags (pr_id, user_tag_id) VALUES ({pr}, 1)"
+        )
+
+
+CHILD_TABLES = (
+    "pr_labels",
+    "pr_reviews",
+    "pr_comments",
+    "pr_commits",
+    "pr_files",
+    "pr_closing_issues",
+    "pr_user_tags",
+)
+
+
+class TestBatchAlter:
+    def test_a_batch_alter_of_pull_requests_keeps_child_rows_and_constraints(
+        self, migrated_database: Path, tmp_path: Path, head_template: Path
+    ) -> None:
+        _seed_a_pull_request_with_children(migrated_database)
+        children = {
+            table: query(migrated_database, f"SELECT * FROM {table}") for table in CHILD_TABLES
+        }
+        view_rows = {
+            view: query(migrated_database, f"SELECT * FROM {view}")
+            for view in VIEWS_READING_PULL_REQUESTS
+        }
+        constraints = named_constraints(migrated_database, "pull_requests")
+        indexes = query(migrated_database, PULL_REQUEST_INDEXES)
+        assert all(children.values())
+        assert all(view_rows.values())
+        step3 = ScriptDirectory.from_config(alembic_config(head_template)).get_revision(
+            HEAD_REVISION
+        )
+        frozen = tuple(
+            (name, sql) for name, sql in step3.module.VIEWS if name in VIEWS_READING_PULL_REQUESTS
+        )
+        assert len(frozen) == len(VIEWS_READING_PULL_REQUESTS)
+        versions = tmp_path / "versions"
+        write_revision(versions, TEST_REVISION, HEAD_REVISION, _batch_alter_revision(frozen))
+
+        upgrade(migrated_database, test_versions=versions)
+
+        assert revision_of(migrated_database) == TEST_REVISION
+        assert "probe" in {
+            row[1] for row in query(migrated_database, "PRAGMA table_info(pull_requests)")
+        }
+        assert {
+            table: query(migrated_database, f"SELECT * FROM {table}") for table in CHILD_TABLES
+        } == children
+        assert {
+            view: query(migrated_database, f"SELECT * FROM {view}")
+            for view in VIEWS_READING_PULL_REQUESTS
+        } == view_rows
+        # Batch recreate keeps named CHECKs (gap 72), the named foreign keys, and the indexes.
+        assert named_constraints(migrated_database, "pull_requests") == constraints
+        assert {
+            "ck_pull_requests_state",
+            "ck_pull_requests_merged_at_iff_merged",
+        } <= constraints.keys()
+        assert query(migrated_database, PULL_REQUEST_INDEXES) == indexes
+
+    def test_a_batch_alter_under_a_view_fails_and_applies_nothing(
+        self, migrated_database: Path, tmp_path: Path
+    ) -> None:
+        """legacy_alter_table stays off, so a view left in place fails the migration (gap 71)."""
+        versions = tmp_path / "versions"
+        write_revision(versions, TEST_REVISION, HEAD_REVISION, _batch_alter_revision(None))
+        before = snapshot(migrated_database)
+        with pytest.raises(Exception, match=r"error in view v_\w+"):
+            upgrade(migrated_database, test_versions=versions)
+        assert snapshot(migrated_database) == before
+
+
+class TestRefusals:
+    @pytest.fixture(autouse=True)
+    def tracked_file_unchanged(self) -> Iterator[None]:
+        before = (digest(TRACKED), TRACKED.stat().st_mtime_ns)
+        yield
+        assert (digest(TRACKED), TRACKED.stat().st_mtime_ns) == before
+
+    @pytest.mark.parametrize("spelling", ["absolute", "relative", "dotted", "symlink"])
+    def test_refuses_the_tracked_file(
+        self, spelling: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        if spelling == "absolute":
+            target = TRACKED
+        elif spelling == "relative":
+            monkeypatch.chdir(REPO_ROOT)
+            target = Path("github_activity.db")
+        elif spelling == "dotted":
+            target = REPO_ROOT / "alembic" / ".." / "github_activity.db"
+        else:
+            target = tmp_path / "link.db"
+            target.symlink_to(TRACKED)
+        with pytest.raises(RuntimeError) as error:
+            upgrade(target)
+        assert "refusing to migrate" in refusal(error)
+
+    def test_refuses_the_tracked_file_named_by_database_url(
+        self, monkeypatch: pytest.MonkeyPatch, isolated_settings: None
+    ) -> None:
+        """The spelling gap 73 found: DATABASE_URL, as the documented .env line sets it."""
+        monkeypatch.setenv("DATABASE_URL", f"sqlite+aiosqlite:///{TRACKED}")
+        config = alembic_config(TRACKED)
+        del config.attributes["database_url"]
+        with pytest.raises(RuntimeError) as error:
+            command.upgrade(config, "head")
+        assert "refusing to migrate" in refusal(error)
+
+    def test_refuses_a_hard_link_to_the_tracked_file(
+        self, tmp_path: Path, first_schema: Path
+    ) -> None:
+        """Through a copy of alembic/, whose env.py takes the copy's parent as the checkout."""
+        checkout = tmp_path / "checkout"
+        shutil.copytree(
+            REPO_ROOT / "alembic",
+            checkout / "alembic",
+            ignore=shutil.ignore_patterns("__pycache__"),
+        )
+        shutil.copyfile(first_schema, checkout / "github_activity.db")
+        linked = tmp_path / "linked.db"
+        linked.hardlink_to(checkout / "github_activity.db")
+        before = snapshot(linked)
+        with pytest.raises(RuntimeError) as error:
+            upgrade(linked, script_location=checkout / "alembic")
+        assert "refusing to migrate" in refusal(error)
+        assert snapshot(linked) == before
+        # Positive control: the copied environment migrates a file that is not the tracked one.
+        other = tmp_path / "other.db"
+        shutil.copyfile(first_schema, other)
+        upgrade(other, script_location=checkout / "alembic")
+        assert revision_of(other) == HEAD_REVISION
+
+    def test_the_alembic_command_refuses_the_tracked_file(self) -> None:
+        result = subprocess.run(
+            [sys.executable, "-m", "alembic", "upgrade", "head"],
+            cwd=REPO_ROOT,
+            env={"PATH": "", "DATABASE_URL": "sqlite+aiosqlite:///./github_activity.db"},
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        assert result.returncode != 0
+        assert "MigrationRefused: refusing to migrate" in result.stderr
+
+    def test_offline_mode_is_refused(self, tmp_path: Path) -> None:
+        target = tmp_path / "offline.db"
+        with pytest.raises(RuntimeError) as error:
+            command.upgrade(alembic_config(target), "head", sql=True)
+        assert "offline --sql mode is not supported" in refusal(error)
+        assert not target.exists()
+
+    @pytest.mark.parametrize(
+        ("url", "message"),
+        [
+            ("postgresql://localhost/activity", "only SQLite is supported, not 'postgresql'"),
+            ("sqlite+aiosqlite:///activity.db?mode=ro", "query parameters are not supported"),
+            (
+                "sqlite+aiosqlite:///file:github_activity.db?uri=true",
+                "query parameters are not supported",
+            ),
+            (
+                "sqlite+aiosqlite:///file:github_activity.db",
+                "SQLite URI filenames are not supported",
+            ),
+        ],
+    )
+    def test_refuses_urls_it_does_not_model(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, url: str, message: str
+    ) -> None:
+        monkeypatch.chdir(tmp_path)
+        config = alembic_config(tmp_path / "unused.db")
+        config.attributes["database_url"] = url
+        with pytest.raises(RuntimeError) as error:
+            command.upgrade(config, "head")
+        assert message in refusal(error)
+        assert list(tmp_path.iterdir()) == []
+
+
+def test_head_tables_are_the_models_tables(head_template: Path) -> None:
+    assert table_names(head_template) == set(Base.metadata.tables) | {"alembic_version"}

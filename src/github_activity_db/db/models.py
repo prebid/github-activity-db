@@ -1,254 +1,376 @@
-"""SQLAlchemy ORM models for GitHub Activity DB."""
+"""ORM models: the head schema of redesign plan 5.1, except ``issues`` and ``issue_labels``.
+
+Every table, column, and constraint here must match the newest migration; the views are
+created by migrations only (``alembic/versions``), never declared here, and the data dictionary
+(``docs/data-dictionary.md``) says which columns consumers may rely on.
+
+Names: indexes, CHECK constraints, and foreign keys are named by ``NAMING_CONVENTION``, which
+alembic also applies to every migration's operations, so it must not change. Unique constraints
+carry explicit ``uq_`` names and stay out of the convention, which would otherwise report the
+unnamed ``UNIQUE`` of the kept ``user_tags`` table to ``alembic check``.
+
+References to ``repositories`` and ``pull_requests`` cascade on delete; references to
+``github_users`` are set null, so removing an account row never removes what it authored.
+"""
+
+from __future__ import annotations
 
 from datetime import datetime
-from enum import Enum
+from typing import Final
 
 from sqlalchemy import (
-    Column,
-    DateTime,
+    BigInteger,
+    CheckConstraint,
     ForeignKey,
     Index,
+    MetaData,
     String,
-    Table,
     Text,
     UniqueConstraint,
-    func,
 )
-from sqlalchemy.orm import (
-    DeclarativeBase,
-    Mapped,
-    mapped_column,
-    relationship,
-)
-from sqlalchemy.types import JSON
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+
+from github_activity_db.db.types import UtcDateTime, utc_now
+
+NAMING_CONVENTION: Final = {
+    "ix": "ix_%(table_name)s_%(column_0_N_name)s",
+    "ck": "ck_%(table_name)s_%(constraint_name)s",
+    "fk": "fk_%(table_name)s_%(column_0_N_name)s_%(referred_table_name)s",
+}
+
+ITEM_KINDS: Final = ("pull_request", "issue")
+
+
+def _one_of(column: str, values: tuple[str, ...]) -> str:
+    """CHECK text restricting ``column`` to ``values``."""
+    return f"{column} IN ({', '.join(repr(value) for value in values)})"
 
 
 class Base(DeclarativeBase):
-    """Base class for all SQLAlchemy models."""
-
-    pass
+    metadata = MetaData(naming_convention=NAMING_CONVENTION)
 
 
-class PRState(str, Enum):
-    """Pull request state enum."""
-
-    OPEN = "open"
-    MERGED = "merged"
-    CLOSED = "closed"  # closed without merge
-
-
-class SyncFailureStatus(str, Enum):
-    """Status of a sync failure for retry tracking."""
-
-    PENDING = "pending"  # Waiting for retry
-    RESOLVED = "resolved"  # Successfully retried
-    PERMANENT = "permanent"  # Max retries exceeded or non-retryable error
-
-
-# ------------------------------------------------------------------------------
-# Junction table for many-to-many: PullRequest <-> UserTag
-# ------------------------------------------------------------------------------
-pr_user_tags = Table(
-    "pr_user_tags",
-    Base.metadata,
-    Column("pr_id", ForeignKey("pull_requests.id", ondelete="CASCADE"), primary_key=True),
-    Column("user_tag_id", ForeignKey("user_tags.id", ondelete="CASCADE"), primary_key=True),
-    Column("created_at", DateTime, default=func.now()),
-)
-
-
-# ------------------------------------------------------------------------------
-# Repository model
-# ------------------------------------------------------------------------------
 class Repository(Base):
-    """Tracked GitHub repository."""
-
     __tablename__ = "repositories"
-
-    id: Mapped[int] = mapped_column(primary_key=True)
-    owner: Mapped[str] = mapped_column(String(100))  # e.g., "prebid"
-    name: Mapped[str] = mapped_column(String(100))  # e.g., "prebid-server"
-    full_name: Mapped[str] = mapped_column(String(200), unique=True)  # "prebid/prebid-server"
-    is_active: Mapped[bool] = mapped_column(default=True)
-    last_synced_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=func.now())
-
-    # Relationships
-    pull_requests: Mapped[list["PullRequest"]] = relationship(
-        back_populates="repository",
-        cascade="all, delete-orphan",
+    __table_args__ = (
+        UniqueConstraint("github_id", name="uq_repositories_github_id"),
+        Index(None, "full_name"),
     )
 
-    def __repr__(self) -> str:
-        return f"<Repository(id={self.id}, full_name='{self.full_name}')>"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    github_id: Mapped[int] = mapped_column(BigInteger)
+    owner: Mapped[str] = mapped_column(Text)
+    name: Mapped[str] = mapped_column(Text)
+    full_name: Mapped[str] = mapped_column(Text)
+    repo_group: Mapped[str] = mapped_column(Text)
+    is_private: Mapped[bool]
+    is_archived: Mapped[bool]
+    default_branch: Mapped[str] = mapped_column(Text)
+    is_tracked: Mapped[bool]
 
 
-# ------------------------------------------------------------------------------
-# PullRequest model
-# ------------------------------------------------------------------------------
+class GitHubUser(Base):
+    __tablename__ = "github_users"
+    __table_args__ = (
+        UniqueConstraint("github_id", name="uq_github_users_github_id"),
+        UniqueConstraint("node_id", name="uq_github_users_node_id"),
+        CheckConstraint(_one_of("type", ("User", "Bot", "Organization", "Mannequin")), name="type"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    github_id: Mapped[int] = mapped_column(BigInteger)
+    node_id: Mapped[str] = mapped_column(Text)
+    login: Mapped[str] = mapped_column(Text)
+    type: Mapped[str] = mapped_column(Text)
+    refreshed_at: Mapped[datetime] = mapped_column(UtcDateTime)
+    deleted_at: Mapped[datetime | None] = mapped_column(UtcDateTime)
+
+
 class PullRequest(Base):
-    """GitHub Pull Request with all tracked fields."""
-
     __tablename__ = "pull_requests"
-
-    # Primary key
-    id: Mapped[int] = mapped_column(primary_key=True)
-
-    # Foreign key to repository
-    repository_id: Mapped[int] = mapped_column(ForeignKey("repositories.id", ondelete="CASCADE"))
-
-    # --------------------------------------------------------------------------
-    # Immutable fields (set once on creation)
-    # --------------------------------------------------------------------------
-    number: Mapped[int] = mapped_column()
-    link: Mapped[str] = mapped_column(String(500))
-    open_date: Mapped[datetime] = mapped_column(DateTime)
-    submitter: Mapped[str] = mapped_column(String(100))
-
-    # --------------------------------------------------------------------------
-    # Synced fields (updated until merged)
-    # --------------------------------------------------------------------------
-    title: Mapped[str] = mapped_column(String(500))
-    description: Mapped[str | None] = mapped_column(Text, nullable=True)
-    last_update_date: Mapped[datetime] = mapped_column(DateTime)
-    state: Mapped[PRState] = mapped_column(default=PRState.OPEN)
-
-    # Numeric stats
-    files_changed: Mapped[int] = mapped_column(default=0)
-    lines_added: Mapped[int] = mapped_column(default=0)
-    lines_deleted: Mapped[int] = mapped_column(default=0)
-    commits_count: Mapped[int] = mapped_column(default=0)
-
-    # JSON columns for complex data
-    github_labels: Mapped[list[str]] = mapped_column(JSON, default=list)
-    file_changes: Mapped[list[dict[str, str | int]]] = mapped_column(
-        JSON, default=list
-    )  # [{filename, status, additions, deletions, changes}]
-    commits_breakdown: Mapped[list[dict[str, str]]] = mapped_column(
-        JSON, default=list
-    )  # [{date, author}]
-    reviewers: Mapped[list[str]] = mapped_column(JSON, default=list)
-    assignees: Mapped[list[str]] = mapped_column(JSON, default=list)
-    participants: Mapped[dict[str, list[str]]] = mapped_column(
-        JSON, default=dict
-    )  # {user: [actions]}
-
-    # --------------------------------------------------------------------------
-    # Agent-generated fields
-    # --------------------------------------------------------------------------
-    classify_tags: Mapped[str | None] = mapped_column(String(500), nullable=True)
-
-    # --------------------------------------------------------------------------
-    # Merge-only fields (null until merged)
-    # --------------------------------------------------------------------------
-    close_date: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-    merged_by: Mapped[str | None] = mapped_column(String(100), nullable=True)
-    ai_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
-
-    # --------------------------------------------------------------------------
-    # Metadata
-    # --------------------------------------------------------------------------
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=func.now())
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=func.now(), onupdate=func.now())
-
-    # --------------------------------------------------------------------------
-    # Relationships
-    # --------------------------------------------------------------------------
-    repository: Mapped["Repository"] = relationship(back_populates="pull_requests")
-    user_tags: Mapped[list["UserTag"]] = relationship(
-        secondary=pr_user_tags,
-        back_populates="pull_requests",
+    __table_args__ = (
+        UniqueConstraint("repository_id", "number", name="uq_pull_requests_repository_id_number"),
+        UniqueConstraint("github_id", name="uq_pull_requests_github_id"),
+        CheckConstraint(_one_of("state", ("OPEN", "MERGED")), name="state"),
+        CheckConstraint(
+            "(state = 'MERGED') = (merged_at IS NOT NULL)", name="merged_at_iff_merged"
+        ),
+        Index(None, "repository_id", "state"),
+        Index(None, "repository_id", "merged_at"),
+        Index(None, "author_id"),
+        Index(None, "merged_by_id"),
     )
 
-    # Unique constraint: one PR number per repo
-    __table_args__ = (UniqueConstraint("repository_id", "number", name="uq_repo_pr_number"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    repository_id: Mapped[int] = mapped_column(ForeignKey("repositories.id", ondelete="CASCADE"))
+    number: Mapped[int]
+    github_id: Mapped[int] = mapped_column(BigInteger)
+    node_id: Mapped[str] = mapped_column(Text)
+    state: Mapped[str] = mapped_column(Text)
+    is_draft: Mapped[bool]
+    title: Mapped[str] = mapped_column(Text)
+    body: Mapped[str] = mapped_column(Text)
+    author_id: Mapped[int | None] = mapped_column(
+        ForeignKey("github_users.id", ondelete="SET NULL")
+    )
+    author_association: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime)
+    merged_at: Mapped[datetime | None] = mapped_column(UtcDateTime)
+    merged_by_id: Mapped[int | None] = mapped_column(
+        ForeignKey("github_users.id", ondelete="SET NULL")
+    )
+    base_ref: Mapped[str] = mapped_column(Text)
+    targets_default_branch: Mapped[bool]
+    is_cross_repository: Mapped[bool]
+    additions: Mapped[int]
+    deletions: Mapped[int]
+    changed_files: Mapped[int]
+    commits_total: Mapped[int]
+    files_total: Mapped[int]
+    reviews_total: Mapped[int]
+    comments_total: Mapped[int]
+    labels_total: Mapped[int]
+    closing_issues_total: Mapped[int]
+    github_updated_at: Mapped[datetime] = mapped_column(UtcDateTime)
+    hydrated_at: Mapped[datetime] = mapped_column(UtcDateTime)
+    hydration_version: Mapped[int]
 
-    def __repr__(self) -> str:
-        return f"<PullRequest(id={self.id}, repo='{self.repository_id}', number={self.number})>"
 
-    @property
-    def is_open(self) -> bool:
-        """Check if PR is still open."""
-        return self.state == PRState.OPEN
+class PullRequestLabel(Base):
+    __tablename__ = "pr_labels"
 
-    @property
-    def is_merged(self) -> bool:
-        """Check if PR was merged."""
-        return self.state == PRState.MERGED
+    pr_id: Mapped[int] = mapped_column(
+        ForeignKey("pull_requests.id", ondelete="CASCADE"), primary_key=True
+    )
+    name: Mapped[str] = mapped_column(Text, primary_key=True)
 
 
-# ------------------------------------------------------------------------------
-# UserTag model
-# ------------------------------------------------------------------------------
+class PullRequestReview(Base):
+    __tablename__ = "pr_reviews"
+    __table_args__ = (
+        UniqueConstraint("github_id", name="uq_pr_reviews_github_id"),
+        CheckConstraint(
+            _one_of("state", ("APPROVED", "CHANGES_REQUESTED", "COMMENTED", "DISMISSED")),
+            name="state",
+        ),
+        Index(None, "pr_id"),
+        Index(None, "reviewer_id"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    github_id: Mapped[int] = mapped_column(BigInteger)
+    pr_id: Mapped[int] = mapped_column(ForeignKey("pull_requests.id", ondelete="CASCADE"))
+    reviewer_id: Mapped[int | None] = mapped_column(
+        ForeignKey("github_users.id", ondelete="SET NULL")
+    )
+    state: Mapped[str] = mapped_column(Text)
+
+
+class PullRequestComment(Base):
+    """A conversation comment: its id and author, never its text (D24)."""
+
+    __tablename__ = "pr_comments"
+    __table_args__ = (
+        UniqueConstraint("github_id", name="uq_pr_comments_github_id"),
+        Index(None, "pr_id"),
+        Index(None, "author_id"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    github_id: Mapped[int] = mapped_column(BigInteger)
+    pr_id: Mapped[int] = mapped_column(ForeignKey("pull_requests.id", ondelete="CASCADE"))
+    author_id: Mapped[int | None] = mapped_column(
+        ForeignKey("github_users.id", ondelete="SET NULL")
+    )
+
+
+class PullRequestCommit(Base):
+    __tablename__ = "pr_commits"
+    __table_args__ = (Index(None, "author_id"),)
+
+    pr_id: Mapped[int] = mapped_column(
+        ForeignKey("pull_requests.id", ondelete="CASCADE"), primary_key=True
+    )
+    sha: Mapped[str] = mapped_column(Text, primary_key=True)
+    author_id: Mapped[int | None] = mapped_column(
+        ForeignKey("github_users.id", ondelete="SET NULL")
+    )
+    author_name: Mapped[str | None] = mapped_column(Text)
+    author_email: Mapped[str | None] = mapped_column(Text)
+    authored_at: Mapped[datetime] = mapped_column(UtcDateTime)
+
+
+class PullRequestFile(Base):
+    """One entry of the file list, keyed by position: a path can appear twice."""
+
+    __tablename__ = "pr_files"
+
+    pr_id: Mapped[int] = mapped_column(
+        ForeignKey("pull_requests.id", ondelete="CASCADE"), primary_key=True
+    )
+    ordinal: Mapped[int] = mapped_column(primary_key=True)
+    path: Mapped[str] = mapped_column(Text)
+    change_type: Mapped[str] = mapped_column(Text)
+    additions: Mapped[int]
+    deletions: Mapped[int]
+
+
+class PullRequestClosingIssue(Base):
+    """An issue the pull request closes, possibly in a repository the database does not track."""
+
+    __tablename__ = "pr_closing_issues"
+    __table_args__ = (Index(None, "issue_repo_github_id", "issue_number"),)
+
+    pr_id: Mapped[int] = mapped_column(
+        ForeignKey("pull_requests.id", ondelete="CASCADE"), primary_key=True
+    )
+    issue_repo_github_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    issue_repo_full_name: Mapped[str] = mapped_column(Text)
+    issue_number: Mapped[int] = mapped_column(primary_key=True)
+
+
+class AutomationAccount(Base):
+    """A ``[automation].accounts`` entry of tracking.toml, replaced at the start of every run."""
+
+    __tablename__ = "automation_accounts"
+    __table_args__ = (UniqueConstraint("github_id", name="uq_automation_accounts_github_id"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    github_id: Mapped[int] = mapped_column(BigInteger)
+    login: Mapped[str] = mapped_column(Text)
+    reason: Mapped[str] = mapped_column(Text)
+
+
+class AutomationEmail(Base):
+    """A ``[automation].emails`` entry of tracking.toml, stored lowercase."""
+
+    __tablename__ = "automation_emails"
+    __table_args__ = (
+        UniqueConstraint("email", name="uq_automation_emails_email"),
+        CheckConstraint("email = lower(email)", name="email_lowercase"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    email: Mapped[str] = mapped_column(Text)
+    reason: Mapped[str] = mapped_column(Text)
+
+
+class SyncRun(Base):
+    __tablename__ = "sync_runs"
+    __table_args__ = (
+        CheckConstraint(
+            _one_of("status", ("running", "complete", "time_limited", "failed", "aborted")),
+            name="status",
+        ),
+        CheckConstraint(
+            _one_of('"trigger"', ("schedule", "workflow_dispatch", "manual")), name="trigger"
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    started_at: Mapped[datetime] = mapped_column(UtcDateTime)
+    deadline_at: Mapped[datetime | None] = mapped_column(UtcDateTime)
+    finished_at: Mapped[datetime | None] = mapped_column(UtcDateTime)
+    status: Mapped[str] = mapped_column(Text)
+    exit_code: Mapped[int | None]
+    trigger: Mapped[str] = mapped_column(Text)
+    code_version: Mapped[str] = mapped_column(Text)
+    graphql_points: Mapped[int]
+    rest_calls: Mapped[int]
+    items_planned: Mapped[int]
+    items_hydrated: Mapped[int]
+    items_deleted: Mapped[int]
+    failures: Mapped[int]
+    # JSON text: the repository, the approved N, the candidate count, and whether it ran.
+    deletions_approved: Mapped[str | None] = mapped_column(Text)
+    halt_reason: Mapped[str | None] = mapped_column(Text)
+
+
+class RepoSyncState(Base):
+    __tablename__ = "repo_sync_state"
+    __table_args__ = (
+        CheckConstraint(
+            _one_of(
+                "last_outcome",
+                ("complete", "time_limited", "failed", "incomplete_index", "halted", "untracked"),
+            ),
+            name="last_outcome",
+        ),
+        Index(None, "last_run_id"),
+    )
+
+    repository_id: Mapped[int] = mapped_column(
+        ForeignKey("repositories.id", ondelete="CASCADE"), primary_key=True
+    )
+    last_index_started_at: Mapped[datetime | None] = mapped_column(UtcDateTime)
+    index_pr_total: Mapped[int | None]
+    index_issue_total: Mapped[int | None]
+    last_success_at: Mapped[datetime | None] = mapped_column(UtcDateTime)
+    last_run_id: Mapped[int] = mapped_column(ForeignKey("sync_runs.id"))
+    last_outcome: Mapped[str] = mapped_column(Text)
+    halt_reason: Mapped[str | None] = mapped_column(Text)
+
+
+class SyncPending(Base):
+    """An item a time-limited run planned but did not reach."""
+
+    __tablename__ = "sync_pending"
+    __table_args__ = (
+        CheckConstraint(_one_of("item_kind", ITEM_KINDS), name="item_kind"),
+        Index(None, "run_id"),
+    )
+
+    repository_id: Mapped[int] = mapped_column(
+        ForeignKey("repositories.id", ondelete="CASCADE"), primary_key=True
+    )
+    item_kind: Mapped[str] = mapped_column(Text, primary_key=True)
+    number: Mapped[int] = mapped_column(primary_key=True)
+    run_id: Mapped[int] = mapped_column(ForeignKey("sync_runs.id"))
+
+
+class SyncFailure(Base):
+    __tablename__ = "sync_failures"
+    __table_args__ = (
+        UniqueConstraint(
+            "repository_id",
+            "item_kind",
+            "number",
+            name="uq_sync_failures_repository_id_item_kind_number",
+        ),
+        CheckConstraint(_one_of("item_kind", ITEM_KINDS), name="item_kind"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    repository_id: Mapped[int] = mapped_column(ForeignKey("repositories.id", ondelete="CASCADE"))
+    item_kind: Mapped[str] = mapped_column(Text)
+    number: Mapped[int]
+    attempts: Mapped[int]
+    last_error: Mapped[str] = mapped_column(Text)
+    first_failed_at: Mapped[datetime] = mapped_column(UtcDateTime)
+    last_failed_at: Mapped[datetime] = mapped_column(UtcDateTime)
+
+
 class UserTag(Base):
-    """User-created tags for PRs (applied via CLI)."""
+    """Kept from the first schema with its nullability (D17); no producer writes it yet."""
 
     __tablename__ = "user_tags"
 
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(100), unique=True)
-    description: Mapped[str | None] = mapped_column(String(500), nullable=True)
-    color: Mapped[str | None] = mapped_column(String(7), nullable=True)  # hex color e.g., "#ff0000"
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=func.now())
+    description: Mapped[str | None] = mapped_column(String(500))
+    color: Mapped[str | None] = mapped_column(String(7))
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utc_now)
 
-    # Relationships
-    pull_requests: Mapped[list["PullRequest"]] = relationship(
-        secondary=pr_user_tags,
-        back_populates="user_tags",
+
+class PullRequestUserTag(Base):
+    """Recreated empty by the Step 3 migration, pointing at the new ``pull_requests`` (D17)."""
+
+    __tablename__ = "pr_user_tags"
+
+    pr_id: Mapped[int] = mapped_column(
+        ForeignKey("pull_requests.id", ondelete="CASCADE"), primary_key=True
     )
-
-    def __repr__(self) -> str:
-        return f"<UserTag(id={self.id}, name='{self.name}')>"
-
-
-# ------------------------------------------------------------------------------
-# SyncFailure model
-# ------------------------------------------------------------------------------
-class SyncFailure(Base):
-    """Track failed PR ingestion attempts for retry.
-
-    Records failures during sync operations, enabling:
-    - Manual retry via `ghactivity sync retry`
-    - Automatic retry on subsequent syncs
-    - Failure analysis and metrics
-    """
-
-    __tablename__ = "sync_failures"
-
-    id: Mapped[int] = mapped_column(primary_key=True)
-
-    # Foreign key to repository
-    repository_id: Mapped[int] = mapped_column(ForeignKey("repositories.id", ondelete="CASCADE"))
-
-    # PR that failed (set for PR-level failures)
-    pr_number: Mapped[int] = mapped_column()
-
-    # Error details
-    error_message: Mapped[str] = mapped_column(Text)
-    error_type: Mapped[str] = mapped_column(String(100))  # e.g., "GitHubAPIError", "ValueError"
-
-    # Retry tracking
-    retry_count: Mapped[int] = mapped_column(default=0)
-    status: Mapped[SyncFailureStatus] = mapped_column(default=SyncFailureStatus.PENDING)
-
-    # Timestamps
-    failed_at: Mapped[datetime] = mapped_column(DateTime)
-    resolved_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=func.now())
-
-    # Relationships
-    repository: Mapped["Repository"] = relationship()
-
-    # Unique constraint: only one pending failure per repo+PR
-    # This allows multiple resolved/permanent records for history
-    __table_args__ = (
-        UniqueConstraint("repository_id", "pr_number", "status", name="uq_repo_pr_pending_status"),
-        Index("ix_sync_failures_status", "status"),
-        Index("ix_sync_failures_repository_id", "repository_id"),
+    user_tag_id: Mapped[int] = mapped_column(
+        ForeignKey("user_tags.id", ondelete="CASCADE"), primary_key=True
     )
-
-    def __repr__(self) -> str:
-        return (
-            f"<SyncFailure(id={self.id}, repo_id={self.repository_id}, "
-            f"pr={self.pr_number}, status={self.status.value})>"
-        )
+    created_at: Mapped[datetime | None] = mapped_column(UtcDateTime, default=utc_now)

@@ -94,7 +94,9 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**/*.py" = ["S101", "S105", "S106", "S603"]  # assert, test tokens, fixed-argv subprocesses
+# assert, test tokens, fixed-argv subprocesses, and SQL naming literal tables (identifiers
+# cannot be bound as parameters)
+"tests/**/*.py" = ["S101", "S105", "S106", "S603", "S608"]
 "scripts/check_junit.py" = ["S314"]  # parses the report pytest wrote earlier in the same job
 "scripts/check_query_lock.py" = ["S603"]  # runs git with a fixed argument list
 
