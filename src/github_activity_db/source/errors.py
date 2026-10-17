@@ -12,8 +12,8 @@ By what the caller does next:
   raised, and the caller fails the items waiting on that account.
 - ``DeadlineReached``: the run stops issuing requests and drains (redesign plan 5.3 step 4).
 
-``RequestFailedError`` is internal: the transport raises it after its retries, and the operations
-turn it into one of the above.
+``RequestFailedError``: the transport raises it after its retries. The operations turn it into one
+of the above; a caller of ``GitHubSource.transport`` handles it itself.
 """
 
 from __future__ import annotations
@@ -26,7 +26,10 @@ class SourceError(Exception):
 
 
 class DeadlineReached(SourceError):
-    """A request, or a wait before one, would run past the ``--max-minutes`` deadline."""
+    """A request would start, or a wait would end, at or after the ``--max-minutes`` deadline.
+
+    A request already in flight is not cut short; the HTTP timeouts bound it.
+    """
 
     def __init__(self, deadline: datetime) -> None:
         super().__init__(f"deadline {deadline.isoformat()} reached")
@@ -41,7 +44,9 @@ class FatalSourceError(SourceError):
 
 
 class Unauthorized(FatalSourceError):
-    """GitHub answered 401: the credentials are missing, expired, or revoked."""
+    """The credentials do not work: GitHub answered 401, a credential request (an App
+    installation-token mint) failed without a rate-limit signal, or the auth strategy rejected
+    its credentials before any request."""
 
 
 class Forbidden(FatalSourceError):
@@ -83,6 +88,14 @@ class ServerError(RequestFailedError):
 
 class RequestTooHeavy(RequestFailedError):
     """GitHub timed out or hit a resource limit on the request; a smaller request may pass."""
+
+
+class UnattributedErrors(RequestFailedError):
+    """GitHub reported an error outside every item of a batch or continuation request.
+
+    No single item can take it, so the request counts as failed: it is split down to single
+    items, which then fail on their own.
+    """
 
 
 class LookupShapeError(SourceError):
@@ -247,7 +260,8 @@ class ItemChangedDuringRead(InvariantError):
 
 
 class PagingStalled(InvariantError):
-    """A page reported a next page without a new cursor; following it would never end."""
+    """A page reported a next page without progress (no new cursor, or no entries); following it
+    could never end."""
 
     def __init__(self, number: int, connection: str, cursor: str | None) -> None:
         super().__init__(number, f"{connection}: next page without a new cursor ({cursor!r})")
@@ -262,6 +276,15 @@ class DuplicateEntry(InvariantError):
         super().__init__(number, f"{connection}: {key!r} listed twice")
         self.connection = connection
         self.key = key
+
+
+class MergeStateMismatch(InvariantError):
+    """``state`` and ``mergedAt`` disagree: a merged pull request has a merge time, others none."""
+
+    def __init__(self, number: int, state: str, merged: bool) -> None:
+        super().__init__(number, f"state {state} with mergedAt {'set' if merged else 'null'}")
+        self.state = state
+        self.merged = merged
 
 
 class NullEntry(InvariantError):

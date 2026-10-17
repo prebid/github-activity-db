@@ -41,6 +41,10 @@ async def _lookup(transport: Transport, batch: list[str]) -> UserLookup:
     nodes = result.data.get("nodes")
     if not isinstance(nodes, list) or len(nodes) != len(batch):
         return _all_failed(batch, LookupShapeError(f"{len(batch)} ids, nodes {nodes!r:.200}"))
+    stray = [error for error in result.errors if error.path[:1] != ("nodes",)]
+    if stray:
+        # An error outside every node cannot be pinned on one id.
+        return _all_failed(batch, LookupShapeError(f"errors outside the nodes: {stray[0]}"))
     accounts: dict[str, Account | None] = {}
     failed: dict[str, UserLookupFailed] = {}
     for index, (node_id, raw) in enumerate(zip(batch, nodes, strict=True)):
@@ -56,6 +60,9 @@ def _account(
     node_id: str, raw: Any, errors: tuple[GraphQLError, ...]
 ) -> Account | None | UserLookupFailed:
     if raw is None:
+        # None means deleted (D28) only when GitHub says NOT_FOUND; an unexplained null fails.
+        if not errors:
+            return _failed(node_id, "null node without an error")
         if any(error.type != "NOT_FOUND" for error in errors):
             return _failed(node_id, f"{errors[0].type}: {errors[0].message}")
         return None

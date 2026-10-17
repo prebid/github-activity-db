@@ -7,7 +7,8 @@ version by editing its hash.
 
 Usage: check_query_lock.py --base <git ref> [--lock tests/query_versions.json]
 
-Run from the repository root. Uses only the standard library, so it runs with ``python -I -S``.
+Run anywhere inside the repository; paths are taken from its root. Uses only the standard
+library, so it runs with ``python -I -S``.
 
 Exit 0 when every entry at <ref> is unchanged (new entries are fine, and so is a lock file that
 does not exist at <ref>); 1 when an entry was changed or removed (deleting the lock removes them
@@ -43,8 +44,8 @@ def problems(base: dict[str, str], current: dict[str, str]) -> list[str]:
     return found
 
 
-def _git(git: str, *args: str) -> str:
-    result = subprocess.run([git, *args], capture_output=True, text=True, check=False)
+def _git(git: str, *args: str, cwd: Path | None = None) -> str:
+    result = subprocess.run([git, *args], capture_output=True, text=True, check=False, cwd=cwd)
     if result.returncode != 0:
         raise CannotCheck(f"git {' '.join(args)} failed: {result.stderr.strip()}")
     return result.stdout
@@ -53,7 +54,7 @@ def _git(git: str, *args: str) -> str:
 def _entries(text: str, where: str) -> dict[str, str]:
     try:
         entries = json.loads(text)
-    except json.JSONDecodeError as e:
+    except ValueError as e:  # JSONDecodeError, and an integer past Python's digit limit
         raise CannotCheck(f"{where} is not JSON: {e}") from e
     if not isinstance(entries, dict) or not all(
         isinstance(key, str) and isinstance(value, str) for key, value in entries.items()
@@ -68,15 +69,17 @@ def check(base_ref: str, lock: str) -> int:
         raise CannotCheck("git is not on PATH")
     if PurePosixPath(lock).is_absolute() or ".." in PurePosixPath(lock).parts:
         raise CannotCheck(f"--lock {lock} must be a path relative to the repository root")
+    # Every path is taken from the repository root, wherever the check runs from.
+    root = Path(_git(git, "rev-parse", "--show-toplevel").strip())
     try:
-        _git(git, "rev-parse", "--verify", "--quiet", f"{base_ref}^{{commit}}")
+        _git(git, "rev-parse", "--verify", "--quiet", f"{base_ref}^{{commit}}", cwd=root)
     except CannotCheck as e:
         raise CannotCheck(f"{base_ref} is not a commit; fetch the base branch first") from e
-    if not _git(git, "ls-tree", "--name-only", base_ref, "--", lock).strip():
+    if not _git(git, "ls-tree", "--name-only", base_ref, "--", lock, cwd=root).strip():
         print(f"{lock} does not exist at {base_ref}; nothing to compare")
         return 0
-    base = _entries(_git(git, "show", f"{base_ref}:{lock}"), f"{lock} at {base_ref}")
-    path = Path(lock)
+    base = _entries(_git(git, "show", f"{base_ref}:{lock}", cwd=root), f"{lock} at {base_ref}")
+    path = root / lock
     current = _entries(path.read_text(), lock) if path.exists() else {}
     found = problems(base, current)
     for problem in found:

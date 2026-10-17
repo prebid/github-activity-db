@@ -32,7 +32,9 @@ from tests.source.recordings import (
     whole_stamp,
 )
 
-RATE_LIMIT = {"cost": 1, "remaining": 4900, "resetAt": "2099-01-01T00:00:00Z"}
+# The reading every replayed GraphQL response carries: its window resets an hour after the test
+# clock starts (conftest.START), as GitHub's do, so a limit without a reset header waits for it.
+RATE_LIMIT = {"cost": 1, "remaining": 4900, "resetAt": "2026-10-17T13:00:00Z"}
 
 
 @dataclass(frozen=True)
@@ -352,7 +354,8 @@ def _loaded_units() -> list[Unit]:
 def synthetic(name: str, *, headers: dict[str, str] | None = None) -> httpx.Response:
     """A response built from ``tests/fixtures/source/synthetic/<name>.json``.
 
-    Each file names its ``source``: GitHub's documented shape, or the recorded unit it modifies.
+    Each file names its ``source``: GitHub's documentation, a dated live observation, or a
+    construction for a case GitHub does not document.
     ``headers`` add to or replace the file's headers (a reset time relative to the test clock).
     """
     spec = json.loads((SYNTHETIC / f"{name}.json").read_text())

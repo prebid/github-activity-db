@@ -16,6 +16,7 @@ from tests.source.recordings import (
     RECORDED,
     Unit,
     canonical_batch,
+    compare_key,
     expected_overflow_stamp,
     expected_pull_request_stamp,
     overflow_stamp,
@@ -167,6 +168,58 @@ def test_the_replay_refuses_a_continuation_with_an_unbound_variable() -> None:
     query = documents.overflow_continuation([documents.CONNECTIONS_BY_FIELD["commits"]])
     payload = {"query": query, "variables": {"id0": "PR_a", "after0": "x", "id1": "PR_b"}}
     assert "variables" in _refused(Replay.from_fixtures(), payload)
+
+
+def test_the_replay_refuses_batch_aliases_out_of_order() -> None:
+    query = documents.pull_request_batch(2)
+    first = "p0: pullRequest(number: $n0) { ...PullRequestFields }"
+    second = "p1: pullRequest(number: $n1) { ...PullRequestFields }"
+    query = query.replace(f"{first} {second}", f"{second} {first}")
+    assert query.index("p1:") < query.index("p0:")
+    payload = {
+        "query": query,
+        "variables": {"owner": "prebid", "name": "Prebid.js", "n0": 13481, "n1": 15724},
+    }
+    assert "bind" in _refused(Replay.from_fixtures(), payload)
+
+
+def test_the_replay_refuses_a_continuation_reading_another_alias_id() -> None:
+    connections = [documents.CONNECTIONS_BY_FIELD["commits"]] * 2
+    query = documents.overflow_continuation(connections).replace(
+        "o1_commits: node(id: $id1)", "o1_commits: node(id: $id0)"
+    )
+    payload = {
+        "query": query,
+        "variables": {"id0": "PR_a", "after0": "x", "id1": "PR_b", "after1": "y"},
+    }
+    assert "binds" in _refused(Replay.from_fixtures(), payload)
+
+
+def test_the_replay_refuses_a_continuation_declaring_an_unused_alias() -> None:
+    query = documents.overflow_continuation([documents.CONNECTIONS_BY_FIELD["commits"]]).replace(
+        "$id0: ID! $after0: String!", "$id0: ID! $after0: String! $id1: ID! $after1: String!"
+    )
+    payload = {"query": query, "variables": {"id0": "PR_a", "after0": "x"}}
+    assert "declarations" in _refused(Replay.from_fixtures(), payload)
+
+
+def test_the_replay_refuses_a_request_it_has_no_unit_for() -> None:
+    payload = {
+        "query": documents.pull_request_batch(1),
+        "variables": {"owner": "prebid", "name": "Prebid.js", "n0": 1},
+    }
+    assert "no pull_request unit" in _refused(Replay.from_fixtures(), payload)
+
+
+@pytest.mark.parametrize(
+    "query",
+    ["per_page=100&page=1&sha=main", "per_page=100", "per_page=100&page=1&page=2"],
+    ids=["extra-parameter", "missing-page", "repeated-page"],
+)
+def test_a_compare_request_with_other_parameters_finds_no_unit(query: str) -> None:
+    base = "/repos/prebid/Prebid.js/compare/" + "a" * 40 + "..." + "b" * 40
+    assert compare_key(f"https://api.github.com{base}?{query}") is None
+    assert compare_key(f"https://api.github.com{base}?per_page=100&page=1") is not None
 
 
 def test_a_fault_never_served_or_not_used_up_is_reported() -> None:

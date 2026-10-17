@@ -2,8 +2,10 @@
 
 GraphQL models forbid unknown fields: the documents select every field, so an extra one means a
 document and its model disagree. Nullability follows GitHub's schema; a value the source layer
-cannot use (a null id, an unknown actor type, a new state) fails validation and the item fails
-(redesign plan 5.3 step 4). Descriptive enums stay ``str`` so a new GitHub value is stored.
+cannot use (a null id, an unknown actor type, a new state) fails validation, and with it what the
+response describes: the item in a hydration batch, the repository on a resolve, label, or index
+page, the node id in a user lookup (redesign plan 5.3 step 4). Descriptive enums stay ``str`` so a
+new GitHub value is stored.
 
 The REST compare models ignore unknown fields: REST returns far more than is read.
 """

@@ -133,7 +133,7 @@ tests/
 ├── fixtures/                # Mock data files
 │   ├── source/
 │   │   ├── recorded/        # Units recorded from public repositories (scripts/record_fixtures.py)
-│   │   └── synthetic/       # Error responses GitHub documents or was seen to send; each names its source
+│   │   └── synthetic/       # Error responses: documented, observed, or constructed; each names which
 │   ├── github_responses.py  # GitHub API mock responses
 │   ├── rate_limit_responses.py
 │   ├── real_pr_open.py      # Real open PR fixture

@@ -4,8 +4,9 @@ Every connection's node selection is defined once and used both in the first pag
 overflow continuation, so the two can never select different fields.
 
 A kind's ``hydration_version`` changes whenever its documents do: ``tests/query_versions.json``
-maps each ``<kind>:<version>`` to the SHA-256 of the normalized documents, and a test fails when
-they change without a new entry (plan Step 2).
+maps each ``<kind>:<version>`` to the SHA-256 of the normalized documents. A test fails when the
+current documents differ from the current version's entry, and on pull requests CI fails when an
+existing entry is edited or removed, so a document change needs a new version (plan Step 2).
 """
 
 from __future__ import annotations
@@ -73,7 +74,7 @@ REVIEWS: Final = Connection(
     "states: [APPROVED, CHANGES_REQUESTED, COMMENTED, DISMISSED]",
     "fullDatabaseId state author { ...Actor }",
 )
-# Each comment's id and author, never its text (D28).
+# Each comment's id and author, never its text (D24).
 COMMENTS: Final = Connection("comments", "", "fullDatabaseId author { ...Actor }")
 # No connection inside `commits`: GraphQL charges for every possible nested node (D15).
 COMMITS: Final = Connection(

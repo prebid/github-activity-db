@@ -45,6 +45,7 @@ from github_activity_db.source.errors import (
     IdentityMismatch,
     ItemChangedDuringRead,
     ItemRequestFailed,
+    MergeStateMismatch,
     NullEntry,
     PagingStalled,
     RepositoryNotFound,
@@ -52,6 +53,7 @@ from github_activity_db.source.errors import (
     RequestTooHeavy,
     ResponseShapeError,
     TotalCountChanged,
+    UnattributedErrors,
 )
 from github_activity_db.source.hydrate import _uses_compare
 from github_activity_db.source.limits import (
@@ -97,6 +99,10 @@ def is_batch(seen: Seen) -> bool:
 
 def pr_unit(replay: Replay, number: int, repository: tuple[str, str] = PREBID_JS) -> Unit:
     return replay.unit("pull_request", owner=repository[0], name=repository[1], number=number)
+
+
+def parsed_date(unit: Unit) -> datetime:
+    return datetime.strptime(unit.headers["date"], "%a, %d %b %Y %H:%M:%S GMT").replace(tzinfo=UTC)
 
 
 def copied(replay: Replay, recorded: int, number: int) -> Unit:
@@ -239,6 +245,26 @@ class TestRecordedScenarios:
             "comments": len(record.comments),
         }
         assert fetched[connection] == total
+
+    @pytest.mark.parametrize("number", [11155, 8858], ids=["with-continuation", "with-compare"])
+    async def test_hydrated_at_is_the_alias_response_date(
+        self, open_source, replay: Replay, number: int
+    ) -> None:
+        # The alias answered before its continuation (11155) or compare pages (8858).
+        unit = pr_unit(replay, number)
+        later = [
+            u
+            for u in replay.units.values()
+            if (u.kind == "overflow" and u.key["id"] == unit.data["id"]) or u.kind == "compare"
+        ]
+        if number == 11155:
+            later = [u for u in later if u.kind == "overflow"]
+        else:
+            later = [u for u in later if u.kind == "compare"]
+        alias_date = parsed_date(unit)
+        assert any(parsed_date(u) != alias_date for u in later)
+        record = await hydrate_one(open_source, PREBID_JS, number)
+        assert record.hydrated_at == alias_date
 
     async def test_record_dates_and_version(self, open_source, replay: Replay) -> None:
         record = await hydrate_one(open_source, PREBID_JS, 13481)
@@ -648,6 +674,85 @@ class TestInvariants:
         unit.errors = [{"type": "SERVICE_UNAVAILABLE", "path": ["files"], "message": "partial"}]
         replay.add(unit)
         assert isinstance(await failure(open_source, PREBID_JS, 13481), AliasError)
+
+    async def test_a_not_found_below_a_null_alias_is_not_gone(
+        self, open_source, replay: Replay
+    ) -> None:
+        # Gone needs NOT_FOUND on the pull request itself; one deeper down nulled the alias.
+        unit = pr_unit(replay, 13481)
+        unit.data = None
+        unit.errors = [{"type": "NOT_FOUND", "path": ["commits", "nodes", 0], "message": "x"}]
+        replay.add(unit)
+        error = await failure(open_source, PREBID_JS, 13481)
+        assert isinstance(error, AliasError)
+        assert error.error_type == "NOT_FOUND"
+
+    @pytest.mark.parametrize(
+        ("state", "merged_at"),
+        [("MERGED", None), ("OPEN", "2025-07-01T14:55:24Z"), ("CLOSED", "2025-07-01T14:55:24Z")],
+        ids=["merged-without-a-time", "open-with-a-time", "closed-with-a-time"],
+    )
+    async def test_state_and_merge_time_must_agree(
+        self, open_source, replay: Replay, state: str, merged_at: str | None
+    ) -> None:
+        unit = pr_unit(replay, 13481)
+        unit.data["state"] = state
+        unit.data["mergedAt"] = merged_at
+        replay.add(unit)
+        error = await failure(open_source, PREBID_JS, 13481)
+        assert isinstance(error, MergeStateMismatch)
+        assert error.state == state
+
+    async def test_a_first_page_with_a_next_page_but_no_entries(
+        self, open_source, replay: Replay
+    ) -> None:
+        unit = pr_unit(replay, 13481)
+        unit.data["files"]["nodes"] = []
+        unit.data["files"]["pageInfo"] = {"hasNextPage": True, "endCursor": "page-2"}
+        replay.add(unit)
+        error = await failure(open_source, PREBID_JS, 13481)
+        assert isinstance(error, PagingStalled)
+        assert error.connection == "files"
+
+    async def test_a_continuation_with_a_next_page_but_no_entries(
+        self, open_source, replay: Replay
+    ) -> None:
+        # A fresh cursor each time but no entries would be followed forever.
+        def empty(body: dict[str, Any]) -> None:
+            page = body["data"][overflow_alias(0, COMMITS)]["commits"]
+            page["nodes"] = []
+            page["pageInfo"] = {"hasNextPage": True, "endCursor": "fresh"}
+
+        replay.modify(empty, when=is_overflow, times=2)
+        error = await failure(open_source, PREBID_JS, 11155)
+        assert isinstance(error, PagingStalled)
+        assert error.cursor == "fresh"
+
+    async def test_an_error_outside_every_alias_fails_the_items(
+        self, open_source, replay: Replay
+    ) -> None:
+        # Nothing ties it to one item, so the request fails: split to single items, which fail.
+        def stray(body: dict[str, Any]) -> None:
+            body["errors"] = [{"type": "INTERNAL", "path": ["repository"], "message": "partial"}]
+
+        replay.modify(stray, when=is_batch, times=None)
+        outcomes = await hydrate(open_source, PREBID_JS, [13481, 15724])
+        for outcome in outcomes:
+            assert isinstance(outcome, Failed)
+            assert isinstance(outcome.error, ItemRequestFailed)
+            assert isinstance(outcome.error.cause, UnattributedErrors)
+        assert batches(replay) == [[13481, 15724], [13481], [15724]]
+
+    async def test_an_error_outside_every_continuation_fails_the_item(
+        self, open_source, replay: Replay
+    ) -> None:
+        def stray(body: dict[str, Any]) -> None:
+            body["errors"] = [{"type": "INTERNAL", "path": ["elsewhere"], "message": "partial"}]
+
+        replay.modify(stray, when=is_overflow, times=None)
+        error = await failure(open_source, PREBID_JS, 11155)
+        assert isinstance(error, ItemRequestFailed)
+        assert isinstance(error.cause, UnattributedErrors)
 
     async def test_a_null_alias_without_errors(self, open_source, replay: Replay) -> None:
         unit = pr_unit(replay, 13481)

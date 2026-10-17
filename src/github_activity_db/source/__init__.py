@@ -13,6 +13,7 @@ from .errors import (
     FatalSourceError,
     ItemError,
     RepositoryError,
+    RequestFailedError,
     SourceError,
     UserLookupFailed,
 )
@@ -60,6 +61,7 @@ __all__ = [
     "PullRequestRecord",
     "RepositoryError",
     "RepositoryRecord",
+    "RequestFailedError",
     "Review",
     "SourceError",
     "SystemClock",

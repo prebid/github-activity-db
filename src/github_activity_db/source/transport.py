@@ -6,21 +6,23 @@ server errors. Callers see only results and ``source.errors`` exceptions.
 
 Failure classes:
 
-- rate limited: GraphQL ``RATE_LIMITED`` or a secondary-limit message (HTTP 200 or 403); REST
-  403/429 with ``retry-after``, ``x-ratelimit-remaining: 0``, or a secondary-limit message.
-  Wait for ``retry-after``; else, when the primary limit is exhausted, until the reset; else 60 s,
-  which is also the wait when githubkit cannot read the headers.
+- rate limited: any HTTP 429; a 403 with ``retry-after``, ``x-ratelimit-remaining: 0``, a
+  secondary-limit message, or a ``RATE_LIMITED`` error; a GraphQL 200 with ``RATE_LIMITED`` or a
+  secondary-limit message. Wait for ``retry-after``; else, when the primary limit is exhausted,
+  until the reset; else 60 s, which is also the wait when githubkit cannot read the headers.
   Each further limit before a success waits at least 60 s doubled per repeat, so a limit that
   never lifts reaches the longest accepted wait. The pause holds every request on this transport
   and is never counted as an attempt.
 - timeout or resource limit: HTTP 502/504, or a GraphQL error at any path reporting a timeout or
   exceeded resource limits. ``RequestTooHeavy`` at once for a splittable request; retried like a
   server error otherwise.
-- server or transport error: other 5xx, network errors, client timeouts, malformed responses.
-  Retried after 2, 4, and 8 s (with jitter), then ``ServerError``.
+- server or transport error: other 5xx, network errors, client timeouts, a connection the server
+  broke off or a body it encoded wrongly, malformed responses. Retried after 2, 4, and 8 s (with
+  jitter), then ``ServerError``.
 - fatal: 401 or a failed credential request (``Unauthorized``), 403 without a rate-limit signal
-  (``Forbidden``), an HTTP client failure outside the network (``ClientFailure``), a response this
-  code does not understand (``UnexpectedResponse``).
+  (``Forbidden``), any other HTTP client failure, such as a redirect loop, a proxy or URL
+  problem, or a missing auth dependency (``ClientFailure``), and a response this code does not
+  understand (``UnexpectedResponse``).
 """
 
 from __future__ import annotations
@@ -94,6 +96,15 @@ _GITHUBKIT_RATE_LIMIT_READERS = frozenset({"_check_rate_limit", "_extract_retry_
 # What those readers raise on values GitHub's docs do not allow: an HTTP-date retry-after, a
 # reset out of range, a null message.
 _UNREADABLE_HEADER_ERRORS = (ValueError, OverflowError, TypeError, OSError)
+# httpx errors from the network or the server's side of the exchange, which a retry may clear. Any
+# other client error (a redirect loop, a proxy or URL problem, a request this side built wrong) is
+# a ClientFailure.
+_RETRIED_CLIENT_ERRORS = (
+    httpx.TimeoutException,
+    httpx.NetworkError,
+    httpx.RemoteProtocolError,
+    httpx.DecodingError,
+)
 
 
 @dataclass(frozen=True)
@@ -334,7 +345,7 @@ class Transport:
             return _unreadable_rate_limit(inner)
         if isinstance(inner, AuthCredentialError | AuthExpiredError):
             raise Unauthorized(f"credentials rejected: {inner!r}")
-        if isinstance(inner, httpx.RequestError):
+        if isinstance(inner, _RETRIED_CLIENT_ERRORS):
             return _Failure("server", f"transport error: {inner!r}")
         raise ClientFailure(f"HTTP client failed: {inner!r}") from error
 
@@ -366,13 +377,10 @@ class Transport:
     # Reading successful responses
     # ----------------------------------------------------------------------------------------
     def _read_graphql(self, response: Response[Any]) -> GraphQLResult | _Failure:
-        date = _response_date(response)
         try:
             body = response.json()
         except ValueError as e:
             return _Failure("server", f"GraphQL body is not JSON: {e}")
-        if date is None:
-            return _Failure("server", "GraphQL response without a readable Date header")
         if not isinstance(body, dict):
             return _Failure("server", "GraphQL body is not a JSON object")
         raw_errors = body.get("errors") or []
@@ -381,16 +389,18 @@ class Transport:
             return _Failure("server", "GraphQL body has malformed data or errors")
         errors = tuple(_graphql_error(entry) for entry in raw_errors)
         reading = data.get("rateLimit") if data is not None else None
+        malformed: Exception | None = None
+        parsed: RateLimitReading | None = None
         try:
-            parsed = RateLimitReading.model_validate(reading) if reading is not None else None
-        except ValidationError as e:
-            malformed: ValidationError | None = e
-            parsed = None
-        else:
-            malformed = None
+            if reading is not None:
+                parsed = RateLimitReading.model_validate(reading)
+                reset_at = parsed.reset_at.astimezone(UTC)
+        except (ValidationError, OverflowError) as e:
+            malformed, parsed = e, None
         if parsed is not None:
             # Counted whenever readable, also on a response that fails below.
-            self._record_graphql_budget(parsed)
+            self.usage.graphql_points += parsed.cost
+            self.graphql_budget.record(parsed.remaining, reset_at)
         limited = [
             error
             for error in errors
@@ -407,6 +417,9 @@ class Transport:
         failure = _whole_request_failure(errors)
         if failure is not None:
             return failure
+        date = _response_date(response)
+        if date is None:
+            return _Failure("server", "GraphQL response without a readable Date header")
         if data is None and not errors:
             return _Failure("server", "GraphQL response without data or errors")
         if data is None or any(not error.path for error in errors):
@@ -432,10 +445,6 @@ class Transport:
         if remaining is not None and reset is not None:
             self.rest_budget.record(remaining, reset)
         return RestResult(body=body, date=date)
-
-    def _record_graphql_budget(self, reading: RateLimitReading) -> None:
-        self.usage.graphql_points += reading.cost
-        self.graphql_budget.record(reading.remaining, reading.reset_at.astimezone(UTC))
 
     # ----------------------------------------------------------------------------------------
     # Waiting
@@ -588,19 +597,27 @@ def _retry_after(headers: httpx.Headers, now: datetime) -> float | None:
     seconds = _int_header(headers, "retry-after")
     if seconds is not None:
         return float(min(max(seconds, 0), int(_LONGEST_WAIT)))
-    try:
-        when = parsedate_to_datetime(value)
-    except (TypeError, ValueError):
+    when = _http_date(value)
+    if when is None:
         return None
-    return max((when.astimezone(UTC) - now).total_seconds(), 0.0)
+    return max((when - now).total_seconds(), 0.0)
 
 
 def _response_date(response: Response[Any]) -> datetime | None:
     value = response.headers.get("date")
-    if not isinstance(value, str):
-        return None
+    return _http_date(value) if isinstance(value, str) else None
+
+
+def _http_date(value: str) -> datetime | None:
+    """An HTTP-date in UTC, or None when it cannot be read.
+
+    HTTP-dates are GMT (RFC 9110), so a date that names no zone (asctime, or ``-0000``) is read
+    as UTC, never as the host's local time.
+    """
     try:
         parsed = parsedate_to_datetime(value)
-    except (TypeError, ValueError):
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=UTC)
+        return parsed.astimezone(UTC)
+    except (TypeError, ValueError, OverflowError):
         return None
-    return parsed.astimezone(UTC)

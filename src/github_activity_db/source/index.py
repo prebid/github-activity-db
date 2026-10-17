@@ -100,9 +100,11 @@ async def _scan(
         if not page.page_info.has_next_page:
             return tuple(entries), page.total_count, first_page_date
         next_cursor = page.page_info.end_cursor
-        if next_cursor is None or next_cursor == cursor:
+        if next_cursor is None or next_cursor == cursor or not page.nodes:
             raise RepositoryShapeError(
-                full_name, f"index page has a next page but no new cursor ({next_cursor!r})"
+                full_name,
+                f"index page has a next page but no progress ({len(page.nodes)} entries, "
+                f"cursor {next_cursor!r})",
             )
         cursor = next_cursor
 

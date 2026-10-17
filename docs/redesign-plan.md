@@ -26,7 +26,7 @@ GitHub, GitHub's documentation, the installed libraries, and `main`, and correct
 | Step | Title | Status |
 |------|-------|--------|
 | 1 | Guardrails | done (PR #5) |
-| 2 | GitHub source layer | in progress |
+| 2 | GitHub source layer | done (PR #7) |
 | 3 | New schema, PR sync engine, cutover | not started |
 | 4 | Issues and closing-issue links | not started |
 | 5 | Full bootstrap and verification | not started |
@@ -72,7 +72,7 @@ status, releases, and repositories not in the tracked list.
 | D25 | A run, scheduled or manual, publishes when its starting database is valid (the downloaded snapshot passed `verify --db-only`, or `bootstrap` started from an empty database), sync exited 0 or 2, and verify exited 0 (no error, 5.4). The manifest records the sync exit code and verify's counts per class. A final job that runs whatever the others did then marks the workflow failed if sync exited 2, verify failed, or nothing was published, so a failure is visible after the data is saved. |
 | D26 | The Step 5 database is not committed; it becomes the first snapshot of release `db` (Step 6b). From Step 3 until 6c removes it, the tracked `github_activity.db` keeps its pre-Step-3 content: the default `DATABASE_URL` moves to a git-ignored file, and `scripts/check_frozen_db.py` fails when the file's SHA-256 differs from the digest it pins, as a pre-commit hook on the file (so CI's `--all-files` run checks it) and as a test. |
 | D27 | A stored repository no longer listed in `tracking.toml` is reported on every run (exit 2), and its rows stay until `ghactivity sync --prune-untracked` deletes them; the prune is recorded in `sync_runs`. |
-| D28 | The database keeps a person attached to everything it attributed to them. A stored account stays stored after GitHub deletes it, with its last known login and type, and every reference to it stays: when GitHub later returns that actor as null, as a re-hydration after the deletion does, the writer keeps the stored reference of the same object (the PR's author and merger, the issue's author, the review or comment with the same `github_id`, and this PR's commit with the same SHA). `deleted_at` records that a lookup found the account deleted; it changes no reference, the 24-hour refresh skips the account, and a later sighting of the account clears it. An actor the database cannot attribute (GitHub returns null and the object has no stored reference) is represented as deleted, one way everywhere: a null reference, and no `github_users` row for an account never stored. A non-null actor GitHub returns replaces the stored one; a commit link whose account lookup returns null counts as null. Deleted accounts are identified as stored ones by `deleted_at IS NOT NULL`, and unattributed ones by a null actor reference on a PR, issue, review, or comment; on a commit a null link also means an email linked to no account, so commits do not single out deleted accounts. This attribution is data GitHub no longer serves (section 9), so a bootstrap copies it from the latest snapshot; an object re-created from GitHub loses it: a PR reopened after D3 deleted it, a transferred issue (new `github_id`), and a repository pruned and re-added (D27). |
+| D28 | The database keeps a person attached to everything it attributed to them. A stored account stays stored after GitHub deletes it, with its last known login and type, and every reference to it stays: when GitHub later returns that actor as null, as a re-hydration after the deletion does, the writer keeps the stored reference of the same object (the PR's author and merger, the issue's author, the review or comment with the same `github_id`, and this PR's commit with the same SHA). `deleted_at` records that a lookup found the account deleted; it changes no reference, the 24-hour refresh skips the account, and a later sighting of the account clears it. An actor the database cannot attribute (GitHub returns null and the object has no stored reference) is represented as deleted, one way everywhere: a null reference, and no `github_users` row for an account never stored. A non-null actor GitHub returns replaces the stored one; a commit link whose account lookup returns null counts as null. Deleted accounts are identified as stored ones by `deleted_at IS NOT NULL`, and unattributed ones by a null actor reference on a PR, issue, review, or comment; on a commit a null link also means an email linked to no account, so commits do not single out deleted accounts. The attribution lives in the stored rows and cascades with them, so anything that re-creates a row from GitHub drops it for accounts deleted before then: a bootstrap (it starts from an empty file), a PR reopened after D3 deleted it, a transferred issue (new `github_id`), and a repository pruned and re-added (D27). |
 
 ## 3. Coverage rule
 
@@ -134,7 +134,7 @@ Every gap found in the audit, and where it is resolved.
 | 36 | `gh release upload --clobber` deletes before uploading | Step 6 |
 | 37 | Public-repo schedules disable after 60 days without activity; start-of-hour runs delayed or dropped | Step 6 |
 | 38 | The same path can appear twice in one PR's file list | Step 3: file rows keyed by ordinal; `files_total`, not `changed_files`, counts them |
-| 39 | Null PR author, reviewer, commenter, issue author, and merger occur | Step 3: nullable references, kept for stored accounts (D28); deleted-account comments stored with a null author unless their author was already stored (D24) |
+| 39 | Null PR author, reviewer, commenter, issue author, and merger occur | Step 3: nullable references, kept for stored accounts (D28); deleted-account comments stored with a null author (D24) unless their author was already stored (D28) |
 | 40 | A review can be submitted seconds after the PR `updatedAt` | Step 3: unsettled re-hydration |
 | 41 | Issue transfers between repositories | Step 4: a transferred issue arrives with a new id; deletions recomputed at delete time |
 | 42 | `uv sync --frozen` without `--extra dev` uninstalls dev tools | Step 1 |
@@ -333,8 +333,9 @@ less than 10 minutes in the past, inserts its own row, and replaces `automation_
    from `github_updated_at`, its index `state` differs from the stored `state`, its
    `hydration_version` differs from the code's for its kind, it is unsettled
    (`hydrated_at - github_updated_at < 10 minutes`), it carries a label its repository no
-   longer has (step 1), or its link `totalCount` exceeds 10 and either differs from
-   `closing_issues_total` or an indexed link is not stored. Update in place without hydration, for
+   longer has (step 1), its link `totalCount` exceeds 10 and either differs from
+   `closing_issues_total` or an indexed link is not stored, or the index lists fewer distinct links
+   than the smaller of its `totalCount` and 10 (a link listed twice). Update in place without hydration, for
    items not planned for hydration in this run: `is_draft` and `author_association` from the index
    (ready-for-review is not proven to change `updatedAt`, 0 of 151 counterexamples; association
    changes do not change it), and the closing links and `closing_issues_total` when the index lists
@@ -356,12 +357,13 @@ less than 10 minutes in the past, inserts its own row, and replaces `automation_
 
    | Class | Detected by | Action |
    |-------|-------------|--------|
-   | Rate limited | GraphQL: `errors[].type == "RATE_LIMITED"`, or an error message naming a secondary rate limit, on HTTP 200 or 403 (GitHub documents both statuses); REST: HTTP 403/429 with `retry-after`, `x-ratelimit-remaining: 0`, or a secondary-limit message | Wait for `retry-after`; else, when `x-ratelimit-remaining` is 0 or the error is `RATE_LIMITED`, until `x-ratelimit-reset` or the last `resetAt`; else 60 s. Each further limit before a success waits at least 60 s doubled per repeat, whatever the headers say (GitHub: "If your request continues to fail due to a secondary rate limit, wait for an exponentially increasing amount of time between retries, and throw an error after a specific number of retries"). Never split; not an attempt. A wait that would end after the `--max-minutes` deadline stops queueing instead |
+   | Rate limited | Any HTTP 429 (GraphQL or REST); HTTP 403 with `retry-after`, `x-ratelimit-remaining: 0`, a secondary-limit message, or `errors[].type == "RATE_LIMITED"`; GraphQL HTTP 200 with `RATE_LIMITED` or an error message naming a secondary rate limit (GitHub documents 200 and 403 for GraphQL, 403 and 429 for REST) | Wait for `retry-after`; else, when `x-ratelimit-remaining` is 0 or the error is `RATE_LIMITED`, until `x-ratelimit-reset` or the last `resetAt`; else 60 s. Each further limit before a success waits at least 60 s doubled per repeat, whatever the headers say (GitHub: "If your request continues to fail due to a secondary rate limit, wait for an exponentially increasing amount of time between retries, and throw an error after a specific number of retries"). Never split; not an attempt. A wait that would end after the `--max-minutes` deadline stops queueing instead |
    | Timeout or resource limit | HTTP 502/504 (GitHub documents both for a request over 10 s); a GraphQL error at any path reporting a timeout or exceeded resource limits (GitHub returns "partial results along with an error indicating that resource limits were exceeded") | Split the batch in half at once; a same-size retry repeats the cost |
    | Server or transport error | other 5xx; a GraphQL server fault at any path; connection error; client timeout; a response without data or errors, or without a readable `Date` | Retry up to 3 more times (2, 4, 8 s, with jitter), then split |
    | Item gone | alias `null` with `NOT_FOUND` | No write and no failure; the next index removes it |
    | Item error | another alias error; partial alias data; a value the typed models reject; a failed check in step 5; HTTP 404/422 on a compare page | Retry the item once alone, then record it in `sync_failures` and write nothing for it |
-   | Unauthorized or forbidden | HTTP 401; a failed credential request (an App token mint answering 4xx without a rate-limit signal); HTTP 403 with no rate-limit signal (a missing permission); an HTTP client failure outside the network (a missing auth dependency) | Fatal: drain the writer, close the run, exit 1 |
+   | Not understood | a GraphQL error without a path, or no data, that matches none of the classes above (a rejected document, an unrecognized limit message); a missing or malformed `rateLimit`; another status (400, a GraphQL 404 or 422) | Fatal: drain the writer, close the run, exit 1 |
+   | Unauthorized or forbidden | HTTP 401; a failed credential request (an App token mint answering 4xx without a rate-limit signal); HTTP 403 with no rate-limit signal (a missing permission); an HTTP client failure outside the network (a redirect loop, a proxy or URL problem, a missing auth dependency) | Fatal: drain the writer, close the run, exit 1 |
 
    Typed response models check types strictly: GitHub's JSON has exact types, and lax coercion
    would read `"no"` as false. `BigInt` ids must be strings of digits and timestamps ISO strings.
@@ -384,7 +386,7 @@ less than 10 minutes in the past, inserts its own row, and replaces `automation_
 
    Budget, per pool: GraphQL readings come from `rateLimit { cost remaining resetAt }` in every
    response. One token's readings can alternate between two windows, so the guard keeps the lowest
-   `remaining` per `resetAt` and gates on the lowest among windows that have not reset. REST readings
+   `remaining` per `resetAt` and waits until every window below the reserve has reset. REST readings
    come from the `x-ratelimit-remaining` and `x-ratelimit-reset` headers of compare responses. Below
    the reserve (a named constant above the largest measured request cost) the guard sleeps until the
    reset, subject to the deadline rule above. `sync_runs.graphql_points` is the sum of
@@ -393,8 +395,11 @@ less than 10 minutes in the past, inserts its own row, and replaces `automation_
    `PENDING`, so the counts agree by construction), comments, commits, files, labels, and closing
    issues; every overflow page reports the first page's `totalCount`; a null connection or null node
    is a failure, never a count of zero; the compare `total_commits` equals the PR's commit
-   `totalCount`, and the fetched compare commits equal `total_commits`; the returned number and
-   repository equal the request. A PR that closed without merge, or an item that left coverage,
+   `totalCount`, and the fetched compare commits equal `total_commits`; the returned number equals
+   the request (the batch names the resolved repository); `state` is `MERGED` exactly when
+   `mergedAt` is set; the entries the database keys (labels, closing issues, reviews, comments,
+   commits) are distinct; every page with a next page has entries and a new cursor; and an error
+   outside every item fails the request, which then splits. A PR that closed without merge, or an item that left coverage,
    between index and hydration is skipped without a failure; the next index removes it.
 6. Write: one writer task with its own session. Each item is one transaction: upsert by `github_id`
    with `INSERT ... ON CONFLICT (github_id) DO UPDATE`, which keeps the row id (never
@@ -543,9 +548,8 @@ Workflow `.github/workflows/sync.yml`:
   runs project code and PyPI dependencies holds no write token:
   - `sync` (`permissions: contents: read`; `timeout-minutes: 355`, under GitHub's 6-hour job limit)
     holds the App credentials. Without `bootstrap`, it downloads the latest snapshot and runs
-    `verify --db-only`; a missing or failing snapshot halts the run. With `bootstrap`, it starts from
-    an empty file and copies into it only the data section 9 names (D28's attribution of deleted
-    accounts), from the latest snapshot when one exists; the manifest records `bootstrap: true`. It then runs
+    `verify --db-only`; a missing or failing snapshot halts the run. With `bootstrap`, it downloads
+    nothing and starts from an empty file, and the manifest records `bootstrap: true`. It then runs
     `alembic upgrade head`, asserts the revision is head, runs `ghactivity sync --max-minutes 300`
     and `ghactivity verify --max-minutes 40 --report verify.json`, runs `ghactivity snapshot
     --verify-report verify.json`, and hands the snapshot and manifest to `publish` as a workflow
@@ -623,8 +627,9 @@ fails when another module does.
 | Replace in Step 3 | `db/models.py`, `db/repositories/*`, `db/__init__.py` (its re-exports follow the new models), and the shared test fixtures that import them (`tests/conftest.py`, `tests/factories.py`); `cli/sync.py` becomes one `ghactivity sync [--repo owner/name]... [--max-minutes N] [--dry-run] [--allow-deletions owner/name=N] [--prune-untracked] [--break-lock]` command (the `pr`, `repo`, `all`, and `retry` subcommands go), plus `ghactivity verify [--repo owner/name]... [--exact] [--db-only] [--max-minutes N] [--report PATH]` and, in Step 6a, `ghactivity snapshot`; `cli/github.py` keeps `rate-limit` over the `source/` factory (GraphQL `rateLimit` and REST `/rate_limit`), and `test` resolves one repository and hydrates one PR |
 | Remove in Step 3 | all of `github/` (`client.py`, `exceptions.py`, `pacing/*`, `rate_limit/*`, `sync/*`), all of `schemas/`, and their tests |
 
-GraphQL requests go through githubkit's `GitHub.arequest("POST", "/graphql", json=...)`, which
-returns a 200 body with `data` and `errors` together. `github.graphql.arequest` turns any error into
+GraphQL requests go through githubkit's `GitHub.arequest("POST", "/graphql", content=...)`, which
+returns a 200 body with `data` and `errors` together. `source/` encodes the body itself, with
+`allow_nan=False`, so variables JSON cannot represent raise before any request is sent. `github.graphql.arequest` turns any error into
 an exception: `GraphQLFailed`, whose `.response` is the parsed body without the HTTP status or
 headers (so the `Date` header 5.3 needs is lost), or `PrimaryRateLimitExceeded` for `RATE_LIMITED`.
 Per-alias handling would then run inside exception handlers. githubkit retries only
@@ -638,7 +643,7 @@ created earlier builds a new client per request.
 
 ### 5.8 Query shapes
 
-Resolve (step 1; labels page past 100 like any connection):
+Resolve (step 1; labels past the first 100 continue with the next document):
 
 ```graphql
 query($owner: String!, $name: String!) {
@@ -646,6 +651,17 @@ query($owner: String!, $name: String!) {
     id databaseId nameWithOwner name owner { login } isPrivate isArchived
     defaultBranchRef { name }
     labels(first: 100) { totalCount pageInfo { hasNextPage endCursor } nodes { name } }
+  }
+  rateLimit { cost remaining resetAt }
+}
+```
+
+Repository labels after the first page (cost 1):
+
+```graphql
+query RepositoryLabels($id: ID!, $after: String!) {
+  node(id: $id) {
+    ... on Repository { id labels(first: 100, after: $after) { totalCount pageInfo { hasNextPage endCursor } nodes { name } } }
   }
   rateLimit { cost remaining resetAt }
 }
@@ -840,8 +856,8 @@ and commit references kept through a re-hydration that returns it as null) and t
 account deleted before it was stored (null references everywhere, and a commit whose lookup returns
 null stored without a linked account), an object first written after its author's deletion stored
 with a null author, a different non-null commit link replacing a stored one, the 24-hour refresh
-skipping an account marked deleted, a bootstrap copying D28's attribution from the latest snapshot,
-a duplicate closing link in the index leaving the entry incomplete,
+skipping an account marked deleted,
+a closing link listed twice in the index planning the PR for hydration, where the duplicate fails it,
 an automation-list change with no hydration changing the views, an accepted failure leaving exit 0,
 one case per exit condition in 5.3 step 8, `sync_failures` rows removed when their item leaves
 coverage, `last_index_started_at` left unwritten for a failed or incompletely indexed repository,
@@ -1015,7 +1031,7 @@ Measured 2026-10-16 unless noted. "Index" means the created-order enumeration in
 | Issues read permission for the App | Step 6b's first manual run exercises it with a real token |
 | GraphQL `rateLimit` readings alternating between two windows (seen with a personal token; GitHub documents that values vary by the region handling a request, but not differing `resetAt` values) | Step 2's guard handles it; Step 6 records App-token readings |
 | Whether body edits, base-ref changes, review dismissals, and issue label events always change `updatedAt` (not measured; a state change is caught by the index) | A change that does not is missed until the item's next update or a `hydration_version` bump; accepted |
-| The error body of a GraphQL secondary limit returned as HTTP 200 (not observed; documented only as "an error message") | Step 2 classifies by type and message; a misclassified response is an item error, visible in `sync_failures` |
+| The error body of a GraphQL secondary limit returned as HTTP 200 (not observed; documented only as "an error message") | Step 2 classifies by type and message; a message it does not recognize is "not understood" (5.3 step 4) and stops the run with exit 1, naming the message; Step 5 records secondary-limit responses |
 | A PR file list above 3,000 entries (no tracked PR found) | Validation fails the item if `files` stops short of `totalCount`; Step 5 reports any |
 | Compare fallback on a PR whose head fork was deleted (only a live fork tested) | A count mismatch fails the item; Step 5 reports any |
 | Full bootstrap time, cost, and size are projections from two repositories | Step 5 measures them |
@@ -1031,6 +1047,6 @@ check that the latest manifest is recent (a disabled schedule fails no run).
 Data that cannot be re-fetched from GitHub (user tags, AI enrichment) must be keyed by GitHub
 identity (PR or issue `github_id`, user `github_id`), must not cascade from mirror rows, must be
 produced where the published file is built, and must be copied from the last good snapshot across a
-bootstrap. D28's attribution of deleted accounts (the `github_users` rows of stored accounts and the
-references GitHub now returns as null) is such data; besides it, D18's "nothing that cannot be
-re-fetched" holds.
+bootstrap. D28's attribution of deleted accounts cannot be re-fetched either, but it is kept in the
+mirror rows and accepted as lost when a row is re-created (D28), so these rules do not cover it;
+besides it, D18's "nothing that cannot be re-fetched" holds.

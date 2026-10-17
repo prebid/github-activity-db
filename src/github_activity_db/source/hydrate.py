@@ -44,6 +44,7 @@ from .errors import (
     ItemChangedDuringRead,
     ItemError,
     ItemRequestFailed,
+    MergeStateMismatch,
     NullEntry,
     PagingStalled,
     RepositoryNotFound,
@@ -51,6 +52,7 @@ from .errors import (
     RequestFailedError,
     ResponseShapeError,
     TotalCountChanged,
+    UnattributedErrors,
 )
 from .limits import (
     COMPARE_PAGE_SIZE,
@@ -166,7 +168,8 @@ class PullRequestHydrator:
     async def batches(self, numbers: Sequence[int]) -> AsyncIterator[list[PullRequestOutcome]]:
         """Outcomes batch by batch: one per distinct number, in the order first given.
 
-        A batch's failed items are retried alone before the batch is delivered.
+        Before a batch is delivered, its failed items are retried alone, except an item whose own
+        request already failed alone after the transport's retries (``ItemRequestFailed``).
         """
         distinct = list(dict.fromkeys(numbers))
         for start in range(0, len(distinct), PR_BATCH_SIZE):
@@ -234,6 +237,8 @@ class PullRequestHydrator:
             raise RepositoryShapeError(
                 self._repository.full_name, f"batch repository is null: {detail}"
             )
+        aliases = [pull_request_alias(i) for i in range(len(numbers))]
+        _check_attributed(result, [("repository", alias) for alias in aliases])
         items: dict[int, _Item | Gone | ItemError] = {}
         for i, number in enumerate(numbers):
             alias = pull_request_alias(i)
@@ -246,7 +251,9 @@ class PullRequestHydrator:
         errors = result.errors_under("repository", alias)
         raw = container.get(alias)
         if raw is None:
-            if any(error.type == "NOT_FOUND" for error in errors):
+            # Gone only when NOT_FOUND names the pull request itself; a NOT_FOUND deeper down,
+            # nulling the alias through a non-null field, is an error about the item.
+            if any(e.type == "NOT_FOUND" and e.path == ("repository", alias) for e in errors):
                 return Gone(number)
             first = errors[0] if errors else None
             return AliasError(
@@ -260,6 +267,8 @@ class PullRequestHydrator:
             return ResponseShapeError(number, str(e))
         if node.number != number:
             return IdentityMismatch(number, "number", number, node.number)
+        if (node.state == "MERGED") != (node.merged_at is not None):
+            return MergeStateMismatch(number, node.state, node.merged_at is not None)
         try:
             return _Item(
                 number=number,
@@ -305,6 +314,7 @@ class PullRequestHydrator:
             result = await self._transport.graphql(
                 overflow_continuation(connections), variables, splittable=len(group) > 1
             )
+            _check_attributed(result, [(overflow_alias(i, c),) for i, (_, c) in enumerate(group)])
         except RequestFailedError as e:
             if len(group) == 1:
                 item = group[0][0]
@@ -472,6 +482,20 @@ class PullRequestHydrator:
 # --------------------------------------------------------------------------------------------
 # Helpers
 # --------------------------------------------------------------------------------------------
+def _check_attributed(result: GraphQLResult, prefixes: Sequence[tuple[str, ...]]) -> None:
+    """Raise when GitHub reported an error outside every item of the request."""
+    stray = [
+        error
+        for error in result.errors
+        if not any(error.path[: len(prefix)] == prefix for prefix in prefixes)
+    ]
+    if stray:
+        detail = "; ".join(
+            f"{error.type} at {list(error.path)}: {error.message}" for error in stray
+        )
+        raise UnattributedErrors(f"errors outside every item: {detail}")
+
+
 def _uses_compare(total_commits: int) -> bool:
     """GraphQL stops at 250 commits; above that the list comes from compare."""
     return total_commits > GRAPHQL_COMMIT_CAP
@@ -482,7 +506,7 @@ def _first_collected[NodeT](number: int, name: str, page: Page[NodeT] | None) ->
     if page is None or page.nodes is None or any(node is None for node in page.nodes):
         raise NullEntry(number, name)
     cursor = page.page_info.end_cursor
-    if page.page_info.has_next_page and cursor is None:
+    if page.page_info.has_next_page and (cursor is None or not page.nodes):
         raise PagingStalled(number, name, cursor)
     return _Collected(
         total=page.total_count,
@@ -530,7 +554,7 @@ def _apply_continuation(
         )
     if page.page_info.has_next_page:
         cursor = page.page_info.end_cursor
-        if cursor is None or cursor == collected.cursor:
+        if cursor is None or cursor == collected.cursor or not page.nodes:
             return PagingStalled(number, connection.field, cursor)
         collected.cursor = cursor
     else:

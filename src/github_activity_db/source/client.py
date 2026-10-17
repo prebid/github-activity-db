@@ -85,7 +85,10 @@ class GitHubSource:
 
     @property
     def transport(self) -> Transport:
-        """The low-level transport, for a document the operations below do not send."""
+        """The low-level transport, for a document the operations below do not send.
+
+        Its calls raise ``RequestFailedError`` when a request still fails after its retries.
+        """
         return self._transport
 
     async def resolve(self, owner: str, name: str) -> RepositoryRecord:
@@ -99,8 +102,8 @@ class GitHubSource:
     ) -> AsyncIterator[list[PullRequestOutcome]]:
         """Outcomes batch by batch: ``async for outcomes in source.hydrate_pull_requests(...)``.
 
-        Each batch arrives after its failed items were retried alone, so a deadline, a
-        repository error, or a fatal error loses at most the batch in progress.
+        Each batch arrives after its failed items' solo retries, so a deadline, a repository
+        error, or a fatal error loses at most the batch in progress.
         """
         return PullRequestHydrator(self._transport, repository).batches(numbers)
 

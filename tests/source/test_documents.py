@@ -100,3 +100,22 @@ class TestDocuments:
         scalars = documents.normalize(documents.PULL_REQUEST_FIELDS).split("author {")[0]
         assert " fullDatabaseId " in scalars
         assert " databaseId " not in scalars
+
+
+@pytest.mark.parametrize(
+    ("connections", "fragment"),
+    [
+        ((documents.LABELS, documents.COMMENTS), True),
+        ((documents.FILES, documents.REVIEWS, documents.COMMITS), True),
+        ((documents.LABELS, documents.FILES, documents.CLOSING_ISSUES), False),
+    ],
+    ids=["labels-and-comments", "files-reviews-commits", "no-actor-connection"],
+)
+def test_a_mixed_continuation_defines_the_actor_fragment_only_when_used(
+    connections: tuple[documents.Connection, ...], fragment: bool
+) -> None:
+    # GitHub rejects a document that defines a fragment it does not use, or uses one it does
+    # not define (plan section 7, "Unused fragments").
+    document = documents.overflow_continuation(list(connections))
+    assert ("fragment Actor on Actor" in document) is fragment
+    assert ("...Actor" in document) is fragment

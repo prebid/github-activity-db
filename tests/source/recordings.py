@@ -282,16 +282,9 @@ def split_graphql(
 
 def split_rest(url: str, body: Any, headers: dict[str, str], recorded_at: str) -> list[Unit]:
     """The unit of one REST compare page."""
-    parts = urlsplit(url)
-    match = _COMPARE_PATH.match(parts.path)
-    if match is None:
-        raise ValueError(f"no unit split for REST {parts.path}")
-    query = parse_qs(parts.query)
-    key = {
-        **match.groupdict(),
-        "page": int(query["page"][0]),
-        "per_page": int(query["per_page"][0]),
-    }
+    key = compare_key(url)
+    if key is None:
+        raise ValueError(f"no unit split for REST {url}")
     return [
         Unit(
             kind="compare",
@@ -305,12 +298,18 @@ def split_rest(url: str, body: Any, headers: dict[str, str], recorded_at: str) -
 
 
 def compare_key(url: str) -> dict[str, Any] | None:
-    """The compare unit key of a REST request URL, or None for another endpoint."""
+    """The compare unit key of a REST request URL, or None for another request.
+
+    The request must carry exactly ``page`` and ``per_page``, the parameters ``COMPARE_STAMP``
+    names; any other parameter could change GitHub's answer, so it finds no unit.
+    """
     parts = urlsplit(url)
     match = _COMPARE_PATH.match(parts.path)
     if match is None:
         return None
     query = parse_qs(parts.query)
+    if set(query) != {"page", "per_page"} or any(len(values) != 1 for values in query.values()):
+        return None
     return {
         **match.groupdict(),
         "page": int(query["page"][0]),

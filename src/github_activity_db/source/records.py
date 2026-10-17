@@ -114,7 +114,7 @@ class Review:
 
 @dataclass(frozen=True, slots=True)
 class Comment:
-    """A conversation comment: its id and author, never its text (D28).
+    """A conversation comment: its id and author, never its text (D24).
 
     The author is None for an account GitHub reports as deleted.
     """
@@ -219,7 +219,8 @@ class Gone:
 
 @dataclass(frozen=True, slots=True)
 class Failed:
-    """The item failed twice, the second time alone (plan 5.3 step 4)."""
+    """The item failed: on its solo retry, or at once when its own request had already failed
+    alone after the transport's retries (plan 5.3 step 4)."""
 
     number: int
     error: ItemError

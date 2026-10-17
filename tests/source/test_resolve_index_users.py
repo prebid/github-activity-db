@@ -126,7 +126,7 @@ class TestResolve:
         unit.data["labels"]["pageInfo"] = {"hasNextPage": True, "endCursor": None}
         replay.add(unit)
         async with open_source() as source:
-            with pytest.raises(RepositoryShapeError, match="no new cursor"):
+            with pytest.raises(RepositoryShapeError, match="no progress"):
                 await source.resolve("prebid", "go-gdpr")
 
     async def test_a_null_repository_without_not_found(self, open_source, replay: Replay) -> None:
@@ -216,7 +216,34 @@ class TestLabelPages:
 
         replay.modify(stall, when=operation("RepositoryLabels"))
         async with open_source() as source:
-            with pytest.raises(RepositoryShapeError, match="no new cursor"):
+            with pytest.raises(RepositoryShapeError, match="no progress"):
+                await source.resolve(*GO)
+
+    async def test_a_later_page_with_a_next_page_but_no_labels(
+        self, open_source, replay: Replay
+    ) -> None:
+        # Once only, as above; a resolver following empty pages with fresh cursors never ends.
+        def empty(body: dict[str, Any]) -> None:
+            labels = body["data"]["node"]["labels"]
+            labels["nodes"] = []
+            labels["pageInfo"] = {"hasNextPage": True, "endCursor": "fresh"}
+
+        replay.modify(empty, when=operation("RepositoryLabels"))
+        async with open_source() as source:
+            with pytest.raises(RepositoryShapeError, match="no progress"):
+                await source.resolve(*GO)
+
+    async def test_errors_on_a_label_page_fail_the_repository(
+        self, open_source, replay: Replay
+    ) -> None:
+        def error(body: dict[str, Any]) -> None:
+            body["errors"] = [
+                {"type": "SERVICE_UNAVAILABLE", "path": ["node", "labels"], "message": "x"}
+            ]
+
+        replay.modify(error, when=operation("RepositoryLabels"))
+        async with open_source() as source:
+            with pytest.raises(RepositoryShapeError, match="errors on a label page"):
                 await source.resolve(*GO)
 
     async def test_more_labels_than_the_total_stop_paging(
@@ -440,7 +467,20 @@ class TestIndex:
         )
         async with open_source() as source:
             repository = await source.resolve("prebid", "prebid-cache-java")
-            with pytest.raises(RepositoryShapeError, match="no new cursor"):
+            with pytest.raises(RepositoryShapeError, match="no progress"):
+                await source.index_pull_requests(repository)
+
+    async def test_a_next_page_with_no_entries(self, open_source, replay: Replay) -> None:
+        # Once only: an index following empty pages with fresh cursors would never end.
+        def empty(body: dict[str, Any]) -> None:
+            page = body["data"]["repository"]["pullRequests"]
+            page["nodes"] = []
+            page["pageInfo"] = {"hasNextPage": True, "endCursor": "fresh"}
+
+        replay.modify(empty, when=operation("PullRequestIndex"))
+        async with open_source() as source:
+            repository = await source.resolve("prebid", "prebid-cache-java")
+            with pytest.raises(RepositoryShapeError, match="no progress"):
                 await source.index_pull_requests(repository)
 
     @pytest.mark.parametrize(
@@ -633,6 +673,31 @@ class TestUserLookup:
             accounts, failed = await all_lookups(source, [PATMMCCANN, DEPENDABOT])
         assert list(failed) == [PATMMCCANN]
         assert list(accounts) == [DEPENDABOT]
+
+    async def test_a_null_node_without_an_error_fails_that_id(
+        self, open_source, replay: Replay
+    ) -> None:
+        # Only NOT_FOUND means deleted (D28); an unexplained null is not proof of deletion.
+        def unexplained(body: dict[str, Any]) -> None:
+            body["data"]["nodes"][0] = None
+
+        replay.modify(unexplained, when=operation("UserLookup"))
+        async with open_source() as source:
+            accounts, failed = await all_lookups(source, [PATMMCCANN, DEPENDABOT])
+        assert list(failed) == [PATMMCCANN]
+        assert list(accounts) == [DEPENDABOT]
+
+    async def test_an_error_outside_every_node_fails_the_batch(
+        self, open_source, replay: Replay
+    ) -> None:
+        def stray(body: dict[str, Any]) -> None:
+            body["errors"] = [{"type": "INTERNAL", "path": ["elsewhere"], "message": "x"}]
+
+        replay.modify(stray, when=operation("UserLookup"))
+        async with open_source() as source:
+            accounts, failed = await all_lookups(source, [PATMMCCANN, DEPENDABOT])
+        assert accounts == {}
+        assert set(failed) == {PATMMCCANN, DEPENDABOT}
 
     @pytest.mark.parametrize(
         "change",

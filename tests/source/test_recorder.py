@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 from pathlib import Path
 from typing import Any
@@ -9,8 +10,11 @@ from typing import Any
 import httpx
 import pytest
 
+from github_activity_db.source.limits import RATE_LIMIT_FALLBACK_WAIT, SERVER_RETRY_DELAYS
 from tests.source import recorder
+from tests.source.conftest import FakeClock
 from tests.source.recorder import PrivateRepository, RecordingFailed, Scenario, record
+from tests.source.recordings import RECORDED
 from tests.source.replay import Replay, synthetic
 
 
@@ -68,8 +72,23 @@ async def test_a_failed_user_lookup_stops_the_recording() -> None:
         when=lambda seen: seen.operation == "UserLookup",
         times=None,
     )
+    clock = FakeClock()
     with pytest.raises(RecordingFailed, match="user lookup"):
-        await record("test-token", inner=replay.transport(), scenarios=())
+        await record("test-token", inner=replay.transport(), scenarios=(), clock=clock)
+    assert clock.sleeps == list(SERVER_RETRY_DELAYS)
+
+
+async def test_an_answer_without_data_is_retried_not_recorded() -> None:
+    # The first lookup answers a secondary limit with no data; the retry's answer is recorded.
+    replay = Replay.from_fixtures()
+    replay.fault(
+        lambda request: synthetic("secondary_limit_graphql"),
+        when=lambda seen: seen.operation == "UserLookup",
+    )
+    clock = FakeClock()
+    units = await record("test-token", inner=replay.transport(), scenarios=(), clock=clock)
+    assert sorted(unit.key["id"] for unit in units) == sorted(recorder.USERS)
+    assert clock.sleeps == [RATE_LIMIT_FALLBACK_WAIT]
 
 
 async def test_a_listed_private_repository_is_never_requested() -> None:
@@ -95,3 +114,49 @@ def test_a_failed_recording_writes_nothing(monkeypatch: pytest.MonkeyPatch, tmp_
         recorder.main()
     assert [path.name for path in tmp_path.iterdir()] == ["recorded"]
     assert [path.name for path in recorded.iterdir()] == ["kept.json"]
+
+
+def recorded_units() -> list[Any]:
+    """The units the recorder produces from the replay, as a live recording would."""
+    return asyncio.run(record("test-token", inner=Replay.from_fixtures().transport()))
+
+
+def test_a_recording_writes_one_file_per_unit(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    units = recorded_units()
+
+    async def replayed(token: str, **kwargs: Any) -> list[Any]:
+        return units
+
+    target = tmp_path / "recorded"
+    target.mkdir()
+    (target / "stale.json").write_text("{}")
+    monkeypatch.setattr(recorder, "RECORDED", target)
+    monkeypatch.setattr(recorder, "record", replayed)
+    monkeypatch.setenv("GITHUB_TOKEN", "test-token")
+    assert recorder.main() == 0
+    written = sorted(str(path.relative_to(target)) for path in target.rglob("*.json"))
+    committed = sorted(str(path.relative_to(RECORDED)) for path in RECORDED.rglob("*.json"))
+    assert written == committed  # every unit to its own file; the stale file is gone
+    for unit in units:
+        assert (target / unit.path()).read_text() == unit.dumps()
+    assert [path.name for path in tmp_path.iterdir()] == ["recorded"]
+
+
+def test_an_oversized_unit_writes_nothing(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    units = recorded_units()
+
+    async def replayed(token: str, **kwargs: Any) -> list[Any]:
+        return units
+
+    target = tmp_path / "recorded"
+    target.mkdir()
+    (target / "kept.json").write_text("{}")
+    monkeypatch.setattr(recorder, "RECORDED", target)
+    monkeypatch.setattr(recorder, "record", replayed)
+    monkeypatch.setattr(recorder, "MAX_FILE_BYTES", 10)
+    monkeypatch.setenv("GITHUB_TOKEN", "test-token")
+    assert recorder.main() == 1
+    assert [path.name for path in tmp_path.iterdir()] == ["recorded"]
+    assert [path.name for path in target.iterdir()] == ["kept.json"]

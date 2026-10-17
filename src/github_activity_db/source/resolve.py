@@ -67,14 +67,18 @@ async def _label_names(
     previous: str | None = None
     while page.page_info.has_next_page:
         cursor = page.page_info.end_cursor
-        if cursor is None or cursor == previous:
+        if cursor is None or cursor == previous or not page.nodes:
             raise RepositoryShapeError(
-                full_name, f"label page has a next page but no new cursor ({cursor!r})"
+                full_name,
+                f"label page has a next page but no progress ({len(page.nodes or ())} labels, "
+                f"cursor {cursor!r})",
             )
         previous = cursor
         result = await _send(
             transport, full_name, REPOSITORY_LABELS, {"id": repository.id, "after": cursor}
         )
+        if result.errors:
+            raise RepositoryShapeError(full_name, f"errors on a label page: {_messages(result)}")
         try:
             node = RepositoryLabelsNode.model_validate(result.data.get("node"))
         except ValidationError as e:
