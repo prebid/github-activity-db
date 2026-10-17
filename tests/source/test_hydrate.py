@@ -535,6 +535,8 @@ class TestSplitAndRetry:
             if seen.operation == "Overflow"
         ]
         assert sizes == [2, 1, 1]
+        # Split continuations complete both items; neither is retried alone.
+        assert batches(replay) == [[11155, 12975]]
 
     async def test_continuations_from_several_items_share_a_request(
         self, open_source, replay: Replay
