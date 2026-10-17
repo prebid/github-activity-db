@@ -72,6 +72,7 @@ status, releases, and repositories not in the tracked list.
 | D25 | A run, scheduled or manual, publishes when its starting database is valid (the downloaded snapshot passed `verify --db-only`, or `bootstrap` started from an empty database), sync exited 0 or 2, and verify exited 0 (no error, 5.4). The manifest records the sync exit code and verify's counts per class. A final job that runs whatever the others did then marks the workflow failed if sync exited 2, verify failed, or nothing was published, so a failure is visible after the data is saved. |
 | D26 | The Step 5 database is not committed; it becomes the first snapshot of release `db` (Step 6b). From Step 3 until 6c removes it, the tracked `github_activity.db` keeps its pre-Step-3 content: the default `DATABASE_URL` moves to a git-ignored file, and `scripts/check_frozen_db.py` fails when the file's SHA-256 differs from the digest it pins, as a pre-commit hook on the file (so CI's `--all-files` run checks it) and as a test. |
 | D27 | A stored repository no longer listed in `tracking.toml` is reported on every run (exit 2), and its rows stay until `ghactivity sync --prune-untracked` deletes them; the prune is recorded in `sync_runs`. |
+| D28 | A deleted GitHub account is represented one way everywhere: every reference to it (`author_id`, `merged_by_id`, `reviewer_id`, `pr_commits.author_id`, and issue `author_id`) is null, and its conversation comments are counted in `deleted_author_comment_count` (D24), never in `pr_commenters`. This holds whether GitHub returned the actor as null at hydration or a later lookup returned null for a stored account, so the stored state never depends on which items were re-hydrated after the deletion. A stored account keeps its `github_users` row with its last known login and type; `deleted_at` records the run that first found it deleted, so `deleted_at IS NOT NULL` lists the deleted accounts that were stored. A null actor reference always means a deleted account (an `EnterpriseUserAccount` actor is an item failure, 5.2). |
 
 ## 3. Coverage rule
 
@@ -182,7 +183,7 @@ effect inside a transaction) and asserts that `PRAGMA foreign_keys` returns 0; m
 | Table | Columns | Keys and constraints |
 |-------|---------|----------------------|
 | `repositories` | `github_id`, `owner`, `name`, `full_name`, `repo_group`, `is_private`, `is_archived`, `default_branch`, `is_tracked` | `github_id` unique; names take GitHub's spelling; `is_tracked` set by 5.3 step 1 (D27) |
-| `github_users` | `github_id`, `node_id`, `login`, `type`, `refreshed_at` | `github_id` unique; `node_id` unique; `type` and `login` not null, from GraphQL only (5.2) |
+| `github_users` | `github_id`, `node_id`, `login`, `type`, `refreshed_at`, `deleted_at` | `github_id` unique; `node_id` unique; `type` and `login` not null, from GraphQL only (5.2); `deleted_at` null unless a lookup found the account deleted (D28) |
 | `pull_requests` | `repository_id`, `number`, `github_id`, `node_id`, `state`, `is_draft`, `title`, `body`, `author_id`, `author_association`, `created_at`, `merged_at`, `merged_by_id`, `base_ref`, `targets_default_branch`, `is_cross_repository`, `additions`, `deletions`, `changed_files`, `commits_total`, `files_total`, `reviews_total`, `comments_total`, `deleted_author_comment_count`, `labels_total`, `closing_issues_total`, `github_updated_at`, `hydrated_at`, `hydration_version` | unique (`repository_id`, `number`); `github_id` unique; `state` in (`OPEN`, `MERGED`); `merged_at` set iff `MERGED`; author and merger nullable |
 | `pr_labels` | `pr_id`, `name` | PK (`pr_id`, `name`) |
 | `pr_reviews` | `github_id`, `pr_id`, `reviewer_id`, `state` | `github_id` unique; reviewer nullable; `state` in (`APPROVED`, `CHANGES_REQUESTED`, `COMMENTED`, `DISMISSED`) |
@@ -280,8 +281,11 @@ changes do not bump it. The manifest (5.6) carries the same number.
   is not yet stored is written only after `nodes(ids:)` (100 ids per request) resolves that account
   in the same run; a failed lookup, or a null result for an account with no stored values, is an item
   error. Each run also refreshes users last refreshed more than 24 hours ago, so renamed logins
-  converge; a lookup that returns null for a stored account (deleted since) keeps its last known
-  values.
+  converge. A lookup that returns null for a stored account (deleted since) keeps its row and last
+  known values and sets `deleted_at`; in the same transaction every reference to the account is set
+  null and its `pr_commenters` counts move to `deleted_author_comment_count`, which is what
+  re-hydrating those items would write (D28). An account seen again, in an actor sighting or a
+  lookup, has `deleted_at` cleared; its references return as the items re-hydrate.
 - Automation: an account is automation when its type is `Bot` or its `github_id` is listed in
   `[automation].accounts`; a commit is automation when its linked account is, or its author email is
   listed in `[automation].emails`. Each run copies both lists into `automation_accounts` and
@@ -824,6 +828,8 @@ clears, the deadline reached during the index, dry run writing nothing, run lock
 author-association changes applied from the index (and not over a hydrated write), a closing link
 added after merge, a PR with more than 10 links, a renamed label, a default-branch change
 recomputing `targets_default_branch`, a bot seen first through a commit and a failed user lookup,
+an account deleted after it was stored (`deleted_at` set, every reference null, its comment counts
+moved to `deleted_author_comment_count`, the same rows a re-hydration writes) and then seen again,
 an automation-list change with no hydration changing the views, an accepted failure leaving exit 0,
 one case per exit condition in 5.3 step 8, `sync_failures` rows removed when their item leaves
 coverage, `last_index_started_at` left unwritten for a failed or incompletely indexed repository,
