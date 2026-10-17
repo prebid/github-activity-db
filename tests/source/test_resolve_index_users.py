@@ -687,6 +687,26 @@ class TestUserLookup:
         assert list(failed) == [PATMMCCANN]
         assert list(accounts) == [DEPENDABOT]
 
+    @pytest.mark.parametrize(
+        "path",
+        [["nodes", 0, None], ["nodes", 0, {}], ["nodes", 0, 1.5], ["nodes", True]],
+        ids=["null", "object", "float", "bool-index"],
+    )
+    async def test_a_not_found_at_a_malformed_path_is_not_deleted(
+        self, open_source, replay: Replay, path: list[Any]
+    ) -> None:
+        # Trimmed, these would read as ["nodes", 0], NOT_FOUND on the node: a deleted account.
+        def malformed(body: dict[str, Any]) -> None:
+            body["data"]["nodes"][0] = None
+            body["errors"] = [{"type": "NOT_FOUND", "path": path, "message": "Missing resource"}]
+
+        replay.modify(malformed, when=operation("UserLookup"), times=None)
+        async with open_source() as source:
+            accounts, failed = await all_lookups(source, [PATMMCCANN, DEPENDABOT])
+        assert accounts == {}
+        assert set(failed) == {PATMMCCANN, DEPENDABOT}
+        assert all(isinstance(error.cause, ServerError) for error in failed.values())
+
     async def test_a_not_found_below_a_null_node_is_not_deleted(
         self, open_source, replay: Replay
     ) -> None:

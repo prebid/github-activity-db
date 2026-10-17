@@ -1027,9 +1027,7 @@ class TestGraphQLReading:
             await source.resolve(**RESOLVE)
         assert clock.sleeps == [SERVER_RETRY_DELAYS[0]]
 
-    @pytest.mark.parametrize(
-        "entry", ["boom", {"message": "boom", "path": 5}], ids=["string", "path"]
-    )
+    @pytest.mark.parametrize("entry", ["boom", {"message": "boom"}], ids=["string", "no-path"])
     async def test_a_malformed_error_entry_is_a_rejection(
         self, open_source, replay: Replay, clock: FakeClock, entry: Any
     ) -> None:
@@ -1331,9 +1329,8 @@ class TestInputGuards:
         "error",
         [
             {"type": ["NOT_FOUND"], "message": "m", "path": ["repository"]},
-            {"type": "SERVICE_UNAVAILABLE", "message": "m", "path": ["repository", None]},
         ],
-        ids=["type-not-a-string", "path-part-null"],
+        ids=["type-not-a-string"],
     )
     async def test_odd_error_fields_are_read_as_absent(
         self, open_source, replay: Replay, error: dict[str, Any]
@@ -1346,6 +1343,31 @@ class TestInputGuards:
         async with open_source() as source:
             with pytest.raises(RepositoryShapeError, match="errors under repository"):
                 await source.resolve(**RESOLVE)
+
+    @pytest.mark.parametrize(
+        "path",
+        [
+            ["repository", None],
+            ["repository", {}],
+            ["repository", 1.5],
+            ["repository", True],
+            ["repository", -1],
+            5,
+            "repository",
+        ],
+        ids=["null", "object", "float", "bool", "negative", "number", "string"],
+    )
+    async def test_a_malformed_error_path_makes_the_response_malformed(
+        self, open_source, replay: Replay, clock: FakeClock, path: Any
+    ) -> None:
+        # A path is used whole or not at all: trimmed, it could match an exact NOT_FOUND path.
+        body = resolve_body(replay, errors=[{"type": "NOT_FOUND", "message": "m", "path": path}])
+        replay.fault(
+            lambda request: httpx.Response(200, json=body, headers=REST_DATE), when=resolves
+        )
+        async with open_source() as source:
+            await source.resolve(**RESOLVE)
+        assert clock.sleeps == [SERVER_RETRY_DELAYS[0]]
 
     async def test_a_reset_in_the_past_waits_only_the_margin(
         self, open_source, replay: Replay, clock: FakeClock

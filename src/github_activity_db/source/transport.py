@@ -17,8 +17,9 @@ Failure classes:
   exceeded resource limits. ``RequestTooHeavy`` at once for a splittable request; retried like a
   server error otherwise.
 - server or transport error: other 5xx, network errors, client timeouts, a connection the server
-  broke off or a body it encoded wrongly, malformed responses. Retried after 2, 4, and 8 s (with
-  jitter), then ``ServerError``.
+  broke off or a body it encoded wrongly, malformed responses (an error path that is not field
+  names and list indices among them). Retried after 2, 4, and 8 s (with jitter), then
+  ``ServerError``.
 - fatal: 401 or a failed credential request (``Unauthorized``), 403 without a rate-limit signal
   (``Forbidden``), any other HTTP client failure, such as a redirect loop, a proxy or URL
   problem, or a missing auth dependency (``ClientFailure``), and a response this code does not
@@ -387,6 +388,13 @@ class Transport:
         data = body.get("data")
         if not isinstance(raw_errors, list) or not isinstance(data, dict | None):
             return _Failure("server", "GraphQL body has malformed data or errors")
+        # A path locates an error, and an exact path is what proves an item absent (NOT_FOUND),
+        # so a path is used whole or the response is malformed; it is never trimmed to fit.
+        for entry in raw_errors:
+            if isinstance(entry, dict) and not _valid_path(entry.get("path")):
+                return _Failure(
+                    "server", f"GraphQL error path is malformed: {entry['path']!r:.200}"
+                )
         errors = tuple(_graphql_error(entry) for entry in raw_errors)
         reading = data.get("rateLimit") if data is not None else None
         malformed: Exception | None = None
@@ -527,9 +535,21 @@ def _graphql_error(entry: object) -> GraphQLError:
     return GraphQLError(
         type=error_type if isinstance(error_type, str) else None,
         message=str(entry.get("message", "")),
-        path=tuple(part for part in path if isinstance(part, str | int))
-        if isinstance(path, list)
-        else (),
+        path=tuple(path) if isinstance(path, list) else (),
+    )
+
+
+def _valid_path(path: object) -> bool:
+    """Absent, or a list of field names and list indices (the GraphQL response-path form).
+
+    An index is a non-negative ``int``; ``bool`` is not one, although Python counts it as int.
+    """
+    if path is None:
+        return True
+    return isinstance(path, list) and all(
+        isinstance(part, str)
+        or (isinstance(part, int) and not isinstance(part, bool) and part >= 0)
+        for part in path
     )
 
 

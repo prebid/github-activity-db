@@ -52,6 +52,7 @@ from github_activity_db.source.errors import (
     RepositoryShapeError,
     RequestTooHeavy,
     ResponseShapeError,
+    ServerError,
     TotalCountChanged,
     UnattributedErrors,
 )
@@ -686,6 +687,26 @@ class TestInvariants:
         error = await failure(open_source, PREBID_JS, 13481)
         assert isinstance(error, AliasError)
         assert error.error_type == "NOT_FOUND"
+
+    @pytest.mark.parametrize(
+        "suffix",
+        [[None], [{}], [1.5], [True], [-1]],
+        ids=["null", "object", "float", "bool", "negative"],
+    )
+    async def test_a_not_found_at_a_malformed_path_is_not_gone(
+        self, open_source, replay: Replay, clock: FakeClock, suffix: list[Any]
+    ) -> None:
+        # ["repository", "p0", null] must not be read as ["repository", "p0"], which means Gone.
+        unit = pr_unit(replay, 13481)
+        unit.data = None
+        unit.errors = [{"type": "NOT_FOUND", "path": suffix, "message": "Missing resource"}]
+        replay.add(unit)
+        error = await failure(open_source, PREBID_JS, 13481)
+        assert isinstance(error, ItemRequestFailed)
+        assert isinstance(error.cause, ServerError)
+        assert "malformed" in str(error.cause)
+        # The transport retried the malformed answer; the item's own request is not repeated.
+        assert batches(replay) == [[13481]] * 4
 
     @pytest.mark.parametrize(
         ("state", "merged_at"),
