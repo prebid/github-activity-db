@@ -296,6 +296,9 @@ Search API:
 
 ### Environment Variables
 
+These variables have no effect: `Settings` sets no `env_nested_delimiter`, so the pacer runs with
+the defaults below (redesign plan, gap 64). The pacing stack is retired at cutover (D16).
+
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `PACING__MIN_REQUEST_INTERVAL_MS` | `50` | Sets the bucket's max rate ceiling (1000 / value = req/s) |

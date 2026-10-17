@@ -37,7 +37,7 @@ uv run pytest                      # CI also runs Python 3.12, `alembic check`, 
 | [Data Model](docs/data-model.md) | PR fields, sync behavior, tagging systems |
 | [Development](docs/development.md) | Setup, commands, configuration, troubleshooting |
 | [Testing](docs/testing.md) | Testing strategy, infrastructure, patterns, coverage |
-| [Roadmap](docs/roadmap.md) | Implementation phases and future plans |
+| [Roadmap](docs/roadmap.md) | History of earlier phases; superseded by the redesign plan |
 
 ## Current Scope
 
@@ -106,8 +106,6 @@ Async GitHub API client with integrated pacing and rate limit tracking. Every AP
 | `DATABASE_URL` | No | `sqlite+aiosqlite:///./github_activity.db` | Database connection |
 | `LOG_LEVEL` | No | `INFO` | Logging level |
 | `ENVIRONMENT` | No | `development` | App environment |
-| `SYNC__MERGE_GRACE_PERIOD_DAYS` | No | `14` | Days after merge before PR is frozen |
-| `SYNC__COMMIT_BATCH_SIZE` | No | `25` | PRs per commit batch |
 | `TRACKING_CONFIG_PATH` | No | packaged `tracking.toml` | Tracked repositories file to read instead |
 
 ## Type Safety Policy

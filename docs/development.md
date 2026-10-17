@@ -382,8 +382,9 @@ target_metadata = Base.metadata
 ### SQLite "database is locked"
 
 This can happen with concurrent access. Create engines with `build_engine` from
-`github_activity_db.db.engine`, which uses `NullPool` and sets a 30 s busy timeout, foreign keys,
-and the rollback journal on every connection:
+`github_activity_db.db.engine`, which uses `NullPool` and sets a 30 s busy timeout and foreign keys
+on every connection. It does not set the journal mode (redesign plan D20); `scripts/check_db_journal.py`
+checks the tracked file:
 ```python
 engine = build_engine(url)
 ```
