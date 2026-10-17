@@ -1,5 +1,9 @@
 # Roadmap
 
+> Historical record of the earlier phases. Future work is governed by the
+> [redesign plan](redesign-plan.md); where this document disagrees with it, including the Phase 2
+> and Phase 3 designs below, the redesign plan wins.
+
 This document describes the implementation phases and architecture of GitHub Activity DB.
 
 ---

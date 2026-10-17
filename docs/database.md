@@ -339,12 +339,9 @@ async with get_session(auto_commit=False) as session:
 
 ### Configuration
 
-The batch size is configurable via environment variable:
-
-```bash
-# Set batch size to 50 PRs per commit
-SYNC__COMMIT_BATCH_SIZE=50 uv run ghactivity sync all --since 2024-10-01
-```
+The batch size is `SyncConfig.commit_batch_size` (default 25). The `SYNC__COMMIT_BATCH_SIZE`
+environment variable has no effect: `Settings` sets no `env_nested_delimiter` (redesign plan,
+gap 64).
 
 ### Failure Recovery
 
