@@ -45,7 +45,6 @@ from .errors import (
     ItemRequestFailed,
     NullEntry,
     PagingStalled,
-    RepositoryChanged,
     RepositoryNotFound,
     RepositoryShapeError,
     RequestFailedError,
@@ -233,10 +232,6 @@ class PullRequestHydrator:
             detail = "; ".join(f"{error.type}: {error.message}" for error in errors) or "no error"
             raise RepositoryShapeError(
                 self._repository.full_name, f"batch repository is null: {detail}"
-            )
-        if container.get("databaseId") != self._repository.github_id:
-            raise RepositoryChanged(
-                self._repository.full_name, self._repository.github_id, container.get("databaseId")
             )
         items: dict[int, _Item | Gone | ItemError] = {}
         for i, number in enumerate(numbers):

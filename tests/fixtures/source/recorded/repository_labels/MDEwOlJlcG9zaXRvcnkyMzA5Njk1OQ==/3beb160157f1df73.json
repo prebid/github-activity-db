@@ -147,18 +147,18 @@
   "errors": [],
   "extra": {},
   "headers": {
-    "date": "Sat, 17 Oct 2026 05:18:38 GMT",
+    "date": "Sat, 17 Oct 2026 11:05:20 GMT",
     "x-ratelimit-limit": "5000",
-    "x-ratelimit-remaining": "4947",
-    "x-ratelimit-reset": "1792216302",
+    "x-ratelimit-remaining": "4955",
+    "x-ratelimit-reset": "1792235352",
     "x-ratelimit-resource": "graphql",
-    "x-ratelimit-used": "53"
+    "x-ratelimit-used": "45"
   },
   "key": {
     "after": "MTAw",
     "id": "MDEwOlJlcG9zaXRvcnkyMzA5Njk1OQ=="
   },
   "kind": "repository_labels",
-  "recorded_at": "2026-10-17T05:18:27Z",
+  "recorded_at": "2026-10-17T11:05:08Z",
   "source": "live"
 }

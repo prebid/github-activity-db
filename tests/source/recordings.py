@@ -255,7 +255,6 @@ def split_graphql(
                     stamp,
                     repository.get(alias),
                     ["repository", alias],
-                    repository_database_id=repository.get("databaseId"),
                 )
             )
         return units

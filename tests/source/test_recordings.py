@@ -91,7 +91,10 @@ def test_a_continuation_stamp_does_not_depend_on_its_neighbours(connection) -> N
 @pytest.mark.parametrize(
     ("document", "edit"),
     [
-        (documents.pull_request_batch(2), ("{ databaseId p0:", "{ p0:")),
+        (
+            documents.pull_request_batch(2),
+            ("repository(owner: $owner, name: $name)", "repository(name: $name, owner: $owner)"),
+        ),
         (documents.pull_request_batch(2), ("rateLimit { cost remaining resetAt }", "")),
         (documents.pull_request_batch(2), ("additions deletions changedFiles", "additions")),
     ],

@@ -136,17 +136,6 @@ class RepositoryRequestFailed(RepositoryError):
         self.cause = cause
 
 
-class RepositoryChanged(RepositoryError):
-    """A batch answered for another repository than the one resolved: renamed or replaced since."""
-
-    def __init__(self, full_name: str, resolved_id: int, answered_id: object) -> None:
-        super().__init__(
-            full_name, f"resolved as repository {resolved_id}, batch answered for {answered_id!r}"
-        )
-        self.resolved_id = resolved_id
-        self.answered_id = answered_id
-
-
 class RepositoryShapeError(RepositoryError):
     """A response for the repository did not match the typed models, or GitHub reported errors
     for it, or its paging did not advance."""

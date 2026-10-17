@@ -167,18 +167,18 @@
   "errors": [],
   "extra": {},
   "headers": {
-    "date": "Sat, 17 Oct 2026 05:18:30 GMT",
+    "date": "Sat, 17 Oct 2026 11:05:11 GMT",
     "x-ratelimit-limit": "5000",
-    "x-ratelimit-remaining": "4961",
-    "x-ratelimit-reset": "1792216302",
+    "x-ratelimit-remaining": "4971",
+    "x-ratelimit-reset": "1792235352",
     "x-ratelimit-resource": "graphql",
-    "x-ratelimit-used": "39"
+    "x-ratelimit-used": "29"
   },
   "key": {
     "name": "Prebid.js",
     "owner": "prebid"
   },
   "kind": "resolve",
-  "recorded_at": "2026-10-17T05:18:27Z",
+  "recorded_at": "2026-10-17T11:05:08Z",
   "source": "live"
 }

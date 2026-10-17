@@ -425,18 +425,16 @@
     "title": "Bugfix: Update adRendering.js styling for iframe in case of insterstitial ads",
     "updatedAt": "2025-04-08T18:41:04Z"
   },
-  "document_sha256": "bcdac6b7a83d74688da324dead3486a0056b3e9aa474f50d8fb8de54333a5c6a",
+  "document_sha256": "199ed73f6d5ba2a5a330b9fbd6ed0ca1cecac86adc6839df6b34e896cb5c8e8d",
   "errors": [],
-  "extra": {
-    "repository_database_id": 39321023
-  },
+  "extra": {},
   "headers": {
-    "date": "Sat, 17 Oct 2026 05:18:31 GMT",
+    "date": "Sat, 17 Oct 2026 11:05:12 GMT",
     "x-ratelimit-limit": "5000",
-    "x-ratelimit-remaining": "4960",
-    "x-ratelimit-reset": "1792216302",
+    "x-ratelimit-remaining": "4970",
+    "x-ratelimit-reset": "1792235352",
     "x-ratelimit-resource": "graphql",
-    "x-ratelimit-used": "40"
+    "x-ratelimit-used": "30"
   },
   "key": {
     "name": "Prebid.js",
@@ -444,6 +442,6 @@
     "owner": "prebid"
   },
   "kind": "pull_request",
-  "recorded_at": "2026-10-17T05:18:27Z",
+  "recorded_at": "2026-10-17T11:05:08Z",
   "source": "live"
 }

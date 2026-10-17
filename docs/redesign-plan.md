@@ -363,8 +363,7 @@ less than 10 minutes in the past, inserts its own row, and replaces `automation_
    error (3 more times, 2, 4, 8 s) in the timeout class too. A single item whose own request still
    fails after those retries is recorded as failed without the solo retry, which would repeat that
    request; every other item error gets its solo retry. A resolve or index page that still fails
-   fails its repository for this run, and so does a batch answered for another repository than the
-   one resolved (renamed or replaced since). A compare page that still fails is an item error. A
+   fails its repository for this run. A compare page that still fails is an item error. A
    user lookup failure is scoped to what it covers, one node or one request of 100 ids, and is an
    item error for each item waiting on those accounts (5.2); a failed 24-hour
    refresh keeps the stored values, is logged, and is retried next run without changing the exit
@@ -662,9 +661,7 @@ query($owner: String!, $name: String!, $after: String) {
 Issue index (Step 4), same shape with
 `issues(...) { ... nodes { number fullDatabaseId state createdAt updatedAt closedAt } }`.
 
-Pull request fields per alias (25 aliases cost 2 points; cost depends only on the query shape). The
-batch also selects the container `repository { databaseId }`, checked against the resolved
-repository before any alias is read:
+Pull request fields per alias (25 aliases cost 2 points; cost depends only on the query shape):
 
 ```graphql
 id number fullDatabaseId state isDraft title body createdAt updatedAt mergedAt

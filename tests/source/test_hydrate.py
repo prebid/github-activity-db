@@ -46,7 +46,6 @@ from github_activity_db.source.errors import (
     ItemRequestFailed,
     NullEntry,
     PagingStalled,
-    RepositoryChanged,
     RepositoryNotFound,
     RepositoryShapeError,
     RequestTooHeavy,
@@ -624,19 +623,6 @@ class TestInvariants:
         error = await failure(open_source, PREBID_JS, 13481)
         assert isinstance(error, IdentityMismatch)
         assert error.field == "number"
-
-    async def test_a_batch_for_another_repository_fails_the_repository(
-        self, open_source, replay: Replay
-    ) -> None:
-        # Checked before any alias, so a missing number is not reported Gone for the impostor.
-        for number in (13481, 999999):
-            unit = pr_unit(replay, number)
-            unit.extra["repository_database_id"] = 1
-            replay.add(unit)
-        with pytest.raises(RepositoryChanged) as raised:
-            await hydrate(open_source, PREBID_JS, [13481, 999999])
-        assert (raised.value.resolved_id, raised.value.answered_id) == (39321023, 1)
-        assert len(batches(replay)) == 1
 
     async def test_an_alias_error_other_than_not_found(self, open_source, replay: Replay) -> None:
         unit = pr_unit(replay, 13481)

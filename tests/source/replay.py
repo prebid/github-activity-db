@@ -25,7 +25,6 @@ from tests.source.recordings import (
     RECORDED,
     SYNTHETIC,
     Unit,
-    canonical_batch,
     compare_key,
     extract_block,
     overflow_stamp,
@@ -224,8 +223,6 @@ class Replay:
                     key = {"owner": variables["owner"], "name": variables["name"], "number": number}
                     unit = self._lookup("pull_request", key, stamp)
                     container[pull_request_alias(index)] = unit.data
-                    if "{ databaseId p0:" in canonical_batch(seen.query):
-                        container["databaseId"] = unit.extra["repository_database_id"]
                     units.append((unit, ["repository", f"p{index}"]))
                 return _graphql_response(
                     seen, [unit for unit, _ in units], {"repository": container}, units

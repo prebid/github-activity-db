@@ -172,7 +172,7 @@ def pull_request_batch(count: int) -> str:
     )
     return (
         f"query PullRequestBatch($owner: String!, $name: String!, {variables}) {{ "
-        f"repository(owner: $owner, name: $name) {{ databaseId {aliases} }} {RATE_LIMIT} }}"
+        f"repository(owner: $owner, name: $name) {{ {aliases} }} {RATE_LIMIT} }}"
         f"{PULL_REQUEST_FIELDS}{ACTOR_FRAGMENT}"
     )
 
