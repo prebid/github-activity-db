@@ -83,3 +83,50 @@ def test_an_unknown_base_is_an_error_not_a_pass(repo: Path) -> None:
     write_lock(repo, {"pull_request:1": "a" * 64})
     result = check(repo, base="origin/no-such-branch")
     assert result.returncode == 2
+
+
+def test_a_deleted_lock_removes_every_entry(repo: Path) -> None:
+    write_lock(repo, {"pull_request:1": "a" * 64})
+    commit(repo)
+    (repo / LOCK).unlink()
+    result = check(repo)
+    assert result.returncode == 1
+    assert "pull_request:1 was removed" in result.stderr
+
+
+@pytest.mark.parametrize("text", ["{not json", "[1, 2]", '{"pull_request:1": 1}'])
+def test_a_malformed_lock_is_an_error_not_a_pass(repo: Path, text: str) -> None:
+    write_lock(repo, {"pull_request:1": "a" * 64})
+    commit(repo)
+    (repo / LOCK).write_text(text)
+    result = check(repo)
+    assert result.returncode == 2, result.stderr
+
+
+def test_an_absolute_lock_path_is_an_error_not_a_pass(repo: Path) -> None:
+    write_lock(repo, {"pull_request:1": "a" * 64})
+    commit(repo)
+    write_lock(repo, {"pull_request:1": "c" * 64})
+    result = subprocess.run(
+        [sys.executable, str(SCRIPT), "--base", "main", "--lock", str(repo / LOCK)],
+        cwd=repo,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 2
+    assert "relative" in result.stderr
+
+
+def test_the_checker_runs_isolated_from_site_packages(repo: Path) -> None:
+    # CI runs the base copy with -I -S, outside the pull request's environment.
+    write_lock(repo, {"pull_request:1": "a" * 64})
+    commit(repo)
+    write_lock(repo, {"pull_request:1": "c" * 64})
+    result = subprocess.run(
+        [sys.executable, "-I", "-S", str(SCRIPT), "--base", "main"],
+        cwd=repo,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 1
+    assert "pull_request:1 changed" in result.stderr

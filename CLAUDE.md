@@ -24,6 +24,7 @@ uv run ghactivity sync all --since 2024-10-01     # Multi-repo sync
 # Checks (CI runs the same: .github/workflows/check.yml)
 uv run pre-commit run --all-files  # ruff, mypy, file checks, quality gates
 uv run pytest                      # CI also runs Python 3.12, `alembic check`, and a built wheel
+# On pull requests, CI also runs scripts/check_query_lock.py (hydration-version lock, docs/testing.md)
 ```
 
 ## Documentation
@@ -84,7 +85,8 @@ githubkit, and a test enforces it.
 - `Transport`: the one place requests are sent: one in flight, budget per pool, failure classes
   (rate limited, timeout, server error, 401, 403), waits and retries; injectable `Clock`
 - `PullRequestHydrator`: batches of 25, `node(id:)` overflow, REST compare above 250 commits,
-  split on failure, one solo retry; returns `Hydrated`, `Gone`, or `Failed` per number
+  split on failure, one solo retry per failed item (none when its own request already failed
+  alone); returns `Hydrated`, `Gone`, or `Failed` per distinct number
 - `records.py` (public) and `models.py` (private, strict types); `errors.py` splits fatal,
   repository, and item errors
 - Recorded fixtures: `scripts/record_fixtures.py` (see docs/testing.md)

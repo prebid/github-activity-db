@@ -349,20 +349,24 @@ less than 10 minutes in the past, inserts its own row, and replaces `automation_
 
    | Class | Detected by | Action |
    |-------|-------------|--------|
-   | Rate limited | GraphQL: `errors[].type == "RATE_LIMITED"`, or an error message naming a secondary rate limit, on HTTP 200 or 403 (GitHub documents both statuses); REST: HTTP 403/429 with `retry-after`, `x-ratelimit-remaining: 0`, or a secondary-limit message | Wait for `retry-after`; else, when `x-ratelimit-remaining` is 0 or the error is `RATE_LIMITED`, until `x-ratelimit-reset` or the last `resetAt`; else 60 s, doubling while it repeats. Never split; not an attempt. A wait that would end after the `--max-minutes` deadline stops queueing instead |
-   | Timeout or resource limit | HTTP 502/504; a GraphQL timeout or resource-limit error | Split the batch in half at once; a same-size retry repeats the cost |
-   | Server or transport error | other 5xx; connection error; client timeout | Retry up to 3 more times (2, 4, 8 s, with jitter), then split |
+   | Rate limited | GraphQL: `errors[].type == "RATE_LIMITED"`, or an error message naming a secondary rate limit, on HTTP 200 or 403 (GitHub documents both statuses); REST: HTTP 403/429 with `retry-after`, `x-ratelimit-remaining: 0`, or a secondary-limit message | Wait for `retry-after`; else, when `x-ratelimit-remaining` is 0 or the error is `RATE_LIMITED`, until `x-ratelimit-reset` or the last `resetAt`; else 60 s. Each further limit before a success waits at least 60 s doubled per repeat, whatever the headers say (GitHub: "If your request continues to fail due to a secondary rate limit, wait for an exponentially increasing amount of time between retries, and throw an error after a specific number of retries"). Never split; not an attempt. A wait that would end after the `--max-minutes` deadline stops queueing instead |
+   | Timeout or resource limit | HTTP 502/504 (GitHub documents both for a request over 10 s); a GraphQL error at any path reporting a timeout or exceeded resource limits (GitHub returns "partial results along with an error indicating that resource limits were exceeded") | Split the batch in half at once; a same-size retry repeats the cost |
+   | Server or transport error | other 5xx; a GraphQL server fault at any path; connection error; client timeout; a response without data or errors, or without a readable `Date` | Retry up to 3 more times (2, 4, 8 s, with jitter), then split |
    | Item gone | alias `null` with `NOT_FOUND` | No write and no failure; the next index removes it |
    | Item error | another alias error; partial alias data; a value the typed models reject; a failed check in step 5; HTTP 404/422 on a compare page | Retry the item once alone, then record it in `sync_failures` and write nothing for it |
-   | Unauthorized or forbidden | HTTP 401; HTTP 403 with no rate-limit signal (a missing permission) | Fatal: drain the writer, close the run, exit 1 |
+   | Unauthorized or forbidden | HTTP 401; a failed credential request (an App token mint answering 4xx without a rate-limit signal); HTTP 403 with no rate-limit signal (a missing permission); an HTTP client failure outside the network (a missing auth dependency) | Fatal: drain the writer, close the run, exit 1 |
 
    Typed response models check types strictly: GitHub's JSON has exact types, and lax coercion
    would read `"no"` as false. `BigInt` ids must be strings of digits and timestamps ISO strings.
 
-   Splitting continues down to single items; a single item that still fails is an item error. A
-   request that cannot split retries like a server error (3 more times, 2, 4, 8 s) in the timeout
-   class too. A resolve or index page that still fails fails its repository for this run; a compare
-   page or user lookup that does is an item error for each item waiting on it (5.2); a failed 24-hour
+   Splitting continues down to single items. A request that cannot split retries like a server
+   error (3 more times, 2, 4, 8 s) in the timeout class too. A single item whose own request still
+   fails after those retries is recorded as failed without the solo retry, which would repeat that
+   request; every other item error gets its solo retry. A resolve or index page that still fails
+   fails its repository for this run, and so does a batch answered for another repository than the
+   one resolved (renamed or replaced since). A compare page that still fails is an item error. A
+   user lookup failure is scoped to what it covers, one node or one request of 100 ids, and is an
+   item error for each item waiting on those accounts (5.2); a failed 24-hour
    refresh keeps the stored values, is logged, and is retried next run without changing the exit
    code. Fields that drive logic (`state`, review `state`) are closed enums in the typed models;
    descriptive enums are text (5.1).
@@ -660,7 +664,7 @@ Issue index (Step 4), same shape with
 
 Pull request fields per alias (25 aliases cost 2 points; cost depends only on the query shape). The
 batch also selects the container `repository { databaseId }`, checked against the resolved
-repository:
+repository before any alias is read:
 
 ```graphql
 id number fullDatabaseId state isDraft title body createdAt updatedAt mergedAt
@@ -757,11 +761,12 @@ Scope: the `source/` package (5.7): the client factory, failure classification a
 response models, typed invariant errors, and the typed records out; resolve with label names; the PR
 index; the batch hydrator with overflow on all six connections, the compare fallback, and the user
 lookup. A lock file (`tests/query_versions.json`) maps each `<kind>:<version>` to the SHA-256 of its
-kind's normalized query documents (the per-alias field document and the continuation documents,
-never an assembled request; comments removed and whitespace runs collapsed to one space). A test
-fails when a document changes without a new entry, and a CI step, which fetches the base branch
-explicitly, fails when a pull request changes or removes an entry that exists there. Pull requests
-only: the issue shapes land in Step 4. Not wired into the CLI; no configuration changes.
+kind's normalized query documents (the batch request reduced to one alias, and each continuation
+request reduced to one alias; comments removed and whitespace runs collapsed to one space). A test
+fails when the current documents differ from the current version's entry, and a CI step fails when
+a pull request changes or removes an entry that exists at the base commit; it runs the base
+commit's copy of the checker. Pull requests only: the issue shapes land in Step 4. Not wired into
+the CLI; no configuration changes.
 
 Tests run through the `source/` client factory with an injected `httpx.MockTransport`.
 `scripts/record_fixtures.py` records responses from public repositories (never
@@ -770,8 +775,10 @@ normalized query hash and the recording date. A recording keeps the response bod
 headers `date`, `retry-after`, and `x-ratelimit-*`, never request headers. The mock transport
 assembles batch responses from per-alias recordings, so a split or a batch-size change needs no new
 recording, and it fails with "re-record" when a request's query hash differs from the stamp.
-Synthetic responses live in their own directory and name their source: a recorded item they modify,
-or GitHub's documented error shape. Scenarios: overflow on each of the six connections; more than
+Synthetic error responses live in `tests/fixtures/source/synthetic/` and name their source:
+GitHub's documentation, a live observation, or a construction for a case GitHub does not document;
+a test that needs a variant of a recorded item modifies it in the test and says which. Scenarios:
+labels past 100 (`golang/go`; no tracked repository has more than 100); overflow on each of the six connections; more than
 250 commits (compare); ids above 2^31; a null merger (`Prebid.js#13769`); a null PR author and a null
 comment author (`Prebid.js#12975`); a dismissed review (`prebid-server-java#4637`); a duplicate file
 path (`Prebid.js#13481`); one bot seen as a PR author and as a commit user (`Prebid.js#15724`); an
@@ -924,6 +931,9 @@ Measured 2026-10-16 unless noted. "Index" means the created-order enumeration in
 | Cost formula | GitHub's documented formula (requests per connection, nested ones multiplied by the parents' `first`, divided by 100, rounded, minimum 1) gives 2 for a 25-PR batch, 1 for an index page, and 27 for the nested-connection variant, the measured values; `tests/source/test_documents.py` pins each 5.8 document's cost | `tests/source/graphql_cost.py` |
 | Unused fragments | GitHub rejects a document that defines a fragment it does not use ("Fragment Actor was defined, but not used") | live overflow request, 2026-10-17 |
 | Node limit | A query requesting more than 500,000 possible nodes answers HTTP 200 with no `data` and `errors[].type` `MAX_NODE_LIMIT_EXCEEDED` ("... requesting up to 1,000,000 possible nodes which exceeds the maximum limit of 500,000"); `source/` treats it like a timeout and splits the request | live oversized query on go-gdpr, 2026-10-17 |
+| GraphQL timeouts and resource limits | Over 10 s: "a timeout response and a message reporting that 'We couldn't respond to your request in time'"; "you may receive either a `502` or `504` status code". Too many resources: "partial results along with an error indicating that resource limits were exceeded". No error type names are documented | GitHub GraphQL docs, "Rate limits and query limits for the GraphQL API", read 2026-10-17 |
+| Persistent rate limits | "If your request continues to fail due to a secondary rate limit, wait for an exponentially increasing amount of time between retries, and throw an error after a specific number of retries." A primary or secondary limit answers "a `403 Forbidden` or `429 Too Many Requests`" | GitHub REST docs, "Best practices for using the REST API" and "Troubleshooting the REST API", read 2026-10-17 |
+| Label paging | `REPOSITORY_LABELS` (5.8) returns golang/go's second label page (44 of 144); no tracked repository has more than 100 labels (largest: prebid-server, 56) | live recording and query, 2026-10-17 |
 | Lax parsing | pydantic's default (lax) mode reads `"no"` as `False` for a boolean and `"12"` as 12 for an integer | installed pydantic 2.12.5, `TypeAdapter(bool).validate_python("no")` |
 | Source vs REST | 43 PRs (seeded sample of the indexes of Prebid.js, prebid-server, salesagent, prebid-mobile-android, prebid.github.io, go-gdpr, plus the recorded fixture PRs) hydrated through `source/` and read again through REST: state, ids, draft, title, body, author, merger, base ref, additions, deletions, changed files, commit count, author association, labels, reviews (id, state, reviewer), files (path, additions, deletions), commit SHAs and linked authors (up to 250), and commenters equal on 40. The 3 differences are REST's: it reports a deleted account as `ghost` (id 10137) where GraphQL returns null (`Prebid.js#12975`), and it reports 0 additions and deletions for some files of large PRs (`salesagent#1501`: 132 of 1,504 files; `#1721`: 93 of 1,473), where GraphQL's per-file counts sum exactly to the PR totals | live cross-check, 2026-10-17 |
 | Partial errors | A batch with a missing number returns data for the other aliases plus `errors[{type: NOT_FOUND, path}]`; `issue(number:)` on a PR's number also returns `NOT_FOUND` | live API |
@@ -990,7 +1000,7 @@ Measured 2026-10-16 unless noted. "Index" means the created-order enumeration in
 | A PR file list above 3,000 entries (no tracked PR found) | Validation fails the item if `files` stops short of `totalCount`; Step 5 reports any |
 | Compare fallback on a PR whose head fork was deleted (only a live fork tested) | A count mismatch fails the item; Step 5 reports any |
 | Full bootstrap time, cost, and size are projections from two repositories | Step 5 measures them |
-| Overflow continuations per request (25), the reset margin (1 s), and retry jitter (25%) are chosen, not measured | Step 5 records secondary-limit responses and request times at these values |
+| Overflow continuations per request (25), the reset margin (1 s), retry jitter (25%), the budget reserves (100 points, 100 calls), the longest accepted rate-limit wait (65 min), and the HTTP timeouts (read 30 s, connect 10 s) are chosen, not measured | Step 5 records secondary-limit responses, budget readings, and request times at these values |
 
 ## 9. Later work
 

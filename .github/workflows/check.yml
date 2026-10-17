@@ -36,19 +36,23 @@ jobs:
         run: uv run --no-sync pre-commit run --all-files --show-diff-on-failure
       - name: Hydration-version lock entries are append-only
         if: github.event_name == 'pull_request'
-        env:
-          BASE_REF: ${{ github.base_ref }}
-        # The base branch's copy of the checker runs, so a pull request cannot relax the check
-        # that grades it; the pull request's own copy runs only where the base has none.
+        # Compares with the base commit the merge ref was built on, its first parent. The base
+        # commit's copy of the checker runs, isolated from the pull request's environment
+        # (-I -S), so editing scripts/check_query_lock.py cannot relax this check; the pull
+        # request's copy runs only where the base has none. The workflow file itself comes from
+        # the pull request, so this step guards against mistakes, not against edits to it.
         run: |
-          git fetch --no-tags --depth=1 origin "$BASE_REF"
+          parents=$(git cat-file -p HEAD | sed -n 's/^parent //p')
+          test "$(echo "$parents" | wc -l)" -eq 2
+          base=$(echo "$parents" | head -n 1)
+          git fetch --no-tags --depth=1 origin "$base"
           checker=scripts/check_query_lock.py
-          if git cat-file -e "FETCH_HEAD:$checker" 2>/dev/null; then
-            git show "FETCH_HEAD:$checker" > "$RUNNER_TEMP/check_query_lock.py"
+          if git cat-file -e "$base:$checker" 2>/dev/null; then
+            git show "$base:$checker" > "$RUNNER_TEMP/check_query_lock.py"
             checker="$RUNNER_TEMP/check_query_lock.py"
           fi
-          echo "running $checker"
-          uv run --no-sync python "$checker" --base FETCH_HEAD
+          echo "base $base; running $checker"
+          uv run --no-sync python -I -S "$checker" --base "$base"
 
   test:
     name: tests (Python ${{ matrix.python-version }})

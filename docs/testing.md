@@ -164,7 +164,9 @@ tests/
 
 `tests/source` runs the real source layer (`GitHubSource`) against `httpx.MockTransport`. The
 transport answers from **units**: one file per resolve, label page, index page, pull request
-alias, overflow continuation, user, or compare page, recorded from public repositories.
+alias, overflow continuation, user, or compare page, recorded from public repositories. Every
+query document the source layer sends has at least one recorded unit; the only label page comes
+from `golang/go` (144 labels), because no tracked repository has more than 100.
 
 - **Assembled, not replayed whole**: a batch, split, or solo retry is rebuilt from per-alias units,
   so a change of batch size needs no new recording.
@@ -173,27 +175,30 @@ alias, overflow continuation, user, or compare page, recorded from public reposi
   overflow continuation, the request reduced to that one alias, so batch size and neighbouring
   aliases do not change it. The replay computes the same stamp from each request and refuses a
   unit with another, so changing a query without re-recording fails the suite with "re-record".
+  It also refuses a batch or continuation whose aliases do not each bind their own variables.
   Compare units are stamped with `COMPARE_STAMP` (`recordings.py`), the text of the REST request
   they answer; their key holds the base, head, page, and page size.
 - **Re-recording**: `GITHUB_TOKEN="$(gh auth token)" uv run --no-sync python scripts/record_fixtures.py`
-  replaces `tests/fixtures/source/recorded/` after every unit is recorded. It refuses a private
-  repository and keeps response bodies plus the `date`, `retry-after`, and `x-ratelimit-*`
-  headers, never request headers. `tests/source/recorder.py` lists the scenarios and why each PR
-  was chosen.
-- **Synthetic responses** (`tests/fixtures/source/synthetic/`) are error responses in the shape
-  GitHub documents or was seen to send; each file's `source` names the documentation or the live
-  observation. A test that needs a case GitHub does not serve on demand modifies a recorded unit
-  in the test and says which one.
+  replaces `tests/fixtures/source/recorded/` only after every scenario recorded without a failed
+  item or user lookup. It refuses a private repository and keeps response bodies plus the
+  `date`, `retry-after`, and `x-ratelimit-*` headers, never request headers.
+  `tests/source/recorder.py` lists the scenarios and why each was chosen.
+- **Synthetic responses** (`tests/fixtures/source/synthetic/`) are error responses. Each file's
+  `source` says where its shape comes from: GitHub's documentation (quoted), a live observation
+  (dated), or a construction for a case GitHub does not document. A test that needs a variant of
+  a recorded item modifies the unit in the test and says which one.
 - **Faults**: `replay.fault(respond, when=..., times=...)` answers matching requests with a status
   or exception; `replay.modify(change, ..., headers=...)` edits the recorded body, and optionally
-  the headers, of matching requests.
+  the headers, of matching requests. The `replay` fixture fails a test whose fault was never
+  served, or served fewer times than given, so a predicate that misses cannot pass silently.
 - **Round trip**: `tests/source/test_recorder.py` records the replay and gets back every unit, so
   the recorder's split and the replay's assembly agree for every operation.
 - **Time**: tests pass a `FakeClock`, so waits and retries are asserted, never slept.
 - **Hydration version**: `tests/query_versions.json` maps each `<kind>:<version>` to the hash of
-  that kind's documents; a test fails when the documents change without a new entry, and CI
-  (`scripts/check_query_lock.py`, the base branch's copy) rejects a pull request that edits or
-  removes an existing entry.
+  that kind's documents. A test fails when the current documents differ from the current
+  version's entry; on pull requests, CI runs the base commit's copy of
+  `scripts/check_query_lock.py`, which rejects an edited or removed entry, so a document change
+  needs a new version.
 
 ### Key Fixtures
 
@@ -527,7 +532,8 @@ uv run pre-commit install
 `.github/workflows/check.yml` runs on pull requests to `main` and pushes to `main`:
 
 - `lint and types`: `uv lock --locked` (uv.lock matches pyproject.toml), then pre-commit over
-  all files.
+  all files; on pull requests, the base commit's `scripts/check_query_lock.py` against the
+  hydration-version lock.
 - `tests (Python 3.12 / 3.13)`: pytest with JUnit output; `scripts/check_junit.py --max-skipped 0`,
   which fails unless at least one test ran and none failed, errored, or was skipped (pytest
   reports `xfail` as skipped, so an `xfail` also fails the job); and `alembic upgrade head` plus
