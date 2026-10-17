@@ -74,3 +74,10 @@ repos:
         language: system
         pass_filenames: false
         always_run: true
+
+      - id: log-placeholders
+        name: loguru messages use {} placeholders, not %
+        entry: uv run --no-sync python scripts/check_log_placeholders.py src
+        language: system
+        pass_filenames: false
+        always_run: true

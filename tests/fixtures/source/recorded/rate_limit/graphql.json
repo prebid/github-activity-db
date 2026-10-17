@@ -1,0 +1,22 @@
+{
+  "data": {
+    "cost": 1,
+    "remaining": 4786,
+    "resetAt": "2026-10-17T20:19:29Z"
+  },
+  "document_sha256": "6c0d5041a7098171555d7176343746f74345d45deec4b353c537ef3eee1824a2",
+  "errors": [],
+  "extra": {},
+  "headers": {
+    "date": "Sat, 17 Oct 2026 20:15:49 GMT",
+    "x-ratelimit-limit": "5000",
+    "x-ratelimit-remaining": "4786",
+    "x-ratelimit-reset": "1792268369",
+    "x-ratelimit-resource": "graphql",
+    "x-ratelimit-used": "214"
+  },
+  "key": {},
+  "kind": "rate_limit",
+  "recorded_at": "2026-10-17T20:15:49Z",
+  "source": "live"
+}

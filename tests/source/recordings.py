@@ -2,9 +2,9 @@
 
 A unit is the smallest piece of a response that a request can be rebuilt from: one resolve, one
 label page, one index page, one pull request alias, one overflow continuation, one user, one
-compare page. The recorder (``scripts/record_fixtures.py``) splits each live response into
-units; the replay transport assembles any batch, split, or retry from them, so a change of batch
-size needs no new recording.
+compare page, one GraphQL rate-limit reading, one REST ``/rate_limit`` body. The recorder
+(``scripts/record_fixtures.py``) splits each live response into units; the replay transport
+assembles any batch, split, or retry from them, so a change of batch size needs no new recording.
 
 Every unit is stamped with the SHA-256 of the normalized query document it answers. The replay
 hashes the document in each request it receives and refuses a unit whose stamp differs, so a
@@ -36,6 +36,8 @@ KEPT_HEADER_PREFIX = "x-ratelimit-"
 # The REST request compare units answer. Compare has no query document; edit this text when the
 # compare request changes, and the replay refuses units recorded for the old request.
 COMPARE_STAMP = "rest:compare/{base}...{head}?per_page&page"
+# The same for REST /rate_limit, which ``ghactivity github rate-limit`` reads without parameters.
+REST_RATE_LIMIT_STAMP = "rest:rate_limit"
 
 _COMPARE_PATH = re.compile(
     r"^/repos/(?P<owner>[^/]+)/(?P<name>[^/]+)/compare/(?P<base>[0-9a-f]+)\.\.\.(?P<head>[0-9a-f]+)$"
@@ -82,6 +84,10 @@ def unit_path(kind: str, key: dict[str, Any]) -> Path:
             return Path("overflow") / key["id"] / key["connection"] / f"{_short(key['after'])}.json"
         case "user":
             return Path("user") / f"{key['id']}.json"
+        case "rate_limit":
+            return Path("rate_limit") / "graphql.json"
+        case "rest_rate_limit":
+            return Path("rate_limit") / "rest.json"
         case "compare":
             return (
                 Path("compare")
@@ -271,6 +277,8 @@ def split_graphql(
             stamp = overflow_stamp(query, index, connection)
             units.append(unit("overflow", key, stamp, data.get(alias), [alias]))
         return units
+    if name == "RateLimit":
+        return [unit("rate_limit", {}, whole_stamp(query), data.get("rateLimit"), ["rateLimit"])]
     if name == "UserLookup":
         nodes = data.get("nodes") or []
         return [
@@ -281,20 +289,30 @@ def split_graphql(
 
 
 def split_rest(url: str, body: Any, headers: dict[str, str], recorded_at: str) -> list[Unit]:
-    """The unit of one REST compare page."""
-    key = compare_key(url)
-    if key is None:
-        raise ValueError(f"no unit split for REST {url}")
+    """The unit of one REST response: a compare page or ``/rate_limit``."""
+    if is_rest_rate_limit(url):
+        kind, key, stamp = "rest_rate_limit", {}, REST_RATE_LIMIT_STAMP
+    else:
+        compare = compare_key(url)
+        if compare is None:
+            raise ValueError(f"no unit split for REST {url}")
+        kind, key, stamp = "compare", compare, COMPARE_STAMP
     return [
         Unit(
-            kind="compare",
+            kind=kind,
             key=key,
-            document_sha256=whole_stamp(COMPARE_STAMP),
+            document_sha256=whole_stamp(stamp),
             recorded_at=recorded_at,
             headers=kept_headers(headers),
             data=body,
         )
     ]
+
+
+def is_rest_rate_limit(url: str) -> bool:
+    """Whether a REST request is ``GET /rate_limit`` with no parameters."""
+    parts = urlsplit(url)
+    return parts.path == "/rate_limit" and not parts.query
 
 
 def compare_key(url: str) -> dict[str, Any] | None:

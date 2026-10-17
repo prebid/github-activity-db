@@ -23,10 +23,12 @@ from github_activity_db.source.documents import pull_request_alias
 from tests.source.recordings import (
     COMPARE_STAMP,
     RECORDED,
+    REST_RATE_LIMIT_STAMP,
     SYNTHETIC,
     Unit,
     compare_key,
     extract_block,
+    is_rest_rate_limit,
     overflow_stamp,
     pull_request_stamp,
     whole_stamp,
@@ -247,6 +249,12 @@ class Replay:
                     data[alias] = unit.data
                     units.append((unit, [alias]))
                 return _graphql_response(seen, [unit for unit, _ in units], data, units)
+            case "RateLimit":
+                # The reading is this document's whole answer, so it is served as recorded.
+                unit = self._lookup("rate_limit", {}, whole_stamp(seen.query))
+                return _graphql_response(
+                    seen, [unit], {"rateLimit": unit.data}, [(unit, ["rateLimit"])]
+                )
             case "UserLookup":
                 stamp = whole_stamp(seen.query)
                 nodes = []
@@ -259,6 +267,9 @@ class Replay:
         raise _Miss(f"no replay for GraphQL operation {seen.operation}")
 
     def _rest(self, request: httpx.Request) -> httpx.Response:
+        if is_rest_rate_limit(str(request.url)):
+            unit = self._lookup("rest_rate_limit", {}, whole_stamp(REST_RATE_LIMIT_STAMP))
+            return httpx.Response(200, json=unit.data, headers=_headers([unit]))
         key = compare_key(str(request.url))
         if key is None:
             raise _Miss(f"no replay for REST {request.url}")
@@ -320,9 +331,10 @@ def _graphql_response(
         for unit, prefix in errors_from
         for error in unit.errors
     ]
-    # Only what the request selects: a document without rateLimit gets none, as from GitHub.
+    # Only what the request selects: a document without rateLimit gets none, as from GitHub. A
+    # recorded reading (the RateLimit document's own answer) is kept.
     selected = documents.normalize(seen.query)
-    if documents.normalize(documents.RATE_LIMIT) in selected:
+    if documents.normalize(documents.RATE_LIMIT) in selected and "rateLimit" not in data:
         data = {**data, "rateLimit": dict(RATE_LIMIT)}
     body: dict[str, Any] = {"data": data}
     if errors:

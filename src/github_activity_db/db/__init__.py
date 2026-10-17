@@ -18,12 +18,6 @@ from github_activity_db.db.models import (
     UserTag,
     pr_user_tags,
 )
-from github_activity_db.db.repositories import (
-    BaseRepository,
-    PullRequestRepository,
-    RepositoryRepository,
-    SyncFailureRepository,
-)
 
 __all__ = [
     # Models
@@ -42,9 +36,4 @@ __all__ = [
     "get_engine",
     "get_session",
     "get_session_factory",
-    # Repositories
-    "BaseRepository",
-    "PullRequestRepository",
-    "RepositoryRepository",
-    "SyncFailureRepository",
 ]

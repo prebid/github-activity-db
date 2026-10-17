@@ -230,6 +230,30 @@ PullRequestOutcome = Hydrated | Gone | Failed
 
 
 @dataclass(frozen=True, slots=True)
+class RestRateLimit:
+    """One pool REST ``/rate_limit`` reports (``core``, ``graphql``, ``search``, ...)."""
+
+    resource: str
+    limit: int
+    used: int
+    remaining: int
+    reset_at: datetime
+
+
+@dataclass(frozen=True, slots=True)
+class RateLimits:
+    """The GraphQL ``rateLimit`` reading and every REST pool, read one after the other.
+
+    One token's GraphQL readings can come from two windows (plan section 7, "Rate-limit
+    windows"), so the GraphQL reading and REST's ``graphql`` pool may disagree.
+    """
+
+    graphql_remaining: int
+    graphql_reset_at: datetime
+    rest: tuple[RestRateLimit, ...]
+
+
+@dataclass(frozen=True, slots=True)
 class UserLookup:
     """One ``nodes(ids:)`` batch: the account behind each id, and the ids whose lookup failed.
 

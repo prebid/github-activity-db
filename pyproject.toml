@@ -17,6 +17,7 @@ dependencies = [
     "alembic>=1.14",
     "loguru>=0.7",
     "typer>=0.15",
+    "click>=8.3",
     "rich>=13.0",
     "greenlet>=3.3.0",
 ]

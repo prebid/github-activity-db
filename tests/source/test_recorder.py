@@ -86,7 +86,9 @@ async def test_an_answer_without_data_is_retried_not_recorded() -> None:
         when=lambda seen: seen.operation == "UserLookup",
     )
     clock = FakeClock()
-    units = await record("test-token", inner=replay.transport(), scenarios=(), clock=clock)
+    units = await record(
+        "test-token", inner=replay.transport(), scenarios=(), rate_limits=False, clock=clock
+    )
     assert sorted(unit.key["id"] for unit in units) == sorted(recorder.USERS)
     assert clock.sleeps == [RATE_LIMIT_FALLBACK_WAIT]
 
@@ -111,7 +113,7 @@ def test_a_failed_recording_writes_nothing(monkeypatch: pytest.MonkeyPatch, tmp_
     monkeypatch.setattr(recorder, "record", refuse)
     monkeypatch.setenv("GITHUB_TOKEN", "test-token")
     with pytest.raises(PrivateRepository):
-        recorder.main()
+        recorder.main([])
     assert [path.name for path in tmp_path.iterdir()] == ["recorded"]
     assert [path.name for path in recorded.iterdir()] == ["kept.json"]
 
@@ -135,10 +137,36 @@ def test_a_recording_writes_one_file_per_unit(
     monkeypatch.setattr(recorder, "RECORDED", target)
     monkeypatch.setattr(recorder, "record", replayed)
     monkeypatch.setenv("GITHUB_TOKEN", "test-token")
-    assert recorder.main() == 0
+    assert recorder.main([]) == 0
     written = sorted(str(path.relative_to(target)) for path in target.rglob("*.json"))
     committed = sorted(str(path.relative_to(RECORDED)) for path in RECORDED.rglob("*.json"))
     assert written == committed  # every unit to its own file; the stale file is gone
+    for unit in units:
+        assert (target / unit.path()).read_text() == unit.dumps()
+    assert [path.name for path in tmp_path.iterdir()] == ["recorded"]
+
+
+def test_only_rate_limits_adds_them_and_keeps_every_other_unit(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    units = [unit for unit in recorded_units() if unit.kind in ("rate_limit", "rest_rate_limit")]
+    assert sorted(unit.kind for unit in units) == ["rate_limit", "rest_rate_limit"]
+    calls: list[dict[str, Any]] = []
+
+    async def replayed(token: str, **kwargs: Any) -> list[Any]:
+        calls.append(kwargs)
+        return units
+
+    target = tmp_path / "recorded"
+    (target / "rate_limit").mkdir(parents=True)
+    (target / "kept.json").write_text("{}")
+    (target / "rate_limit" / "rest.json").write_text("stale")
+    monkeypatch.setattr(recorder, "RECORDED", target)
+    monkeypatch.setattr(recorder, "record", replayed)
+    monkeypatch.setenv("GITHUB_TOKEN", "test-token")
+    assert recorder.main(["--only", "rate-limits"]) == 0
+    assert calls == [{"scenarios": (), "users": ()}]
+    assert (target / "kept.json").read_text() == "{}"
     for unit in units:
         assert (target / unit.path()).read_text() == unit.dumps()
     assert [path.name for path in tmp_path.iterdir()] == ["recorded"]
@@ -157,6 +185,6 @@ def test_an_oversized_unit_writes_nothing(monkeypatch: pytest.MonkeyPatch, tmp_p
     monkeypatch.setattr(recorder, "record", replayed)
     monkeypatch.setattr(recorder, "MAX_FILE_BYTES", 10)
     monkeypatch.setenv("GITHUB_TOKEN", "test-token")
-    assert recorder.main() == 1
+    assert recorder.main([]) == 1
     assert [path.name for path in tmp_path.iterdir()] == ["recorded"]
     assert [path.name for path in target.iterdir()] == ["kept.json"]

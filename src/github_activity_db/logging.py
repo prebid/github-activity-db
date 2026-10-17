@@ -80,7 +80,9 @@ def setup_logging(
         Configured logger instance
 
     Note:
-        verbose takes precedence over quiet if both are True.
+        verbose takes precedence over quiet if both are True. No handler prints local variable
+        values in a logged traceback (``diagnose=False``): they can hold credentials, and Step 6
+        runs in public logs (redesign plan gap 75).
     """
     global _configured
 
@@ -108,7 +110,7 @@ def setup_logging(
         ),
         colorize=True,
         backtrace=True,
-        diagnose=True,
+        diagnose=False,
         filter=lambda record: "name" in record["extra"],
     )
 
@@ -124,7 +126,7 @@ def setup_logging(
         ),
         colorize=True,
         backtrace=True,
-        diagnose=True,
+        diagnose=False,
         filter=lambda record: "name" not in record["extra"],
     )
 
@@ -144,6 +146,7 @@ def setup_logging(
             retention=retention,
             compression="gz",
             serialize=serialize,
+            diagnose=False,
             filter=lambda record: "name" in record["extra"],
         )
 

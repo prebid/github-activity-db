@@ -6,6 +6,9 @@ Usage (from the repository root, with a token that can read the public tracked r
 
 Writes tests/fixtures/source/recorded/, replacing it only after every scenario recorded without a
 failed item or user lookup. See tests/source/recorder.py for the scenarios.
+
+With ``--only rate-limits`` it records the rate-limit readings alone and adds them to the
+existing recordings, leaving every other unit unchanged.
 """
 
 from __future__ import annotations

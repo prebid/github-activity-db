@@ -16,7 +16,7 @@ class TestSettings:
         )
 
         assert settings.database_url == "sqlite+aiosqlite:///./github_activity.db"
-        assert settings.github_token == ""
+        assert settings.github_token is None
         assert settings.environment == "development"
         assert settings.log_level == "INFO"
 
@@ -56,7 +56,8 @@ class TestSettings:
         settings = Settings(_env_file=None)
 
         assert settings.database_url == "sqlite+aiosqlite:///./test.db"
-        assert settings.github_token == "test_token_123"
+        assert settings.github_token is not None
+        assert settings.github_token.get_secret_value() == "test_token_123"
         assert settings.environment == "production"
         assert settings.log_level == "DEBUG"
 
@@ -82,7 +83,26 @@ class TestSettings:
         settings = Settings(_env_file=None)
 
         assert settings.database_url == "sqlite+aiosqlite:///./lower.db"
-        assert settings.github_token == "upper_token"
+        assert settings.github_token is not None
+        assert settings.github_token.get_secret_value() == "upper_token"
+
+    def test_token_is_hidden_in_repr(self, monkeypatch):
+        monkeypatch.setenv("GITHUB_TOKEN", "secret-token-value")
+        settings = Settings(_env_file=None)
+        assert "secret-token-value" not in repr(settings)
+        assert "secret-token-value" not in str(settings.model_dump())
+
+    def test_nested_settings_read_double_underscore_variables(self, monkeypatch):
+        """LOGGING__ROTATION sets logging.rotation (redesign plan gap 64)."""
+        monkeypatch.setenv("LOGGING__ROTATION", "1 day")
+        monkeypatch.setenv("LOGGING__RETENTION", "3 days")
+        settings = Settings(_env_file=None)
+        assert settings.logging.rotation == "1 day"
+        assert settings.logging.retention == "3 days"
+
+    def test_removed_pipeline_settings_are_gone(self):
+        fields = set(Settings.model_fields)
+        assert fields.isdisjoint({"rate_limit", "pacing", "sync"})
 
 
 class TestGetSettings:

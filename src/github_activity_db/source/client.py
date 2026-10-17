@@ -15,6 +15,7 @@ from .clock import Clock
 from .hydrate import PullRequestHydrator
 from .index import index_pull_requests
 from .limits import CONNECT_TIMEOUT, READ_TIMEOUT
+from .rate_limits import read_rate_limits
 from .resolve import resolve_repository
 from .transport import Transport
 from .users import lookup_user_batches
@@ -23,7 +24,13 @@ if TYPE_CHECKING:
     from githubkit import BaseAuthStrategy
 
     from .budget import Usage
-    from .records import PullRequestIndex, PullRequestOutcome, RepositoryRecord, UserLookup
+    from .records import (
+        PullRequestIndex,
+        PullRequestOutcome,
+        RateLimits,
+        RepositoryRecord,
+        UserLookup,
+    )
 
 USER_AGENT = "github-activity-db"
 
@@ -108,6 +115,10 @@ class GitHubSource:
         error, or a fatal error loses at most the batch in progress.
         """
         return PullRequestHydrator(self._transport, repository).batches(numbers)
+
+    async def rate_limits(self) -> RateLimits:
+        """The GraphQL ``rateLimit`` reading and every REST ``/rate_limit`` pool."""
+        return await read_rate_limits(self._transport)
 
     def lookup_users(self, node_ids: Sequence[str]) -> AsyncIterator[UserLookup]:
         """Accounts batch by batch, keyed by node id, with the ids whose lookup failed."""
