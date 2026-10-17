@@ -1,21 +1,29 @@
 """Tests for configuration settings."""
 
+import re
+from pathlib import Path
+
 import pytest
 
 from github_activity_db.config import Settings, get_settings
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+# The git-ignored local file, never the tracked github_activity.db (D26).
+LOCAL_DATABASE_URL = "sqlite+aiosqlite:///./github_activity.local.db"
 
 
 class TestSettings:
     """Tests for Settings class."""
 
-    def test_settings_defaults(self):
+    def test_settings_defaults(self, monkeypatch):
         """Test default values are correct."""
-        # Create settings without env vars
+        for name in ("DATABASE_URL", "GITHUB_TOKEN", "ENVIRONMENT", "LOG_LEVEL"):
+            monkeypatch.delenv(name, raising=False)
         settings = Settings(
             _env_file=None,  # Don't load .env
         )
 
-        assert settings.database_url == "sqlite+aiosqlite:///./github_activity.db"
+        assert settings.database_url == LOCAL_DATABASE_URL
         assert settings.github_token is None
         assert settings.environment == "development"
         assert settings.log_level == "INFO"
@@ -103,6 +111,18 @@ class TestSettings:
     def test_removed_pipeline_settings_are_gone(self):
         fields = set(Settings.model_fields)
         assert fields.isdisjoint({"rate_limit", "pacing", "sync"})
+
+
+class TestDocumentedDatabaseUrl:
+    """The documented DATABASE_URL lines show the default, which names the local file (D26)."""
+
+    @pytest.mark.parametrize("document", [".env.example", "docs/development.md"])
+    def test_names_the_local_database(self, document: str) -> None:
+        lines = re.findall(r"^#? ?DATABASE_URL=(.*)$", (REPO_ROOT / document).read_text(), re.M)
+        assert lines == [LOCAL_DATABASE_URL]
+
+    def test_the_field_default_is_the_local_database(self) -> None:
+        assert Settings.model_fields["database_url"].default == LOCAL_DATABASE_URL
 
 
 class TestGetSettings:

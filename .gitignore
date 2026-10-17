@@ -104,8 +104,9 @@ site/
 *.db-wal
 *.db-shm
 
-# Exception: include the main PR database for data sharing
-!github_activity.db
+# Exception: the tracked database at the repository root only, frozen until Step 6c of
+# docs/redesign-plan.md (D26). The local database, github_activity.local.db, stays ignored.
+!/github_activity.db
 
 # Alembic
 alembic/versions/*.pyc

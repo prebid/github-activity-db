@@ -50,7 +50,8 @@ class Settings(BaseSettings):
     # Database
     # --------------------------------------------------------------------------
     database_url: str = Field(
-        default="sqlite+aiosqlite:///./github_activity.db",
+        # Not the tracked github_activity.db, which stays frozen until Step 6c (D26).
+        default="sqlite+aiosqlite:///./github_activity.local.db",
         description="Async SQLite database connection string",
     )
 

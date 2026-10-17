@@ -38,7 +38,7 @@ Create a `.env` file (copy from `.env.example`):
 GITHUB_TOKEN=ghp_your_token_here
 
 # Optional (defaults shown)
-DATABASE_URL=sqlite+aiosqlite:///./github_activity.db
+DATABASE_URL=sqlite+aiosqlite:///./github_activity.local.db
 LOG_LEVEL=INFO
 ENVIRONMENT=development
 ```

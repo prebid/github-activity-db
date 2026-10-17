@@ -68,6 +68,12 @@ repos:
         language: system
         files: ^github_activity\.db$
 
+      - id: tracked-db-frozen
+        name: github_activity.db keeps its pinned pre-Step-3 content (D26)
+        entry: uv run --no-sync python scripts/check_frozen_db.py
+        language: system
+        files: ^github_activity\.db$
+
       - id: prevent-any-aliases
         name: Prevent new Any type aliases
         entry: uv run --no-sync python scripts/check_any_aliases.py src
