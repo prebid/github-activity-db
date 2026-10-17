@@ -689,13 +689,20 @@ class TestUserLookup:
 
     @pytest.mark.parametrize(
         "path",
-        [["nodes", 0, None], ["nodes", 0, {}], ["nodes", 0, 1.5], ["nodes", True]],
-        ids=["null", "object", "float", "bool-index"],
+        [
+            ["nodes", 0, None],
+            ["nodes", 0, {}],
+            ["nodes", 0, 1.5],
+            ["nodes", 0.0],
+            ["nodes", True],
+        ],
+        ids=["null", "object", "float", "integral-float-index", "bool-index"],
     )
     async def test_a_not_found_at_a_malformed_path_is_not_deleted(
         self, open_source, replay: Replay, path: list[Any]
     ) -> None:
-        # Trimmed, these would read as ["nodes", 0], NOT_FOUND on the node: a deleted account.
+        # Trimmed, the first three would read as ["nodes", 0], NOT_FOUND on the node: a deleted
+        # account; and 0.0 equals 0 in Python. A bool is no index either (True equals 1).
         def malformed(body: dict[str, Any]) -> None:
             body["data"]["nodes"][0] = None
             body["errors"] = [{"type": "NOT_FOUND", "path": path, "message": "Missing resource"}]

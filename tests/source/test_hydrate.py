@@ -690,8 +690,8 @@ class TestInvariants:
 
     @pytest.mark.parametrize(
         "suffix",
-        [[None], [{}], [1.5], [True], [-1]],
-        ids=["null", "object", "float", "bool", "negative"],
+        [[None], [{}], [1.5], [0.0], [True], [-1]],
+        ids=["null", "object", "float", "integral-float", "bool", "negative"],
     )
     async def test_a_not_found_at_a_malformed_path_is_not_gone(
         self, open_source, replay: Replay, clock: FakeClock, suffix: list[Any]
@@ -788,6 +788,20 @@ class TestInvariants:
         error = await failure(open_source, PREBID_JS, 11155)
         assert isinstance(error, ItemRequestFailed)
         assert isinstance(error.cause, UnattributedErrors)
+
+    async def test_a_not_found_beside_another_error_is_not_gone(
+        self, open_source, replay: Replay
+    ) -> None:
+        # Gone needs every error under the alias to be NOT_FOUND on the pull request itself.
+        unit = pr_unit(replay, 13481)
+        unit.data = None
+        unit.errors = [
+            {"type": "NOT_FOUND", "path": [], "message": "gone"},
+            {"type": "FORBIDDEN", "path": ["author"], "message": "no"},
+        ]
+        replay.add(unit)
+        error = await failure(open_source, PREBID_JS, 13481)
+        assert isinstance(error, AliasError)
 
     async def test_a_null_alias_without_errors(self, open_source, replay: Replay) -> None:
         unit = pr_unit(replay, 13481)

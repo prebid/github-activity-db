@@ -253,9 +253,11 @@ class PullRequestHydrator:
         errors = result.errors_under("repository", alias)
         raw = container.get(alias)
         if raw is None:
-            # Gone only when NOT_FOUND names the pull request itself; a NOT_FOUND deeper down,
-            # nulling the alias through a non-null field, is an error about the item.
-            if any(e.type == "NOT_FOUND" and e.path == ("repository", alias) for e in errors):
+            # Gone only when every error under the alias is NOT_FOUND on the pull request itself;
+            # a NOT_FOUND deeper down, or any other error alongside, is an error about the item.
+            if errors and all(
+                e.type == "NOT_FOUND" and e.path == ("repository", alias) for e in errors
+            ):
                 return Gone(number)
             first = errors[0] if errors else None
             return AliasError(

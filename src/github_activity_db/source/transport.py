@@ -17,8 +17,8 @@ Failure classes:
   exceeded resource limits. ``RequestTooHeavy`` at once for a splittable request; retried like a
   server error otherwise.
 - server or transport error: other 5xx, network errors, client timeouts, a connection the server
-  broke off or a body it encoded wrongly, malformed responses (an error path that is not field
-  names and list indices among them). Retried after 2, 4, and 8 s (with jitter), then
+  broke off or a body it encoded wrongly, malformed responses (an error path that is not strings
+  and list indices among them). Retried after 2, 4, and 8 s (with jitter), then
   ``ServerError``.
 - fatal: 401 or a failed credential request (``Unauthorized``), 403 without a rate-limit signal
   (``Forbidden``), any other HTTP client failure, such as a redirect loop, a proxy or URL
@@ -389,12 +389,13 @@ class Transport:
         if not isinstance(raw_errors, list) or not isinstance(data, dict | None):
             return _Failure("server", "GraphQL body has malformed data or errors")
         # A path locates an error, and an exact path is what proves an item absent (NOT_FOUND),
-        # so a path is used whole or the response is malformed; it is never trimmed to fit.
-        for entry in raw_errors:
-            if isinstance(entry, dict) and not _valid_path(entry.get("path")):
-                return _Failure(
-                    "server", f"GraphQL error path is malformed: {entry['path']!r:.200}"
-                )
+        # so a path is used whole or the response is malformed; it is never trimmed to fit. The
+        # reading and the rate-limit and timeout classes below use no path, so they come first.
+        bad_paths = [
+            entry["path"]
+            for entry in raw_errors
+            if isinstance(entry, dict) and not _valid_path(entry.get("path"))
+        ]
         errors = tuple(_graphql_error(entry) for entry in raw_errors)
         reading = data.get("rateLimit") if data is not None else None
         malformed: Exception | None = None
@@ -425,6 +426,8 @@ class Transport:
         failure = _whole_request_failure(errors)
         if failure is not None:
             return failure
+        if bad_paths:
+            return _Failure("server", f"GraphQL error path is malformed: {bad_paths[0]!r:.200}")
         date = _response_date(response)
         if date is None:
             return _Failure("server", "GraphQL response without a readable Date header")
@@ -535,14 +538,17 @@ def _graphql_error(entry: object) -> GraphQLError:
     return GraphQLError(
         type=error_type if isinstance(error_type, str) else None,
         message=str(entry.get("message", "")),
-        path=tuple(path) if isinstance(path, list) else (),
+        # A malformed path is kept out (the response fails before any path is read), never trimmed.
+        path=tuple(path) if isinstance(path, list) and _valid_path(path) else (),
     )
 
 
 def _valid_path(path: object) -> bool:
-    """Absent, or a list of field names and list indices (the GraphQL response-path form).
+    """Absent, or a list of strings and list indices (the GraphQL response-path form).
 
-    An index is a non-negative ``int``; ``bool`` is not one, although Python counts it as int.
+    The strings are field names, aliases such as ``p0``, and GitHub's operation-name segment
+    (``"query Resolve"``). An index is a non-negative ``int``; ``bool`` is not one, although
+    Python counts it as int, and neither is an integral float such as ``0.0``.
     """
     if path is None:
         return True

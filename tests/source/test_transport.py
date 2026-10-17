@@ -1369,6 +1369,35 @@ class TestInputGuards:
             await source.resolve(**RESOLVE)
         assert clock.sleeps == [SERVER_RETRY_DELAYS[0]]
 
+    async def test_points_in_a_response_with_a_malformed_path_are_counted(
+        self, open_source, replay: Replay
+    ) -> None:
+        body = resolve_body(replay, errors=[{"type": "NOT_FOUND", "message": "m", "path": [None]}])
+        body["data"]["rateLimit"] = {**RATE_LIMIT, "cost": 7}
+        replay.fault(
+            lambda request: httpx.Response(200, json=body, headers=REST_DATE), when=resolves
+        )
+        async with open_source() as source:
+            await source.resolve(**RESOLVE)
+            usage = source.usage
+        assert (usage.graphql_points, usage.graphql_requests) == (7 + 1, 2)
+
+    async def test_a_rate_limit_beside_a_malformed_path_still_waits(
+        self, open_source, replay: Replay, clock: FakeClock
+    ) -> None:
+        # Rate limits are read by type and message; a malformed path elsewhere does not hide one.
+        errors = [
+            {"message": "You have exceeded a secondary rate limit."},
+            {"type": "NOT_FOUND", "message": "m", "path": ["repository", None]},
+        ]
+        body = {"data": None, "errors": errors}
+        replay.fault(
+            lambda request: httpx.Response(200, json=body, headers=REST_DATE), when=resolves
+        )
+        async with open_source() as source:
+            await source.resolve(**RESOLVE)
+        assert clock.sleeps == [RATE_LIMIT_FALLBACK_WAIT]
+
     async def test_a_reset_in_the_past_waits_only_the_margin(
         self, open_source, replay: Replay, clock: FakeClock
     ) -> None:
