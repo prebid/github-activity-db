@@ -26,7 +26,7 @@ GitHub, GitHub's documentation, the installed libraries, and `main`, and correct
 | Step | Title | Status |
 |------|-------|--------|
 | 1 | Guardrails | done (PR #5) |
-| 2 | GitHub source layer | not started |
+| 2 | GitHub source layer | in progress |
 | 3 | New schema, PR sync engine, cutover | not started |
 | 4 | Issues and closing-issue links | not started |
 | 5 | Full bootstrap and verification | not started |
@@ -316,7 +316,8 @@ less than 10 minutes in the past, inserts its own row, and replaces `automation_
    `last_index_started_at` is the GitHub `Date` header of the first request of its completed scan
    (the PR connection's when both are indexed) minus 60 s, because the header has one-second
    resolution and is set after the page is read. Creation order is stable, so an update during
-   the scan cannot make pagination skip an item. The enumerated count must equal the `totalCount`
+   the scan cannot make pagination skip an item; a number listed twice or out of creation order
+   fails the repository. The enumerated count must equal the `totalCount`
    returned with the last page. A transfer or deletion during the scan breaks that equality, so on a
    mismatch the connection is rescanned once; a second mismatch leaves the repository with no writes
    or deletions this run. One GitHub request is in flight at a time: GitHub limits GraphQL to 60 s of
@@ -354,6 +355,9 @@ less than 10 minutes in the past, inserts its own row, and replaces `automation_
    | Item gone | alias `null` with `NOT_FOUND` | No write and no failure; the next index removes it |
    | Item error | another alias error; partial alias data; a value the typed models reject; a failed check in step 5; HTTP 404/422 on a compare page | Retry the item once alone, then record it in `sync_failures` and write nothing for it |
    | Unauthorized or forbidden | HTTP 401; HTTP 403 with no rate-limit signal (a missing permission) | Fatal: drain the writer, close the run, exit 1 |
+
+   Typed response models check types strictly: GitHub's JSON has exact types, and lax coercion
+   would read `"no"` as false. `BigInt` ids must be strings of digits and timestamps ISO strings.
 
    Splitting continues down to single items; a single item that still fails is an item error. A
    request that cannot split retries like a server error (3 more times, 2, 4, 8 s) in the timeout
@@ -654,7 +658,9 @@ query($owner: String!, $name: String!, $after: String) {
 Issue index (Step 4), same shape with
 `issues(...) { ... nodes { number fullDatabaseId state createdAt updatedAt closedAt } }`.
 
-Pull request fields per alias (25 aliases cost 2 points; cost depends only on the query shape):
+Pull request fields per alias (25 aliases cost 2 points; cost depends only on the query shape). The
+batch also selects the container `repository { databaseId }`, checked against the resolved
+repository:
 
 ```graphql
 id number fullDatabaseId state isDraft title body createdAt updatedAt mergedAt
@@ -697,7 +703,9 @@ nodes(ids: $ids) { __typename id
 ```
 
 `Actor` selects `__typename login` plus `id databaseId` on `User`, `Bot`, `Organization`, and
-`Mannequin`; an `EnterpriseUserAccount` actor therefore arrives without an id (5.2). Do not nest a
+`Mannequin`; an `EnterpriseUserAccount` actor therefore arrives without an id (5.2). A continuation
+includes the `Actor` fragment only when its connection uses it: GitHub rejects a document that
+defines a fragment it does not use. Do not nest a
 connection inside `commits` (for example `authors(first: N)`); GraphQL charges for every possible
 nested node.
 
@@ -776,9 +784,10 @@ unsplittable request retried, a 404 on a compare page, a 401); `rateLimit` readi
 between two windows; each query document's point cost, computed from GitHub's documented formula,
 equals its 5.8 figure.
 
-Acceptance: deleting any single invariant check makes at least one test fail, shown per check site
-in the PR; changing a query document without re-recording fails the suite; a pull request that edits
-an existing lock entry fails the CI step on its exact head; CI passes on the exact PR head.
+Acceptance: an adversarial review of the change, by reviewers who did not write it, finds no
+invariant check without a test that targets it; changing a query document without re-recording
+fails the suite; the lock check fails on an edited or removed entry (tested against a real git
+repository) and runs on the exact PR head; CI passes on the exact PR head.
 
 ### Step 3: New schema, PR sync engine, cutover
 
@@ -825,7 +834,9 @@ sections (defaults, invalid values, unknown keys).
 
 Acceptance: `verify --exact` on Prebid.js, salesagent, and prebid-server; a REST sample of PRs that
 includes a null author, a null merger, more than 250 commits, overflow, a duplicate path, and a
-dismissed review matches field by field; CI passes.
+dismissed review matches field by field, with REST's `ghost` account (id 10137) read as null and
+per-file line counts compared only where REST's per-file sums equal the PR totals (section 7,
+"Source vs REST"); CI passes.
 
 ### Step 4: Issues and closing-issue links
 
@@ -910,6 +921,11 @@ Measured 2026-10-16 unless noted. "Index" means the created-order enumeration in
 | Compare paging | Docs: without `per_page` or `page` the list is limited to 250 commits | GitHub REST docs |
 | Hydration cost | 25 heaviest salesagent PRs: 2 points, about 9 s, 5 of 5 runs succeeded; 10 PRs: 1 point, 5 of 5; 100 issues: 1 point. Cost depends only on the query shape; heavy items cost time, not points | repeated live batches |
 | Nested connection cost | Same 25 PRs, only change is `authors(first: 5)` inside `commits(first: 100)`: 2 points without, 27 with | live single-variable comparison |
+| Cost formula | GitHub's documented formula (requests per connection, nested ones multiplied by the parents' `first`, divided by 100, rounded, minimum 1) gives 2 for a 25-PR batch, 1 for an index page, and 27 for the nested-connection variant, the measured values; `tests/source/test_documents.py` pins each 5.8 document's cost | `tests/source/graphql_cost.py` |
+| Unused fragments | GitHub rejects a document that defines a fragment it does not use ("Fragment Actor was defined, but not used") | live overflow request, 2026-10-17 |
+| Node limit | A query requesting more than 500,000 possible nodes answers HTTP 200 with no `data` and `errors[].type` `MAX_NODE_LIMIT_EXCEEDED` ("... requesting up to 1,000,000 possible nodes which exceeds the maximum limit of 500,000"); `source/` treats it like a timeout and splits the request | live oversized query on go-gdpr, 2026-10-17 |
+| Lax parsing | pydantic's default (lax) mode reads `"no"` as `False` for a boolean and `"12"` as 12 for an integer | installed pydantic 2.12.5, `TypeAdapter(bool).validate_python("no")` |
+| Source vs REST | 43 PRs (seeded sample of the indexes of Prebid.js, prebid-server, salesagent, prebid-mobile-android, prebid.github.io, go-gdpr, plus the recorded fixture PRs) hydrated through `source/` and read again through REST: state, ids, draft, title, body, author, merger, base ref, additions, deletions, changed files, commit count, author association, labels, reviews (id, state, reviewer), files (path, additions, deletions), commit SHAs and linked authors (up to 250), and commenters equal on 40. The 3 differences are REST's: it reports a deleted account as `ghost` (id 10137) where GraphQL returns null (`Prebid.js#12975`), and it reports 0 additions and deletions for some files of large PRs (`salesagent#1501`: 132 of 1,504 files; `#1721`: 93 of 1,473), where GraphQL's per-file counts sum exactly to the PR totals | live cross-check, 2026-10-17 |
 | Partial errors | A batch with a missing number returns data for the other aliases plus `errors[{type: NOT_FOUND, path}]`; `issue(number:)` on a PR's number also returns `NOT_FOUND` | live API |
 | githubkit 0.14.2 | `graphql.arequest` raises `GraphQLFailed` on any error (its `.response` is the parsed body, without HTTP status or headers) and `PrimaryRateLimitExceeded` on `RATE_LIMITED`; `GitHub.arequest` returns data and errors together; its retry covers 403/429 rate-limit responses and 5xx only; defaults `auto_retry` on (rate limit once, 5xx three times), `http_cache=True`, `follow_redirects=True`, no timeout; accepts `async_transport` | installed source; probe |
 | Item ids | `PullRequest.databaseId` and `PullRequestReview.databaseId` are deprecated: "`databaseId` will be removed because it does not support 64-bit signed integer identifiers. Use `fullDatabaseId` instead. Removal on 2024-07-01 UTC." Both are still served. `fullDatabaseId` is a BigInt returned as a JSON string. Prebid.js#15779 returns 4,891,210,785 (above 2^31) from both, equal to its REST `id`. `databaseId` on `User`, `Bot`, `Organization`, and `Mannequin` is not deprecated | live introspection; live query and REST |
@@ -974,6 +990,7 @@ Measured 2026-10-16 unless noted. "Index" means the created-order enumeration in
 | A PR file list above 3,000 entries (no tracked PR found) | Validation fails the item if `files` stops short of `totalCount`; Step 5 reports any |
 | Compare fallback on a PR whose head fork was deleted (only a live fork tested) | A count mismatch fails the item; Step 5 reports any |
 | Full bootstrap time, cost, and size are projections from two repositories | Step 5 measures them |
+| Overflow continuations per request (25), the reset margin (1 s), and retry jitter (25%) are chosen, not measured | Step 5 records secondary-limit responses and request times at these values |
 
 ## 9. Later work
 

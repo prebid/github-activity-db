@@ -38,9 +38,17 @@ jobs:
         if: github.event_name == 'pull_request'
         env:
           BASE_REF: ${{ github.base_ref }}
+        # The base branch's copy of the checker runs, so a pull request cannot relax the check
+        # that grades it; the pull request's own copy runs only where the base has none.
         run: |
           git fetch --no-tags --depth=1 origin "$BASE_REF"
-          uv run --no-sync python scripts/check_query_lock.py --base FETCH_HEAD
+          checker=scripts/check_query_lock.py
+          if git cat-file -e "FETCH_HEAD:$checker" 2>/dev/null; then
+            git show "FETCH_HEAD:$checker" > "$RUNNER_TEMP/check_query_lock.py"
+            checker="$RUNNER_TEMP/check_query_lock.py"
+          fi
+          echo "running $checker"
+          uv run --no-sync python "$checker" --base FETCH_HEAD
 
   test:
     name: tests (Python ${{ matrix.python-version }})
