@@ -469,6 +469,29 @@ class TestIndex:
         assert index.total_count == len(index.entries)
         assert clock.sleeps == [SERVER_RETRY_DELAYS[0]]
 
+    async def test_a_duplicate_closing_link_makes_the_entry_incomplete(
+        self, open_source, replay: Replay
+    ) -> None:
+        # Kept once, so the entry is shorter than its total and the PR is hydrated, where the
+        # duplicate fails the item; a duplicate never passes for a complete list.
+        def duplicate(body: dict[str, Any]) -> None:
+            for node in body["data"]["repository"]["pullRequests"]["nodes"]:
+                links = node["closingIssuesReferences"]
+                if links["nodes"]:
+                    first = links["nodes"][0]
+                    repository = {**first["repository"], "nameWithOwner": "prebid/renamed"}
+                    links["nodes"].append({**first, "repository": repository})
+                    links["totalCount"] += 1
+                    return
+            raise AssertionError("no indexed PR with a closing link")
+
+        replay.modify(duplicate, when=operation("PullRequestIndex"))
+        async with open_source() as source:
+            index = await source.index_pull_requests(await source.resolve("prebid", "go-gdpr"))
+        (entry,) = [entry for entry in index.entries if entry.closing_issues_total == 2]
+        assert len(entry.closing_issues) == 1
+        assert entry.closing_issues[0].repo_full_name != "prebid/renamed"
+
     async def test_errors_in_an_index_page_fail_the_repository(
         self, open_source, replay: Replay
     ) -> None:

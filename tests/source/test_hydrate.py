@@ -762,6 +762,21 @@ class TestInvariants:
             Comment(github_id=13, author=wire_account(renamed)),
         )
 
+    async def test_a_closing_link_renamed_between_pages_is_still_one_link(
+        self, open_source, replay: Replay
+    ) -> None:
+        # The database keys a link by repository id and number; a rename changes only the name.
+        unit = pr_unit(replay, 12975)
+        page = unit.data["closingIssuesReferences"]
+        link = page["nodes"][0]
+        renamed = {**link, "repository": {**link["repository"], "nameWithOwner": "prebid/renamed"}}
+        page["nodes"].append(renamed)
+        page["totalCount"] += 1
+        replay.add(unit)
+        error = await failure(open_source, PREBID_JS, 12975)
+        assert isinstance(error, DuplicateEntry)
+        assert error.key == (link["repository"]["databaseId"], link["number"])
+
     @pytest.mark.parametrize(
         "connection", ["labels", "closingIssuesReferences", "reviews", "comments", "commits"]
     )

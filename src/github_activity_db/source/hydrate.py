@@ -85,6 +85,7 @@ from .records import (
     PullRequestRecord,
     RepositoryRecord,
     Review,
+    link_key,
 )
 from .transport import GraphQLResult, RestRefused, Transport
 
@@ -414,7 +415,9 @@ class PullRequestHydrator:
         # The database keys these entries, so a duplicate standing in for a missing entry would
         # pass the count check and drop a row.
         _check_distinct(number, "labels", labels)
-        _check_distinct(number, "closingIssuesReferences", closing_issues)
+        _check_distinct(
+            number, "closingIssuesReferences", [link_key(link) for link in closing_issues]
+        )
         _check_distinct(number, "reviews", [review.github_id for review in reviews])
         _check_distinct(number, "comments", [comment.github_id for comment in comments])
         _check_distinct(number, "commits", [commit.sha for commit in commits])

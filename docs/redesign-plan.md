@@ -72,7 +72,7 @@ status, releases, and repositories not in the tracked list.
 | D25 | A run, scheduled or manual, publishes when its starting database is valid (the downloaded snapshot passed `verify --db-only`, or `bootstrap` started from an empty database), sync exited 0 or 2, and verify exited 0 (no error, 5.4). The manifest records the sync exit code and verify's counts per class. A final job that runs whatever the others did then marks the workflow failed if sync exited 2, verify failed, or nothing was published, so a failure is visible after the data is saved. |
 | D26 | The Step 5 database is not committed; it becomes the first snapshot of release `db` (Step 6b). From Step 3 until 6c removes it, the tracked `github_activity.db` keeps its pre-Step-3 content: the default `DATABASE_URL` moves to a git-ignored file, and `scripts/check_frozen_db.py` fails when the file's SHA-256 differs from the digest it pins, as a pre-commit hook on the file (so CI's `--all-files` run checks it) and as a test. |
 | D27 | A stored repository no longer listed in `tracking.toml` is reported on every run (exit 2), and its rows stay until `ghactivity sync --prune-untracked` deletes them; the prune is recorded in `sync_runs`. |
-| D28 | The database keeps a person attached to everything it attributed to them. A stored account stays stored after GitHub deletes it, with its last known login and type, and every reference to it stays: when GitHub later returns that actor as null, as a re-hydration after the deletion does, the writer keeps the stored reference of the same object (the PR's author and merger, the issue's author, and the review, comment, or commit with the same `github_id` or SHA). `deleted_at` records that a lookup found the account deleted; it changes no reference, the 24-hour refresh skips the account, and a later sighting of the account clears it. An account the database never stored is represented as deleted, one way everywhere: a null reference and no `github_users` row. A non-null actor from GitHub always replaces the stored one. |
+| D28 | The database keeps a person attached to everything it attributed to them. A stored account stays stored after GitHub deletes it, with its last known login and type, and every reference to it stays: when GitHub later returns that actor as null, as a re-hydration after the deletion does, the writer keeps the stored reference of the same object (the PR's author and merger, the issue's author, the review or comment with the same `github_id`, and this PR's commit with the same SHA). `deleted_at` records that a lookup found the account deleted; it changes no reference, the 24-hour refresh skips the account, and a later sighting of the account clears it. An actor the database cannot attribute (GitHub returns null and the object has no stored reference) is represented as deleted, one way everywhere: a null reference, and no `github_users` row for an account never stored. A non-null actor GitHub returns replaces the stored one; a commit link whose account lookup returns null counts as null. Deleted accounts are identified as stored ones by `deleted_at IS NOT NULL`, and unattributed ones by a null actor reference on a PR, issue, review, or comment; on a commit a null link also means an email linked to no account, so commits do not single out deleted accounts. This attribution is data GitHub no longer serves (section 9), so a bootstrap copies it from the latest snapshot; an object re-created from GitHub loses it: a PR reopened after D3 deleted it, a transferred issue (new `github_id`), and a repository pruned and re-added (D27). |
 
 ## 3. Coverage rule
 
@@ -99,7 +99,7 @@ Every gap found in the audit, and where it is resolved.
 | 1 | No issues table or issue sync | Step 4 |
 | 2 | No GitHub user id or account type; bots indistinguishable | Step 3: `github_users` keyed by GitHub id; type and login from GraphQL actor sightings and node lookups (5.2); automation from account type plus the `[automation]` list. `prebidjs-release` (99054218) and `claude` (81847) are type `User`. Logins change: `blueseasx` became `blueseasx-prebid`. |
 | 3 | Review order lost; final reviewer state unknown | Step 3: one row per review keyed by review id; `v_pr_reviewers` derives the final verdict |
-| 4 | Validation silently drops commits (`author: {}`), reviews (`user: null`), files (`sha: null`) | Steps 2, 3: no silent skips; failures are recorded. GraphQL file objects carry no `sha`; unlinked commit authors keep git name and email; deleted-account comments are stored with a null author (D24) |
+| 4 | Validation silently drops commits (`author: {}`), reviews (`user: null`), files (`sha: null`) | Steps 2, 3: no silent skips; failures are recorded. GraphQL file objects carry no `sha`; unlinked commit authors keep git name and email; deleted-account comments are stored with a null author unless their author was already stored (D24, D28) |
 | 5 | 10,895 PRs with file status `unknown` and zero per-file line counts | Step 5: rebuild from GitHub |
 | 6 | Closed-unmerged PRs partially stored | D3 |
 | 7 | `reviewers` holds pending review requests | D4 |
@@ -134,7 +134,7 @@ Every gap found in the audit, and where it is resolved.
 | 36 | `gh release upload --clobber` deletes before uploading | Step 6 |
 | 37 | Public-repo schedules disable after 60 days without activity; start-of-hour runs delayed or dropped | Step 6 |
 | 38 | The same path can appear twice in one PR's file list | Step 3: file rows keyed by ordinal; `files_total`, not `changed_files`, counts them |
-| 39 | Null PR author, reviewer, commenter, issue author, and merger occur | Step 3: nullable references; deleted-account comments stored with a null author (D24, D28) |
+| 39 | Null PR author, reviewer, commenter, issue author, and merger occur | Step 3: nullable references, kept for stored accounts (D28); deleted-account comments stored with a null author unless their author was already stored (D24) |
 | 40 | A review can be submitted seconds after the PR `updatedAt` | Step 3: unsettled re-hydration |
 | 41 | Issue transfers between repositories | Step 4: a transferred issue arrives with a new id; deletions recomputed at delete time |
 | 42 | `uv sync --frozen` without `--extra dev` uninstalls dev tools | Step 1 |
@@ -169,8 +169,8 @@ Every gap found in the audit, and where it is resolved.
 
 ### 5.1 Schema
 
-Entity tables (`repositories`, `github_users`, `pull_requests`, `pr_reviews`, `issues`, `sync_runs`,
-`sync_failures`) have their own integer primary key; GitHub identifiers there are unique columns,
+Entity tables (`repositories`, `github_users`, `pull_requests`, `pr_reviews`, `pr_comments`, `issues`,
+`sync_runs`, `sync_failures`) have their own integer primary key; GitHub identifiers there are unique columns,
 never primary keys. Child tables use the composite keys listed. References to `repositories`,
 `pull_requests`, and `issues` use `ON DELETE CASCADE`; references to `github_users` use
 `ON DELETE SET NULL`.
@@ -219,7 +219,8 @@ Column rules:
   `author_association`, `state_reason`) are text without a CHECK, so a new GitHub value is stored,
   not rejected.
 
-Indexes: foreign-key columns of every child table; `pull_requests (repository_id, state)`,
+Indexes: foreign-key columns of every child table and of `pr_reviews` and `pr_comments`;
+`pull_requests (repository_id, state)`,
 `(repository_id, merged_at)`, `(author_id)`; `issues (repository_id, state)`, `(author_id)`;
 `pr_closing_issues (issue_repo_github_id, issue_number)`.
 
@@ -270,7 +271,8 @@ changes do not bump it. The manifest (5.6) carries the same number.
   `PullRequestReview.databaseId` are deprecated because they do not support 64-bit ids. Actor ids come
   from `databaseId`, which `User`, `Bot`, `Organization`, and `Mannequin` do not deprecate.
 - GraphQL `Actor` types with a `databaseId`: `User`, `Bot`, `Organization`, `Mannequin`. A null actor
-  (deleted account) stores a null reference. The fifth type, `EnterpriseUserAccount`, has no
+  (deleted account) stores a null reference, unless the object already has a stored reference,
+  which it keeps (D28). The fifth type, `EnterpriseUserAccount`, has no
   `databaseId`; an item with such an actor is an item failure, never a null reference.
 - One account comes back in more than one shape. dependabot (49699333) is `Bot`/`dependabot` as a PR
   author and `dependabot[bot]` as a commit's `GitActor.user`, whose declared type is `User`; REST uses
@@ -398,9 +400,10 @@ less than 10 minutes in the past, inserts its own row, and replaces `automation_
    with `INSERT ... ON CONFLICT (github_id) DO UPDATE`, which keeps the row id (never
    `INSERT OR REPLACE`, which deletes the row and cascades); replace the hydrated child rows
    (`pr_labels`, `pr_reviews`, `pr_comments`, `pr_commits`, `pr_files`, `pr_closing_issues`,
-   `issue_labels`), where a new review, comment, or commit with a null author takes the stored author
-   of the row with the same `github_id` or SHA, and a null PR or issue author or merger keeps the
-   stored one (D28); store the validated totals; set `hydrated_at`. Fetchers never touch the database.
+   `issue_labels`), where a new review or comment with a null author takes the stored author of the
+   row with the same `github_id`, a commit with a null link takes the stored link of this PR's row
+   with the same SHA, and a null PR or issue author or merger keeps the stored one (D28); store the
+   validated totals; set `hydrated_at`. Fetchers never touch the database.
    A transferred issue arrives with a new `github_id` and number and is inserted in its new
    repository; step 7 removes the old row.
 7. Delete: after all writes, for each repository with a complete index, recompute from the database
@@ -540,8 +543,9 @@ Workflow `.github/workflows/sync.yml`:
   runs project code and PyPI dependencies holds no write token:
   - `sync` (`permissions: contents: read`; `timeout-minutes: 355`, under GitHub's 6-hour job limit)
     holds the App credentials. Without `bootstrap`, it downloads the latest snapshot and runs
-    `verify --db-only`; a missing or failing snapshot halts the run. With `bootstrap`, it downloads
-    nothing and starts from an empty file, and the manifest records `bootstrap: true`. It then runs
+    `verify --db-only`; a missing or failing snapshot halts the run. With `bootstrap`, it starts from
+    an empty file and copies into it only the data section 9 names (D28's attribution of deleted
+    accounts), from the latest snapshot when one exists; the manifest records `bootstrap: true`. It then runs
     `alembic upgrade head`, asserts the revision is head, runs `ghactivity sync --max-minutes 300`
     and `ghactivity verify --max-minutes 40 --report verify.json`, runs `ghactivity snapshot
     --verify-report verify.json`, and hands the snapshot and manifest to `publish` as a workflow
@@ -834,7 +838,10 @@ recomputing `targets_default_branch`, a bot seen first through a commit and a fa
 an account deleted after it was stored (`deleted_at` set; its PR author, merger, review, comment,
 and commit references kept through a re-hydration that returns it as null) and then seen again, an
 account deleted before it was stored (null references everywhere, and a commit whose lookup returns
-null stored without a linked account),
+null stored without a linked account), an object first written after its author's deletion stored
+with a null author, a different non-null commit link replacing a stored one, the 24-hour refresh
+skipping an account marked deleted, a bootstrap copying D28's attribution from the latest snapshot,
+a duplicate closing link in the index leaving the entry incomplete,
 an automation-list change with no hydration changing the views, an accepted failure leaving exit 0,
 one case per exit condition in 5.3 step 8, `sync_failures` rows removed when their item leaves
 coverage, `last_index_started_at` left unwritten for a failed or incompletely indexed repository,
@@ -849,7 +856,8 @@ sections (defaults, invalid values, unknown keys).
 
 Acceptance: `verify --exact` on Prebid.js, salesagent, and prebid-server; a REST sample of PRs that
 includes a null author, a null merger, more than 250 commits, overflow, a duplicate path, and a
-dismissed review matches field by field, with REST's `ghost` account (id 10137) read as null and
+dismissed review matches field by field, with REST's `ghost` account (id 10137) matching a null
+reference or a reference D28 kept from before the deletion, and
 per-file line counts compared only where REST's per-file sums equal the PR totals (section 7,
 "Source vs REST"); CI passes.
 
@@ -861,7 +869,7 @@ Scope: a migration for the issue tables (the first additive migration); issue in
 view joining closing references to stored issues; the data dictionary for issues.
 
 Tests: issue first sync, update, close, and reopen; unsettled re-hydration and version bump for
-issues; a transfer arriving with a new id; an old number returning `NOT_FOUND`, treated as gone; a
+issues; an issue's stored author kept when GitHub returns it as null (D28); a transfer arriving with a new id; an old number returning `NOT_FOUND`, treated as gone; a
 snapshot one migration behind head upgrades and syncs.
 
 Acceptance: `verify --exact` for issues on the same repositories; a REST sample of issues matches
@@ -1022,4 +1030,6 @@ check that the latest manifest is recent (a disabled schedule fails no run).
 Data that cannot be re-fetched from GitHub (user tags, AI enrichment) must be keyed by GitHub
 identity (PR or issue `github_id`, user `github_id`), must not cascade from mirror rows, must be
 produced where the published file is built, and must be copied from the last good snapshot across a
-bootstrap. Until such data exists, D18's "nothing that cannot be re-fetched" holds.
+bootstrap. D28's attribution of deleted accounts (the `github_users` rows of stored accounts and the
+references GitHub now returns as null) is such data; besides it, D18's "nothing that cannot be
+re-fetched" holds.

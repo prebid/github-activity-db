@@ -68,6 +68,14 @@ class ClosingIssue:
     number: int
 
 
+def link_key(link: ClosingIssue) -> tuple[int, int]:
+    """A closing link as the database keys it: the repository's id and the issue number.
+
+    The repository's name is not part of it; a rename between two pages changes only the name.
+    """
+    return (link.repo_github_id, link.number)
+
+
 @dataclass(frozen=True, slots=True)
 class IndexedPullRequest:
     """One pull request as the index reports it."""
@@ -80,7 +88,7 @@ class IndexedPullRequest:
     created_at: datetime
     updated_at: datetime
     merged_at: datetime | None
-    # The first INDEX_CLOSING_LINKS links; complete when len() == closing_issues_total.
+    # The first INDEX_CLOSING_LINKS distinct links; complete when len() == closing_issues_total.
     closing_issues: tuple[ClosingIssue, ...]
     closing_issues_total: int
 

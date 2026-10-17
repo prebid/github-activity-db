@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from datetime import datetime
 
 from pydantic import ValidationError
@@ -17,7 +18,13 @@ from .errors import (
 )
 from .limits import INDEX_BOUNDARY_MARGIN
 from .models import IndexedPullRequestNode, PullRequestIndexPage
-from .records import IndexedPullRequest, PullRequestIndex, RepositoryRecord
+from .records import (
+    ClosingIssue,
+    IndexedPullRequest,
+    PullRequestIndex,
+    RepositoryRecord,
+    link_key,
+)
 from .transport import Transport
 
 _CONNECTION = "pullRequests"
@@ -100,6 +107,18 @@ async def _scan(
         cursor = next_cursor
 
 
+def _distinct_links(links: Iterable[ClosingIssue]) -> tuple[ClosingIssue, ...]:
+    """Each link once by its database key, first sighting kept.
+
+    A duplicate leaves the list shorter than ``totalCount``, so the entry reads as incomplete
+    and the pull request is hydrated, where the duplicate fails that item (plan 5.3 step 3).
+    """
+    seen: dict[tuple[int, int], ClosingIssue] = {}
+    for link in links:
+        seen.setdefault(link_key(link), link)
+    return tuple(seen.values())
+
+
 def _entry(full_name: str, node: IndexedPullRequestNode) -> IndexedPullRequest:
     links = node.closing_issues_references
     if links is None or links.nodes is None or any(link is None for link in links.nodes):
@@ -113,6 +132,8 @@ def _entry(full_name: str, node: IndexedPullRequestNode) -> IndexedPullRequest:
         created_at=utc(node.created_at),
         updated_at=utc(node.updated_at),
         merged_at=utc(node.merged_at) if node.merged_at is not None else None,
-        closing_issues=tuple(closing_issue(link) for link in links.nodes if link is not None),
+        closing_issues=_distinct_links(
+            closing_issue(link) for link in links.nodes if link is not None
+        ),
         closing_issues_total=links.total_count,
     )
