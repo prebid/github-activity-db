@@ -323,11 +323,19 @@ class TestInvariants:
         [
             (("reviews", "nodes", 0, "state"), "PENDING"),
             (("isDraft",), "no"),
-            (("fullDatabaseId",), "12x"),
+            (("fullDatabaseId",), "1_2"),
+            (("fullDatabaseId",), True),
             (("createdAt",), 1_700_000_000),
             (("author", "__typename"), "Ghost"),
         ],
-        ids=["pending-review", "string-bool", "bad-bigint", "numeric-date", "unknown-actor"],
+        ids=[
+            "pending-review",
+            "string-bool",
+            "bigint-with-underscore",
+            "bigint-as-bool",
+            "numeric-date",
+            "unknown-actor",
+        ],
     )
     async def test_a_value_the_models_reject(
         self, open_source, replay: Replay, path, value
@@ -364,6 +372,12 @@ class TestInvariants:
         error = await failure(open_source, PREBID_JS, 13481)
         assert isinstance(error, AliasError)
         assert error.error_type == "FORBIDDEN"
+
+    async def test_an_error_on_a_continuation_page(self, open_source, replay: Replay) -> None:
+        unit = replay.unit("overflow", id="PR_kwDOAlf9v85oRaET", connection="commits", after="MTAw")
+        unit.errors = [{"type": "SERVICE_UNAVAILABLE", "path": ["commits"], "message": "partial"}]
+        replay.add(unit)
+        assert isinstance(await failure(open_source, PREBID_JS, 11155), AliasError)
 
     async def test_partial_data_under_an_alias(self, open_source, replay: Replay) -> None:
         unit = pr_unit(replay, 13481)
@@ -438,9 +452,8 @@ class TestSplitAndRetry:
         )
         outcomes = await hydrate(open_source, PREBID_JS, RECORDED_PREBID_JS)
         assert all(isinstance(outcome, Hydrated) for outcome in outcomes)
-        sizes = [len(batch) for batch in batches(replay)]
-        assert sizes[0] == 6
-        assert sizes.count(1) == 6
+        # Halves until single items pass: 6 -> 3 (-> 1, 2 -> 1, 1) and 3 (-> 1, 2 -> 1, 1).
+        assert [len(batch) for batch in batches(replay)] == [6, 3, 1, 2, 1, 1, 3, 1, 2, 1, 1]
         assert clock.sleeps == []  # a splittable timeout splits at once, without retries
 
     async def test_a_server_error_retries_then_splits(
@@ -496,6 +509,32 @@ class TestSplitAndRetry:
         assert isinstance(outcomes[0], Failed)
         assert isinstance(outcomes[0].error, ItemRequestFailed)
         assert isinstance(outcomes[1], Hydrated)
+
+    async def test_a_failing_continuation_request_is_split(
+        self, open_source, replay: Replay
+    ) -> None:
+        unit = pr_unit(replay, 12975)
+        unit.data["labels"]["totalCount"] += 1
+        unit.data["labels"]["pageInfo"] = {"hasNextPage": True, "endCursor": "page-2"}
+        replay.add(unit)
+        replay.add(
+            overflow_unit(
+                unit, "labels", "page-2", [{"name": "x"}], unit.data["labels"]["totalCount"]
+            )
+        )
+        replay.fault(
+            lambda request: synthetic("bad_gateway"),
+            when=lambda s: s.operation == "Overflow" and "id1" in s.variables,
+            times=None,
+        )
+        outcomes = await hydrate(open_source, PREBID_JS, [11155, 12975])
+        assert all(isinstance(outcome, Hydrated) for outcome in outcomes)
+        sizes = [
+            sum(1 for name in seen.variables if name.startswith("id"))
+            for seen in replay.seen
+            if seen.operation == "Overflow"
+        ]
+        assert sizes == [2, 1, 1]
 
     async def test_continuations_from_several_items_share_a_request(
         self, open_source, replay: Replay

@@ -249,6 +249,24 @@ class TestBudget:
             await source.resolve(**RESOLVE)
         assert clock.sleeps == [20 * 60 + RESET_MARGIN]
 
+    async def test_rest_waits_until_the_reset_when_below_the_reserve(
+        self, open_source, replay: Replay, clock: FakeClock
+    ) -> None:
+        path, params = compare_unit(replay)
+        reset = reset_in(clock, 900)
+
+        def low(request: httpx.Request) -> httpx.Response:
+            unit = next(u for u in replay.units.values() if u.kind == "compare")
+            headers = {**unit.headers, "x-ratelimit-remaining": "5", "x-ratelimit-reset": reset}
+            return httpx.Response(200, json=unit.data, headers=headers)
+
+        replay.fault(low, when=lambda s: s.operation == "rest")
+        async with open_source() as source:
+            await source.transport.rest_get(path, params)
+            assert clock.sleeps == []
+            await source.transport.rest_get(path, params)
+        assert clock.sleeps == [900 + RESET_MARGIN]
+
     async def test_accounts_points_requests_and_rest_calls(
         self, open_source, replay: Replay
     ) -> None:

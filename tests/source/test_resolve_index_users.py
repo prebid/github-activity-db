@@ -92,6 +92,47 @@ class TestResolve:
             with pytest.raises(LabelCountMismatch):
                 await source.resolve("prebid", "go-gdpr")
 
+    async def test_errors_under_the_repository_fail_it(self, open_source, replay: Replay) -> None:
+        unit = replay.unit("resolve", owner="prebid", name="go-gdpr")
+        unit.errors = [{"type": "SERVICE_UNAVAILABLE", "path": ["labels"], "message": "partial"}]
+        replay.add(unit)
+        async with open_source() as source:
+            with pytest.raises(RepositoryShapeError, match="errors under repository"):
+                await source.resolve("prebid", "go-gdpr")
+
+    async def test_a_label_page_for_another_repository(self, open_source, replay: Replay) -> None:
+        unit = replay.unit("resolve", owner="prebid", name="go-gdpr")
+        unit.data["labels"]["totalCount"] = 11
+        unit.data["labels"]["pageInfo"] = {"hasNextPage": True, "endCursor": "page-2"}
+        replay.add(unit)
+        page = _label_page(unit, "page-2", ["needs triage"], total=11)
+        page.data["id"] = "R_another"
+        replay.add(page)
+        async with open_source() as source:
+            with pytest.raises(RepositoryShapeError, match="label page for R_another"):
+                await source.resolve("prebid", "go-gdpr")
+
+    async def test_a_label_total_that_changes_between_pages(
+        self, open_source, replay: Replay
+    ) -> None:
+        unit = replay.unit("resolve", owner="prebid", name="go-gdpr")
+        unit.data["labels"]["totalCount"] = 11
+        unit.data["labels"]["pageInfo"] = {"hasNextPage": True, "endCursor": "page-2"}
+        replay.add(unit)
+        replay.add(_label_page(unit, "page-2", ["needs triage", "another"], total=12))
+        async with open_source() as source:
+            with pytest.raises(LabelCountMismatch) as raised:
+                await source.resolve("prebid", "go-gdpr")
+        assert (raised.value.fetched, raised.value.total_count) == (10, 12)
+
+    async def test_a_null_label_entry(self, open_source, replay: Replay) -> None:
+        unit = replay.unit("resolve", owner="prebid", name="go-gdpr")
+        unit.data["labels"]["nodes"][0] = None
+        replay.add(unit)
+        async with open_source() as source:
+            with pytest.raises(RepositoryShapeError, match="null label entry"):
+                await source.resolve("prebid", "go-gdpr")
+
     async def test_label_count_without_pages_must_match(self, open_source, replay: Replay) -> None:
         unit = replay.unit("resolve", owner="prebid", name="go-gdpr")
         unit.data["labels"]["totalCount"] = 11
@@ -208,17 +249,25 @@ class TestIndex:
             with pytest.raises(IndexOrderViolation, match="created before"):
                 await source.index_pull_requests(repository)
 
-    @pytest.mark.parametrize("path", [("nodes", 0), ("nodes", 0, "closingIssuesReferences")])
+    @pytest.mark.parametrize(
+        "change",
+        [
+            lambda page: page.update(nodes=None),
+            lambda page: page["nodes"].__setitem__(0, None),
+            lambda page: page["nodes"][0].update(closingIssuesReferences=None),
+            lambda page: page["nodes"][0].update(
+                closingIssuesReferences={"totalCount": 1, "nodes": [None]}
+            ),
+        ],
+        ids=["nodes", "entry", "links", "link-entry"],
+    )
     async def test_a_null_entry_fails_the_repository(
-        self, open_source, replay: Replay, path
+        self, open_source, replay: Replay, change
     ) -> None:
-        def null(body: dict) -> None:
-            target = body["data"]["repository"]["pullRequests"]
-            for part in path[:-1]:
-                target = target[part]
-            target[path[-1]] = None
-
-        replay.modify(null, when=operation("PullRequestIndex"))
+        replay.modify(
+            lambda body: change(body["data"]["repository"]["pullRequests"]),
+            when=operation("PullRequestIndex"),
+        )
         async with open_source() as source:
             repository = await source.resolve("prebid", "go-gdpr")
             with pytest.raises(RepositoryShapeError):
@@ -235,9 +284,29 @@ class TestIndex:
             with pytest.raises(RepositoryRequestFailed):
                 await source.index_pull_requests(repository)
 
+    async def test_errors_in_an_index_page_fail_the_repository(
+        self, open_source, replay: Replay
+    ) -> None:
+        def error(body: dict) -> None:
+            body["errors"] = [
+                {
+                    "type": "SERVICE_UNAVAILABLE",
+                    "path": ["repository", "pullRequests"],
+                    "message": "x",
+                }
+            ]
+
+        replay.modify(error, when=operation("PullRequestIndex"))
+        async with open_source() as source:
+            repository = await source.resolve("prebid", "go-gdpr")
+            with pytest.raises(RepositoryShapeError, match="index errors"):
+                await source.index_pull_requests(repository)
+
 
 class TestUserLookup:
-    async def test_a_commit_linked_bot_gets_its_real_type(self, open_source) -> None:
+    async def test_a_commit_linked_bot_gets_its_real_type(
+        self, open_source, replay: Replay
+    ) -> None:
         async with open_source() as source:
             accounts = await source.lookup_users([DEPENDABOT, PATMMCCANN, NO_SUCH_USER, DEPENDABOT])
         assert accounts[DEPENDABOT] == Account(
@@ -246,6 +315,8 @@ class TestUserLookup:
         assert accounts[PATMMCCANN] is not None and accounts[PATMMCCANN].type == "User"
         assert accounts[NO_SUCH_USER] is None
         assert len(accounts) == 3
+        (request,) = [seen for seen in replay.seen if seen.operation == "UserLookup"]
+        assert request.variables["ids"] == [DEPENDABOT, PATMMCCANN, NO_SUCH_USER]
 
     async def test_batches_of_100(self, open_source, replay: Replay) -> None:
         template = replay.unit("user", id=PATMMCCANN)
@@ -272,6 +343,26 @@ class TestUserLookup:
             body["errors"] = [{"type": "FORBIDDEN", "path": ["nodes", 0], "message": "no"}]
 
         replay.modify(forbid, when=operation("UserLookup"))
+        async with open_source() as source:
+            with pytest.raises(UserLookupFailed):
+                await source.lookup_users([PATMMCCANN])
+
+    async def test_a_short_answer_fails_the_lookup(self, open_source, replay: Replay) -> None:
+        def short(body: dict) -> None:
+            body["data"]["nodes"] = body["data"]["nodes"][:1]
+
+        replay.modify(short, when=operation("UserLookup"))
+        async with open_source() as source:
+            with pytest.raises(UserLookupFailed):
+                await source.lookup_users([PATMMCCANN, DEPENDABOT])
+
+    async def test_an_answer_for_another_id_fails_the_lookup(
+        self, open_source, replay: Replay
+    ) -> None:
+        def swapped(body: dict) -> None:
+            body["data"]["nodes"][0]["id"] = DEPENDABOT
+
+        replay.modify(swapped, when=operation("UserLookup"))
         async with open_source() as source:
             with pytest.raises(UserLookupFailed):
                 await source.lookup_users([PATMMCCANN])
