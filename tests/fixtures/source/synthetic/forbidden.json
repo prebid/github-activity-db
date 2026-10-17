@@ -1,0 +1,11 @@
+{
+  "body": {
+    "message": "Resource not accessible by integration"
+  },
+  "headers": {
+    "date": "Sat, 17 Oct 2026 12:00:00 GMT",
+    "x-ratelimit-remaining": "4000"
+  },
+  "source": "GitHub REST docs, 'Troubleshooting the REST API': 'Resource not accessible by integration' means the token 'has insufficient permissions'. The docs name no status for it; 403 is constructed",
+  "status": 403
+}

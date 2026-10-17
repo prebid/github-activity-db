@@ -1,0 +1,133 @@
+{
+  "data": {
+    "additions": 0,
+    "author": {
+      "__typename": "User",
+      "databaseId": 66466997,
+      "id": "MDQ6VXNlcjY2NDY2OTk3",
+      "login": "Arthur482"
+    },
+    "authorAssociation": "CONTRIBUTOR",
+    "baseRefName": "master",
+    "baseRefOid": "42c41d576dee0cbd27fe544d72b6e5d742d9a3c3",
+    "body": "Hi, Team!\r\nPlease review our bid adapter update.\r\n\r\n## Type of change\r\n- [x] Updated bidder adapter  <!--  IMPORTANT: (1) consider whether you need to upgrade your bidder parameter documentation in https://github.com/prebid/prebid.github.io/tree/master/dev-docs/bidders and (2) if you have a Prebid Server adapter, please consider whether that should be updated as well. --> \r\n\r\n## Description of change\r\n- Added: Support for enriching the request payload with payload.userIdAsEids.\r\n- Removed: payload.eids from the request payload.\r\n- Changed: Restructured the payload so that bids contains all placements, allowing them to be included in a single request.\r\n\r\nBest regards,\r\nArthur Buchatsky",
+    "changedFiles": 0,
+    "closingIssuesReferences": {
+      "nodes": [],
+      "pageInfo": {
+        "endCursor": null,
+        "hasNextPage": false
+      },
+      "totalCount": 0
+    },
+    "comments": {
+      "nodes": [
+        {
+          "author": {
+            "__typename": "Bot",
+            "databaseId": 41898282,
+            "id": "MDM6Qm90NDE4OTgyODI=",
+            "login": "github-actions"
+          },
+          "fullDatabaseId": "3183385040"
+        },
+        {
+          "author": {
+            "__typename": "Bot",
+            "databaseId": 41898282,
+            "id": "MDM6Qm90NDE4OTgyODI=",
+            "login": "github-actions"
+          },
+          "fullDatabaseId": "3200322304"
+        },
+        {
+          "author": {
+            "__typename": "Bot",
+            "databaseId": 41898282,
+            "id": "MDM6Qm90NDE4OTgyODI=",
+            "login": "github-actions"
+          },
+          "fullDatabaseId": "3201595368"
+        },
+        {
+          "author": {
+            "__typename": "Bot",
+            "databaseId": 41898282,
+            "id": "MDM6Qm90NDE4OTgyODI=",
+            "login": "github-actions"
+          },
+          "fullDatabaseId": "3228264397"
+        }
+      ],
+      "pageInfo": {
+        "endCursor": "Y3Vyc29yOnYyOpHOwGtnzQ==",
+        "hasNextPage": false
+      },
+      "totalCount": 4
+    },
+    "commits": {
+      "nodes": [],
+      "pageInfo": {
+        "endCursor": null,
+        "hasNextPage": false
+      },
+      "totalCount": 0
+    },
+    "createdAt": "2025-08-13T11:17:28Z",
+    "deletions": 0,
+    "files": {
+      "nodes": [],
+      "pageInfo": {
+        "endCursor": null,
+        "hasNextPage": false
+      },
+      "totalCount": 0
+    },
+    "fullDatabaseId": "2742471571",
+    "headRefOid": "42c41d576dee0cbd27fe544d72b6e5d742d9a3c3",
+    "id": "PR_kwDOAlf9v86jdsuT",
+    "isCrossRepository": true,
+    "isDraft": false,
+    "labels": {
+      "nodes": [],
+      "pageInfo": {
+        "endCursor": null,
+        "hasNextPage": false
+      },
+      "totalCount": 0
+    },
+    "mergedAt": "2025-08-27T16:31:41Z",
+    "mergedBy": null,
+    "number": 13769,
+    "reviews": {
+      "nodes": [],
+      "pageInfo": {
+        "endCursor": null,
+        "hasNextPage": false
+      },
+      "totalCount": 0
+    },
+    "state": "MERGED",
+    "title": "Pixfuture bid adapter payload update",
+    "updatedAt": "2025-08-27T16:31:42Z"
+  },
+  "document_sha256": "39fd2b5d7744d57be4fd58ba38b2fcf50319c5bd19e1c3796ae4771203af3ea0",
+  "errors": [],
+  "extra": {},
+  "headers": {
+    "date": "Sat, 17 Oct 2026 12:09:24 GMT",
+    "x-ratelimit-limit": "5000",
+    "x-ratelimit-remaining": "4929",
+    "x-ratelimit-reset": "1792241340",
+    "x-ratelimit-resource": "graphql",
+    "x-ratelimit-used": "71"
+  },
+  "key": {
+    "name": "Prebid.js",
+    "number": 13769,
+    "owner": "prebid"
+  },
+  "kind": "pull_request",
+  "recorded_at": "2026-10-17T12:09:19Z",
+  "source": "live"
+}

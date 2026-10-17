@@ -1,0 +1,804 @@
+{
+  "data": {
+    "additions": 910,
+    "author": {
+      "__typename": "User",
+      "databaseId": 92721590,
+      "id": "U_kgDOBYbRtg",
+      "login": "OlenaPostindustria"
+    },
+    "authorAssociation": "MEMBER",
+    "baseRefName": "master",
+    "baseRefOid": "be3bab2cb3fa8149a0a38ab8a850aa2fee8bbef1",
+    "body": "#839 ",
+    "changedFiles": 101,
+    "closingIssuesReferences": {
+      "nodes": [],
+      "pageInfo": {
+        "endCursor": null,
+        "hasNextPage": false
+      },
+      "totalCount": 0
+    },
+    "comments": {
+      "nodes": [],
+      "pageInfo": {
+        "endCursor": null,
+        "hasNextPage": false
+      },
+      "totalCount": 0
+    },
+    "commits": {
+      "nodes": [
+        {
+          "commit": {
+            "author": {
+              "email": "olena.stepaniuk@postindustria.com",
+              "name": "Olena Stepaniuk",
+              "user": {
+                "databaseId": 92721590,
+                "id": "U_kgDOBYbRtg",
+                "login": "OlenaPostindustria"
+              }
+            },
+            "authoredDate": "2023-05-21T20:13:04Z",
+            "oid": "43a37619c6693921597e65ec4fcf6b0e66143b80"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "olena.stepaniuk@postindustria.com",
+              "name": "Olena Stepaniuk",
+              "user": {
+                "databaseId": 92721590,
+                "id": "U_kgDOBYbRtg",
+                "login": "OlenaPostindustria"
+              }
+            },
+            "authoredDate": "2023-05-22T07:51:47Z",
+            "oid": "63659a70ec0891fa1072dfe5a36cb2715cbf45e7"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "olena.stepaniuk@postindustria.com",
+              "name": "Olena Stepaniuk",
+              "user": {
+                "databaseId": 92721590,
+                "id": "U_kgDOBYbRtg",
+                "login": "OlenaPostindustria"
+              }
+            },
+            "authoredDate": "2023-05-23T06:57:20Z",
+            "oid": "0fddb4c7e8335b6831a2c8eaaf4658b9f3f8e2fe"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "olena.stepaniuk@postindustria.com",
+              "name": "Olena Stepaniuk",
+              "user": {
+                "databaseId": 92721590,
+                "id": "U_kgDOBYbRtg",
+                "login": "OlenaPostindustria"
+              }
+            },
+            "authoredDate": "2023-05-23T09:29:31Z",
+            "oid": "54c101b677757632dd59b1464bbb5a2587963209"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "olena.stepaniuk@postindustria.com",
+              "name": "Olena Stepaniuk",
+              "user": {
+                "databaseId": 92721590,
+                "id": "U_kgDOBYbRtg",
+                "login": "OlenaPostindustria"
+              }
+            },
+            "authoredDate": "2023-05-23T09:37:43Z",
+            "oid": "b930a27177ce819f39fe4ebc0c574f8eb284db7b"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "olena.stepaniuk@postindustria.com",
+              "name": "Olena Stepaniuk",
+              "user": {
+                "databaseId": 92721590,
+                "id": "U_kgDOBYbRtg",
+                "login": "OlenaPostindustria"
+              }
+            },
+            "authoredDate": "2023-05-23T10:17:17Z",
+            "oid": "0c19f81f430aae7bb98c499aaf7c969a132d14e5"
+          }
+        }
+      ],
+      "pageInfo": {
+        "endCursor": "Ng",
+        "hasNextPage": false
+      },
+      "totalCount": 6
+    },
+    "createdAt": "2023-05-23T09:31:02Z",
+    "deletions": 254,
+    "files": {
+      "nodes": [
+        {
+          "additions": 1,
+          "changeType": "MODIFIED",
+          "deletions": 1,
+          "path": "Example/PrebidDemo/PrebidDemoObjectiveC/Examples/AdMob/AdMobDisplayBannerViewController.m"
+        },
+        {
+          "additions": 1,
+          "changeType": "MODIFIED",
+          "deletions": 1,
+          "path": "Example/PrebidDemo/PrebidDemoObjectiveC/Examples/AdMob/AdMobDisplayInterstitialViewController.m"
+        },
+        {
+          "additions": 1,
+          "changeType": "MODIFIED",
+          "deletions": 1,
+          "path": "Example/PrebidDemo/PrebidDemoObjectiveC/Examples/AdMob/AdMobNativeViewController.m"
+        },
+        {
+          "additions": 1,
+          "changeType": "MODIFIED",
+          "deletions": 1,
+          "path": "Example/PrebidDemo/PrebidDemoObjectiveC/Examples/AdMob/AdMobVideoBannerViewController.m"
+        },
+        {
+          "additions": 1,
+          "changeType": "MODIFIED",
+          "deletions": 1,
+          "path": "Example/PrebidDemo/PrebidDemoObjectiveC/Examples/AdMob/AdMobVideoInterstitialViewController.m"
+        },
+        {
+          "additions": 1,
+          "changeType": "MODIFIED",
+          "deletions": 1,
+          "path": "Example/PrebidDemo/PrebidDemoObjectiveC/Examples/AdMob/AdMobVideoRewardedViewController.m"
+        },
+        {
+          "additions": 1,
+          "changeType": "MODIFIED",
+          "deletions": 1,
+          "path": "Example/PrebidDemo/PrebidDemoObjectiveC/Examples/GAM/OriginalAPI/GAMOriginalAPIDisplayBannerViewController.m"
+        },
+        {
+          "additions": 1,
+          "changeType": "MODIFIED",
+          "deletions": 1,
+          "path": "Example/PrebidDemo/PrebidDemoObjectiveC/Examples/GAM/OriginalAPI/GAMOriginalAPIDisplayInterstitialViewController.m"
+        },
+        {
+          "additions": 1,
+          "changeType": "MODIFIED",
+          "deletions": 1,
+          "path": "Example/PrebidDemo/PrebidDemoObjectiveC/Examples/GAM/OriginalAPI/GAMOriginalAPIMultiformatBannerViewController.m"
+        },
+        {
+          "additions": 1,
+          "changeType": "MODIFIED",
+          "deletions": 1,
+          "path": "Example/PrebidDemo/PrebidDemoObjectiveC/Examples/GAM/OriginalAPI/GAMOriginalAPIMultiformatInterstitialViewController.m"
+        },
+        {
+          "additions": 1,
+          "changeType": "MODIFIED",
+          "deletions": 1,
+          "path": "Example/PrebidDemo/PrebidDemoObjectiveC/Examples/GAM/OriginalAPI/GAMOriginalAPINativeBannerViewController.m"
+        },
+        {
+          "additions": 1,
+          "changeType": "MODIFIED",
+          "deletions": 1,
+          "path": "Example/PrebidDemo/PrebidDemoObjectiveC/Examples/GAM/OriginalAPI/GAMOriginalAPINativeViewController.m"
+        },
+        {
+          "additions": 1,
+          "changeType": "MODIFIED",
+          "deletions": 1,
+          "path": "Example/PrebidDemo/PrebidDemoObjectiveC/Examples/GAM/OriginalAPI/GAMOriginalAPIVideoBannerViewController.m"
+        },
+        {
+          "additions": 1,
+          "changeType": "MODIFIED",
+          "deletions": 1,
+          "path": "Example/PrebidDemo/PrebidDemoObjectiveC/Examples/GAM/OriginalAPI/GAMOriginalAPIVideoInstreamViewController.m"
+        },
+        {
+          "additions": 1,
+          "changeType": "MODIFIED",
+          "deletions": 1,
+          "path": "Example/PrebidDemo/PrebidDemoObjectiveC/Examples/GAM/OriginalAPI/GAMOriginalAPIVideoInterstitialViewController.m"
+        },
+        {
+          "additions": 1,
+          "changeType": "MODIFIED",
+          "deletions": 1,
+          "path": "Example/PrebidDemo/PrebidDemoObjectiveC/Examples/GAM/OriginalAPI/GAMOriginalAPIVideoRewardedViewController.m"
+        },
+        {
+          "additions": 1,
+          "changeType": "MODIFIED",
+          "deletions": 1,
+          "path": "Example/PrebidDemo/PrebidDemoObjectiveC/Examples/GAM/RenderingAPI/GAMDisplayBannerViewController.m"
+        },
+        {
+          "additions": 1,
+          "changeType": "MODIFIED",
+          "deletions": 1,
+          "path": "Example/PrebidDemo/PrebidDemoObjectiveC/Examples/GAM/RenderingAPI/GAMDisplayInterstitialViewController.m"
+        },
+        {
+          "additions": 1,
+          "changeType": "MODIFIED",
+          "deletions": 1,
+          "path": "Example/PrebidDemo/PrebidDemoObjectiveC/Examples/GAM/RenderingAPI/GAMNativeViewController.m"
+        },
+        {
+          "additions": 1,
+          "changeType": "MODIFIED",
+          "deletions": 1,
+          "path": "Example/PrebidDemo/PrebidDemoObjectiveC/Examples/GAM/RenderingAPI/GAMVideoBannerViewController.m"
+        },
+        {
+          "additions": 1,
+          "changeType": "MODIFIED",
+          "deletions": 1,
+          "path": "Example/PrebidDemo/PrebidDemoObjectiveC/Examples/GAM/RenderingAPI/GAMVideoInterstitialViewController.m"
+        },
+        {
+          "additions": 1,
+          "changeType": "MODIFIED",
+          "deletions": 1,
+          "path": "Example/PrebidDemo/PrebidDemoObjectiveC/Examples/GAM/RenderingAPI/GAMVideoRewardedViewController.m"
+        },
+        {
+          "additions": 1,
+          "changeType": "MODIFIED",
+          "deletions": 1,
+          "path": "Example/PrebidDemo/PrebidDemoObjectiveC/Examples/InApp/InAppDisplayBannerViewController.m"
+        },
+        {
+          "additions": 1,
+          "changeType": "MODIFIED",
+          "deletions": 1,
+          "path": "Example/PrebidDemo/PrebidDemoObjectiveC/Examples/InApp/InAppDisplayInterstitialViewController.m"
+        },
+        {
+          "additions": 1,
+          "changeType": "MODIFIED",
+          "deletions": 1,
+          "path": "Example/PrebidDemo/PrebidDemoObjectiveC/Examples/InApp/InAppNativeViewController.m"
+        },
+        {
+          "additions": 1,
+          "changeType": "MODIFIED",
+          "deletions": 1,
+          "path": "Example/PrebidDemo/PrebidDemoObjectiveC/Examples/InApp/InAppVideoBannerViewController.m"
+        },
+        {
+          "additions": 1,
+          "changeType": "MODIFIED",
+          "deletions": 1,
+          "path": "Example/PrebidDemo/PrebidDemoObjectiveC/Examples/InApp/InAppVideoInterstitialLandscapeViewController.m"
+        },
+        {
+          "additions": 1,
+          "changeType": "MODIFIED",
+          "deletions": 1,
+          "path": "Example/PrebidDemo/PrebidDemoObjectiveC/Examples/InApp/InAppVideoInterstitialVerticalViewController.m"
+        },
+        {
+          "additions": 1,
+          "changeType": "MODIFIED",
+          "deletions": 1,
+          "path": "Example/PrebidDemo/PrebidDemoObjectiveC/Examples/InApp/InAppVideoInterstitialViewController.m"
+        },
+        {
+          "additions": 1,
+          "changeType": "MODIFIED",
+          "deletions": 1,
+          "path": "Example/PrebidDemo/PrebidDemoObjectiveC/Examples/InApp/InAppVideoRewardedViewController.m"
+        },
+        {
+          "additions": 1,
+          "changeType": "MODIFIED",
+          "deletions": 1,
+          "path": "Example/PrebidDemo/PrebidDemoObjectiveC/Examples/MAX/MAXDisplayBannerViewController.m"
+        },
+        {
+          "additions": 1,
+          "changeType": "MODIFIED",
+          "deletions": 1,
+          "path": "Example/PrebidDemo/PrebidDemoObjectiveC/Examples/MAX/MAXDisplayInterstitialViewController.m"
+        },
+        {
+          "additions": 1,
+          "changeType": "MODIFIED",
+          "deletions": 1,
+          "path": "Example/PrebidDemo/PrebidDemoObjectiveC/Examples/MAX/MAXNativeViewController.m"
+        },
+        {
+          "additions": 1,
+          "changeType": "MODIFIED",
+          "deletions": 1,
+          "path": "Example/PrebidDemo/PrebidDemoObjectiveC/Examples/MAX/MAXVideoBannerViewController.m"
+        },
+        {
+          "additions": 1,
+          "changeType": "MODIFIED",
+          "deletions": 1,
+          "path": "Example/PrebidDemo/PrebidDemoObjectiveC/Examples/MAX/MAXVideoInterstitialViewController.m"
+        },
+        {
+          "additions": 1,
+          "changeType": "MODIFIED",
+          "deletions": 1,
+          "path": "Example/PrebidDemo/PrebidDemoObjectiveC/Examples/MAX/MAXVideoRewardedViewController.m"
+        },
+        {
+          "additions": 1,
+          "changeType": "MODIFIED",
+          "deletions": 1,
+          "path": "Example/PrebidDemo/PrebidDemoSwift/Examples/AdMob/AdMobDisplayBannerViewController.swift"
+        },
+        {
+          "additions": 1,
+          "changeType": "MODIFIED",
+          "deletions": 1,
+          "path": "Example/PrebidDemo/PrebidDemoSwift/Examples/AdMob/AdMobDisplayInterstitialViewController.swift"
+        },
+        {
+          "additions": 1,
+          "changeType": "MODIFIED",
+          "deletions": 1,
+          "path": "Example/PrebidDemo/PrebidDemoSwift/Examples/AdMob/AdMobNativeViewController.swift"
+        },
+        {
+          "additions": 1,
+          "changeType": "MODIFIED",
+          "deletions": 1,
+          "path": "Example/PrebidDemo/PrebidDemoSwift/Examples/AdMob/AdMobVideoBannerViewController.swift"
+        },
+        {
+          "additions": 1,
+          "changeType": "MODIFIED",
+          "deletions": 1,
+          "path": "Example/PrebidDemo/PrebidDemoSwift/Examples/AdMob/AdMobVideoInterstitialViewController.swift"
+        },
+        {
+          "additions": 1,
+          "changeType": "MODIFIED",
+          "deletions": 1,
+          "path": "Example/PrebidDemo/PrebidDemoSwift/Examples/AdMob/AdMobVideoRewardedViewController.swift"
+        },
+        {
+          "additions": 1,
+          "changeType": "MODIFIED",
+          "deletions": 1,
+          "path": "Example/PrebidDemo/PrebidDemoSwift/Examples/GAM/OriginalAPI/GAMOriginalAPIDisplayBannerViewController.swift"
+        },
+        {
+          "additions": 1,
+          "changeType": "MODIFIED",
+          "deletions": 1,
+          "path": "Example/PrebidDemo/PrebidDemoSwift/Examples/GAM/OriginalAPI/GAMOriginalAPIDisplayInterstitialViewController.swift"
+        },
+        {
+          "additions": 1,
+          "changeType": "MODIFIED",
+          "deletions": 1,
+          "path": "Example/PrebidDemo/PrebidDemoSwift/Examples/GAM/OriginalAPI/GAMOriginalAPIMultiformatBannerViewController.swift"
+        },
+        {
+          "additions": 1,
+          "changeType": "MODIFIED",
+          "deletions": 1,
+          "path": "Example/PrebidDemo/PrebidDemoSwift/Examples/GAM/OriginalAPI/GAMOriginalAPIMultiformatInterstitialViewController.swift"
+        },
+        {
+          "additions": 1,
+          "changeType": "MODIFIED",
+          "deletions": 1,
+          "path": "Example/PrebidDemo/PrebidDemoSwift/Examples/GAM/OriginalAPI/GAMOriginalAPINativeBannerViewController.swift"
+        },
+        {
+          "additions": 1,
+          "changeType": "MODIFIED",
+          "deletions": 1,
+          "path": "Example/PrebidDemo/PrebidDemoSwift/Examples/GAM/OriginalAPI/GAMOriginalAPINativeViewController.swift"
+        },
+        {
+          "additions": 1,
+          "changeType": "MODIFIED",
+          "deletions": 1,
+          "path": "Example/PrebidDemo/PrebidDemoSwift/Examples/GAM/OriginalAPI/GAMOriginalAPIVideoBannerViewController.swift"
+        },
+        {
+          "additions": 1,
+          "changeType": "MODIFIED",
+          "deletions": 1,
+          "path": "Example/PrebidDemo/PrebidDemoSwift/Examples/GAM/OriginalAPI/GAMOriginalAPIVideoInstreamViewController.swift"
+        },
+        {
+          "additions": 1,
+          "changeType": "MODIFIED",
+          "deletions": 1,
+          "path": "Example/PrebidDemo/PrebidDemoSwift/Examples/GAM/OriginalAPI/GAMOriginalAPIVideoInterstitialViewController.swift"
+        },
+        {
+          "additions": 1,
+          "changeType": "MODIFIED",
+          "deletions": 1,
+          "path": "Example/PrebidDemo/PrebidDemoSwift/Examples/GAM/OriginalAPI/GAMOriginalAPIVideoRewardedViewController.swift"
+        },
+        {
+          "additions": 1,
+          "changeType": "MODIFIED",
+          "deletions": 1,
+          "path": "Example/PrebidDemo/PrebidDemoSwift/Examples/GAM/RenderingAPI/GAMDisplayBannerViewController.swift"
+        },
+        {
+          "additions": 1,
+          "changeType": "MODIFIED",
+          "deletions": 1,
+          "path": "Example/PrebidDemo/PrebidDemoSwift/Examples/GAM/RenderingAPI/GAMDisplayInterstitialViewController.swift"
+        },
+        {
+          "additions": 1,
+          "changeType": "MODIFIED",
+          "deletions": 1,
+          "path": "Example/PrebidDemo/PrebidDemoSwift/Examples/GAM/RenderingAPI/GAMNativeViewController.swift"
+        },
+        {
+          "additions": 1,
+          "changeType": "MODIFIED",
+          "deletions": 1,
+          "path": "Example/PrebidDemo/PrebidDemoSwift/Examples/GAM/RenderingAPI/GAMVideoBannerViewController.swift"
+        },
+        {
+          "additions": 1,
+          "changeType": "MODIFIED",
+          "deletions": 1,
+          "path": "Example/PrebidDemo/PrebidDemoSwift/Examples/GAM/RenderingAPI/GAMVideoInterstitialViewController.swift"
+        },
+        {
+          "additions": 1,
+          "changeType": "MODIFIED",
+          "deletions": 1,
+          "path": "Example/PrebidDemo/PrebidDemoSwift/Examples/GAM/RenderingAPI/GAMVideoRewardedViewController.swift"
+        },
+        {
+          "additions": 1,
+          "changeType": "MODIFIED",
+          "deletions": 1,
+          "path": "Example/PrebidDemo/PrebidDemoSwift/Examples/In-App/InAppDisplayBannerViewController.swift"
+        },
+        {
+          "additions": 1,
+          "changeType": "MODIFIED",
+          "deletions": 1,
+          "path": "Example/PrebidDemo/PrebidDemoSwift/Examples/In-App/InAppDisplayInterstitialViewController.swift"
+        },
+        {
+          "additions": 1,
+          "changeType": "MODIFIED",
+          "deletions": 1,
+          "path": "Example/PrebidDemo/PrebidDemoSwift/Examples/In-App/InAppNativeViewController.swift"
+        },
+        {
+          "additions": 1,
+          "changeType": "MODIFIED",
+          "deletions": 1,
+          "path": "Example/PrebidDemo/PrebidDemoSwift/Examples/In-App/InAppVideoBannerViewController.swift"
+        },
+        {
+          "additions": 1,
+          "changeType": "MODIFIED",
+          "deletions": 1,
+          "path": "Example/PrebidDemo/PrebidDemoSwift/Examples/In-App/InAppVideoInterstitialLandscapeViewController.swift"
+        },
+        {
+          "additions": 1,
+          "changeType": "MODIFIED",
+          "deletions": 1,
+          "path": "Example/PrebidDemo/PrebidDemoSwift/Examples/In-App/InAppVideoInterstitialVerticalViewController.swift"
+        },
+        {
+          "additions": 1,
+          "changeType": "MODIFIED",
+          "deletions": 1,
+          "path": "Example/PrebidDemo/PrebidDemoSwift/Examples/In-App/InAppVideoInterstitialViewController.swift"
+        },
+        {
+          "additions": 1,
+          "changeType": "MODIFIED",
+          "deletions": 1,
+          "path": "Example/PrebidDemo/PrebidDemoSwift/Examples/In-App/InAppVideoRewardedViewController.swift"
+        },
+        {
+          "additions": 1,
+          "changeType": "MODIFIED",
+          "deletions": 1,
+          "path": "Example/PrebidDemo/PrebidDemoSwift/Examples/MAX/MAXDisplayBannerViewController.swift"
+        },
+        {
+          "additions": 1,
+          "changeType": "MODIFIED",
+          "deletions": 1,
+          "path": "Example/PrebidDemo/PrebidDemoSwift/Examples/MAX/MAXDisplayInterstitialViewController.swift"
+        },
+        {
+          "additions": 1,
+          "changeType": "MODIFIED",
+          "deletions": 1,
+          "path": "Example/PrebidDemo/PrebidDemoSwift/Examples/MAX/MAXNativeViewController.swift"
+        },
+        {
+          "additions": 1,
+          "changeType": "MODIFIED",
+          "deletions": 1,
+          "path": "Example/PrebidDemo/PrebidDemoSwift/Examples/MAX/MAXVideoBannerViewController.swift"
+        },
+        {
+          "additions": 1,
+          "changeType": "MODIFIED",
+          "deletions": 1,
+          "path": "Example/PrebidDemo/PrebidDemoSwift/Examples/MAX/MAXVideoInterstitialViewController.swift"
+        },
+        {
+          "additions": 1,
+          "changeType": "MODIFIED",
+          "deletions": 1,
+          "path": "Example/PrebidDemo/PrebidDemoSwift/Examples/MAX/MAXVideoRewardedViewController.swift"
+        },
+        {
+          "additions": 1,
+          "changeType": "MODIFIED",
+          "deletions": 1,
+          "path": "Example/PrebidDemo/PrebidDemoSwiftUITests/NativeAdsTest.swift"
+        },
+        {
+          "additions": 17,
+          "changeType": "ADDED",
+          "deletions": 0,
+          "path": "Example/PrebidDemo/stored-configs/stored-impressions/prebid-demo-banner-300-250.json"
+        },
+        {
+          "additions": 17,
+          "changeType": "ADDED",
+          "deletions": 0,
+          "path": "Example/PrebidDemo/stored-configs/stored-impressions/prebid-demo-banner-320-50.json"
+        },
+        {
+          "additions": 17,
+          "changeType": "ADDED",
+          "deletions": 0,
+          "path": "Example/PrebidDemo/stored-configs/stored-impressions/prebid-demo-banner-728-90.json"
+        },
+        {
+          "additions": 9,
+          "changeType": "ADDED",
+          "deletions": 0,
+          "path": "Example/PrebidDemo/stored-configs/stored-impressions/prebid-demo-banner-native-styles.json"
+        },
+        {
+          "additions": 22,
+          "changeType": "ADDED",
+          "deletions": 0,
+          "path": "Example/PrebidDemo/stored-configs/stored-impressions/prebid-demo-display-interstitial-320-480.json"
+        },
+        {
+          "additions": 22,
+          "changeType": "ADDED",
+          "deletions": 0,
+          "path": "Example/PrebidDemo/stored-configs/stored-impressions/prebid-demo-video-interstitial-320-480-original-api.json"
+        },
+        {
+          "additions": 22,
+          "changeType": "ADDED",
+          "deletions": 0,
+          "path": "Example/PrebidDemo/stored-configs/stored-impressions/prebid-demo-video-interstitial-320-480.json"
+        },
+        {
+          "additions": 22,
+          "changeType": "ADDED",
+          "deletions": 0,
+          "path": "Example/PrebidDemo/stored-configs/stored-impressions/prebid-demo-video-interstitial-landscape-with-end-card.json"
+        },
+        {
+          "additions": 22,
+          "changeType": "ADDED",
+          "deletions": 0,
+          "path": "Example/PrebidDemo/stored-configs/stored-impressions/prebid-demo-video-interstitial-vertical.json"
+        },
+        {
+          "additions": 21,
+          "changeType": "ADDED",
+          "deletions": 0,
+          "path": "Example/PrebidDemo/stored-configs/stored-impressions/prebid-demo-video-outstream-original-api.json"
+        },
+        {
+          "additions": 21,
+          "changeType": "ADDED",
+          "deletions": 0,
+          "path": "Example/PrebidDemo/stored-configs/stored-impressions/prebid-demo-video-outstream.json"
+        },
+        {
+          "additions": 21,
+          "changeType": "ADDED",
+          "deletions": 0,
+          "path": "Example/PrebidDemo/stored-configs/stored-impressions/prebid-demo-video-rewarded-320-480-original-api.json"
+        },
+        {
+          "additions": 21,
+          "changeType": "ADDED",
+          "deletions": 0,
+          "path": "Example/PrebidDemo/stored-configs/stored-impressions/prebid-demo-video-rewarded-320-480.json"
+        },
+        {
+          "additions": 20,
+          "changeType": "ADDED",
+          "deletions": 0,
+          "path": "Example/PrebidDemo/stored-configs/stored-responses/prebid-demo-response-banner-300-250.json"
+        },
+        {
+          "additions": 24,
+          "changeType": "ADDED",
+          "deletions": 0,
+          "path": "Example/PrebidDemo/stored-configs/stored-responses/prebid-demo-response-banner-320-50.json"
+        },
+        {
+          "additions": 24,
+          "changeType": "ADDED",
+          "deletions": 0,
+          "path": "Example/PrebidDemo/stored-configs/stored-responses/prebid-demo-response-banner-728-90.json"
+        },
+        {
+          "additions": 18,
+          "changeType": "ADDED",
+          "deletions": 0,
+          "path": "Example/PrebidDemo/stored-configs/stored-responses/prebid-demo-response-banner-native-styles.json"
+        },
+        {
+          "additions": 25,
+          "changeType": "ADDED",
+          "deletions": 0,
+          "path": "Example/PrebidDemo/stored-configs/stored-responses/prebid-demo-response-display-interstitial-320-480.json"
+        },
+        {
+          "additions": 42,
+          "changeType": "ADDED",
+          "deletions": 0,
+          "path": "Example/PrebidDemo/stored-configs/stored-responses/prebid-demo-response-video-interstitial-320-480-original-api.json"
+        },
+        {
+          "additions": 19,
+          "changeType": "ADDED",
+          "deletions": 0,
+          "path": "Example/PrebidDemo/stored-configs/stored-responses/prebid-demo-response-video-interstitial-320-480.json"
+        },
+        {
+          "additions": 36,
+          "changeType": "ADDED",
+          "deletions": 0,
+          "path": "Example/PrebidDemo/stored-configs/stored-responses/prebid-demo-response-video-interstitial-landscape-with-end-card.json"
+        },
+        {
+          "additions": 31,
+          "changeType": "ADDED",
+          "deletions": 0,
+          "path": "Example/PrebidDemo/stored-configs/stored-responses/prebid-demo-response-video-interstitial-vertical.json"
+        },
+        {
+          "additions": 42,
+          "changeType": "ADDED",
+          "deletions": 0,
+          "path": "Example/PrebidDemo/stored-configs/stored-responses/prebid-demo-response-video-outstream-original-api.json"
+        },
+        {
+          "additions": 19,
+          "changeType": "ADDED",
+          "deletions": 0,
+          "path": "Example/PrebidDemo/stored-configs/stored-responses/prebid-demo-response-video-outstream.json"
+        },
+        {
+          "additions": 38,
+          "changeType": "ADDED",
+          "deletions": 0,
+          "path": "Example/PrebidDemo/stored-configs/stored-responses/prebid-demo-response-video-rewarded-320-480-original-api.json"
+        },
+        {
+          "additions": 65,
+          "changeType": "ADDED",
+          "deletions": 0,
+          "path": "Example/PrebidDemo/stored-configs/stored-responses/prebid-demo-response-video-rewarded-320-480.json"
+        },
+        {
+          "additions": 4,
+          "changeType": "MODIFIED",
+          "deletions": 5,
+          "path": "InternalTestApp/InternalTestApp.xcodeproj/project.pbxproj"
+        }
+      ],
+      "pageInfo": {
+        "endCursor": "MTAw",
+        "hasNextPage": true
+      },
+      "totalCount": 101
+    },
+    "fullDatabaseId": "1361019629",
+    "headRefOid": "0c19f81f430aae7bb98c499aaf7c969a132d14e5",
+    "id": "PR_kwDOBb4uhc5RH4Lt",
+    "isCrossRepository": false,
+    "isDraft": false,
+    "labels": {
+      "nodes": [],
+      "pageInfo": {
+        "endCursor": null,
+        "hasNextPage": false
+      },
+      "totalCount": 0
+    },
+    "mergedAt": "2023-05-24T06:52:38Z",
+    "mergedBy": {
+      "__typename": "User",
+      "databaseId": 21169695,
+      "id": "MDQ6VXNlcjIxMTY5Njk1",
+      "login": "YuriyVelichkoPI"
+    },
+    "number": 851,
+    "reviews": {
+      "nodes": [
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 21169695,
+            "id": "MDQ6VXNlcjIxMTY5Njk1",
+            "login": "YuriyVelichkoPI"
+          },
+          "fullDatabaseId": "1441055632",
+          "state": "APPROVED"
+        }
+      ],
+      "pageInfo": {
+        "endCursor": "Y3Vyc29yOnYyOpO0MjAyMy0wNS0yNFQwNjo1MjozMFq0MjAyMy0wNS0yNFQwNjo1MjozMFrOVeTDkA==",
+        "hasNextPage": false
+      },
+      "totalCount": 1
+    },
+    "state": "MERGED",
+    "title": "Add test stored configs",
+    "updatedAt": "2023-05-24T06:52:39Z"
+  },
+  "document_sha256": "39fd2b5d7744d57be4fd58ba38b2fcf50319c5bd19e1c3796ae4771203af3ea0",
+  "errors": [],
+  "extra": {},
+  "headers": {
+    "date": "Sat, 17 Oct 2026 12:09:28 GMT",
+    "x-ratelimit-limit": "5000",
+    "x-ratelimit-remaining": "4988",
+    "x-ratelimit-reset": "1792242556",
+    "x-ratelimit-resource": "graphql",
+    "x-ratelimit-used": "12"
+  },
+  "key": {
+    "name": "prebid-mobile-ios",
+    "number": 851,
+    "owner": "prebid"
+  },
+  "kind": "pull_request",
+  "recorded_at": "2026-10-17T12:09:19Z",
+  "source": "live"
+}

@@ -1,0 +1,10 @@
+{
+  "body": {
+    "message": "We couldn't respond to your request in time. Sorry about that. Please try resubmitting your request and contact us if the problem persists."
+  },
+  "headers": {
+    "date": "Sat, 17 Oct 2026 12:00:00 GMT"
+  },
+  "source": "GitHub GraphQL docs, 'Rate limits and query limits for the GraphQL API': as bad_gateway.json, with the 504 status the docs also name. The rest of the message text is constructed",
+  "status": 504
+}

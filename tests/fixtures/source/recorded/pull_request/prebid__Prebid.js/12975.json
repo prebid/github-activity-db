@@ -1,0 +1,449 @@
+{
+  "data": {
+    "additions": 93,
+    "author": null,
+    "authorAssociation": "NONE",
+    "baseRefName": "master",
+    "baseRefOid": "063d88e2abcaf27cf25ece9c064994dc7d513eed",
+    "body": "## Type of change\r\n- [x] Bugfix\r\n\r\n## Description of change\r\nIt assures that styling is added to the iframe even in case of the interstitial ads, as it was working fine for on page units but overriding 1px in styling\r\n\r\n## Other information\r\nCloses #12914 \r\n",
+    "changedFiles": 9,
+    "closingIssuesReferences": {
+      "nodes": [
+        {
+          "number": 12914,
+          "repository": {
+            "databaseId": 39321023,
+            "nameWithOwner": "prebid/Prebid.js"
+          }
+        }
+      ],
+      "pageInfo": {
+        "endCursor": "MQ",
+        "hasNextPage": false
+      },
+      "totalCount": 1
+    },
+    "comments": {
+      "nodes": [
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 10151381,
+            "id": "MDQ6VXNlcjEwMTUxMzgx",
+            "login": "dgirardi"
+          },
+          "fullDatabaseId": "2787188944"
+        },
+        {
+          "author": null,
+          "fullDatabaseId": "2787199734"
+        }
+      ],
+      "pageInfo": {
+        "endCursor": "Y3Vyc29yOnYyOpHOpiFK9g==",
+        "hasNextPage": false
+      },
+      "totalCount": 2
+    },
+    "commits": {
+      "nodes": [
+        {
+          "commit": {
+            "author": {
+              "email": "ubaid@advergic.com",
+              "name": "ubaid",
+              "user": {
+                "databaseId": 238473456,
+                "id": "U_kgDODjbQ8A",
+                "login": "hiUbaid"
+              }
+            },
+            "authoredDate": "2025-04-08T06:09:32Z",
+            "oid": "0470efc2c45d4c4d5d0ce03ed4f95809ec4bfa2c"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "ubaid@advergic.com",
+              "name": "ubaid",
+              "user": {
+                "databaseId": 238473456,
+                "id": "U_kgDODjbQ8A",
+                "login": "hiUbaid"
+              }
+            },
+            "authoredDate": "2025-04-08T07:56:33Z",
+            "oid": "2d00c62f81132902c91a08b36e72621a45f4759b"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "ubaid@advergic.com",
+              "name": "ubaid",
+              "user": {
+                "databaseId": 238473456,
+                "id": "U_kgDODjbQ8A",
+                "login": "hiUbaid"
+              }
+            },
+            "authoredDate": "2025-04-08T08:00:29Z",
+            "oid": "64739292537f292976f4f40271cd2d613ce23a87"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "ubaid@advergic.com",
+              "name": "ubaid",
+              "user": {
+                "databaseId": 238473456,
+                "id": "U_kgDODjbQ8A",
+                "login": "hiUbaid"
+              }
+            },
+            "authoredDate": "2025-04-08T16:35:56Z",
+            "oid": "7652cb44ef7e816147b93a26f04bd4c2cb465852"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "ubaid@advergic.com",
+              "name": "ubaid",
+              "user": {
+                "databaseId": 238473456,
+                "id": "U_kgDODjbQ8A",
+                "login": "hiUbaid"
+              }
+            },
+            "authoredDate": "2025-04-08T16:39:47Z",
+            "oid": "d957586c5e13d0a42827242f041af72d076c825f"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "dgirardi@prebid.org",
+              "name": "Demetrio Girardi",
+              "user": {
+                "databaseId": 10151381,
+                "id": "MDQ6VXNlcjEwMTUxMzgx",
+                "login": "dgirardi"
+              }
+            },
+            "authoredDate": "2025-04-08T16:41:59Z",
+            "oid": "15a888fa822a61ccad868989b1387280bed4efb2"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "dgirardi@prebid.org",
+              "name": "Demetrio Girardi",
+              "user": {
+                "databaseId": 10151381,
+                "id": "MDQ6VXNlcjEwMTUxMzgx",
+                "login": "dgirardi"
+              }
+            },
+            "authoredDate": "2025-04-08T16:43:20Z",
+            "oid": "0f2baebdf209077bd6fd59ddf051e0b48b0ce765"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "dgirardi@prebid.org",
+              "name": "Demetrio Girardi",
+              "user": {
+                "databaseId": 10151381,
+                "id": "MDQ6VXNlcjEwMTUxMzgx",
+                "login": "dgirardi"
+              }
+            },
+            "authoredDate": "2025-04-08T16:54:51Z",
+            "oid": "8680775e5b4baeef42130432687304aea219d9e9"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "dgirardi@prebid.org",
+              "name": "Demetrio Girardi",
+              "user": {
+                "databaseId": 10151381,
+                "id": "MDQ6VXNlcjEwMTUxMzgx",
+                "login": "dgirardi"
+              }
+            },
+            "authoredDate": "2025-04-08T16:57:31Z",
+            "oid": "520d49477e665b4a0f0b1ce0fc37a279cf3d8986"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "ubaid@advergic.com",
+              "name": "ubaid",
+              "user": {
+                "databaseId": 238473456,
+                "id": "U_kgDODjbQ8A",
+                "login": "hiUbaid"
+              }
+            },
+            "authoredDate": "2025-04-08T17:14:01Z",
+            "oid": "243559ebe5201c86bccfe02a6fae1c0525d56419"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "ubaid@advergic.com",
+              "name": "ubaid",
+              "user": {
+                "databaseId": 238473456,
+                "id": "U_kgDODjbQ8A",
+                "login": "hiUbaid"
+              }
+            },
+            "authoredDate": "2025-04-08T17:16:34Z",
+            "oid": "250ea42d187c240ebbb42e263a4a4fdcc881946d"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "dgirardi@prebid.org",
+              "name": "Demetrio Girardi",
+              "user": {
+                "databaseId": 10151381,
+                "id": "MDQ6VXNlcjEwMTUxMzgx",
+                "login": "dgirardi"
+              }
+            },
+            "authoredDate": "2025-04-08T17:21:24Z",
+            "oid": "4944935eae08b095f6ec829267f64703fec316fb"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "dgirardi@prebid.org",
+              "name": "Demetrio Girardi",
+              "user": {
+                "databaseId": 10151381,
+                "id": "MDQ6VXNlcjEwMTUxMzgx",
+                "login": "dgirardi"
+              }
+            },
+            "authoredDate": "2025-04-08T17:30:38Z",
+            "oid": "71215638127c084723ab2d75d046fb39765bdc2a"
+          }
+        }
+      ],
+      "pageInfo": {
+        "endCursor": "MTM",
+        "hasNextPage": false
+      },
+      "totalCount": 13
+    },
+    "createdAt": "2025-04-08T07:42:43Z",
+    "deletions": 9,
+    "files": {
+      "nodes": [
+        {
+          "additions": 7,
+          "changeType": "MODIFIED",
+          "deletions": 1,
+          "path": "creative/renderers/display/renderer.js"
+        },
+        {
+          "additions": 1,
+          "changeType": "MODIFIED",
+          "deletions": 1,
+          "path": "libraries/creative-renderer-display/renderer.js"
+        },
+        {
+          "additions": 13,
+          "changeType": "MODIFIED",
+          "deletions": 5,
+          "path": "src/adRendering.js"
+        },
+        {
+          "additions": 4,
+          "changeType": "MODIFIED",
+          "deletions": 1,
+          "path": "src/auction.js"
+        },
+        {
+          "additions": 4,
+          "changeType": "MODIFIED",
+          "deletions": 1,
+          "path": "src/secureCreatives.js"
+        },
+        {
+          "additions": 25,
+          "changeType": "MODIFIED",
+          "deletions": 0,
+          "path": "test/spec/auctionmanager_spec.js"
+        },
+        {
+          "additions": 23,
+          "changeType": "MODIFIED",
+          "deletions": 0,
+          "path": "test/spec/creative/displayRenderer_spec.js"
+        },
+        {
+          "additions": 6,
+          "changeType": "MODIFIED",
+          "deletions": 0,
+          "path": "test/spec/unit/adRendering_spec.js"
+        },
+        {
+          "additions": 10,
+          "changeType": "MODIFIED",
+          "deletions": 0,
+          "path": "test/spec/unit/secureCreatives_spec.js"
+        }
+      ],
+      "pageInfo": {
+        "endCursor": "OQ",
+        "hasNextPage": false
+      },
+      "totalCount": 9
+    },
+    "fullDatabaseId": "2445130198",
+    "headRefOid": "71215638127c084723ab2d75d046fb39765bdc2a",
+    "id": "PR_kwDOAlf9v86RvbnW",
+    "isCrossRepository": true,
+    "isDraft": false,
+    "labels": {
+      "nodes": [
+        {
+          "name": "bugfix"
+        }
+      ],
+      "pageInfo": {
+        "endCursor": "MQ",
+        "hasNextPage": false
+      },
+      "totalCount": 1
+    },
+    "mergedAt": "2025-04-08T18:41:03Z",
+    "mergedBy": {
+      "__typename": "User",
+      "databaseId": 3444727,
+      "id": "MDQ6VXNlcjM0NDQ3Mjc=",
+      "login": "ChrisHuie"
+    },
+    "number": 12975,
+    "reviews": {
+      "nodes": [
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 10151381,
+            "id": "MDQ6VXNlcjEwMTUxMzgx",
+            "login": "dgirardi"
+          },
+          "fullDatabaseId": "2750179613",
+          "state": "COMMENTED"
+        },
+        {
+          "author": null,
+          "fullDatabaseId": "2750241537",
+          "state": "COMMENTED"
+        },
+        {
+          "author": null,
+          "fullDatabaseId": "2750246900",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 10151381,
+            "id": "MDQ6VXNlcjEwMTUxMzgx",
+            "login": "dgirardi"
+          },
+          "fullDatabaseId": "2750432703",
+          "state": "COMMENTED"
+        },
+        {
+          "author": null,
+          "fullDatabaseId": "2750451049",
+          "state": "COMMENTED"
+        },
+        {
+          "author": null,
+          "fullDatabaseId": "2750473687",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 10151381,
+            "id": "MDQ6VXNlcjEwMTUxMzgx",
+            "login": "dgirardi"
+          },
+          "fullDatabaseId": "2750509740",
+          "state": "COMMENTED"
+        },
+        {
+          "author": null,
+          "fullDatabaseId": "2750550597",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 10151381,
+            "id": "MDQ6VXNlcjEwMTUxMzgx",
+            "login": "dgirardi"
+          },
+          "fullDatabaseId": "2750912824",
+          "state": "APPROVED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 3444727,
+            "id": "MDQ6VXNlcjM0NDQ3Mjc=",
+            "login": "ChrisHuie"
+          },
+          "fullDatabaseId": "2751076926",
+          "state": "APPROVED"
+        }
+      ],
+      "pageInfo": {
+        "endCursor": "Y3Vyc29yOnYyOpO0MjAyNS0wNC0wOFQxODo0MDo1Nlq0MjAyNS0wNC0wOFQxODo0MDo1NlrOo_oaPg==",
+        "hasNextPage": false
+      },
+      "totalCount": 10
+    },
+    "state": "MERGED",
+    "title": "Bugfix: Update adRendering.js styling for iframe in case of insterstitial ads",
+    "updatedAt": "2025-04-08T18:41:04Z"
+  },
+  "document_sha256": "39fd2b5d7744d57be4fd58ba38b2fcf50319c5bd19e1c3796ae4771203af3ea0",
+  "errors": [],
+  "extra": {},
+  "headers": {
+    "date": "Sat, 17 Oct 2026 12:09:24 GMT",
+    "x-ratelimit-limit": "5000",
+    "x-ratelimit-remaining": "4929",
+    "x-ratelimit-reset": "1792241340",
+    "x-ratelimit-resource": "graphql",
+    "x-ratelimit-used": "71"
+  },
+  "key": {
+    "name": "Prebid.js",
+    "number": 12975,
+    "owner": "prebid"
+  },
+  "kind": "pull_request",
+  "recorded_at": "2026-10-17T12:09:19Z",
+  "source": "live"
+}

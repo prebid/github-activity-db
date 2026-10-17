@@ -1,0 +1,28 @@
+{
+  "data": null,
+  "document_sha256": "39fd2b5d7744d57be4fd58ba38b2fcf50319c5bd19e1c3796ae4771203af3ea0",
+  "errors": [
+    {
+      "message": "Could not resolve to a PullRequest with the number of 999999.",
+      "path": [],
+      "type": "NOT_FOUND"
+    }
+  ],
+  "extra": {},
+  "headers": {
+    "date": "Sat, 17 Oct 2026 12:09:24 GMT",
+    "x-ratelimit-limit": "5000",
+    "x-ratelimit-remaining": "4929",
+    "x-ratelimit-reset": "1792241340",
+    "x-ratelimit-resource": "graphql",
+    "x-ratelimit-used": "71"
+  },
+  "key": {
+    "name": "Prebid.js",
+    "number": 999999,
+    "owner": "prebid"
+  },
+  "kind": "pull_request",
+  "recorded_at": "2026-10-17T12:09:19Z",
+  "source": "live"
+}

@@ -1,0 +1,1477 @@
+{
+  "data": {
+    "nodes": [
+      {
+        "authorAssociation": "CONTRIBUTOR",
+        "closingIssuesReferences": {
+          "nodes": [],
+          "totalCount": 0
+        },
+        "createdAt": "2018-08-14T16:57:37Z",
+        "fullDatabaseId": "208347678",
+        "isDraft": false,
+        "mergedAt": "2018-08-15T10:30:22Z",
+        "number": 4,
+        "state": "MERGED",
+        "updatedAt": "2018-08-15T10:30:30Z"
+      },
+      {
+        "authorAssociation": "CONTRIBUTOR",
+        "closingIssuesReferences": {
+          "nodes": [],
+          "totalCount": 0
+        },
+        "createdAt": "2018-09-17T13:02:05Z",
+        "fullDatabaseId": "215973751",
+        "isDraft": false,
+        "mergedAt": "2018-09-19T15:07:45Z",
+        "number": 5,
+        "state": "MERGED",
+        "updatedAt": "2018-09-19T15:07:50Z"
+      },
+      {
+        "authorAssociation": "CONTRIBUTOR",
+        "closingIssuesReferences": {
+          "nodes": [],
+          "totalCount": 0
+        },
+        "createdAt": "2018-09-18T08:29:40Z",
+        "fullDatabaseId": "216223485",
+        "isDraft": false,
+        "mergedAt": "2018-09-21T14:24:58Z",
+        "number": 6,
+        "state": "MERGED",
+        "updatedAt": "2018-09-21T14:25:01Z"
+      },
+      {
+        "authorAssociation": "CONTRIBUTOR",
+        "closingIssuesReferences": {
+          "nodes": [],
+          "totalCount": 0
+        },
+        "createdAt": "2018-09-25T13:36:11Z",
+        "fullDatabaseId": "217983183",
+        "isDraft": false,
+        "mergedAt": "2018-10-02T13:17:35Z",
+        "number": 7,
+        "state": "MERGED",
+        "updatedAt": "2018-10-02T13:17:40Z"
+      },
+      {
+        "authorAssociation": "CONTRIBUTOR",
+        "closingIssuesReferences": {
+          "nodes": [],
+          "totalCount": 0
+        },
+        "createdAt": "2018-09-26T12:45:49Z",
+        "fullDatabaseId": "218302501",
+        "isDraft": false,
+        "mergedAt": "2018-10-02T13:29:42Z",
+        "number": 8,
+        "state": "MERGED",
+        "updatedAt": "2018-10-02T13:29:46Z"
+      },
+      {
+        "authorAssociation": "CONTRIBUTOR",
+        "closingIssuesReferences": {
+          "nodes": [],
+          "totalCount": 0
+        },
+        "createdAt": "2018-10-04T10:03:42Z",
+        "fullDatabaseId": "220318346",
+        "isDraft": false,
+        "mergedAt": "2018-10-08T09:25:11Z",
+        "number": 9,
+        "state": "MERGED",
+        "updatedAt": "2018-10-08T09:25:15Z"
+      },
+      {
+        "authorAssociation": "CONTRIBUTOR",
+        "closingIssuesReferences": {
+          "nodes": [],
+          "totalCount": 0
+        },
+        "createdAt": "2018-10-12T13:36:50Z",
+        "fullDatabaseId": "222469190",
+        "isDraft": false,
+        "mergedAt": "2018-10-16T11:02:56Z",
+        "number": 10,
+        "state": "MERGED",
+        "updatedAt": "2018-10-16T11:03:00Z"
+      },
+      {
+        "authorAssociation": "CONTRIBUTOR",
+        "closingIssuesReferences": {
+          "nodes": [],
+          "totalCount": 0
+        },
+        "createdAt": "2018-10-17T12:41:21Z",
+        "fullDatabaseId": "223587247",
+        "isDraft": false,
+        "mergedAt": "2018-10-17T13:27:40Z",
+        "number": 11,
+        "state": "MERGED",
+        "updatedAt": "2018-10-17T13:27:44Z"
+      },
+      {
+        "authorAssociation": "CONTRIBUTOR",
+        "closingIssuesReferences": {
+          "nodes": [],
+          "totalCount": 0
+        },
+        "createdAt": "2018-10-25T11:42:45Z",
+        "fullDatabaseId": "225726201",
+        "isDraft": false,
+        "mergedAt": "2018-10-25T11:54:17Z",
+        "number": 12,
+        "state": "MERGED",
+        "updatedAt": "2018-10-25T11:54:20Z"
+      },
+      {
+        "authorAssociation": "CONTRIBUTOR",
+        "closingIssuesReferences": {
+          "nodes": [],
+          "totalCount": 0
+        },
+        "createdAt": "2018-10-30T10:15:07Z",
+        "fullDatabaseId": "226861595",
+        "isDraft": false,
+        "mergedAt": "2018-10-30T10:17:27Z",
+        "number": 13,
+        "state": "MERGED",
+        "updatedAt": "2018-10-30T10:17:31Z"
+      },
+      {
+        "authorAssociation": "CONTRIBUTOR",
+        "closingIssuesReferences": {
+          "nodes": [],
+          "totalCount": 0
+        },
+        "createdAt": "2018-10-31T10:41:35Z",
+        "fullDatabaseId": "227235776",
+        "isDraft": false,
+        "mergedAt": "2018-10-31T15:24:44Z",
+        "number": 14,
+        "state": "MERGED",
+        "updatedAt": "2018-10-31T15:24:47Z"
+      },
+      {
+        "authorAssociation": "CONTRIBUTOR",
+        "closingIssuesReferences": {
+          "nodes": [],
+          "totalCount": 0
+        },
+        "createdAt": "2018-11-02T08:55:08Z",
+        "fullDatabaseId": "227869383",
+        "isDraft": false,
+        "mergedAt": "2018-11-05T11:34:34Z",
+        "number": 15,
+        "state": "MERGED",
+        "updatedAt": "2018-11-05T11:34:38Z"
+      },
+      {
+        "authorAssociation": "CONTRIBUTOR",
+        "closingIssuesReferences": {
+          "nodes": [],
+          "totalCount": 0
+        },
+        "createdAt": "2018-11-23T11:10:58Z",
+        "fullDatabaseId": "233169126",
+        "isDraft": false,
+        "mergedAt": "2018-11-23T11:21:57Z",
+        "number": 16,
+        "state": "MERGED",
+        "updatedAt": "2018-11-23T11:22:00Z"
+      },
+      {
+        "authorAssociation": "CONTRIBUTOR",
+        "closingIssuesReferences": {
+          "nodes": [],
+          "totalCount": 0
+        },
+        "createdAt": "2018-12-10T14:25:58Z",
+        "fullDatabaseId": "237338473",
+        "isDraft": false,
+        "mergedAt": "2018-12-12T09:06:59Z",
+        "number": 17,
+        "state": "MERGED",
+        "updatedAt": "2018-12-12T09:07:02Z"
+      },
+      {
+        "authorAssociation": "CONTRIBUTOR",
+        "closingIssuesReferences": {
+          "nodes": [],
+          "totalCount": 0
+        },
+        "createdAt": "2018-12-31T15:51:09Z",
+        "fullDatabaseId": "241577021",
+        "isDraft": false,
+        "mergedAt": "2019-01-09T09:49:08Z",
+        "number": 18,
+        "state": "MERGED",
+        "updatedAt": "2019-01-09T09:49:11Z"
+      },
+      {
+        "authorAssociation": "CONTRIBUTOR",
+        "closingIssuesReferences": {
+          "nodes": [],
+          "totalCount": 0
+        },
+        "createdAt": "2019-02-01T12:01:42Z",
+        "fullDatabaseId": "249580146",
+        "isDraft": false,
+        "mergedAt": "2019-02-01T12:07:33Z",
+        "number": 19,
+        "state": "MERGED",
+        "updatedAt": "2019-02-01T12:07:36Z"
+      },
+      {
+        "authorAssociation": "CONTRIBUTOR",
+        "closingIssuesReferences": {
+          "nodes": [],
+          "totalCount": 0
+        },
+        "createdAt": "2019-02-01T13:15:46Z",
+        "fullDatabaseId": "249599527",
+        "isDraft": false,
+        "mergedAt": "2019-02-01T14:44:01Z",
+        "number": 20,
+        "state": "MERGED",
+        "updatedAt": "2019-02-01T14:44:04Z"
+      },
+      {
+        "authorAssociation": "CONTRIBUTOR",
+        "closingIssuesReferences": {
+          "nodes": [],
+          "totalCount": 0
+        },
+        "createdAt": "2019-02-04T12:10:14Z",
+        "fullDatabaseId": "250029236",
+        "isDraft": false,
+        "mergedAt": "2019-02-04T12:28:52Z",
+        "number": 21,
+        "state": "MERGED",
+        "updatedAt": "2019-02-04T12:28:55Z"
+      },
+      {
+        "authorAssociation": "CONTRIBUTOR",
+        "closingIssuesReferences": {
+          "nodes": [],
+          "totalCount": 0
+        },
+        "createdAt": "2019-02-04T12:59:05Z",
+        "fullDatabaseId": "250042294",
+        "isDraft": false,
+        "mergedAt": "2019-02-06T14:21:53Z",
+        "number": 22,
+        "state": "MERGED",
+        "updatedAt": "2019-02-06T14:21:56Z"
+      },
+      {
+        "authorAssociation": "CONTRIBUTOR",
+        "closingIssuesReferences": {
+          "nodes": [],
+          "totalCount": 0
+        },
+        "createdAt": "2019-02-07T14:28:30Z",
+        "fullDatabaseId": "251134848",
+        "isDraft": false,
+        "mergedAt": "2019-02-08T09:58:57Z",
+        "number": 23,
+        "state": "MERGED",
+        "updatedAt": "2019-02-08T09:59:02Z"
+      },
+      {
+        "authorAssociation": "CONTRIBUTOR",
+        "closingIssuesReferences": {
+          "nodes": [],
+          "totalCount": 0
+        },
+        "createdAt": "2019-03-01T14:52:23Z",
+        "fullDatabaseId": "257470992",
+        "isDraft": false,
+        "mergedAt": "2019-03-01T14:54:24Z",
+        "number": 24,
+        "state": "MERGED",
+        "updatedAt": "2019-03-01T14:54:27Z"
+      },
+      {
+        "authorAssociation": "CONTRIBUTOR",
+        "closingIssuesReferences": {
+          "nodes": [],
+          "totalCount": 0
+        },
+        "createdAt": "2019-04-03T04:11:20Z",
+        "fullDatabaseId": "266886246",
+        "isDraft": false,
+        "mergedAt": "2019-04-05T13:29:07Z",
+        "number": 25,
+        "state": "MERGED",
+        "updatedAt": "2019-04-05T13:29:07Z"
+      },
+      {
+        "authorAssociation": "CONTRIBUTOR",
+        "closingIssuesReferences": {
+          "nodes": [],
+          "totalCount": 0
+        },
+        "createdAt": "2019-06-07T08:01:43Z",
+        "fullDatabaseId": "286085750",
+        "isDraft": false,
+        "mergedAt": "2019-06-07T12:51:22Z",
+        "number": 27,
+        "state": "MERGED",
+        "updatedAt": "2019-06-07T12:51:26Z"
+      },
+      {
+        "authorAssociation": "CONTRIBUTOR",
+        "closingIssuesReferences": {
+          "nodes": [],
+          "totalCount": 0
+        },
+        "createdAt": "2019-06-07T08:04:06Z",
+        "fullDatabaseId": "286086397",
+        "isDraft": false,
+        "mergedAt": "2019-06-07T12:51:37Z",
+        "number": 28,
+        "state": "MERGED",
+        "updatedAt": "2019-06-07T12:51:40Z"
+      },
+      {
+        "authorAssociation": "CONTRIBUTOR",
+        "closingIssuesReferences": {
+          "nodes": [],
+          "totalCount": 0
+        },
+        "createdAt": "2019-06-07T08:12:47Z",
+        "fullDatabaseId": "286088734",
+        "isDraft": false,
+        "mergedAt": "2019-06-07T12:51:50Z",
+        "number": 29,
+        "state": "MERGED",
+        "updatedAt": "2019-06-07T12:51:53Z"
+      },
+      {
+        "authorAssociation": "CONTRIBUTOR",
+        "closingIssuesReferences": {
+          "nodes": [],
+          "totalCount": 0
+        },
+        "createdAt": "2019-07-30T11:22:42Z",
+        "fullDatabaseId": "302452250",
+        "isDraft": false,
+        "mergedAt": "2019-07-30T11:28:51Z",
+        "number": 30,
+        "state": "MERGED",
+        "updatedAt": "2019-07-30T11:29:00Z"
+      },
+      {
+        "authorAssociation": "CONTRIBUTOR",
+        "closingIssuesReferences": {
+          "nodes": [],
+          "totalCount": 0
+        },
+        "createdAt": "2019-08-15T11:03:23Z",
+        "fullDatabaseId": "307666720",
+        "isDraft": false,
+        "mergedAt": "2019-08-15T11:40:20Z",
+        "number": 31,
+        "state": "MERGED",
+        "updatedAt": "2019-08-15T11:40:23Z"
+      },
+      {
+        "authorAssociation": "CONTRIBUTOR",
+        "closingIssuesReferences": {
+          "nodes": [],
+          "totalCount": 0
+        },
+        "createdAt": "2020-01-12T21:24:53Z",
+        "fullDatabaseId": "361872843",
+        "isDraft": false,
+        "mergedAt": "2020-01-17T11:00:17Z",
+        "number": 32,
+        "state": "MERGED",
+        "updatedAt": "2020-01-17T11:00:25Z"
+      },
+      {
+        "authorAssociation": "CONTRIBUTOR",
+        "closingIssuesReferences": {
+          "nodes": [],
+          "totalCount": 0
+        },
+        "createdAt": "2020-01-31T18:16:39Z",
+        "fullDatabaseId": "369706556",
+        "isDraft": false,
+        "mergedAt": null,
+        "number": 33,
+        "state": "CLOSED",
+        "updatedAt": "2022-05-04T05:26:13Z"
+      },
+      {
+        "authorAssociation": "NONE",
+        "closingIssuesReferences": {
+          "nodes": [],
+          "totalCount": 0
+        },
+        "createdAt": "2020-02-11T15:14:20Z",
+        "fullDatabaseId": "373714647",
+        "isDraft": false,
+        "mergedAt": null,
+        "number": 34,
+        "state": "CLOSED",
+        "updatedAt": "2022-05-04T05:33:28Z"
+      },
+      {
+        "authorAssociation": "NONE",
+        "closingIssuesReferences": {
+          "nodes": [],
+          "totalCount": 0
+        },
+        "createdAt": "2020-03-27T15:51:20Z",
+        "fullDatabaseId": "394832490",
+        "isDraft": false,
+        "mergedAt": null,
+        "number": 35,
+        "state": "CLOSED",
+        "updatedAt": "2023-09-07T11:05:41Z"
+      },
+      {
+        "authorAssociation": "CONTRIBUTOR",
+        "closingIssuesReferences": {
+          "nodes": [],
+          "totalCount": 0
+        },
+        "createdAt": "2020-04-27T09:02:26Z",
+        "fullDatabaseId": "409355212",
+        "isDraft": false,
+        "mergedAt": "2020-04-27T09:24:27Z",
+        "number": 36,
+        "state": "MERGED",
+        "updatedAt": "2020-04-27T09:24:35Z"
+      },
+      {
+        "authorAssociation": "NONE",
+        "closingIssuesReferences": {
+          "nodes": [],
+          "totalCount": 0
+        },
+        "createdAt": "2020-06-25T12:19:43Z",
+        "fullDatabaseId": "439983134",
+        "isDraft": false,
+        "mergedAt": null,
+        "number": 37,
+        "state": "CLOSED",
+        "updatedAt": "2022-05-04T05:30:11Z"
+      },
+      {
+        "authorAssociation": "CONTRIBUTOR",
+        "closingIssuesReferences": {
+          "nodes": [],
+          "totalCount": 0
+        },
+        "createdAt": "2020-11-04T09:47:24Z",
+        "fullDatabaseId": "515263328",
+        "isDraft": false,
+        "mergedAt": "2020-11-05T10:26:01Z",
+        "number": 38,
+        "state": "MERGED",
+        "updatedAt": "2020-11-05T10:26:04Z"
+      },
+      {
+        "authorAssociation": "CONTRIBUTOR",
+        "closingIssuesReferences": {
+          "nodes": [],
+          "totalCount": 0
+        },
+        "createdAt": "2020-11-18T15:27:11Z",
+        "fullDatabaseId": "523265006",
+        "isDraft": false,
+        "mergedAt": "2020-11-18T15:38:35Z",
+        "number": 39,
+        "state": "MERGED",
+        "updatedAt": "2020-11-18T15:38:39Z"
+      },
+      {
+        "authorAssociation": "CONTRIBUTOR",
+        "closingIssuesReferences": {
+          "nodes": [],
+          "totalCount": 0
+        },
+        "createdAt": "2020-11-19T13:07:17Z",
+        "fullDatabaseId": "523938870",
+        "isDraft": false,
+        "mergedAt": "2020-11-19T13:13:44Z",
+        "number": 40,
+        "state": "MERGED",
+        "updatedAt": "2020-11-19T13:13:48Z"
+      },
+      {
+        "authorAssociation": "NONE",
+        "closingIssuesReferences": {
+          "nodes": [],
+          "totalCount": 0
+        },
+        "createdAt": "2021-02-04T13:30:49Z",
+        "fullDatabaseId": "567627248",
+        "isDraft": false,
+        "mergedAt": null,
+        "number": 41,
+        "state": "CLOSED",
+        "updatedAt": "2021-02-04T13:50:16Z"
+      },
+      {
+        "authorAssociation": "NONE",
+        "closingIssuesReferences": {
+          "nodes": [],
+          "totalCount": 0
+        },
+        "createdAt": "2021-02-08T10:26:50Z",
+        "fullDatabaseId": "569353280",
+        "isDraft": false,
+        "mergedAt": null,
+        "number": 42,
+        "state": "CLOSED",
+        "updatedAt": "2021-02-08T10:28:22Z"
+      },
+      {
+        "authorAssociation": "MEMBER",
+        "closingIssuesReferences": {
+          "nodes": [],
+          "totalCount": 0
+        },
+        "createdAt": "2021-03-02T14:32:47Z",
+        "fullDatabaseId": "583079193",
+        "isDraft": false,
+        "mergedAt": null,
+        "number": 43,
+        "state": "CLOSED",
+        "updatedAt": "2023-01-13T10:03:15Z"
+      },
+      {
+        "authorAssociation": "MEMBER",
+        "closingIssuesReferences": {
+          "nodes": [],
+          "totalCount": 0
+        },
+        "createdAt": "2021-07-21T14:11:19Z",
+        "fullDatabaseId": "694406186",
+        "isDraft": false,
+        "mergedAt": "2022-03-29T11:11:07Z",
+        "number": 45,
+        "state": "MERGED",
+        "updatedAt": "2022-03-29T11:12:31Z"
+      },
+      {
+        "authorAssociation": "MEMBER",
+        "closingIssuesReferences": {
+          "nodes": [],
+          "totalCount": 0
+        },
+        "createdAt": "2021-09-07T17:49:19Z",
+        "fullDatabaseId": "728835594",
+        "isDraft": false,
+        "mergedAt": "2022-03-29T11:12:46Z",
+        "number": 46,
+        "state": "MERGED",
+        "updatedAt": "2022-03-29T11:40:46Z"
+      },
+      {
+        "authorAssociation": "MEMBER",
+        "closingIssuesReferences": {
+          "nodes": [],
+          "totalCount": 0
+        },
+        "createdAt": "2021-10-19T11:34:20Z",
+        "fullDatabaseId": "761338571",
+        "isDraft": false,
+        "mergedAt": "2022-05-04T10:31:43Z",
+        "number": 47,
+        "state": "MERGED",
+        "updatedAt": "2022-05-04T10:31:43Z"
+      },
+      {
+        "authorAssociation": "MEMBER",
+        "closingIssuesReferences": {
+          "nodes": [],
+          "totalCount": 0
+        },
+        "createdAt": "2021-12-14T11:38:23Z",
+        "fullDatabaseId": "802248966",
+        "isDraft": false,
+        "mergedAt": "2021-12-14T11:48:55Z",
+        "number": 48,
+        "state": "MERGED",
+        "updatedAt": "2021-12-14T11:48:58Z"
+      },
+      {
+        "authorAssociation": "CONTRIBUTOR",
+        "closingIssuesReferences": {
+          "nodes": [],
+          "totalCount": 0
+        },
+        "createdAt": "2021-12-16T09:41:15Z",
+        "fullDatabaseId": "804254297",
+        "isDraft": false,
+        "mergedAt": "2021-12-16T09:45:28Z",
+        "number": 49,
+        "state": "MERGED",
+        "updatedAt": "2021-12-16T09:45:33Z"
+      },
+      {
+        "authorAssociation": "CONTRIBUTOR",
+        "closingIssuesReferences": {
+          "nodes": [],
+          "totalCount": 0
+        },
+        "createdAt": "2021-12-20T07:41:11Z",
+        "fullDatabaseId": "806360584",
+        "isDraft": false,
+        "mergedAt": "2021-12-20T10:33:31Z",
+        "number": 50,
+        "state": "MERGED",
+        "updatedAt": "2021-12-20T10:33:31Z"
+      },
+      {
+        "authorAssociation": "MEMBER",
+        "closingIssuesReferences": {
+          "nodes": [],
+          "totalCount": 0
+        },
+        "createdAt": "2021-12-29T15:35:59Z",
+        "fullDatabaseId": "811547491",
+        "isDraft": false,
+        "mergedAt": null,
+        "number": 51,
+        "state": "CLOSED",
+        "updatedAt": "2021-12-29T15:36:45Z"
+      },
+      {
+        "authorAssociation": "MEMBER",
+        "closingIssuesReferences": {
+          "nodes": [],
+          "totalCount": 0
+        },
+        "createdAt": "2021-12-29T15:37:34Z",
+        "fullDatabaseId": "811548232",
+        "isDraft": false,
+        "mergedAt": "2021-12-29T15:41:15Z",
+        "number": 52,
+        "state": "MERGED",
+        "updatedAt": "2021-12-29T15:41:17Z"
+      },
+      {
+        "authorAssociation": "CONTRIBUTOR",
+        "closingIssuesReferences": {
+          "nodes": [],
+          "totalCount": 0
+        },
+        "createdAt": "2021-12-29T16:06:23Z",
+        "fullDatabaseId": "811562307",
+        "isDraft": false,
+        "mergedAt": "2021-12-29T16:31:56Z",
+        "number": 53,
+        "state": "MERGED",
+        "updatedAt": "2021-12-29T16:31:56Z"
+      },
+      {
+        "authorAssociation": "CONTRIBUTOR",
+        "closingIssuesReferences": {
+          "nodes": [],
+          "totalCount": 0
+        },
+        "createdAt": "2022-01-21T15:38:28Z",
+        "fullDatabaseId": "828642852",
+        "isDraft": false,
+        "mergedAt": "2022-01-21T15:40:05Z",
+        "number": 54,
+        "state": "MERGED",
+        "updatedAt": "2022-01-21T16:02:48Z"
+      },
+      {
+        "authorAssociation": "CONTRIBUTOR",
+        "closingIssuesReferences": {
+          "nodes": [],
+          "totalCount": 0
+        },
+        "createdAt": "2022-03-21T12:41:36Z",
+        "fullDatabaseId": "884782618",
+        "isDraft": false,
+        "mergedAt": "2022-05-23T14:16:40Z",
+        "number": 56,
+        "state": "MERGED",
+        "updatedAt": "2022-05-23T14:16:41Z"
+      },
+      {
+        "authorAssociation": "CONTRIBUTOR",
+        "closingIssuesReferences": {
+          "nodes": [],
+          "totalCount": 0
+        },
+        "createdAt": "2022-03-29T11:14:57Z",
+        "fullDatabaseId": "892910492",
+        "isDraft": false,
+        "mergedAt": "2022-04-09T08:44:09Z",
+        "number": 57,
+        "state": "MERGED",
+        "updatedAt": "2022-04-09T08:44:10Z"
+      },
+      {
+        "authorAssociation": "MEMBER",
+        "closingIssuesReferences": {
+          "nodes": [],
+          "totalCount": 0
+        },
+        "createdAt": "2022-04-07T14:25:26Z",
+        "fullDatabaseId": "902819350",
+        "isDraft": false,
+        "mergedAt": "2022-06-24T10:21:31Z",
+        "number": 58,
+        "state": "MERGED",
+        "updatedAt": "2022-06-24T10:21:31Z"
+      },
+      {
+        "authorAssociation": "MEMBER",
+        "closingIssuesReferences": {
+          "nodes": [],
+          "totalCount": 0
+        },
+        "createdAt": "2022-04-20T08:34:43Z",
+        "fullDatabaseId": "913937408",
+        "isDraft": false,
+        "mergedAt": null,
+        "number": 59,
+        "state": "CLOSED",
+        "updatedAt": "2022-05-04T11:13:00Z"
+      },
+      {
+        "authorAssociation": "MEMBER",
+        "closingIssuesReferences": {
+          "nodes": [],
+          "totalCount": 0
+        },
+        "createdAt": "2022-04-20T12:35:02Z",
+        "fullDatabaseId": "914164781",
+        "isDraft": false,
+        "mergedAt": "2022-05-04T05:07:56Z",
+        "number": 60,
+        "state": "MERGED",
+        "updatedAt": "2022-05-04T05:07:57Z"
+      },
+      {
+        "authorAssociation": "MEMBER",
+        "closingIssuesReferences": {
+          "nodes": [],
+          "totalCount": 0
+        },
+        "createdAt": "2022-05-04T05:25:40Z",
+        "fullDatabaseId": "927251695",
+        "isDraft": false,
+        "mergedAt": "2022-05-24T14:28:45Z",
+        "number": 61,
+        "state": "MERGED",
+        "updatedAt": "2022-05-24T14:28:45Z"
+      },
+      {
+        "authorAssociation": "MEMBER",
+        "closingIssuesReferences": {
+          "nodes": [
+            {
+              "number": 44,
+              "repository": {
+                "databaseId": 126012969,
+                "nameWithOwner": "prebid/prebid-cache-java"
+              }
+            }
+          ],
+          "totalCount": 1
+        },
+        "createdAt": "2022-05-04T10:54:48Z",
+        "fullDatabaseId": "927486415",
+        "isDraft": false,
+        "mergedAt": "2022-05-04T11:25:45Z",
+        "number": 62,
+        "state": "MERGED",
+        "updatedAt": "2022-05-04T11:25:45Z"
+      },
+      {
+        "authorAssociation": "MEMBER",
+        "closingIssuesReferences": {
+          "nodes": [],
+          "totalCount": 0
+        },
+        "createdAt": "2022-05-04T11:11:47Z",
+        "fullDatabaseId": "927500572",
+        "isDraft": false,
+        "mergedAt": null,
+        "number": 63,
+        "state": "CLOSED",
+        "updatedAt": "2022-07-11T11:00:43Z"
+      },
+      {
+        "authorAssociation": "CONTRIBUTOR",
+        "closingIssuesReferences": {
+          "nodes": [],
+          "totalCount": 0
+        },
+        "createdAt": "2022-05-20T20:48:16Z",
+        "fullDatabaseId": "943125893",
+        "isDraft": false,
+        "mergedAt": null,
+        "number": 68,
+        "state": "CLOSED",
+        "updatedAt": "2022-05-23T06:41:48Z"
+      },
+      {
+        "authorAssociation": "MEMBER",
+        "closingIssuesReferences": {
+          "nodes": [],
+          "totalCount": 0
+        },
+        "createdAt": "2022-05-23T12:12:22Z",
+        "fullDatabaseId": "944354103",
+        "isDraft": false,
+        "mergedAt": "2022-05-23T12:19:28Z",
+        "number": 69,
+        "state": "MERGED",
+        "updatedAt": "2022-05-23T12:19:29Z"
+      },
+      {
+        "authorAssociation": "MEMBER",
+        "closingIssuesReferences": {
+          "nodes": [],
+          "totalCount": 0
+        },
+        "createdAt": "2022-05-23T16:56:04Z",
+        "fullDatabaseId": "944700896",
+        "isDraft": false,
+        "mergedAt": "2022-05-24T10:27:18Z",
+        "number": 70,
+        "state": "MERGED",
+        "updatedAt": "2022-05-24T10:27:19Z"
+      },
+      {
+        "authorAssociation": "MEMBER",
+        "closingIssuesReferences": {
+          "nodes": [],
+          "totalCount": 0
+        },
+        "createdAt": "2022-05-26T14:59:25Z",
+        "fullDatabaseId": "948368008",
+        "isDraft": false,
+        "mergedAt": "2022-05-26T15:07:28Z",
+        "number": 71,
+        "state": "MERGED",
+        "updatedAt": "2022-05-26T15:07:28Z"
+      },
+      {
+        "authorAssociation": "MEMBER",
+        "closingIssuesReferences": {
+          "nodes": [],
+          "totalCount": 0
+        },
+        "createdAt": "2022-05-26T16:11:27Z",
+        "fullDatabaseId": "948440060",
+        "isDraft": false,
+        "mergedAt": "2022-06-20T12:58:34Z",
+        "number": 72,
+        "state": "MERGED",
+        "updatedAt": "2022-06-20T12:58:34Z"
+      },
+      {
+        "authorAssociation": "MEMBER",
+        "closingIssuesReferences": {
+          "nodes": [],
+          "totalCount": 0
+        },
+        "createdAt": "2022-06-20T13:37:31Z",
+        "fullDatabaseId": "972246346",
+        "isDraft": false,
+        "mergedAt": "2022-06-20T14:28:47Z",
+        "number": 73,
+        "state": "MERGED",
+        "updatedAt": "2022-06-20T14:28:48Z"
+      },
+      {
+        "authorAssociation": "MEMBER",
+        "closingIssuesReferences": {
+          "nodes": [],
+          "totalCount": 0
+        },
+        "createdAt": "2022-07-04T05:01:45Z",
+        "fullDatabaseId": "985993822",
+        "isDraft": false,
+        "mergedAt": "2022-07-05T10:29:47Z",
+        "number": 74,
+        "state": "MERGED",
+        "updatedAt": "2022-07-05T10:29:48Z"
+      },
+      {
+        "authorAssociation": "MEMBER",
+        "closingIssuesReferences": {
+          "nodes": [],
+          "totalCount": 0
+        },
+        "createdAt": "2022-07-04T10:48:30Z",
+        "fullDatabaseId": "986310669",
+        "isDraft": false,
+        "mergedAt": "2022-07-05T10:03:54Z",
+        "number": 75,
+        "state": "MERGED",
+        "updatedAt": "2022-07-05T10:03:55Z"
+      },
+      {
+        "authorAssociation": "MEMBER",
+        "closingIssuesReferences": {
+          "nodes": [],
+          "totalCount": 0
+        },
+        "createdAt": "2022-07-07T09:09:21Z",
+        "fullDatabaseId": "989902208",
+        "isDraft": false,
+        "mergedAt": "2022-07-12T14:04:31Z",
+        "number": 76,
+        "state": "MERGED",
+        "updatedAt": "2022-07-12T14:04:32Z"
+      },
+      {
+        "authorAssociation": "MEMBER",
+        "closingIssuesReferences": {
+          "nodes": [],
+          "totalCount": 0
+        },
+        "createdAt": "2022-07-07T11:48:51Z",
+        "fullDatabaseId": "990101338",
+        "isDraft": false,
+        "mergedAt": "2022-07-12T10:36:00Z",
+        "number": 77,
+        "state": "MERGED",
+        "updatedAt": "2022-07-12T10:36:01Z"
+      },
+      {
+        "authorAssociation": "MEMBER",
+        "closingIssuesReferences": {
+          "nodes": [],
+          "totalCount": 0
+        },
+        "createdAt": "2022-07-11T10:59:58Z",
+        "fullDatabaseId": "992958759",
+        "isDraft": false,
+        "mergedAt": "2022-07-12T14:03:31Z",
+        "number": 78,
+        "state": "MERGED",
+        "updatedAt": "2022-07-12T14:03:32Z"
+      },
+      {
+        "authorAssociation": "MEMBER",
+        "closingIssuesReferences": {
+          "nodes": [],
+          "totalCount": 0
+        },
+        "createdAt": "2022-07-13T12:09:13Z",
+        "fullDatabaseId": "995417167",
+        "isDraft": false,
+        "mergedAt": "2022-07-13T12:19:56Z",
+        "number": 79,
+        "state": "MERGED",
+        "updatedAt": "2022-07-13T12:19:57Z"
+      },
+      {
+        "authorAssociation": "NONE",
+        "closingIssuesReferences": {
+          "nodes": [],
+          "totalCount": 0
+        },
+        "createdAt": "2022-07-16T15:11:43Z",
+        "fullDatabaseId": "998445482",
+        "isDraft": false,
+        "mergedAt": null,
+        "number": 80,
+        "state": "CLOSED",
+        "updatedAt": "2023-07-18T04:25:16Z"
+      },
+      {
+        "authorAssociation": "MEMBER",
+        "closingIssuesReferences": {
+          "nodes": [],
+          "totalCount": 0
+        },
+        "createdAt": "2022-08-12T21:14:16Z",
+        "fullDatabaseId": "1025387978",
+        "isDraft": false,
+        "mergedAt": "2023-05-09T10:23:40Z",
+        "number": 81,
+        "state": "MERGED",
+        "updatedAt": "2023-05-09T10:23:41Z"
+      },
+      {
+        "authorAssociation": "MEMBER",
+        "closingIssuesReferences": {
+          "nodes": [
+            {
+              "number": 12343,
+              "repository": {
+                "databaseId": 1064563,
+                "nameWithOwner": "netty/netty"
+              }
+            }
+          ],
+          "totalCount": 1
+        },
+        "createdAt": "2023-01-12T19:18:31Z",
+        "fullDatabaseId": "1195774367",
+        "isDraft": false,
+        "mergedAt": null,
+        "number": 84,
+        "state": "CLOSED",
+        "updatedAt": "2023-07-18T08:27:01Z"
+      },
+      {
+        "authorAssociation": "CONTRIBUTOR",
+        "closingIssuesReferences": {
+          "nodes": [],
+          "totalCount": 0
+        },
+        "createdAt": "2023-01-23T19:09:04Z",
+        "fullDatabaseId": "1213897673",
+        "isDraft": false,
+        "mergedAt": "2023-01-24T13:28:16Z",
+        "number": 85,
+        "state": "MERGED",
+        "updatedAt": "2023-01-24T13:28:17Z"
+      },
+      {
+        "authorAssociation": "CONTRIBUTOR",
+        "closingIssuesReferences": {
+          "nodes": [],
+          "totalCount": 0
+        },
+        "createdAt": "2023-01-26T17:10:10Z",
+        "fullDatabaseId": "1218178873",
+        "isDraft": false,
+        "mergedAt": "2023-07-18T04:28:35Z",
+        "number": 86,
+        "state": "MERGED",
+        "updatedAt": "2023-07-18T04:28:36Z"
+      },
+      {
+        "authorAssociation": "MEMBER",
+        "closingIssuesReferences": {
+          "nodes": [],
+          "totalCount": 0
+        },
+        "createdAt": "2023-04-05T15:00:09Z",
+        "fullDatabaseId": "1303357266",
+        "isDraft": false,
+        "mergedAt": "2023-07-18T10:59:30Z",
+        "number": 93,
+        "state": "MERGED",
+        "updatedAt": "2023-07-18T10:59:31Z"
+      },
+      {
+        "authorAssociation": "MEMBER",
+        "closingIssuesReferences": {
+          "nodes": [],
+          "totalCount": 0
+        },
+        "createdAt": "2023-05-02T13:13:02Z",
+        "fullDatabaseId": "1335226931",
+        "isDraft": false,
+        "mergedAt": "2023-05-09T10:25:07Z",
+        "number": 97,
+        "state": "MERGED",
+        "updatedAt": "2023-05-09T10:25:08Z"
+      },
+      {
+        "authorAssociation": "MEMBER",
+        "closingIssuesReferences": {
+          "nodes": [],
+          "totalCount": 0
+        },
+        "createdAt": "2023-05-24T11:06:31Z",
+        "fullDatabaseId": "1362884106",
+        "isDraft": false,
+        "mergedAt": "2023-05-24T12:59:23Z",
+        "number": 99,
+        "state": "MERGED",
+        "updatedAt": "2023-05-24T12:59:24Z"
+      },
+      {
+        "authorAssociation": "CONTRIBUTOR",
+        "closingIssuesReferences": {
+          "nodes": [],
+          "totalCount": 0
+        },
+        "createdAt": "2023-06-14T22:52:15Z",
+        "fullDatabaseId": "1393191557",
+        "isDraft": false,
+        "mergedAt": null,
+        "number": 100,
+        "state": "CLOSED",
+        "updatedAt": "2023-07-17T14:12:25Z"
+      },
+      {
+        "authorAssociation": "MEMBER",
+        "closingIssuesReferences": {
+          "nodes": [],
+          "totalCount": 0
+        },
+        "createdAt": "2023-07-19T12:14:06Z",
+        "fullDatabaseId": "1440919292",
+        "isDraft": false,
+        "mergedAt": "2023-07-19T12:24:39Z",
+        "number": 101,
+        "state": "MERGED",
+        "updatedAt": "2023-07-19T12:24:40Z"
+      },
+      {
+        "authorAssociation": "CONTRIBUTOR",
+        "closingIssuesReferences": {
+          "nodes": [],
+          "totalCount": 0
+        },
+        "createdAt": "2023-08-03T19:46:22Z",
+        "fullDatabaseId": "1461971761",
+        "isDraft": false,
+        "mergedAt": null,
+        "number": 104,
+        "state": "CLOSED",
+        "updatedAt": "2023-08-31T09:11:21Z"
+      },
+      {
+        "authorAssociation": "MEMBER",
+        "closingIssuesReferences": {
+          "nodes": [
+            {
+              "number": 102,
+              "repository": {
+                "databaseId": 126012969,
+                "nameWithOwner": "prebid/prebid-cache-java"
+              }
+            },
+            {
+              "number": 103,
+              "repository": {
+                "databaseId": 126012969,
+                "nameWithOwner": "prebid/prebid-cache-java"
+              }
+            }
+          ],
+          "totalCount": 2
+        },
+        "createdAt": "2023-08-17T10:34:56Z",
+        "fullDatabaseId": "1478804952",
+        "isDraft": false,
+        "mergedAt": "2023-08-29T15:13:06Z",
+        "number": 105,
+        "state": "MERGED",
+        "updatedAt": "2023-08-29T15:13:07Z"
+      },
+      {
+        "authorAssociation": "MEMBER",
+        "closingIssuesReferences": {
+          "nodes": [],
+          "totalCount": 0
+        },
+        "createdAt": "2023-08-28T16:13:09Z",
+        "fullDatabaseId": "1492349084",
+        "isDraft": false,
+        "mergedAt": "2023-08-29T13:47:14Z",
+        "number": 107,
+        "state": "MERGED",
+        "updatedAt": "2023-08-29T13:47:15Z"
+      },
+      {
+        "authorAssociation": "MEMBER",
+        "closingIssuesReferences": {
+          "nodes": [],
+          "totalCount": 0
+        },
+        "createdAt": "2023-08-30T09:46:38Z",
+        "fullDatabaseId": "1495212366",
+        "isDraft": false,
+        "mergedAt": "2023-09-07T10:27:22Z",
+        "number": 108,
+        "state": "MERGED",
+        "updatedAt": "2023-09-07T10:27:23Z"
+      },
+      {
+        "authorAssociation": "CONTRIBUTOR",
+        "closingIssuesReferences": {
+          "nodes": [],
+          "totalCount": 0
+        },
+        "createdAt": "2023-08-31T09:11:15Z",
+        "fullDatabaseId": "1496801921",
+        "isDraft": false,
+        "mergedAt": "2023-11-28T11:55:16Z",
+        "number": 109,
+        "state": "MERGED",
+        "updatedAt": "2023-11-28T11:55:17Z"
+      },
+      {
+        "authorAssociation": "MEMBER",
+        "closingIssuesReferences": {
+          "nodes": [],
+          "totalCount": 0
+        },
+        "createdAt": "2023-09-01T10:33:18Z",
+        "fullDatabaseId": "1498642717",
+        "isDraft": false,
+        "mergedAt": "2023-09-07T13:00:34Z",
+        "number": 110,
+        "state": "MERGED",
+        "updatedAt": "2023-09-07T13:00:36Z"
+      },
+      {
+        "authorAssociation": "MEMBER",
+        "closingIssuesReferences": {
+          "nodes": [],
+          "totalCount": 0
+        },
+        "createdAt": "2023-09-06T10:33:45Z",
+        "fullDatabaseId": "1504373755",
+        "isDraft": false,
+        "mergedAt": "2023-09-07T00:47:34Z",
+        "number": 111,
+        "state": "MERGED",
+        "updatedAt": "2023-09-07T00:47:35Z"
+      },
+      {
+        "authorAssociation": "MEMBER",
+        "closingIssuesReferences": {
+          "nodes": [],
+          "totalCount": 0
+        },
+        "createdAt": "2023-09-26T07:43:50Z",
+        "fullDatabaseId": "1530058228",
+        "isDraft": false,
+        "mergedAt": "2023-09-27T07:57:52Z",
+        "number": 112,
+        "state": "MERGED",
+        "updatedAt": "2023-09-27T07:57:53Z"
+      },
+      {
+        "authorAssociation": "MEMBER",
+        "closingIssuesReferences": {
+          "nodes": [],
+          "totalCount": 0
+        },
+        "createdAt": "2023-09-27T09:11:19Z",
+        "fullDatabaseId": "1531988857",
+        "isDraft": false,
+        "mergedAt": "2023-09-27T11:52:54Z",
+        "number": 113,
+        "state": "MERGED",
+        "updatedAt": "2023-09-27T11:52:55Z"
+      },
+      {
+        "authorAssociation": "MEMBER",
+        "closingIssuesReferences": {
+          "nodes": [
+            {
+              "number": 106,
+              "repository": {
+                "databaseId": 126012969,
+                "nameWithOwner": "prebid/prebid-cache-java"
+              }
+            }
+          ],
+          "totalCount": 1
+        },
+        "createdAt": "2023-09-28T07:09:59Z",
+        "fullDatabaseId": "1533581185",
+        "isDraft": false,
+        "mergedAt": "2024-03-04T12:18:05Z",
+        "number": 114,
+        "state": "MERGED",
+        "updatedAt": "2024-03-04T12:18:05Z"
+      },
+      {
+        "authorAssociation": "MEMBER",
+        "closingIssuesReferences": {
+          "nodes": [],
+          "totalCount": 0
+        },
+        "createdAt": "2023-09-28T10:33:56Z",
+        "fullDatabaseId": "1533882195",
+        "isDraft": false,
+        "mergedAt": "2023-09-29T10:04:05Z",
+        "number": 115,
+        "state": "MERGED",
+        "updatedAt": "2023-09-29T10:04:06Z"
+      },
+      {
+        "authorAssociation": "MEMBER",
+        "closingIssuesReferences": {
+          "nodes": [],
+          "totalCount": 0
+        },
+        "createdAt": "2023-09-28T10:48:16Z",
+        "fullDatabaseId": "1533905282",
+        "isDraft": false,
+        "mergedAt": "2023-10-13T13:41:57Z",
+        "number": 116,
+        "state": "MERGED",
+        "updatedAt": "2023-10-13T13:41:58Z"
+      },
+      {
+        "authorAssociation": "MEMBER",
+        "closingIssuesReferences": {
+          "nodes": [],
+          "totalCount": 0
+        },
+        "createdAt": "2023-10-02T12:36:52Z",
+        "fullDatabaseId": "1537944247",
+        "isDraft": false,
+        "mergedAt": "2023-10-13T13:38:31Z",
+        "number": 117,
+        "state": "MERGED",
+        "updatedAt": "2023-10-13T13:38:32Z"
+      },
+      {
+        "authorAssociation": "MEMBER",
+        "closingIssuesReferences": {
+          "nodes": [],
+          "totalCount": 0
+        },
+        "createdAt": "2023-10-13T13:57:08Z",
+        "fullDatabaseId": "1555968825",
+        "isDraft": false,
+        "mergedAt": "2023-11-28T11:53:40Z",
+        "number": 119,
+        "state": "MERGED",
+        "updatedAt": "2023-11-28T11:53:41Z"
+      },
+      {
+        "authorAssociation": "MEMBER",
+        "closingIssuesReferences": {
+          "nodes": [],
+          "totalCount": 0
+        },
+        "createdAt": "2023-11-06T09:37:23Z",
+        "fullDatabaseId": "1588206168",
+        "isDraft": false,
+        "mergedAt": "2024-02-20T13:01:30Z",
+        "number": 120,
+        "state": "MERGED",
+        "updatedAt": "2024-02-20T13:01:31Z"
+      },
+      {
+        "authorAssociation": "MEMBER",
+        "closingIssuesReferences": {
+          "nodes": [],
+          "totalCount": 0
+        },
+        "createdAt": "2023-11-27T23:12:43Z",
+        "fullDatabaseId": "1618885967",
+        "isDraft": false,
+        "mergedAt": "2023-11-28T11:57:06Z",
+        "number": 121,
+        "state": "MERGED",
+        "updatedAt": "2023-11-28T11:57:07Z"
+      },
+      {
+        "authorAssociation": "MEMBER",
+        "closingIssuesReferences": {
+          "nodes": [
+            {
+              "number": 82,
+              "repository": {
+                "databaseId": 126012969,
+                "nameWithOwner": "prebid/prebid-cache-java"
+              }
+            }
+          ],
+          "totalCount": 1
+        },
+        "createdAt": "2023-11-29T11:22:39Z",
+        "fullDatabaseId": "1621642659",
+        "isDraft": false,
+        "mergedAt": "2024-02-27T14:43:08Z",
+        "number": 122,
+        "state": "MERGED",
+        "updatedAt": "2024-02-27T14:43:09Z"
+      },
+      {
+        "authorAssociation": "MEMBER",
+        "closingIssuesReferences": {
+          "nodes": [],
+          "totalCount": 0
+        },
+        "createdAt": "2023-12-18T14:34:03Z",
+        "fullDatabaseId": "1648715894",
+        "isDraft": false,
+        "mergedAt": "2024-03-04T12:09:43Z",
+        "number": 124,
+        "state": "MERGED",
+        "updatedAt": "2024-03-04T12:09:44Z"
+      },
+      {
+        "authorAssociation": "MEMBER",
+        "closingIssuesReferences": {
+          "nodes": [],
+          "totalCount": 0
+        },
+        "createdAt": "2024-02-23T20:55:19Z",
+        "fullDatabaseId": "1741358092",
+        "isDraft": false,
+        "mergedAt": "2024-02-26T09:03:54Z",
+        "number": 126,
+        "state": "MERGED",
+        "updatedAt": "2024-02-26T09:03:55Z"
+      },
+      {
+        "authorAssociation": "MEMBER",
+        "closingIssuesReferences": {
+          "nodes": [],
+          "totalCount": 0
+        },
+        "createdAt": "2024-02-29T14:42:03Z",
+        "fullDatabaseId": "1749918822",
+        "isDraft": false,
+        "mergedAt": "2024-03-04T12:08:51Z",
+        "number": 127,
+        "state": "MERGED",
+        "updatedAt": "2024-03-04T12:08:52Z"
+      },
+      {
+        "authorAssociation": "MEMBER",
+        "closingIssuesReferences": {
+          "nodes": [],
+          "totalCount": 0
+        },
+        "createdAt": "2024-03-01T09:18:42Z",
+        "fullDatabaseId": "1751298177",
+        "isDraft": false,
+        "mergedAt": "2024-03-04T12:07:44Z",
+        "number": 128,
+        "state": "MERGED",
+        "updatedAt": "2024-03-04T12:07:44Z"
+      }
+    ],
+    "pageInfo": {
+      "endCursor": "Y3Vyc29yOnYyOpK0MjAyNC0wMy0wMVQwOToxODo0MlrOaGKwgQ==",
+      "hasNextPage": true
+    },
+    "totalCount": 157
+  },
+  "document_sha256": "257970e148a1f2f02077a1cbdff4bc6022dbe105a8046cca975acda16ae37a42",
+  "errors": [],
+  "extra": {},
+  "headers": {
+    "date": "Sat, 17 Oct 2026 12:09:21 GMT",
+    "x-ratelimit-limit": "5000",
+    "x-ratelimit-remaining": "4930",
+    "x-ratelimit-reset": "1792241340",
+    "x-ratelimit-resource": "graphql",
+    "x-ratelimit-used": "70"
+  },
+  "key": {
+    "after": null,
+    "name": "prebid-cache-java",
+    "owner": "prebid"
+  },
+  "kind": "index",
+  "recorded_at": "2026-10-17T12:09:19Z",
+  "source": "live"
+}

@@ -1,0 +1,10 @@
+{
+  "body": {
+    "message": "Server Error"
+  },
+  "headers": {
+    "date": "Sat, 17 Oct 2026 12:00:00 GMT"
+  },
+  "source": "Constructed: a 5xx other than 502 and 504, the statuses GitHub documents for a timeout",
+  "status": 500
+}

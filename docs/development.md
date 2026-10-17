@@ -226,6 +226,9 @@ ruff and mypy run through `uv run --no-sync`, so hooks never change the environm
 `.github/workflows/check.yml` runs on pull requests to `main` and pushes to `main`:
 
 - `uv lock --locked` (uv.lock matches pyproject.toml), then pre-commit over all files;
+- on pull requests, the base commit's `scripts/check_query_lock.py` (the pull request's own copy
+  where the base has none), which fails when an entry of `tests/query_versions.json` was edited
+  or removed;
 - pytest on Python 3.12 and 3.13, then `scripts/check_junit.py --max-skipped 0`, which fails
   unless at least one test ran and none failed, errored, or was skipped (pytest reports `xfail`
   as skipped);

@@ -1,0 +1,40 @@
+{
+  "data": {
+    "files": {
+      "nodes": [
+        {
+          "additions": 176,
+          "changeType": "MODIFIED",
+          "deletions": 176,
+          "path": "InternalTestApp/PrebidMobileDemoRendering/Model/TestCasesManager.swift"
+        }
+      ],
+      "pageInfo": {
+        "endCursor": "MTAx",
+        "hasNextPage": false
+      },
+      "totalCount": 101
+    },
+    "headRefOid": "0c19f81f430aae7bb98c499aaf7c969a132d14e5",
+    "updatedAt": "2023-05-24T06:52:39Z"
+  },
+  "document_sha256": "e1c354405bd48354eef12e6af8ad53d7358efb26255ef2dda16e41f07b0efb93",
+  "errors": [],
+  "extra": {},
+  "headers": {
+    "date": "Sat, 17 Oct 2026 12:09:28 GMT",
+    "x-ratelimit-limit": "5000",
+    "x-ratelimit-remaining": "4987",
+    "x-ratelimit-reset": "1792242556",
+    "x-ratelimit-resource": "graphql",
+    "x-ratelimit-used": "13"
+  },
+  "key": {
+    "after": "MTAw",
+    "connection": "files",
+    "id": "PR_kwDOBb4uhc5RH4Lt"
+  },
+  "kind": "overflow",
+  "recorded_at": "2026-10-17T12:09:19Z",
+  "source": "live"
+}

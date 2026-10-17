@@ -131,10 +131,19 @@ tests/
 ├── conftest.py              # Shared fixtures (db_session, engine)
 ├── factories.py             # Factory functions for test data
 ├── fixtures/                # Mock data files
+│   ├── source/
+│   │   ├── recorded/        # Units recorded from public repositories (scripts/record_fixtures.py)
+│   │   └── synthetic/       # Error responses: documented, observed, or constructed; each names which
 │   ├── github_responses.py  # GitHub API mock responses
 │   ├── rate_limit_responses.py
 │   ├── real_pr_open.py      # Real open PR fixture
 │   └── real_pr_merged.py    # Real merged PR fixture
+├── source/                  # GitHub source layer (redesign plan Step 2)
+│   ├── recordings.py        # Unit format, shared by the recorder and the replay
+│   ├── replay.py            # httpx transport answering from units, with fault injection
+│   ├── recorder.py          # Recording scenarios and the recording transport
+│   └── test_*.py
+├── query_versions.json      # hydration_version -> hash of the query documents
 ├── db/
 │   └── repositories/        # Repository CRUD tests
 ├── github/
@@ -150,6 +159,49 @@ tests/
 ├── test_cli_sync.py         # CLI command tests
 └── test_pr_ingestion_e2e.py # E2E integration tests
 ```
+
+### GitHub Source Layer: Recorded Responses
+
+`tests/source` runs the real source layer (`GitHubSource`) against `httpx.MockTransport`. The
+transport answers from **units**: one file per resolve, label page, index page, pull request
+alias, overflow continuation, user, or compare page, recorded from public repositories. Every
+query document the source layer sends has a recorded unit except the labels and closing-issue
+continuations: no tracked PR has more than 100 labels or closing issues, so their tests use
+synthetic pages, and a change to those documents is caught by the hydration-version lock test,
+not by "re-record". The only label page comes from `golang/go` (144 labels), because no tracked
+repository has more than 100.
+
+- **Assembled, not replayed whole**: a batch, split, or solo retry is rebuilt from per-alias units,
+  so a change of batch size needs no new recording.
+- **Stamped**: each GraphQL unit carries the SHA-256 of the normalized request that produced it:
+  the whole document for resolve, label, index, and user units; for a pull request alias or an
+  overflow continuation, the request reduced to that one alias, so batch size and neighbouring
+  aliases do not change it. The replay computes the same stamp from each request and refuses a
+  unit with another, so changing a query without re-recording fails the suite with "re-record".
+  It also refuses a batch or continuation whose aliases do not each bind their own variables.
+  Compare units are stamped with `COMPARE_STAMP` (`recordings.py`), the text of the REST request
+  they answer; their key holds the base, head, page, and page size.
+- **Re-recording**: `GITHUB_TOKEN="$(gh auth token)" uv run --no-sync python scripts/record_fixtures.py`
+  replaces `tests/fixtures/source/recorded/` only after every scenario recorded without a failed
+  item or user lookup. It refuses a private repository and keeps response bodies plus the
+  `date`, `retry-after`, and `x-ratelimit-*` headers, never request headers.
+  `tests/source/recorder.py` lists the scenarios and why each was chosen.
+- **Synthetic responses** (`tests/fixtures/source/synthetic/`) are error responses. Each file's
+  `source` says where its shape comes from: GitHub's documentation (quoted), a live observation
+  (dated), or a construction for a case GitHub does not document. A test that needs a variant of
+  a recorded item modifies the unit in the test and says which one.
+- **Faults**: `replay.fault(respond, when=..., times=...)` answers matching requests with a status
+  or exception; `replay.modify(change, ..., headers=...)` edits the recorded body, and optionally
+  the headers, of matching requests. The `replay` fixture fails a test whose fault was never
+  served, or served fewer times than given, so a predicate that misses cannot pass silently.
+- **Round trip**: `tests/source/test_recorder.py` records the replay and gets back every unit, so
+  the recorder's split and the replay's assembly agree for every operation.
+- **Time**: tests pass a `FakeClock`, so waits and retries are asserted, never slept.
+- **Hydration version**: `tests/query_versions.json` maps each `<kind>:<version>` to the hash of
+  that kind's documents. A test fails when the current documents differ from the current
+  version's entry; on pull requests, CI runs the base commit's copy of
+  `scripts/check_query_lock.py` (the pull request's own copy where the base has none), which
+  rejects an edited or removed entry, so a document change needs a new version.
 
 ### Key Fixtures
 
@@ -483,7 +535,8 @@ uv run pre-commit install
 `.github/workflows/check.yml` runs on pull requests to `main` and pushes to `main`:
 
 - `lint and types`: `uv lock --locked` (uv.lock matches pyproject.toml), then pre-commit over
-  all files.
+  all files; on pull requests, the base commit's `scripts/check_query_lock.py` (the pull
+  request's own copy where the base has none) against the hydration-version lock.
 - `tests (Python 3.12 / 3.13)`: pytest with JUnit output; `scripts/check_junit.py --max-skipped 0`,
   which fails unless at least one test ran and none failed, errored, or was skipped (pytest
   reports `xfail` as skipped, so an `xfail` also fails the job); and `alembic upgrade head` plus

@@ -1,0 +1,211 @@
+{
+  "data": {
+    "databaseId": 88511474,
+    "defaultBranchRef": {
+      "name": "master"
+    },
+    "id": "MDEwOlJlcG9zaXRvcnk4ODUxMTQ3NA==",
+    "isArchived": false,
+    "isPrivate": false,
+    "labels": {
+      "nodes": [
+        {
+          "name": "bug"
+        },
+        {
+          "name": "enhancement"
+        },
+        {
+          "name": "help wanted"
+        },
+        {
+          "name": "merge conflicts"
+        },
+        {
+          "name": "code coverage"
+        },
+        {
+          "name": "feature request"
+        },
+        {
+          "name": "code quality"
+        },
+        {
+          "name": "Intent to implement"
+        },
+        {
+          "name": "failing tests"
+        },
+        {
+          "name": "openrtb"
+        },
+        {
+          "name": "needs docs"
+        },
+        {
+          "name": "needs review"
+        },
+        {
+          "name": "needs update"
+        },
+        {
+          "name": "External API impact"
+        },
+        {
+          "name": "external"
+        },
+        {
+          "name": "breaking change - adapters"
+        },
+        {
+          "name": "breaking change - hosts"
+        },
+        {
+          "name": "has docs"
+        },
+        {
+          "name": "in progress"
+        },
+        {
+          "name": "breaking change - callers"
+        },
+        {
+          "name": "Core Internal APIs"
+        },
+        {
+          "name": "good first issue"
+        },
+        {
+          "name": "refactor"
+        },
+        {
+          "name": "stale"
+        },
+        {
+          "name": "security"
+        },
+        {
+          "name": "PBS-Go"
+        },
+        {
+          "name": "pinned"
+        },
+        {
+          "name": "PBS-Java"
+        },
+        {
+          "name": "question"
+        },
+        {
+          "name": "Long Form Video"
+        },
+        {
+          "name": "adapter issue"
+        },
+        {
+          "name": "taxonomy"
+        },
+        {
+          "name": "Ready For Dev"
+        },
+        {
+          "name": "In Dev - Go"
+        },
+        {
+          "name": "Needs Design"
+        },
+        {
+          "name": "auto"
+        },
+        {
+          "name": "do not port"
+        },
+        {
+          "name": "dependencies"
+        },
+        {
+          "name": "blocked"
+        },
+        {
+          "name": "match rate"
+        },
+        {
+          "name": "PBS 3.0"
+        },
+        {
+          "name": "PBS 4.0"
+        },
+        {
+          "name": "high priority"
+        },
+        {
+          "name": "med priority"
+        },
+        {
+          "name": "adapter"
+        },
+        {
+          "name": "module"
+        },
+        {
+          "name": "go"
+        },
+        {
+          "name": "modularity infrastructure"
+        },
+        {
+          "name": "will not implement"
+        },
+        {
+          "name": "privacy"
+        },
+        {
+          "name": "networking"
+        },
+        {
+          "name": "needs alias"
+        },
+        {
+          "name": "PBS 5.0"
+        },
+        {
+          "name": "agent review"
+        },
+        {
+          "name": "codex"
+        },
+        {
+          "name": "closed-needs-sponsorship"
+        }
+      ],
+      "pageInfo": {
+        "endCursor": "NTY",
+        "hasNextPage": false
+      },
+      "totalCount": 56
+    },
+    "name": "prebid-server",
+    "nameWithOwner": "prebid/prebid-server",
+    "owner": {
+      "login": "prebid"
+    }
+  },
+  "document_sha256": "035aef891393ccd81c36161af0b0d2e10034e582cac4bae68e62c9e5b035790e",
+  "errors": [],
+  "extra": {},
+  "headers": {
+    "date": "Sat, 17 Oct 2026 12:09:30 GMT",
+    "x-ratelimit-limit": "5000",
+    "x-ratelimit-remaining": "4985",
+    "x-ratelimit-reset": "1792242556",
+    "x-ratelimit-resource": "graphql",
+    "x-ratelimit-used": "15"
+  },
+  "key": {
+    "name": "prebid-server",
+    "owner": "prebid"
+  },
+  "kind": "resolve",
+  "recorded_at": "2026-10-17T12:09:19Z",
+  "source": "live"
+}

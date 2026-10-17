@@ -1,0 +1,94 @@
+{
+  "data": {
+    "headRefOid": "9c337ab1d7d3e63ca5b76ce5e5e4618ae3622380",
+    "reviews": {
+      "nodes": [
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 283858362,
+            "id": "U_kgDOEOtVug",
+            "login": "mkostromin-sigma"
+          },
+          "fullDatabaseId": "5021879694",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 283858362,
+            "id": "U_kgDOEOtVug",
+            "login": "mkostromin-sigma"
+          },
+          "fullDatabaseId": "5021879936",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 283858362,
+            "id": "U_kgDOEOtVug",
+            "login": "mkostromin-sigma"
+          },
+          "fullDatabaseId": "5021880275",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 283858362,
+            "id": "U_kgDOEOtVug",
+            "login": "mkostromin-sigma"
+          },
+          "fullDatabaseId": "5021880568",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 283858362,
+            "id": "U_kgDOEOtVug",
+            "login": "mkostromin-sigma"
+          },
+          "fullDatabaseId": "5021880836",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "Bot",
+            "databaseId": 62310815,
+            "id": "MDM6Qm90NjIzMTA4MTU=",
+            "login": "github-advanced-security"
+          },
+          "fullDatabaseId": "5070804245",
+          "state": "COMMENTED"
+        }
+      ],
+      "pageInfo": {
+        "endCursor": "Y3Vyc29yOnYyOpO0MjAyNi0wOC0zMVQyMDoyMDoxM1q0MjAyNi0wOC0zMVQyMDoyMDoxM1rPAAAAAS4-VRU=",
+        "hasNextPage": false
+      },
+      "totalCount": 106
+    },
+    "updatedAt": "2026-09-03T20:04:19Z"
+  },
+  "document_sha256": "ecb31f511b3f9695be966a37d07dfcb8d48cef566b393b5f55f34888de9874b1",
+  "errors": [],
+  "extra": {},
+  "headers": {
+    "date": "Sat, 17 Oct 2026 12:09:30 GMT",
+    "x-ratelimit-limit": "5000",
+    "x-ratelimit-remaining": "4986",
+    "x-ratelimit-reset": "1792242556",
+    "x-ratelimit-resource": "graphql",
+    "x-ratelimit-used": "14"
+  },
+  "key": {
+    "after": "Y3Vyc29yOnYyOpO0MjAyNi0wOC0yNVQxNzoyMzowMFq0MjAyNi0wOC0yNVQxNzoyMzowMFrPAAAAAStTzKk=",
+    "connection": "reviews",
+    "id": "PR_kwDOPRoOy8707Gr4"
+  },
+  "kind": "overflow",
+  "recorded_at": "2026-10-17T12:09:19Z",
+  "source": "live"
+}

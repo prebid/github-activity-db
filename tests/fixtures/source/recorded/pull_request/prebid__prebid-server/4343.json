@@ -1,0 +1,2166 @@
+{
+  "data": {
+    "additions": 1660,
+    "author": {
+      "__typename": "User",
+      "databaseId": 204218625,
+      "id": "U_kgDODCwhAQ",
+      "login": "Matterfull"
+    },
+    "authorAssociation": "CONTRIBUTOR",
+    "baseRefName": "master",
+    "baseRefOid": "85a2bb2690a3f0ccca2b9fe10b5e26c6a25dda44",
+    "body": "Docs PR - https://github.com/prebid/prebid.github.io/pull/6042",
+    "changedFiles": 20,
+    "closingIssuesReferences": {
+      "nodes": [],
+      "pageInfo": {
+        "endCursor": null,
+        "hasNextPage": false
+      },
+      "totalCount": 0
+    },
+    "comments": {
+      "nodes": [
+        {
+          "author": {
+            "__typename": "Bot",
+            "databaseId": 41898282,
+            "id": "MDM6Qm90NDE4OTgyODI=",
+            "login": "github-actions"
+          },
+          "fullDatabaseId": "2890398517"
+        },
+        {
+          "author": {
+            "__typename": "Bot",
+            "databaseId": 41898282,
+            "id": "MDM6Qm90NDE4OTgyODI=",
+            "login": "github-actions"
+          },
+          "fullDatabaseId": "2890500834"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 1168933,
+            "id": "MDQ6VXNlcjExNjg5MzM=",
+            "login": "bsardo"
+          },
+          "fullDatabaseId": "2971003649"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 204218625,
+            "id": "U_kgDODCwhAQ",
+            "login": "Matterfull"
+          },
+          "fullDatabaseId": "2983832505"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 204218625,
+            "id": "U_kgDODCwhAQ",
+            "login": "Matterfull"
+          },
+          "fullDatabaseId": "3004515477"
+        },
+        {
+          "author": {
+            "__typename": "Bot",
+            "databaseId": 41898282,
+            "id": "MDM6Qm90NDE4OTgyODI=",
+            "login": "github-actions"
+          },
+          "fullDatabaseId": "3018730421"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 9314645,
+            "id": "MDQ6VXNlcjkzMTQ2NDU=",
+            "login": "ShriprasadM"
+          },
+          "fullDatabaseId": "3021997781"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 204218625,
+            "id": "U_kgDODCwhAQ",
+            "login": "Matterfull"
+          },
+          "fullDatabaseId": "3051854407"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 204218625,
+            "id": "U_kgDODCwhAQ",
+            "login": "Matterfull"
+          },
+          "fullDatabaseId": "3106981535"
+        },
+        {
+          "author": {
+            "__typename": "Bot",
+            "databaseId": 41898282,
+            "id": "MDM6Qm90NDE4OTgyODI=",
+            "login": "github-actions"
+          },
+          "fullDatabaseId": "3126636016"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 204218625,
+            "id": "U_kgDODCwhAQ",
+            "login": "Matterfull"
+          },
+          "fullDatabaseId": "3126756553"
+        },
+        {
+          "author": {
+            "__typename": "Bot",
+            "databaseId": 41898282,
+            "id": "MDM6Qm90NDE4OTgyODI=",
+            "login": "github-actions"
+          },
+          "fullDatabaseId": "3139851410"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 204218625,
+            "id": "U_kgDODCwhAQ",
+            "login": "Matterfull"
+          },
+          "fullDatabaseId": "3139870512"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 204218625,
+            "id": "U_kgDODCwhAQ",
+            "login": "Matterfull"
+          },
+          "fullDatabaseId": "3158567687"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 204218625,
+            "id": "U_kgDODCwhAQ",
+            "login": "Matterfull"
+          },
+          "fullDatabaseId": "3173951825"
+        },
+        {
+          "author": {
+            "__typename": "Bot",
+            "databaseId": 41898282,
+            "id": "MDM6Qm90NDE4OTgyODI=",
+            "login": "github-actions"
+          },
+          "fullDatabaseId": "3291362362"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 204218625,
+            "id": "U_kgDODCwhAQ",
+            "login": "Matterfull"
+          },
+          "fullDatabaseId": "3311835101"
+        },
+        {
+          "author": {
+            "__typename": "Bot",
+            "databaseId": 41898282,
+            "id": "MDM6Qm90NDE4OTgyODI=",
+            "login": "github-actions"
+          },
+          "fullDatabaseId": "3338124629"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 204218625,
+            "id": "U_kgDODCwhAQ",
+            "login": "Matterfull"
+          },
+          "fullDatabaseId": "3338288946"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 204218625,
+            "id": "U_kgDODCwhAQ",
+            "login": "Matterfull"
+          },
+          "fullDatabaseId": "3397369446"
+        },
+        {
+          "author": {
+            "__typename": "Bot",
+            "databaseId": 41898282,
+            "id": "MDM6Qm90NDE4OTgyODI=",
+            "login": "github-actions"
+          },
+          "fullDatabaseId": "3563410806"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 204218625,
+            "id": "U_kgDODCwhAQ",
+            "login": "Matterfull"
+          },
+          "fullDatabaseId": "3563435350"
+        },
+        {
+          "author": {
+            "__typename": "Bot",
+            "databaseId": 41898282,
+            "id": "MDM6Qm90NDE4OTgyODI=",
+            "login": "github-actions"
+          },
+          "fullDatabaseId": "3715470974"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 73107205,
+            "id": "MDQ6VXNlcjczMTA3MjA1",
+            "login": "VolodymyrKapatsyn"
+          },
+          "fullDatabaseId": "3779974313"
+        },
+        {
+          "author": {
+            "__typename": "Bot",
+            "databaseId": 41898282,
+            "id": "MDM6Qm90NDE4OTgyODI=",
+            "login": "github-actions"
+          },
+          "fullDatabaseId": "3812943100"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 73107205,
+            "id": "MDQ6VXNlcjczMTA3MjA1",
+            "login": "VolodymyrKapatsyn"
+          },
+          "fullDatabaseId": "3812960572"
+        },
+        {
+          "author": {
+            "__typename": "Bot",
+            "databaseId": 41898282,
+            "id": "MDM6Qm90NDE4OTgyODI=",
+            "login": "github-actions"
+          },
+          "fullDatabaseId": "3958780098"
+        },
+        {
+          "author": {
+            "__typename": "Bot",
+            "databaseId": 41898282,
+            "id": "MDM6Qm90NDE4OTgyODI=",
+            "login": "github-actions"
+          },
+          "fullDatabaseId": "3959395321"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 73107205,
+            "id": "MDQ6VXNlcjczMTA3MjA1",
+            "login": "VolodymyrKapatsyn"
+          },
+          "fullDatabaseId": "3959400675"
+        },
+        {
+          "author": {
+            "__typename": "Bot",
+            "databaseId": 41898282,
+            "id": "MDM6Qm90NDE4OTgyODI=",
+            "login": "github-actions"
+          },
+          "fullDatabaseId": "3983515368"
+        },
+        {
+          "author": {
+            "__typename": "Bot",
+            "databaseId": 41898282,
+            "id": "MDM6Qm90NDE4OTgyODI=",
+            "login": "github-actions"
+          },
+          "fullDatabaseId": "3996963384"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 73107205,
+            "id": "MDQ6VXNlcjczMTA3MjA1",
+            "login": "VolodymyrKapatsyn"
+          },
+          "fullDatabaseId": "4076016864"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 41922797,
+            "id": "MDQ6VXNlcjQxOTIyNzk3",
+            "login": "scr-oath"
+          },
+          "fullDatabaseId": "4076117679"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 1168933,
+            "id": "MDQ6VXNlcjExNjg5MzM=",
+            "login": "bsardo"
+          },
+          "fullDatabaseId": "4126670573"
+        },
+        {
+          "author": {
+            "__typename": "Bot",
+            "databaseId": 41898282,
+            "id": "MDM6Qm90NDE4OTgyODI=",
+            "login": "github-actions"
+          },
+          "fullDatabaseId": "4253419227"
+        },
+        {
+          "author": {
+            "__typename": "Bot",
+            "databaseId": 41898282,
+            "id": "MDM6Qm90NDE4OTgyODI=",
+            "login": "github-actions"
+          },
+          "fullDatabaseId": "4253439734"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 204218625,
+            "id": "U_kgDODCwhAQ",
+            "login": "Matterfull"
+          },
+          "fullDatabaseId": "4253445507"
+        },
+        {
+          "author": {
+            "__typename": "Bot",
+            "databaseId": 41898282,
+            "id": "MDM6Qm90NDE4OTgyODI=",
+            "login": "github-actions"
+          },
+          "fullDatabaseId": "4253494696"
+        },
+        {
+          "author": {
+            "__typename": "Bot",
+            "databaseId": 41898282,
+            "id": "MDM6Qm90NDE4OTgyODI=",
+            "login": "github-actions"
+          },
+          "fullDatabaseId": "4259834268"
+        },
+        {
+          "author": {
+            "__typename": "Bot",
+            "databaseId": 41898282,
+            "id": "MDM6Qm90NDE4OTgyODI=",
+            "login": "github-actions"
+          },
+          "fullDatabaseId": "4260354101"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 204218625,
+            "id": "U_kgDODCwhAQ",
+            "login": "Matterfull"
+          },
+          "fullDatabaseId": "4262227414"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 204218625,
+            "id": "U_kgDODCwhAQ",
+            "login": "Matterfull"
+          },
+          "fullDatabaseId": "4269072208"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 204218625,
+            "id": "U_kgDODCwhAQ",
+            "login": "Matterfull"
+          },
+          "fullDatabaseId": "4324867824"
+        },
+        {
+          "author": {
+            "__typename": "Bot",
+            "databaseId": 41898282,
+            "id": "MDM6Qm90NDE4OTgyODI=",
+            "login": "github-actions"
+          },
+          "fullDatabaseId": "4354600793"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 204218625,
+            "id": "U_kgDODCwhAQ",
+            "login": "Matterfull"
+          },
+          "fullDatabaseId": "4354887174"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 204218625,
+            "id": "U_kgDODCwhAQ",
+            "login": "Matterfull"
+          },
+          "fullDatabaseId": "4354946323"
+        },
+        {
+          "author": {
+            "__typename": "Bot",
+            "databaseId": 41898282,
+            "id": "MDM6Qm90NDE4OTgyODI=",
+            "login": "github-actions"
+          },
+          "fullDatabaseId": "4363860171"
+        },
+        {
+          "author": {
+            "__typename": "Bot",
+            "databaseId": 41898282,
+            "id": "MDM6Qm90NDE4OTgyODI=",
+            "login": "github-actions"
+          },
+          "fullDatabaseId": "4386107059"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 204218625,
+            "id": "U_kgDODCwhAQ",
+            "login": "Matterfull"
+          },
+          "fullDatabaseId": "4394635337"
+        },
+        {
+          "author": {
+            "__typename": "Bot",
+            "databaseId": 41898282,
+            "id": "MDM6Qm90NDE4OTgyODI=",
+            "login": "github-actions"
+          },
+          "fullDatabaseId": "4545069730"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 204218625,
+            "id": "U_kgDODCwhAQ",
+            "login": "Matterfull"
+          },
+          "fullDatabaseId": "4562132971"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 204218625,
+            "id": "U_kgDODCwhAQ",
+            "login": "Matterfull"
+          },
+          "fullDatabaseId": "4622368367"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 204218625,
+            "id": "U_kgDODCwhAQ",
+            "login": "Matterfull"
+          },
+          "fullDatabaseId": "4658298157"
+        },
+        {
+          "author": {
+            "__typename": "Bot",
+            "databaseId": 41898282,
+            "id": "MDM6Qm90NDE4OTgyODI=",
+            "login": "github-actions"
+          },
+          "fullDatabaseId": "4660714518"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 204218625,
+            "id": "U_kgDODCwhAQ",
+            "login": "Matterfull"
+          },
+          "fullDatabaseId": "4671948936"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 204218625,
+            "id": "U_kgDODCwhAQ",
+            "login": "Matterfull"
+          },
+          "fullDatabaseId": "4732136827"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 204218625,
+            "id": "U_kgDODCwhAQ",
+            "login": "Matterfull"
+          },
+          "fullDatabaseId": "4777635361"
+        },
+        {
+          "author": {
+            "__typename": "Bot",
+            "databaseId": 41898282,
+            "id": "MDM6Qm90NDE4OTgyODI=",
+            "login": "github-actions"
+          },
+          "fullDatabaseId": "4835187768"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 204218625,
+            "id": "U_kgDODCwhAQ",
+            "login": "Matterfull"
+          },
+          "fullDatabaseId": "4842554827"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 204218625,
+            "id": "U_kgDODCwhAQ",
+            "login": "Matterfull"
+          },
+          "fullDatabaseId": "4901842524"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 244516447,
+            "id": "U_kgDODpMGXw",
+            "login": "ivanlunamediaio"
+          },
+          "fullDatabaseId": "5020050704"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 217833752,
+            "id": "U_kgDODPvhGA",
+            "login": "postindustria-code"
+          },
+          "fullDatabaseId": "5021136776"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 217833752,
+            "id": "U_kgDODPvhGA",
+            "login": "postindustria-code"
+          },
+          "fullDatabaseId": "5021157708"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 217833752,
+            "id": "U_kgDODPvhGA",
+            "login": "postindustria-code"
+          },
+          "fullDatabaseId": "5021172471"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 204218625,
+            "id": "U_kgDODCwhAQ",
+            "login": "Matterfull"
+          },
+          "fullDatabaseId": "5024983529"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 204218625,
+            "id": "U_kgDODCwhAQ",
+            "login": "Matterfull"
+          },
+          "fullDatabaseId": "5025156016"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 5030553,
+            "id": "MDQ6VXNlcjUwMzA1NTM=",
+            "login": "foxart"
+          },
+          "fullDatabaseId": "5031735130"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 217833752,
+            "id": "U_kgDODPvhGA",
+            "login": "postindustria-code"
+          },
+          "fullDatabaseId": "5031759661"
+        },
+        {
+          "author": {
+            "__typename": "Bot",
+            "databaseId": 41898282,
+            "id": "MDM6Qm90NDE4OTgyODI=",
+            "login": "github-actions"
+          },
+          "fullDatabaseId": "5035556386"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 5030553,
+            "id": "MDQ6VXNlcjUwMzA1NTM=",
+            "login": "foxart"
+          },
+          "fullDatabaseId": "5036484422"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 244516447,
+            "id": "U_kgDODpMGXw",
+            "login": "ivanlunamediaio"
+          },
+          "fullDatabaseId": "5101037020"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 5030553,
+            "id": "MDQ6VXNlcjUwMzA1NTM=",
+            "login": "foxart"
+          },
+          "fullDatabaseId": "5166527902"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 217833752,
+            "id": "U_kgDODPvhGA",
+            "login": "postindustria-code"
+          },
+          "fullDatabaseId": "5175933298"
+        },
+        {
+          "author": {
+            "__typename": "Bot",
+            "databaseId": 41898282,
+            "id": "MDM6Qm90NDE4OTgyODI=",
+            "login": "github-actions"
+          },
+          "fullDatabaseId": "5180115006"
+        },
+        {
+          "author": {
+            "__typename": "Bot",
+            "databaseId": 41898282,
+            "id": "MDM6Qm90NDE4OTgyODI=",
+            "login": "github-actions"
+          },
+          "fullDatabaseId": "5181542709"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 5030553,
+            "id": "MDQ6VXNlcjUwMzA1NTM=",
+            "login": "foxart"
+          },
+          "fullDatabaseId": "5185459013"
+        },
+        {
+          "author": {
+            "__typename": "Bot",
+            "databaseId": 41898282,
+            "id": "MDM6Qm90NDE4OTgyODI=",
+            "login": "github-actions"
+          },
+          "fullDatabaseId": "5191770387"
+        },
+        {
+          "author": {
+            "__typename": "Bot",
+            "databaseId": 41898282,
+            "id": "MDM6Qm90NDE4OTgyODI=",
+            "login": "github-actions"
+          },
+          "fullDatabaseId": "5220398495"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 167743744,
+            "id": "U_kgDOCf-RAA",
+            "login": "przemkaczmarek"
+          },
+          "fullDatabaseId": "5220838690"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 5030553,
+            "id": "MDQ6VXNlcjUwMzA1NTM=",
+            "login": "foxart"
+          },
+          "fullDatabaseId": "5237133154"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 5030553,
+            "id": "MDQ6VXNlcjUwMzA1NTM=",
+            "login": "foxart"
+          },
+          "fullDatabaseId": "5237187253"
+        },
+        {
+          "author": {
+            "__typename": "Bot",
+            "databaseId": 41898282,
+            "id": "MDM6Qm90NDE4OTgyODI=",
+            "login": "github-actions"
+          },
+          "fullDatabaseId": "5240202397"
+        },
+        {
+          "author": {
+            "__typename": "Bot",
+            "databaseId": 41898282,
+            "id": "MDM6Qm90NDE4OTgyODI=",
+            "login": "github-actions"
+          },
+          "fullDatabaseId": "5240205405"
+        },
+        {
+          "author": {
+            "__typename": "Bot",
+            "databaseId": 41898282,
+            "id": "MDM6Qm90NDE4OTgyODI=",
+            "login": "github-actions"
+          },
+          "fullDatabaseId": "5254061312"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 217833752,
+            "id": "U_kgDODPvhGA",
+            "login": "postindustria-code"
+          },
+          "fullDatabaseId": "5278809300"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 5030553,
+            "id": "MDQ6VXNlcjUwMzA1NTM=",
+            "login": "foxart"
+          },
+          "fullDatabaseId": "5279902881"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 5030553,
+            "id": "MDQ6VXNlcjUwMzA1NTM=",
+            "login": "foxart"
+          },
+          "fullDatabaseId": "5280236628"
+        },
+        {
+          "author": {
+            "__typename": "Bot",
+            "databaseId": 41898282,
+            "id": "MDM6Qm90NDE4OTgyODI=",
+            "login": "github-actions"
+          },
+          "fullDatabaseId": "5280436865"
+        },
+        {
+          "author": {
+            "__typename": "Bot",
+            "databaseId": 41898282,
+            "id": "MDM6Qm90NDE4OTgyODI=",
+            "login": "github-actions"
+          },
+          "fullDatabaseId": "5280438031"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 217833752,
+            "id": "U_kgDODPvhGA",
+            "login": "postindustria-code"
+          },
+          "fullDatabaseId": "5280847519"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 217833752,
+            "id": "U_kgDODPvhGA",
+            "login": "postindustria-code"
+          },
+          "fullDatabaseId": "5280909684"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 5030553,
+            "id": "MDQ6VXNlcjUwMzA1NTM=",
+            "login": "foxart"
+          },
+          "fullDatabaseId": "5291561888"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 5030553,
+            "id": "MDQ6VXNlcjUwMzA1NTM=",
+            "login": "foxart"
+          },
+          "fullDatabaseId": "5313844348"
+        },
+        {
+          "author": {
+            "__typename": "Bot",
+            "databaseId": 41898282,
+            "id": "MDM6Qm90NDE4OTgyODI=",
+            "login": "github-actions"
+          },
+          "fullDatabaseId": "5337700706"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 5030553,
+            "id": "MDQ6VXNlcjUwMzA1NTM=",
+            "login": "foxart"
+          },
+          "fullDatabaseId": "5358754301"
+        },
+        {
+          "author": {
+            "__typename": "Bot",
+            "databaseId": 41898282,
+            "id": "MDM6Qm90NDE4OTgyODI=",
+            "login": "github-actions"
+          },
+          "fullDatabaseId": "5462465554"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 5030553,
+            "id": "MDQ6VXNlcjUwMzA1NTM=",
+            "login": "foxart"
+          },
+          "fullDatabaseId": "5490097359"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 5030553,
+            "id": "MDQ6VXNlcjUwMzA1NTM=",
+            "login": "foxart"
+          },
+          "fullDatabaseId": "5583679348"
+        },
+        {
+          "author": {
+            "__typename": "Bot",
+            "databaseId": 41898282,
+            "id": "MDM6Qm90NDE4OTgyODI=",
+            "login": "github-actions"
+          },
+          "fullDatabaseId": "5586359300"
+        },
+        {
+          "author": {
+            "__typename": "Bot",
+            "databaseId": 41898282,
+            "id": "MDM6Qm90NDE4OTgyODI=",
+            "login": "github-actions"
+          },
+          "fullDatabaseId": "5616784313"
+        }
+      ],
+      "pageInfo": {
+        "endCursor": "Y3Vyc29yOnYyOpHPAAAAAU7JU7k=",
+        "hasNextPage": true
+      },
+      "totalCount": 109
+    },
+    "commits": {
+      "nodes": [
+        {
+          "commit": {
+            "author": {
+              "email": "ivan@matterfull.com",
+              "name": "Ivan",
+              "user": null
+            },
+            "authoredDate": "2026-06-09T09:16:47Z",
+            "oid": "7948275540b38d023b0ab7a7da864b8600cd7f59"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "prebid_support@bematterfull.com",
+              "name": "Matterfull",
+              "user": {
+                "databaseId": 204218625,
+                "id": "U_kgDODCwhAQ",
+                "login": "Matterfull"
+              }
+            },
+            "authoredDate": "2026-06-24T16:14:44Z",
+            "oid": "6acf51a49a6fe877cca20582c1ad49e1f3073b0a"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "prebid_support@bematterfull.com",
+              "name": "Matterfull",
+              "user": {
+                "databaseId": 204218625,
+                "id": "U_kgDODCwhAQ",
+                "login": "Matterfull"
+              }
+            },
+            "authoredDate": "2026-07-03T15:22:43Z",
+            "oid": "2dcbd6ec0a8e8fad8dc7a079f3952067e23ad8a7"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "prebid_support@bematterfull.com",
+              "name": "Matterfull",
+              "user": {
+                "databaseId": 204218625,
+                "id": "U_kgDODCwhAQ",
+                "login": "Matterfull"
+              }
+            },
+            "authoredDate": "2026-07-17T13:26:20Z",
+            "oid": "bac4c5b0ad83c59231f5f601a46be0a29c8718d4"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "prebid_support@bematterfull.com",
+              "name": "Matterfull",
+              "user": {
+                "databaseId": 204218625,
+                "id": "U_kgDODCwhAQ",
+                "login": "Matterfull"
+              }
+            },
+            "authoredDate": "2026-07-20T07:30:25Z",
+            "oid": "125fe40695559a01f5043e194da380a26f805e86"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "ivan@matterfull.com",
+              "name": "Ivan",
+              "user": null
+            },
+            "authoredDate": "2026-07-20T17:07:31Z",
+            "oid": "03437de1e888748919c827eb011fb386cdc298fc"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "prebid_support@bematterfull.com",
+              "name": "Matterfull",
+              "user": {
+                "databaseId": 204218625,
+                "id": "U_kgDODCwhAQ",
+                "login": "Matterfull"
+              }
+            },
+            "authoredDate": "2026-07-21T16:16:47Z",
+            "oid": "17b0e2372ed4c465903ba655438a4b78d020d780"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "5030553+foxart@users.noreply.github.com",
+              "name": "Ivan Kosenko",
+              "user": {
+                "databaseId": 5030553,
+                "id": "MDQ6VXNlcjUwMzA1NTM=",
+                "login": "foxart"
+              }
+            },
+            "authoredDate": "2026-07-21T16:27:44Z",
+            "oid": "0f232db8f98a9dd645b9f0ce41348aec09f75922"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "prebid_support@bematterfull.com",
+              "name": "Matterfull",
+              "user": {
+                "databaseId": 204218625,
+                "id": "U_kgDODCwhAQ",
+                "login": "Matterfull"
+              }
+            },
+            "authoredDate": "2026-07-27T13:20:24Z",
+            "oid": "165a485112b285006e372695483e77ffb41169e5"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "prebid_support@bematterfull.com",
+              "name": "Matterfull",
+              "user": {
+                "databaseId": 204218625,
+                "id": "U_kgDODCwhAQ",
+                "login": "Matterfull"
+              }
+            },
+            "authoredDate": "2026-08-04T15:40:28Z",
+            "oid": "0932e3a5bf7e55d19a4cb90799b75d37c64aef77"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "prebid_support@bematterfull.com",
+              "name": "Matterfull",
+              "user": {
+                "databaseId": 204218625,
+                "id": "U_kgDODCwhAQ",
+                "login": "Matterfull"
+              }
+            },
+            "authoredDate": "2026-08-04T22:47:01Z",
+            "oid": "f09a2975855d190724ffdf811824a0eced553e16"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "prebid_support@bematterfull.com",
+              "name": "Matterfull",
+              "user": {
+                "databaseId": 204218625,
+                "id": "U_kgDODCwhAQ",
+                "login": "Matterfull"
+              }
+            },
+            "authoredDate": "2026-08-06T23:03:49Z",
+            "oid": "8a579e4b32b5474f1012b3cbedf76836a7a0bb6f"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "5030553+foxart@users.noreply.github.com",
+              "name": "Ivan Kosenko",
+              "user": {
+                "databaseId": 5030553,
+                "id": "MDQ6VXNlcjUwMzA1NTM=",
+                "login": "foxart"
+              }
+            },
+            "authoredDate": "2026-08-10T07:30:51Z",
+            "oid": "9eee013c72226f79bd6307d077efb882f4fbd259"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "prebid_support@bematterfull.com",
+              "name": "Matterfull",
+              "user": {
+                "databaseId": 204218625,
+                "id": "U_kgDODCwhAQ",
+                "login": "Matterfull"
+              }
+            },
+            "authoredDate": "2026-08-11T10:49:45Z",
+            "oid": "340a7d86fb40f25be6dc4c866850a58aec73e974"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "5030553+foxart@users.noreply.github.com",
+              "name": "Ivan Kosenko",
+              "user": {
+                "databaseId": 5030553,
+                "id": "MDQ6VXNlcjUwMzA1NTM=",
+                "login": "foxart"
+              }
+            },
+            "authoredDate": "2026-08-13T12:04:30Z",
+            "oid": "2cf277f297cb9653ca2d1385ae7ebaf2941224b3"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "5030553+foxart@users.noreply.github.com",
+              "name": "Ivan Kosenko",
+              "user": {
+                "databaseId": 5030553,
+                "id": "MDQ6VXNlcjUwMzA1NTM=",
+                "login": "foxart"
+              }
+            },
+            "authoredDate": "2026-08-14T09:08:21Z",
+            "oid": "929c0cb260f36e6e9db5b675a8da185fb9d075df"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "prebid_support@bematterfull.com",
+              "name": "Matterfull",
+              "user": {
+                "databaseId": 204218625,
+                "id": "U_kgDODCwhAQ",
+                "login": "Matterfull"
+              }
+            },
+            "authoredDate": "2026-08-18T18:08:16Z",
+            "oid": "f77e5f9076e03c6beb818e6663bbcc32744b2c38"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "prebid_support@bematterfull.com",
+              "name": "Matterfull",
+              "user": {
+                "databaseId": 204218625,
+                "id": "U_kgDODCwhAQ",
+                "login": "Matterfull"
+              }
+            },
+            "authoredDate": "2026-08-28T16:21:03Z",
+            "oid": "864556aae833d7724429c9d9e12df5b0178079b0"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "prebid_support@bematterfull.com",
+              "name": "Matterfull",
+              "user": {
+                "databaseId": 204218625,
+                "id": "U_kgDODCwhAQ",
+                "login": "Matterfull"
+              }
+            },
+            "authoredDate": "2026-09-02T19:03:07Z",
+            "oid": "ab359b3e0b98c994012c4f1016add5db2706aa92"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "prebid_support@bematterfull.com",
+              "name": "Matterfull",
+              "user": {
+                "databaseId": 204218625,
+                "id": "U_kgDODCwhAQ",
+                "login": "Matterfull"
+              }
+            },
+            "authoredDate": "2026-09-09T18:23:56Z",
+            "oid": "76b641cfde90cb6f852234cb738126f312411623"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "prebid_support@bematterfull.com",
+              "name": "Matterfull",
+              "user": {
+                "databaseId": 204218625,
+                "id": "U_kgDODCwhAQ",
+                "login": "Matterfull"
+              }
+            },
+            "authoredDate": "2026-09-17T09:35:56Z",
+            "oid": "511d0792ad720d424212a4a7219e91752d66af5d"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "prebid_support@bematterfull.com",
+              "name": "Matterfull",
+              "user": {
+                "databaseId": 204218625,
+                "id": "U_kgDODCwhAQ",
+                "login": "Matterfull"
+              }
+            },
+            "authoredDate": "2026-09-17T16:34:18Z",
+            "oid": "274d61e83b871af072b904e0c67ff9fec3d98944"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "prebid_support@bematterfull.com",
+              "name": "Matterfull",
+              "user": {
+                "databaseId": 204218625,
+                "id": "U_kgDODCwhAQ",
+                "login": "Matterfull"
+              }
+            },
+            "authoredDate": "2026-09-20T18:14:10Z",
+            "oid": "5c5acdc9f1bb45cdfee7327cea247842ca86a8ac"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "prebid_support@bematterfull.com",
+              "name": "Matterfull",
+              "user": {
+                "databaseId": 204218625,
+                "id": "U_kgDODCwhAQ",
+                "login": "Matterfull"
+              }
+            },
+            "authoredDate": "2026-09-23T17:22:38Z",
+            "oid": "0ebea5ee1d6ef46a8299d4e0abf8760b22cae1a3"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "prebid_support@bematterfull.com",
+              "name": "Matterfull",
+              "user": {
+                "databaseId": 204218625,
+                "id": "U_kgDODCwhAQ",
+                "login": "Matterfull"
+              }
+            },
+            "authoredDate": "2026-10-02T12:38:00Z",
+            "oid": "c0dd6b96762622636d52f1241dca4a4ad1bb6305"
+          }
+        }
+      ],
+      "pageInfo": {
+        "endCursor": "MjU",
+        "hasNextPage": false
+      },
+      "totalCount": 25
+    },
+    "createdAt": "2025-05-19T09:22:21Z",
+    "deletions": 0,
+    "files": {
+      "nodes": [
+        {
+          "additions": 294,
+          "changeType": "ADDED",
+          "deletions": 0,
+          "path": "adapters/matterfullrtb/matterfullrtb.go"
+        },
+        {
+          "additions": 395,
+          "changeType": "ADDED",
+          "deletions": 0,
+          "path": "adapters/matterfullrtb/matterfullrtb_test.go"
+        },
+        {
+          "additions": 94,
+          "changeType": "ADDED",
+          "deletions": 0,
+          "path": "adapters/matterfullrtb/matterfullrtbtest/exemplary/banner.json"
+        },
+        {
+          "additions": 59,
+          "changeType": "ADDED",
+          "deletions": 0,
+          "path": "adapters/matterfullrtb/matterfullrtbtest/exemplary/grouping.json"
+        },
+        {
+          "additions": 82,
+          "changeType": "ADDED",
+          "deletions": 0,
+          "path": "adapters/matterfullrtb/matterfullrtbtest/exemplary/video.json"
+        },
+        {
+          "additions": 91,
+          "changeType": "ADDED",
+          "deletions": 0,
+          "path": "adapters/matterfullrtb/matterfullrtbtest/supplemental/app.json"
+        },
+        {
+          "additions": 90,
+          "changeType": "ADDED",
+          "deletions": 0,
+          "path": "adapters/matterfullrtb/matterfullrtbtest/supplemental/compat.json"
+        },
+        {
+          "additions": 33,
+          "changeType": "ADDED",
+          "deletions": 0,
+          "path": "adapters/matterfullrtb/matterfullrtbtest/supplemental/ext.json"
+        },
+        {
+          "additions": 89,
+          "changeType": "ADDED",
+          "deletions": 0,
+          "path": "adapters/matterfullrtb/matterfullrtbtest/supplemental/mtype.json"
+        },
+        {
+          "additions": 78,
+          "changeType": "ADDED",
+          "deletions": 0,
+          "path": "adapters/matterfullrtb/matterfullrtbtest/supplemental/responseCode.json"
+        },
+        {
+          "additions": 73,
+          "changeType": "ADDED",
+          "deletions": 0,
+          "path": "adapters/matterfullrtb/matterfullrtbtest/supplemental/responsebid.json"
+        },
+        {
+          "additions": 68,
+          "changeType": "ADDED",
+          "deletions": 0,
+          "path": "adapters/matterfullrtb/matterfullrtbtest/supplemental/single-format.json"
+        },
+        {
+          "additions": 102,
+          "changeType": "ADDED",
+          "deletions": 0,
+          "path": "adapters/matterfullrtb/matterfullrtbtest/supplemental/site.json"
+        },
+        {
+          "additions": 27,
+          "changeType": "ADDED",
+          "deletions": 0,
+          "path": "adapters/matterfullrtb/matterfullrtbtest/supplemental/size.json"
+        },
+        {
+          "additions": 45,
+          "changeType": "ADDED",
+          "deletions": 0,
+          "path": "adapters/matterfullrtb/params_test.go"
+        },
+        {
+          "additions": 2,
+          "changeType": "MODIFIED",
+          "deletions": 0,
+          "path": "exchange/adapter_builders.go"
+        },
+        {
+          "additions": 2,
+          "changeType": "MODIFIED",
+          "deletions": 0,
+          "path": "openrtb_ext/bidders.go"
+        },
+        {
+          "additions": 5,
+          "changeType": "ADDED",
+          "deletions": 0,
+          "path": "openrtb_ext/imp_matterfullrtb.go"
+        },
+        {
+          "additions": 17,
+          "changeType": "ADDED",
+          "deletions": 0,
+          "path": "static/bidder-info/matterfullrtb.yaml"
+        },
+        {
+          "additions": 14,
+          "changeType": "ADDED",
+          "deletions": 0,
+          "path": "static/bidder-params/matterfullrtb.json"
+        }
+      ],
+      "pageInfo": {
+        "endCursor": "MjA",
+        "hasNextPage": false
+      },
+      "totalCount": 20
+    },
+    "fullDatabaseId": "2528118985",
+    "headRefOid": "c0dd6b96762622636d52f1241dca4a4ad1bb6305",
+    "id": "PR_kwDOBUaT8s6WsAjJ",
+    "isCrossRepository": true,
+    "isDraft": false,
+    "labels": {
+      "nodes": [
+        {
+          "name": "adapter"
+        }
+      ],
+      "pageInfo": {
+        "endCursor": "MQ",
+        "hasNextPage": false
+      },
+      "totalCount": 1
+    },
+    "mergedAt": "2026-10-02T14:07:24Z",
+    "mergedBy": {
+      "__typename": "User",
+      "databaseId": 1168933,
+      "id": "MDQ6VXNlcjExNjg5MzM=",
+      "login": "bsardo"
+    },
+    "number": 4343,
+    "reviews": {
+      "nodes": [
+        {
+          "author": {
+            "__typename": "Bot",
+            "databaseId": 41898282,
+            "id": "MDM6Qm90NDE4OTgyODI=",
+            "login": "github-actions"
+          },
+          "fullDatabaseId": "2850062437",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 1653437,
+            "id": "MDQ6VXNlcjE2NTM0Mzc=",
+            "login": "SyntaxNode"
+          },
+          "fullDatabaseId": "2928802534",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 41922797,
+            "id": "MDQ6VXNlcjQxOTIyNzk3",
+            "login": "scr-oath"
+          },
+          "fullDatabaseId": "3001952408",
+          "state": "CHANGES_REQUESTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 204218625,
+            "id": "U_kgDODCwhAQ",
+            "login": "Matterfull"
+          },
+          "fullDatabaseId": "3016199268",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 204218625,
+            "id": "U_kgDODCwhAQ",
+            "login": "Matterfull"
+          },
+          "fullDatabaseId": "3016208706",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 204218625,
+            "id": "U_kgDODCwhAQ",
+            "login": "Matterfull"
+          },
+          "fullDatabaseId": "3016614828",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 204218625,
+            "id": "U_kgDODCwhAQ",
+            "login": "Matterfull"
+          },
+          "fullDatabaseId": "3028698645",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 41922797,
+            "id": "MDQ6VXNlcjQxOTIyNzk3",
+            "login": "scr-oath"
+          },
+          "fullDatabaseId": "3038637671",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 204218625,
+            "id": "U_kgDODCwhAQ",
+            "login": "Matterfull"
+          },
+          "fullDatabaseId": "3046548965",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "Bot",
+            "databaseId": 41898282,
+            "id": "MDM6Qm90NDE4OTgyODI=",
+            "login": "github-actions"
+          },
+          "fullDatabaseId": "3046667561",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 41922797,
+            "id": "MDQ6VXNlcjQxOTIyNzk3",
+            "login": "scr-oath"
+          },
+          "fullDatabaseId": "3053680937",
+          "state": "CHANGES_REQUESTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 204218625,
+            "id": "U_kgDODCwhAQ",
+            "login": "Matterfull"
+          },
+          "fullDatabaseId": "3054540454",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 41922797,
+            "id": "MDQ6VXNlcjQxOTIyNzk3",
+            "login": "scr-oath"
+          },
+          "fullDatabaseId": "3056560594",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 41922797,
+            "id": "MDQ6VXNlcjQxOTIyNzk3",
+            "login": "scr-oath"
+          },
+          "fullDatabaseId": "3056579231",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 41922797,
+            "id": "MDQ6VXNlcjQxOTIyNzk3",
+            "login": "scr-oath"
+          },
+          "fullDatabaseId": "3056600268",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 41922797,
+            "id": "MDQ6VXNlcjQxOTIyNzk3",
+            "login": "scr-oath"
+          },
+          "fullDatabaseId": "3056601934",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "Bot",
+            "databaseId": 41898282,
+            "id": "MDM6Qm90NDE4OTgyODI=",
+            "login": "github-actions"
+          },
+          "fullDatabaseId": "3061743814",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 41922797,
+            "id": "MDQ6VXNlcjQxOTIyNzk3",
+            "login": "scr-oath"
+          },
+          "fullDatabaseId": "3074232191",
+          "state": "CHANGES_REQUESTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 204218625,
+            "id": "U_kgDODCwhAQ",
+            "login": "Matterfull"
+          },
+          "fullDatabaseId": "3074979118",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 204218625,
+            "id": "U_kgDODCwhAQ",
+            "login": "Matterfull"
+          },
+          "fullDatabaseId": "3074986268",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 204218625,
+            "id": "U_kgDODCwhAQ",
+            "login": "Matterfull"
+          },
+          "fullDatabaseId": "3075025792",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 204218625,
+            "id": "U_kgDODCwhAQ",
+            "login": "Matterfull"
+          },
+          "fullDatabaseId": "3075026437",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 204218625,
+            "id": "U_kgDODCwhAQ",
+            "login": "Matterfull"
+          },
+          "fullDatabaseId": "3075026739",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 204218625,
+            "id": "U_kgDODCwhAQ",
+            "login": "Matterfull"
+          },
+          "fullDatabaseId": "3075029968",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 204218625,
+            "id": "U_kgDODCwhAQ",
+            "login": "Matterfull"
+          },
+          "fullDatabaseId": "3075030377",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 204218625,
+            "id": "U_kgDODCwhAQ",
+            "login": "Matterfull"
+          },
+          "fullDatabaseId": "3075030710",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 204218625,
+            "id": "U_kgDODCwhAQ",
+            "login": "Matterfull"
+          },
+          "fullDatabaseId": "3075031343",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 204218625,
+            "id": "U_kgDODCwhAQ",
+            "login": "Matterfull"
+          },
+          "fullDatabaseId": "3075036707",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 204218625,
+            "id": "U_kgDODCwhAQ",
+            "login": "Matterfull"
+          },
+          "fullDatabaseId": "3075039708",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 204218625,
+            "id": "U_kgDODCwhAQ",
+            "login": "Matterfull"
+          },
+          "fullDatabaseId": "3075040508",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 204218625,
+            "id": "U_kgDODCwhAQ",
+            "login": "Matterfull"
+          },
+          "fullDatabaseId": "3075294935",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 204218625,
+            "id": "U_kgDODCwhAQ",
+            "login": "Matterfull"
+          },
+          "fullDatabaseId": "3075296743",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 204218625,
+            "id": "U_kgDODCwhAQ",
+            "login": "Matterfull"
+          },
+          "fullDatabaseId": "3075297927",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 41922797,
+            "id": "MDQ6VXNlcjQxOTIyNzk3",
+            "login": "scr-oath"
+          },
+          "fullDatabaseId": "3197099710",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 41922797,
+            "id": "MDQ6VXNlcjQxOTIyNzk3",
+            "login": "scr-oath"
+          },
+          "fullDatabaseId": "3197107065",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 31041505,
+            "id": "MDQ6VXNlcjMxMDQxNTA1",
+            "login": "hhhjort"
+          },
+          "fullDatabaseId": "3203037640",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 31041505,
+            "id": "MDQ6VXNlcjMxMDQxNTA1",
+            "login": "hhhjort"
+          },
+          "fullDatabaseId": "3203063040",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 31041505,
+            "id": "MDQ6VXNlcjMxMDQxNTA1",
+            "login": "hhhjort"
+          },
+          "fullDatabaseId": "3254935347",
+          "state": "DISMISSED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 41922797,
+            "id": "MDQ6VXNlcjQxOTIyNzk3",
+            "login": "scr-oath"
+          },
+          "fullDatabaseId": "3254964038",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 41922797,
+            "id": "MDQ6VXNlcjQxOTIyNzk3",
+            "login": "scr-oath"
+          },
+          "fullDatabaseId": "3255022666",
+          "state": "CHANGES_REQUESTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 41922797,
+            "id": "MDQ6VXNlcjQxOTIyNzk3",
+            "login": "scr-oath"
+          },
+          "fullDatabaseId": "3384446474",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 41922797,
+            "id": "MDQ6VXNlcjQxOTIyNzk3",
+            "login": "scr-oath"
+          },
+          "fullDatabaseId": "3384447465",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 41922797,
+            "id": "MDQ6VXNlcjQxOTIyNzk3",
+            "login": "scr-oath"
+          },
+          "fullDatabaseId": "3384448594",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 41922797,
+            "id": "MDQ6VXNlcjQxOTIyNzk3",
+            "login": "scr-oath"
+          },
+          "fullDatabaseId": "3384449206",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 41922797,
+            "id": "MDQ6VXNlcjQxOTIyNzk3",
+            "login": "scr-oath"
+          },
+          "fullDatabaseId": "3384449935",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 41922797,
+            "id": "MDQ6VXNlcjQxOTIyNzk3",
+            "login": "scr-oath"
+          },
+          "fullDatabaseId": "3384451405",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 41922797,
+            "id": "MDQ6VXNlcjQxOTIyNzk3",
+            "login": "scr-oath"
+          },
+          "fullDatabaseId": "3781832352",
+          "state": "CHANGES_REQUESTED"
+        },
+        {
+          "author": {
+            "__typename": "Bot",
+            "databaseId": 41898282,
+            "id": "MDM6Qm90NDE4OTgyODI=",
+            "login": "github-actions"
+          },
+          "fullDatabaseId": "3854401424",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 41922797,
+            "id": "MDQ6VXNlcjQxOTIyNzk3",
+            "login": "scr-oath"
+          },
+          "fullDatabaseId": "3961831808",
+          "state": "DISMISSED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 41922797,
+            "id": "MDQ6VXNlcjQxOTIyNzk3",
+            "login": "scr-oath"
+          },
+          "fullDatabaseId": "4190125344",
+          "state": "CHANGES_REQUESTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 217833752,
+            "id": "U_kgDODPvhGA",
+            "login": "postindustria-code"
+          },
+          "fullDatabaseId": "4733894104",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 217833752,
+            "id": "U_kgDODPvhGA",
+            "login": "postindustria-code"
+          },
+          "fullDatabaseId": "4742595804",
+          "state": "DISMISSED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 41922797,
+            "id": "MDQ6VXNlcjQxOTIyNzk3",
+            "login": "scr-oath"
+          },
+          "fullDatabaseId": "4746581071",
+          "state": "DISMISSED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 217833752,
+            "id": "U_kgDODPvhGA",
+            "login": "postindustria-code"
+          },
+          "fullDatabaseId": "4761967163",
+          "state": "DISMISSED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 167743744,
+            "id": "U_kgDOCf-RAA",
+            "login": "przemkaczmarek"
+          },
+          "fullDatabaseId": "4855906868",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 167743744,
+            "id": "U_kgDOCf-RAA",
+            "login": "przemkaczmarek"
+          },
+          "fullDatabaseId": "4856482088",
+          "state": "DISMISSED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 15028965,
+            "id": "MDQ6VXNlcjE1MDI4OTY1",
+            "login": "linux019"
+          },
+          "fullDatabaseId": "4888788844",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 5030553,
+            "id": "MDQ6VXNlcjUwMzA1NTM=",
+            "login": "foxart"
+          },
+          "fullDatabaseId": "4894541466",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 167743744,
+            "id": "U_kgDOCf-RAA",
+            "login": "przemkaczmarek"
+          },
+          "fullDatabaseId": "4896684401",
+          "state": "DISMISSED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 217833752,
+            "id": "U_kgDODPvhGA",
+            "login": "postindustria-code"
+          },
+          "fullDatabaseId": "4906043033",
+          "state": "DISMISSED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 15028965,
+            "id": "MDQ6VXNlcjE1MDI4OTY1",
+            "login": "linux019"
+          },
+          "fullDatabaseId": "4934889367",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 5030553,
+            "id": "MDQ6VXNlcjUwMzA1NTM=",
+            "login": "foxart"
+          },
+          "fullDatabaseId": "4935728953",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 217833752,
+            "id": "U_kgDODPvhGA",
+            "login": "postindustria-code"
+          },
+          "fullDatabaseId": "4936104162",
+          "state": "APPROVED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 167743744,
+            "id": "U_kgDOCf-RAA",
+            "login": "przemkaczmarek"
+          },
+          "fullDatabaseId": "4968536708",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 167743744,
+            "id": "U_kgDOCf-RAA",
+            "login": "przemkaczmarek"
+          },
+          "fullDatabaseId": "4968537445",
+          "state": "COMMENTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 167743744,
+            "id": "U_kgDOCf-RAA",
+            "login": "przemkaczmarek"
+          },
+          "fullDatabaseId": "4968537760",
+          "state": "APPROVED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 15028965,
+            "id": "MDQ6VXNlcjE1MDI4OTY1",
+            "login": "linux019"
+          },
+          "fullDatabaseId": "4983697901",
+          "state": "APPROVED"
+        }
+      ],
+      "pageInfo": {
+        "endCursor": "Y3Vyc29yOnYyOpO0MjAyNi0wOC0yMFQxNDoxNjo0NFq0MjAyNi0wOC0yMFQxNDoxNjo0NFrPAAAAASkNMe0=",
+        "hasNextPage": false
+      },
+      "totalCount": 67
+    },
+    "state": "MERGED",
+    "title": "New Adapter: Matterfull RTB",
+    "updatedAt": "2026-10-02T14:07:24Z"
+  },
+  "document_sha256": "39fd2b5d7744d57be4fd58ba38b2fcf50319c5bd19e1c3796ae4771203af3ea0",
+  "errors": [],
+  "extra": {},
+  "headers": {
+    "date": "Sat, 17 Oct 2026 12:09:31 GMT",
+    "x-ratelimit-limit": "5000",
+    "x-ratelimit-remaining": "4984",
+    "x-ratelimit-reset": "1792242556",
+    "x-ratelimit-resource": "graphql",
+    "x-ratelimit-used": "16"
+  },
+  "key": {
+    "name": "prebid-server",
+    "number": 4343,
+    "owner": "prebid"
+  },
+  "kind": "pull_request",
+  "recorded_at": "2026-10-17T12:09:19Z",
+  "source": "live"
+}

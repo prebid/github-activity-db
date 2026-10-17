@@ -1,0 +1,121 @@
+{
+  "data": {
+    "databaseId": 1025117899,
+    "defaultBranchRef": {
+      "name": "main"
+    },
+    "id": "R_kgDOPRoOyw",
+    "isArchived": false,
+    "isPrivate": false,
+    "labels": {
+      "nodes": [
+        {
+          "name": "bug"
+        },
+        {
+          "name": "documentation"
+        },
+        {
+          "name": "duplicate"
+        },
+        {
+          "name": "enhancement"
+        },
+        {
+          "name": "good first issue"
+        },
+        {
+          "name": "help wanted"
+        },
+        {
+          "name": "invalid"
+        },
+        {
+          "name": "question"
+        },
+        {
+          "name": "wontfix"
+        },
+        {
+          "name": "autorelease: pending"
+        },
+        {
+          "name": "adcp-2.5"
+        },
+        {
+          "name": "autorelease: tagged"
+        },
+        {
+          "name": "codex"
+        },
+        {
+          "name": "Ready for Dev"
+        },
+        {
+          "name": "adcp-v3"
+        },
+        {
+          "name": "dev topic"
+        },
+        {
+          "name": "refactor"
+        },
+        {
+          "name": "2.0 Release"
+        },
+        {
+          "name": "Post 2.0"
+        },
+        {
+          "name": "needs contributor"
+        },
+        {
+          "name": "ready for rereview"
+        },
+        {
+          "name": "on hold"
+        },
+        {
+          "name": "dependencies"
+        },
+        {
+          "name": "python:uv"
+        },
+        {
+          "name": "test"
+        },
+        {
+          "name": "javascript"
+        }
+      ],
+      "pageInfo": {
+        "endCursor": "MjY",
+        "hasNextPage": false
+      },
+      "totalCount": 26
+    },
+    "name": "salesagent",
+    "nameWithOwner": "prebid/salesagent",
+    "owner": {
+      "login": "prebid"
+    }
+  },
+  "document_sha256": "035aef891393ccd81c36161af0b0d2e10034e582cac4bae68e62c9e5b035790e",
+  "errors": [],
+  "extra": {},
+  "headers": {
+    "date": "Sat, 17 Oct 2026 12:09:28 GMT",
+    "x-ratelimit-limit": "5000",
+    "x-ratelimit-remaining": "4928",
+    "x-ratelimit-reset": "1792241340",
+    "x-ratelimit-resource": "graphql",
+    "x-ratelimit-used": "72"
+  },
+  "key": {
+    "name": "salesagent",
+    "owner": "prebid"
+  },
+  "kind": "resolve",
+  "recorded_at": "2026-10-17T12:09:19Z",
+  "source": "live"
+}

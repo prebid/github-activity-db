@@ -24,6 +24,7 @@ uv run ghactivity sync all --since 2024-10-01     # Multi-repo sync
 # Checks (CI runs the same: .github/workflows/check.yml)
 uv run pre-commit run --all-files  # ruff, mypy, file checks, quality gates
 uv run pytest                      # CI also runs Python 3.12, `alembic check`, and a built wheel
+# On pull requests, CI also runs scripts/check_query_lock.py (hydration-version lock, docs/testing.md)
 ```
 
 ## Documentation
@@ -48,6 +49,8 @@ uv run pytest                      # CI also runs Python 3.12, `alembic check`, 
 - Single and bulk PR ingestion pipelines with 2-week grace period for merged PRs
 - Multi-repository sync orchestration for all tracked repositories
 - CLI commands: `ghactivity sync pr`, `ghactivity sync repo`, and `ghactivity sync all`
+- GitHub source layer (`src/github_activity_db/source/`, redesign plan Step 2): resolve, PR index,
+  and batch hydration over GraphQL with typed records; not yet used by the CLI (Step 3)
 
 **Not implemented despite existing code paths:** `classify_tags` and `ai_summary` have no
 producer, the `tags` and `search` commands are stubs, and bulk sync commits only after a
@@ -73,6 +76,20 @@ and release publication (Step 6).
 | Package Manager | uv |
 
 ## Key Modules
+
+### GitHub Source Layer (`source/`)
+The redesign's GitHub reader. Step 3 removes `github/`; from then on only this package imports
+githubkit, and a test enforces it.
+- `GitHubSource`: `async with` entry point for `resolve`, `index_pull_requests`,
+  `hydrate_pull_requests`, and `lookup_users`
+- `Transport`: the one place requests are sent: one in flight, budget per pool, failure classes
+  (rate limited, timeout, server error, 401, 403), waits and retries; injectable `Clock`
+- `PullRequestHydrator`: batches of 25, `node(id:)` overflow, REST compare above 250 commits,
+  split on failure, one solo retry per failed item (none when its own request already failed
+  alone); returns `Hydrated`, `Gone`, or `Failed` per distinct number
+- `records.py` (public) and `models.py` (private, strict types); `errors.py` splits fatal,
+  repository, and item errors
+- Recorded fixtures: `scripts/record_fixtures.py` (see docs/testing.md)
 
 ### GitHub Client (`github/client.py`)
 Async GitHub API client with integrated pacing and rate limit tracking. Every API method automatically applies pacing delays before requests and feeds response headers back to the pacer for adaptive throttling. Provides both eager (`list_pull_requests`) and lazy (`iter_pull_requests`) iteration for efficient pagination.

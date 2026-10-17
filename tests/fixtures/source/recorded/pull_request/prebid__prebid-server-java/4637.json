@@ -1,0 +1,273 @@
+{
+  "data": {
+    "additions": 1222,
+    "author": {
+      "__typename": "User",
+      "databaseId": 125548596,
+      "id": "U_kgDOB3u4NA",
+      "login": "osulzhenko"
+    },
+    "authorAssociation": "MEMBER",
+    "baseRefName": "master",
+    "baseRefOid": "3e2224948cd78da676b53b91b68684a1217a8588",
+    "body": "### 🔧 Type of changes\r\n- [x] new bid adapter\r\n- [ ] bid adapter update\r\n- [ ] new feature\r\n- [ ] new analytics adapter\r\n- [ ] new module\r\n- [ ] module update\r\n- [ ] bugfix\r\n- [ ] documentation\r\n- [ ] configuration\r\n- [ ] dependency update\r\n- [ ] tech debt (test coverage, refactorings, etc.)\r\n\r\n### ✨ What's the context?\r\nWhat's the context for the changes?\r\n\r\n### 🧠 Rationale behind the change\r\nWhy did you choose to make these changes? Were there any trade-offs you had to consider?\r\n\r\n### 🔎 New Bid Adapter Checklist\r\n- [ ] verify email contact works\r\n- [ ] NO fully dynamic hostnames\r\n- [ ] geographic host parameters are NOT required\r\n- [ ] direct use of HTTP is prohibited - *implement an existing Bidder interface that will do all the job*\r\n- [ ] if the ORTB is just forwarded to the endpoint, use the generic adapter - *define the new adapter as the alias of the generic adapter*\r\n- [ ] cover an adapter configuration with an integration test\r\n\r\n### 🧪 Test plan\r\nHow do you know the changes are safe to ship to production?\r\n\r\n### 🏎 Quality check\r\n- [ ] Are your changes following [our code style guidelines](https://github.com/prebid/prebid-server-java/blob/master/docs/developers/code-style.md)?\r\n- [ ] Are there any breaking changes in your code?\r\n- [ ] Does your test coverage exceed 90%?\r\n- [ ] Are there any erroneous console logs, debuggers or leftover code in your changes?\r\n",
+    "changedFiles": 12,
+    "closingIssuesReferences": {
+      "nodes": [
+        {
+          "number": 4585,
+          "repository": {
+            "databaseId": 124555222,
+            "nameWithOwner": "prebid/prebid-server-java"
+          }
+        }
+      ],
+      "pageInfo": {
+        "endCursor": "MQ",
+        "hasNextPage": false
+      },
+      "totalCount": 1
+    },
+    "comments": {
+      "nodes": [],
+      "pageInfo": {
+        "endCursor": null,
+        "hasNextPage": false
+      },
+      "totalCount": 0
+    },
+    "commits": {
+      "nodes": [
+        {
+          "commit": {
+            "author": {
+              "email": "osulzhenko@magnite.com",
+              "name": "osulzhenko",
+              "user": {
+                "databaseId": 125548596,
+                "id": "U_kgDOB3u4NA",
+                "login": "osulzhenko"
+              }
+            },
+            "authoredDate": "2026-09-21T17:52:19Z",
+            "oid": "2993845a760f92b3cb5849c1e549861fdfc09fc9"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "osulzhenko@magnite.com",
+              "name": "osulzhenko",
+              "user": {
+                "databaseId": 125548596,
+                "id": "U_kgDOB3u4NA",
+                "login": "osulzhenko"
+              }
+            },
+            "authoredDate": "2026-09-22T13:11:37Z",
+            "oid": "47f71a81e6ee4d4d99e51755f50e56f90bef557d"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "dubyk.dv@gmail.com",
+              "name": "Danylo",
+              "user": {
+                "databaseId": 45672370,
+                "id": "MDQ6VXNlcjQ1NjcyMzcw",
+                "login": "CTMBNara"
+              }
+            },
+            "authoredDate": "2026-09-23T15:36:55Z",
+            "oid": "e212ac5bd4bc64b56b8f2cad6249e13cc7e6de7f"
+          }
+        }
+      ],
+      "pageInfo": {
+        "endCursor": "Mw",
+        "hasNextPage": false
+      },
+      "totalCount": 3
+    },
+    "createdAt": "2026-09-21T18:03:36Z",
+    "deletions": 0,
+    "files": {
+      "nodes": [
+        {
+          "additions": 258,
+          "changeType": "ADDED",
+          "deletions": 0,
+          "path": "src/main/java/org/prebid/server/bidder/eskimi/EskimiBidder.java"
+        },
+        {
+          "additions": 28,
+          "changeType": "ADDED",
+          "deletions": 0,
+          "path": "src/main/java/org/prebid/server/proto/openrtb/ext/request/eskimi/ExtImpEskimi.java"
+        },
+        {
+          "additions": 35,
+          "changeType": "ADDED",
+          "deletions": 0,
+          "path": "src/main/java/org/prebid/server/spring/config/bidder/EskimiConfiguration.java"
+        },
+        {
+          "additions": 20,
+          "changeType": "ADDED",
+          "deletions": 0,
+          "path": "src/main/resources/bidder-config/eskimi.yaml"
+        },
+        {
+          "additions": 56,
+          "changeType": "ADDED",
+          "deletions": 0,
+          "path": "src/main/resources/static/bidder-params/eskimi.json"
+        },
+        {
+          "additions": 646,
+          "changeType": "ADDED",
+          "deletions": 0,
+          "path": "src/test/java/org/prebid/server/bidder/eskimi/EskimiBidderTest.java"
+        },
+        {
+          "additions": 33,
+          "changeType": "ADDED",
+          "deletions": 0,
+          "path": "src/test/java/org/prebid/server/it/EskimiTest.java"
+        },
+        {
+          "additions": 24,
+          "changeType": "ADDED",
+          "deletions": 0,
+          "path": "src/test/resources/org/prebid/server/it/openrtb2/eskimi/test-auction-eskimi-request.json"
+        },
+        {
+          "additions": 41,
+          "changeType": "ADDED",
+          "deletions": 0,
+          "path": "src/test/resources/org/prebid/server/it/openrtb2/eskimi/test-auction-eskimi-response.json"
+        },
+        {
+          "additions": 59,
+          "changeType": "ADDED",
+          "deletions": 0,
+          "path": "src/test/resources/org/prebid/server/it/openrtb2/eskimi/test-eskimi-bid-request.json"
+        },
+        {
+          "additions": 20,
+          "changeType": "ADDED",
+          "deletions": 0,
+          "path": "src/test/resources/org/prebid/server/it/openrtb2/eskimi/test-eskimi-bid-response.json"
+        },
+        {
+          "additions": 2,
+          "changeType": "MODIFIED",
+          "deletions": 0,
+          "path": "src/test/resources/org/prebid/server/it/test-application.properties"
+        }
+      ],
+      "pageInfo": {
+        "endCursor": "MTI",
+        "hasNextPage": false
+      },
+      "totalCount": 12
+    },
+    "fullDatabaseId": "4594602248",
+    "headRefOid": "e212ac5bd4bc64b56b8f2cad6249e13cc7e6de7f",
+    "id": "PR_kwDOB2yP1s8AAAABEdwRCA",
+    "isCrossRepository": false,
+    "isDraft": false,
+    "labels": {
+      "nodes": [
+        {
+          "name": "do not port"
+        }
+      ],
+      "pageInfo": {
+        "endCursor": "MQ",
+        "hasNextPage": false
+      },
+      "totalCount": 1
+    },
+    "mergedAt": "2026-09-23T15:52:00Z",
+    "mergedBy": {
+      "__typename": "User",
+      "databaseId": 28010702,
+      "id": "MDQ6VXNlcjI4MDEwNzAy",
+      "login": "And1sS"
+    },
+    "number": 4637,
+    "reviews": {
+      "nodes": [
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 33136089,
+            "id": "MDQ6VXNlcjMzMTM2MDg5",
+            "login": "Lightwood13"
+          },
+          "fullDatabaseId": "5276426920",
+          "state": "CHANGES_REQUESTED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 33136089,
+            "id": "MDQ6VXNlcjMzMTM2MDg5",
+            "login": "Lightwood13"
+          },
+          "fullDatabaseId": "5289072517",
+          "state": "DISMISSED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 45672370,
+            "id": "MDQ6VXNlcjQ1NjcyMzcw",
+            "login": "CTMBNara"
+          },
+          "fullDatabaseId": "5293279824",
+          "state": "APPROVED"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 28010702,
+            "id": "MDQ6VXNlcjI4MDEwNzAy",
+            "login": "And1sS"
+          },
+          "fullDatabaseId": "5293338649",
+          "state": "APPROVED"
+        }
+      ],
+      "pageInfo": {
+        "endCursor": "Y3Vyc29yOnYyOpO0MjAyNi0wOS0yM1QxNTo1MTo0OFq0MjAyNi0wOS0yM1QxNTo1MTo0OFrPAAAAATuB8Bk=",
+        "hasNextPage": false
+      },
+      "totalCount": 4
+    },
+    "state": "MERGED",
+    "title": "Port Eskimi: New Adapter",
+    "updatedAt": "2026-09-23T15:52:02Z"
+  },
+  "document_sha256": "39fd2b5d7744d57be4fd58ba38b2fcf50319c5bd19e1c3796ae4771203af3ea0",
+  "errors": [],
+  "extra": {},
+  "headers": {
+    "date": "Sat, 17 Oct 2026 12:09:27 GMT",
+    "x-ratelimit-limit": "5000",
+    "x-ratelimit-remaining": "4990",
+    "x-ratelimit-reset": "1792242556",
+    "x-ratelimit-resource": "graphql",
+    "x-ratelimit-used": "10"
+  },
+  "key": {
+    "name": "prebid-server-java",
+    "number": 4637,
+    "owner": "prebid"
+  },
+  "kind": "pull_request",
+  "recorded_at": "2026-10-17T12:09:19Z",
+  "source": "live"
+}

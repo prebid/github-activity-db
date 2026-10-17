@@ -1,0 +1,15 @@
+{
+  "body": {
+    "data": null,
+    "errors": [
+      {
+        "message": "We couldn't respond to your request in time. Sorry about that. Please try resubmitting your request and contact us if the problem persists."
+      }
+    ]
+  },
+  "headers": {
+    "date": "Sat, 17 Oct 2026 12:00:00 GMT"
+  },
+  "source": "Constructed: the documented timeout message (GitHub GraphQL docs, 'Rate limits and query limits for the GraphQL API') at HTTP 200, a status the docs do not name for it, so the message alone must classify it",
+  "status": 200
+}

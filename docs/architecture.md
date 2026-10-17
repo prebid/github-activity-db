@@ -59,6 +59,16 @@ github-activity-db/
 │   │       ├── bulk_ingestion.py # BulkPRIngestionService (multi-PR)
 │   │       ├── results.py      # PRIngestionResult
 │   │       └── enums.py        # SyncStrategy, OutputFormat
+│   ├── source/                 # GitHub source layer (redesign plan Step 2; CLI uses it from Step 3)
+│   │   ├── client.py           # GitHubSource: resolve, index, hydrate, user lookup
+│   │   ├── transport.py        # Sends every request: failure classes, waits, retries
+│   │   ├── budget.py           # Rate-limit budget per pool
+│   │   ├── documents.py        # GraphQL documents and the hydration version
+│   │   ├── models.py           # Typed response models (private, strict types)
+│   │   ├── records.py          # Records handed to the sync engine
+│   │   ├── resolve.py, index.py, hydrate.py, users.py  # The operations
+│   │   ├── errors.py           # Fatal, repository, and item errors
+│   │   └── limits.py, clock.py, convert.py
 │   ├── schemas/                # Pydantic validation models
 │   │   ├── __init__.py         # Re-exports all schemas
 │   │   ├── base.py             # SchemaBase with factory pattern
@@ -77,7 +87,9 @@ github-activity-db/
 │   ├── conftest.py             # Shared fixtures (db_session, sample data)
 │   ├── factories.py            # Factory functions for test data
 │   ├── fixtures/               # Mock data
-│   │   └── github_responses.py # GitHub API mock responses
+│   │   ├── github_responses.py # GitHub API mock responses
+│   │   └── source/             # Recorded and synthetic GitHub responses for tests/source
+│   ├── source/                 # Source-layer tests, replay transport, recorder
 │   ├── test_config.py          # Settings tests
 │   ├── test_db_engine.py       # Engine & session tests
 │   ├── test_db_models.py       # ORM model tests
@@ -215,6 +227,7 @@ config.py ←── db/engine.py ←── db/models.py
 | `github/rate_limit/` | ✅ Complete | Monitor, schemas, state machine |
 | `github/pacing/` | ✅ Complete | Pacer, scheduler, batch, progress |
 | `github/sync/` | ✅ Complete | PRIngestionService, BulkPRIngestionService, CommitManager, results, enums |
+| `source/` | ✅ Complete | GraphQL source layer of the redesign; not used by the CLI until Step 3 |
 | `tests/` | ✅ Complete | 533+ tests, factory pattern |
 | `search/query.py` | 🔲 TODO | Search builder |
 

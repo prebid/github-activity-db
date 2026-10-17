@@ -1,0 +1,15 @@
+{
+  "body": {
+    "data": null,
+    "errors": [
+      {
+        "message": "Something went wrong while executing your query. Please include `0000:0000:0000000:0000000:00000000` when reporting this issue."
+      }
+    ]
+  },
+  "headers": {
+    "date": "Sat, 17 Oct 2026 12:00:00 GMT"
+  },
+  "source": "Constructed: GitHub's undocumented generic GraphQL error, without the timeout sentence of graphql_generic_timeout.json",
+  "status": 200
+}

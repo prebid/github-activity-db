@@ -1,0 +1,16 @@
+{
+  "body": {
+    "data": null,
+    "errors": [
+      {
+        "message": "You have exceeded a secondary rate limit. Please wait a few minutes before you try again."
+      }
+    ]
+  },
+  "headers": {
+    "date": "Sat, 17 Oct 2026 12:00:00 GMT",
+    "x-ratelimit-remaining": "4000"
+  },
+  "source": "GitHub GraphQL docs: 'If you exceed a secondary rate limit, the response status will be 200 or 403, and you will receive an error message that indicates that you hit a secondary rate limit.' The error type is undocumented; none is given.",
+  "status": 200
+}
