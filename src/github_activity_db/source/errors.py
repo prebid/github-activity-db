@@ -12,8 +12,9 @@ By what the caller does next:
   raised, and the caller fails the items waiting on that account.
 - ``DeadlineReached``: the run stops issuing requests and drains (redesign plan 5.3 step 4).
 
-``RequestFailedError``: the transport raises it after its retries. The operations turn it into one
-of the above; a caller of ``GitHubSource.transport`` handles it itself.
+``RequestFailedError``: a request failed, after the transport's retries, or because GitHub reported
+an error outside every item of it (``UnattributedErrors``, raised by the hydrator without a retry).
+The operations turn it into one of the above; a caller of ``GitHubSource.transport`` handles it.
 """
 
 from __future__ import annotations
@@ -45,8 +46,8 @@ class FatalSourceError(SourceError):
 
 class Unauthorized(FatalSourceError):
     """The credentials do not work: GitHub answered 401, a credential request (an App
-    installation-token mint) failed without a rate-limit signal, or the auth strategy rejected
-    its credentials before any request."""
+    installation-token mint) answered 4xx without a rate-limit signal, or the auth strategy
+    rejected its credentials before any request."""
 
 
 class Forbidden(FatalSourceError):
@@ -62,8 +63,9 @@ class UnexpectedResponse(FatalSourceError):
 
 
 class ClientFailure(FatalSourceError):
-    """The HTTP client failed for a reason other than the network or GitHub's answer: a missing
-    dependency of an auth strategy, or a defect. Retrying cannot help."""
+    """The HTTP client failed in a way a retry is not expected to clear: a redirect loop, a proxy
+    or URL problem, a request this side built wrong, or a missing dependency of an auth
+    strategy."""
 
 
 class RateLimitWaitTooLong(FatalSourceError):
@@ -79,7 +81,7 @@ class RateLimitWaitTooLong(FatalSourceError):
 # Request failures the transport hands to its caller after its own retries
 # --------------------------------------------------------------------------------------------
 class RequestFailedError(SourceError):
-    """A request failed after the transport's retries; the caller splits or gives up."""
+    """A request failed (see the module docstring); the caller splits or gives up."""
 
 
 class ServerError(RequestFailedError):
@@ -263,10 +265,14 @@ class PagingStalled(InvariantError):
     """A page reported a next page without progress (no new cursor, or no entries); following it
     could never end."""
 
-    def __init__(self, number: int, connection: str, cursor: str | None) -> None:
-        super().__init__(number, f"{connection}: next page without a new cursor ({cursor!r})")
+    def __init__(self, number: int, connection: str, cursor: str | None, entries: int) -> None:
+        super().__init__(
+            number,
+            f"{connection}: next page without progress ({entries} entries, cursor {cursor!r})",
+        )
         self.connection = connection
         self.cursor = cursor
+        self.entries = entries
 
 
 class DuplicateEntry(InvariantError):

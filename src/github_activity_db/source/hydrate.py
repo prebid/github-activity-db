@@ -178,7 +178,9 @@ class PullRequestHydrator:
             outcomes: list[PullRequestOutcome] = []
             for number in batch:
                 outcome = first[number]
-                if isinstance(outcome, ItemRequestFailed):
+                if isinstance(outcome, ItemRequestFailed) and not isinstance(
+                    outcome.cause, UnattributedErrors
+                ):
                     outcome = Failed(number, outcome)
                 elif isinstance(outcome, ItemError):
                     retried = (await self._group([number]))[number]
@@ -507,7 +509,7 @@ def _first_collected[NodeT](number: int, name: str, page: Page[NodeT] | None) ->
         raise NullEntry(number, name)
     cursor = page.page_info.end_cursor
     if page.page_info.has_next_page and (cursor is None or not page.nodes):
-        raise PagingStalled(number, name, cursor)
+        raise PagingStalled(number, name, cursor, len(page.nodes))
     return _Collected(
         total=page.total_count,
         nodes=[node for node in page.nodes if node is not None],
@@ -555,7 +557,7 @@ def _apply_continuation(
     if page.page_info.has_next_page:
         cursor = page.page_info.end_cursor
         if cursor is None or cursor == collected.cursor or not page.nodes:
-            return PagingStalled(number, connection.field, cursor)
+            return PagingStalled(number, connection.field, cursor, len(page.nodes))
         collected.cursor = cursor
     else:
         collected.cursor = None

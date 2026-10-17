@@ -359,7 +359,7 @@ less than 10 minutes in the past, inserts its own row, and replaces `automation_
    |-------|-------------|--------|
    | Rate limited | Any HTTP 429 (GraphQL or REST); HTTP 403 with `retry-after`, `x-ratelimit-remaining: 0`, a secondary-limit message, or `errors[].type == "RATE_LIMITED"`; GraphQL HTTP 200 with `RATE_LIMITED` or an error message naming a secondary rate limit (GitHub documents 200 and 403 for GraphQL, 403 and 429 for REST) | Wait for `retry-after`; else, when `x-ratelimit-remaining` is 0 or the error is `RATE_LIMITED`, until `x-ratelimit-reset` or the last `resetAt`; else 60 s. Each further limit before a success waits at least 60 s doubled per repeat, whatever the headers say (GitHub: "If your request continues to fail due to a secondary rate limit, wait for an exponentially increasing amount of time between retries, and throw an error after a specific number of retries"). Never split; not an attempt. A wait that would end after the `--max-minutes` deadline stops queueing instead |
    | Timeout or resource limit | HTTP 502/504 (GitHub documents both for a request over 10 s); a GraphQL error at any path reporting a timeout or exceeded resource limits (GitHub returns "partial results along with an error indicating that resource limits were exceeded") | Split the batch in half at once; a same-size retry repeats the cost |
-   | Server or transport error | other 5xx; a GraphQL server fault at any path; connection error; client timeout; a response without data or errors, or without a readable `Date` | Retry up to 3 more times (2, 4, 8 s, with jitter), then split |
+   | Server or transport error | other 5xx; a GraphQL server fault at any path; connection error; client timeout; a connection the server broke off or a body it encoded wrongly; a response without data or errors, or without a readable `Date` | Retry up to 3 more times (2, 4, 8 s, with jitter), then split |
    | Item gone | alias `null` with `NOT_FOUND` | No write and no failure; the next index removes it |
    | Item error | another alias error; partial alias data; a value the typed models reject; a failed check in step 5; HTTP 404/422 on a compare page | Retry the item once alone, then record it in `sync_failures` and write nothing for it |
    | Not understood | a GraphQL error without a path, or no data, that matches none of the classes above (a rejected document, an unrecognized limit message); a missing or malformed `rateLimit`; another status (400, a GraphQL 404 or 422) | Fatal: drain the writer, close the run, exit 1 |
@@ -399,7 +399,8 @@ less than 10 minutes in the past, inserts its own row, and replaces `automation_
    the request (the batch names the resolved repository); `state` is `MERGED` exactly when
    `mergedAt` is set; the entries the database keys (labels, closing issues, reviews, comments,
    commits) are distinct; every page with a next page has entries and a new cursor; and an error
-   outside every item fails the request, which then splits. A PR that closed without merge, or an item that left coverage,
+   outside every item fails the request, which then splits, and an item it fails alone gets its
+   solo retry, since no retry of the transport preceded it. A PR that closed without merge, or an item that left coverage,
    between index and hydration is skipped without a failure; the next index removes it.
 6. Write: one writer task with its own session. Each item is one transaction: upsert by `github_id`
    with `INSERT ... ON CONFLICT (github_id) DO UPDATE`, which keeps the row id (never

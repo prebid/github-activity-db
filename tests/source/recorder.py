@@ -78,8 +78,9 @@ class RecordingFailed(Exception):
 class RecordingTransport(httpx.AsyncBaseTransport):
     """Passes requests to GitHub and splits each response that carries data into units.
 
-    A 200 without data (a GraphQL error page, a body that is not JSON) is passed on unrecorded:
-    the source layer classifies it and retries, and the retry's answer is recorded.
+    A 200 without data (a GraphQL error page, a body that is not JSON) is passed on unrecorded,
+    and the source layer classifies it: when it retries or waits, the next answer is recorded;
+    when it fails the request or the run, the recording stops as a live run would.
     """
 
     def __init__(self, inner: httpx.AsyncBaseTransport, recorded_at: str) -> None:

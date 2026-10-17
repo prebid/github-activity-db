@@ -712,7 +712,7 @@ class TestInvariants:
         replay.add(unit)
         error = await failure(open_source, PREBID_JS, 13481)
         assert isinstance(error, PagingStalled)
-        assert error.connection == "files"
+        assert (error.connection, error.entries) == ("files", 0)
 
     async def test_a_continuation_with_a_next_page_but_no_entries(
         self, open_source, replay: Replay
@@ -726,12 +726,14 @@ class TestInvariants:
         replay.modify(empty, when=is_overflow, times=2)
         error = await failure(open_source, PREBID_JS, 11155)
         assert isinstance(error, PagingStalled)
-        assert error.cursor == "fresh"
+        assert (error.cursor, error.entries) == ("fresh", 0)
+        assert "0 entries, cursor 'fresh'" in str(error)
 
     async def test_an_error_outside_every_alias_fails_the_items(
         self, open_source, replay: Replay
     ) -> None:
-        # Nothing ties it to one item, so the request fails: split to single items, which fail.
+        # Nothing ties it to one item, so the request fails: split to single items, each of which
+        # fails, gets its solo retry (no transport retry preceded it), and fails again.
         def stray(body: dict[str, Any]) -> None:
             body["errors"] = [{"type": "INTERNAL", "path": ["repository"], "message": "partial"}]
 
@@ -741,7 +743,19 @@ class TestInvariants:
             assert isinstance(outcome, Failed)
             assert isinstance(outcome.error, ItemRequestFailed)
             assert isinstance(outcome.error.cause, UnattributedErrors)
-        assert batches(replay) == [[13481, 15724], [13481], [15724]]
+        assert batches(replay) == [[13481, 15724], [13481], [15724], [13481], [15724]]
+
+    async def test_a_one_off_error_outside_a_lone_continuation_is_retried(
+        self, open_source, replay: Replay
+    ) -> None:
+        # 11155's continuation is a one-alias request; the solo retry reads it again.
+        def stray(body: dict[str, Any]) -> None:
+            body["errors"] = [{"type": "INTERNAL", "path": ["elsewhere"], "message": "partial"}]
+
+        replay.modify(stray, when=is_overflow)
+        outcomes = await hydrate(open_source, PREBID_JS, [11155])
+        assert isinstance(outcomes[0], Hydrated)
+        assert batches(replay) == [[11155], [11155]]
 
     async def test_an_error_outside_every_continuation_fails_the_item(
         self, open_source, replay: Replay

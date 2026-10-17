@@ -41,14 +41,21 @@ async def _lookup(transport: Transport, batch: list[str]) -> UserLookup:
     nodes = result.data.get("nodes")
     if not isinstance(nodes, list) or len(nodes) != len(batch):
         return _all_failed(batch, LookupShapeError(f"{len(batch)} ids, nodes {nodes!r:.200}"))
-    stray = [error for error in result.errors if error.path[:1] != ("nodes",)]
+    stray = [
+        error
+        for error in result.errors
+        if len(error.path) < 2
+        or error.path[0] != "nodes"
+        or error.path[1] not in range(len(batch))
+        or isinstance(error.path[1], bool)
+    ]
     if stray:
         # An error outside every node cannot be pinned on one id.
         return _all_failed(batch, LookupShapeError(f"errors outside the nodes: {stray[0]}"))
     accounts: dict[str, Account | None] = {}
     failed: dict[str, UserLookupFailed] = {}
     for index, (node_id, raw) in enumerate(zip(batch, nodes, strict=True)):
-        account = _account(node_id, raw, result.errors_under("nodes", index))
+        account = _account(node_id, index, raw, result.errors_under("nodes", index))
         if isinstance(account, UserLookupFailed):
             failed[node_id] = account
         else:
@@ -57,15 +64,19 @@ async def _lookup(transport: Transport, batch: list[str]) -> UserLookup:
 
 
 def _account(
-    node_id: str, raw: Any, errors: tuple[GraphQLError, ...]
+    node_id: str, index: int, raw: Any, errors: tuple[GraphQLError, ...]
 ) -> Account | None | UserLookupFailed:
     if raw is None:
-        # None means deleted (D28) only when GitHub says NOT_FOUND; an unexplained null fails.
-        if not errors:
-            return _failed(node_id, "null node without an error")
-        if any(error.type != "NOT_FOUND" for error in errors):
-            return _failed(node_id, f"{errors[0].type}: {errors[0].message}")
-        return None
+        # None means deleted (D28) only when NOT_FOUND names this node itself, as for a pull
+        # request alias; an unexplained null, or one nulled from deeper down, fails the id.
+        if errors and all(
+            error.type == "NOT_FOUND" and error.path == ("nodes", index) for error in errors
+        ):
+            return None
+        first = errors[0] if errors else None
+        return _failed(
+            node_id, f"{first.type}: {first.message}" if first else "null node without an error"
+        )
     if errors:
         return _failed(node_id, f"partial data with {errors[0].type}: {errors[0].message}")
     try:

@@ -687,11 +687,30 @@ class TestUserLookup:
         assert list(failed) == [PATMMCCANN]
         assert list(accounts) == [DEPENDABOT]
 
-    async def test_an_error_outside_every_node_fails_the_batch(
+    async def test_a_not_found_below_a_null_node_is_not_deleted(
         self, open_source, replay: Replay
     ) -> None:
+        # Deleted needs NOT_FOUND on the node itself, as Gone does for a pull request.
+        def deeper(body: dict[str, Any]) -> None:
+            body["data"]["nodes"][0] = None
+            body["errors"] = [{"type": "NOT_FOUND", "path": ["nodes", 0, "login"], "message": "x"}]
+
+        replay.modify(deeper, when=operation("UserLookup"))
+        async with open_source() as source:
+            accounts, failed = await all_lookups(source, [PATMMCCANN, DEPENDABOT])
+        assert list(failed) == [PATMMCCANN]
+        assert list(accounts) == [DEPENDABOT]
+
+    @pytest.mark.parametrize(
+        "path",
+        [["elsewhere"], ["nodes"], ["nodes", 7], ["nodes", "x"]],
+        ids=["outside-nodes", "the-list", "past-the-batch", "not-an-index"],
+    )
+    async def test_an_error_outside_every_node_fails_the_batch(
+        self, open_source, replay: Replay, path: list[Any]
+    ) -> None:
         def stray(body: dict[str, Any]) -> None:
-            body["errors"] = [{"type": "INTERNAL", "path": ["elsewhere"], "message": "x"}]
+            body["errors"] = [{"type": "INTERNAL", "path": path, "message": "x"}]
 
         replay.modify(stray, when=operation("UserLookup"))
         async with open_source() as source:

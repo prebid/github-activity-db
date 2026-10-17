@@ -19,6 +19,7 @@ from githubkit.exception import (
 )
 from githubkit.response import Response
 
+import github_activity_db.source as source_package
 from github_activity_db.source import GitHubSource, documents
 from github_activity_db.source.client import build_github
 from github_activity_db.source.clock import SystemClock
@@ -1405,3 +1406,13 @@ async def test_only_network_side_client_errors_are_retried(
             with pytest.raises(ClientFailure):
                 await source.resolve(**RESOLVE)
     assert clock.sleeps == ([SERVER_RETRY_DELAYS[0]] if retried else [])
+
+
+async def test_a_transport_failure_is_caught_by_the_packages_error(
+    open_source, replay: Replay
+) -> None:
+    # Callers of GitHubSource.transport catch it through the exported base class.
+    replay.fault(lambda request: synthetic("server_error"), times=None)
+    async with open_source() as source:
+        with pytest.raises(source_package.RequestFailedError):
+            await source.transport.graphql(documents.RESOLVE, RESOLVE, splittable=False)

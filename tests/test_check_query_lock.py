@@ -225,7 +225,10 @@ def lock_step_script() -> str:
             break
         body.append(line[indent:])
     script = "\n".join(body)
-    assert script.count("uv run --no-sync python") == 1, script
+    # The checker runs isolated from the pull request's environment.
+    invocation = 'uv run --no-sync python -I -S "$checker" --base "$base"'
+    assert script.count(invocation) == 1, script
+    assert script.count("uv run") == 1, script
     return script.replace("uv run --no-sync python", sys.executable)
 
 

@@ -87,7 +87,9 @@ class GitHubSource:
     def transport(self) -> Transport:
         """The low-level transport, for a document the operations below do not send.
 
-        Its calls raise ``RequestFailedError`` when a request still fails after its retries.
+        Its calls raise ``RequestFailedError`` when a request still fails after its retries. A
+        document must select ``rateLimit { cost remaining resetAt }`` and no other field of it:
+        the transport reads it for the budget, and any other selection there is malformed.
         """
         return self._transport
 
