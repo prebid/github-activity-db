@@ -4,9 +4,11 @@ Suppressions are read from comment tokens (tokenize) and decorators (ast), so di
 inside a string does not count. Both .py and .pyi files are scanned.
 
 - noqa: line-level `# noqa`, `#NOQA`, `# noqa: F401`; file-level `# ruff: noqa`,
-  `# ruff: noqa: F401`, `# flake8: noqa`, in any letter case; and the isort action comments
-  ruff honors, `# isort: skip_file`, `# isort: off`, `# isort: skip`, also with a `# ruff:`
-  prefix.
+  `# ruff: noqa: F401`, `# flake8: noqa`, in any letter case; range suppressions
+  `# ruff: disable[F401]`, `#ruff:disable[F401, E501]`, in any letter case (ruff 0.14.11 honors
+  them only in preview, and only in lowercase with codes; `# ruff: enable[...]` ends a range and
+  is not counted); and the isort action comments ruff honors, `# isort: skip_file`,
+  `# isort: off`, `# isort: skip`, also with a `# ruff:` prefix.
 - type: ignore: `# type: ignore`, `# type:ignore[code]`, `#type:ignore`; mypy inline
   configuration such as `# mypy: ignore-errors` or `# mypy: disable-error-code=...`; and the
   `@no_type_check` decorator, also as `@<module>.no_type_check` or under a name imported
@@ -34,6 +36,7 @@ from pathlib import Path
 
 NOQA = re.compile(
     r"#\s*(?:(?:ruff|flake8)\s*:\s*)?noqa\b"
+    r"|#\s*ruff\s*:\s*disable\b"
     r"|#\s*(?:ruff\s*:\s*)?isort\s*:\s*(?:skip_file|off|skip)\b",
     re.IGNORECASE,
 )

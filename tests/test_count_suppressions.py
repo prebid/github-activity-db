@@ -60,6 +60,14 @@ NOQA_SPELLINGS = [
     "import sys  # isort: skip\nimport os\n",
     "# ruff: isort: skip_file\nimport sys\nimport os\n",
     "# ruff: isort: off\nimport sys\nimport os\n",
+    # Range suppressions, which ruff 0.14 honors only in preview.
+    "# ruff: disable[F401]\nimport os\n",
+    "#ruff:disable[F401, E501]\nimport os\n",
+    "# ruff: disable [F401]\nimport os\n",
+    "def f() -> None:\n    # ruff: disable[F401]\n    import os\n",
+    "# ruff: disable[F401]\nimport os\n# ruff: enable[F401]\n",
+    # Not honored by ruff (uppercase), counted so that no honored spelling escapes.
+    "# RUFF: DISABLE[F401]\nimport os\n",
 ]
 TYPE_IGNORE_SPELLINGS = [
     'x: int = "a"  # type: ignore[assignment]\n',
@@ -83,6 +91,9 @@ NOT_SUPPRESSIONS = [
     '"""Docstring.\n\n# noqa\n# type: ignore\n"""\n',
     "# this module needs no noqa and no type checking exceptions\nimport os\n",
     "import os\n# isort: on\n",
+    'RANGE = "# ruff: disable[F401]"\nimport os\n',
+    "# ruff: enable[F401]\nimport os\n",
+    "# ruff: disabled checks are listed in pyproject.toml\nimport os\n",
     "def no_type_check() -> None:\n    pass\n\n\nno_type_check()\n",
 ]
 
