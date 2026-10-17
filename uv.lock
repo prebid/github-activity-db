@@ -221,6 +221,7 @@ dependencies = [
 
 [package.optional-dependencies]
 dev = [
+    { name = "identify" },
     { name = "mypy" },
     { name = "pre-commit" },
     { name = "pytest" },
@@ -235,6 +236,7 @@ requires-dist = [
     { name = "alembic", specifier = ">=1.14" },
     { name = "githubkit", specifier = ">=0.12" },
     { name = "greenlet", specifier = ">=3.3.0" },
+    { name = "identify", marker = "extra == 'dev'", specifier = ">=2.6" },
     { name = "loguru", specifier = ">=0.7" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.13" },
     { name = "pre-commit", marker = "extra == 'dev'", specifier = ">=4.0" },

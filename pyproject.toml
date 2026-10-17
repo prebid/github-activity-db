@@ -31,6 +31,8 @@ dev = [
     "mypy>=1.13",
     "ruff>=0.8",
     "pre-commit>=4.0",
+    # scripts/count_suppressions.py tags files as pre-commit does.
+    "identify>=2.6",
 ]
 
 [build-system]

@@ -165,8 +165,8 @@ This project enforces strict type safety through mypy strict mode and custom qua
 Pre-commit (run locally and by CI) fails on:
 - more than 5 `type: ignore` comments in src/ (`# mypy:` inline configuration and
   `@no_type_check` count too)
-- more than 3 `noqa` comments in src/ (file-level `# ruff: noqa` and `# flake8: noqa`, and
-  the isort skip comments, count too)
+- more than 3 `noqa` comments in src/ (file-level `# ruff: noqa` and `# flake8: noqa`,
+  `# ruff: disable[...]` range suppressions, and the isort skip comments count too)
 - a blanket `# noqa` without rule codes (ruff `PGH004`)
 - new module-level type aliases to `Any` (`SomeName = Any`, `type SomeName = Any`, unions and
   `Optional`/`Annotated` forms; `scripts/check_any_aliases.py`); use TYPE_CHECKING instead
@@ -174,6 +174,7 @@ Pre-commit (run locally and by CI) fails on:
 - `github_activity.db` in WAL mode (`scripts/check_db_journal.py`; redesign plan D20)
 
 `scripts/count_suppressions.py` counts comment tokens and decorators in `.py` and `.pyi` files,
-in the spellings its docstring lists; text inside strings is not counted.
+in the spellings its docstring lists; text inside strings is not counted. It refuses (exit 1) a
+file it may read differently from ruff, such as any file with a non-UTF-8 coding declaration.
 
 ruff and mypy run from `uv.lock` through `uv run --no-sync`, so local and CI versions match.
