@@ -7,6 +7,7 @@ with the newest migration's frozen SQL.
 
 from __future__ import annotations
 
+import ast
 import shutil
 import sqlite3
 from collections.abc import Callable
@@ -343,3 +344,43 @@ class TestCheckConstraints:
                 match="CHECK constraint failed: ck_pull_requests_merged_at_iff_merged",
             ):
                 write()
+
+
+ROOT = Path(__file__).resolve().parents[2]
+
+
+def create_all_uses(*roots: Path) -> list[str]:
+    """Every ``.create_all`` attribute, called or passed as ``run_sync(metadata.create_all)``."""
+    found = []
+    for root in roots:
+        for path in sorted(root.rglob("*.py")):
+            for node in ast.walk(ast.parse(path.read_bytes())):
+                if isinstance(node, ast.Attribute) and node.attr == "create_all":
+                    found.append(f"{path.relative_to(root.parent)}:{node.lineno}")
+    return found
+
+
+class TestBuiltByMigrations:
+    """Databases are built by ``alembic upgrade head``; ``create_all`` only builds the models'
+    side of the comparison above (plan Step 3)."""
+
+    def test_create_all_is_used_only_by_the_comparison(self) -> None:
+        uses = create_all_uses(ROOT / "src", ROOT / "tests", ROOT / "scripts", ROOT / "alembic")
+        assert [use.split(":")[0] for use in uses] == ["tests/db/test_schema.py"], uses
+
+    @pytest.mark.parametrize(
+        ("source", "flagged"),
+        [
+            ("Base.metadata.create_all(engine)\n", True),
+            ("conn.run_sync(Base.metadata.create_all)\n", True),
+            ("def f():\n    metadata.create_all(bind=engine)\n", True),
+            ('DECOY = "Base.metadata.create_all(engine)"\n', False),
+            ("# Base.metadata.create_all(engine)\n", False),
+            ("Base.metadata.drop_all(engine)\n", False),
+        ],
+    )
+    def test_flags_every_use_and_no_text(self, tmp_path: Path, source: str, flagged: bool) -> None:
+        package = tmp_path / "pkg"
+        package.mkdir()
+        (package / "module.py").write_text(source)
+        assert bool(create_all_uses(package)) is flagged

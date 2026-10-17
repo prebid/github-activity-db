@@ -1,5 +1,10 @@
 # PR Data Model
 
+> **History.** This document describes the first schema's pull-request fields, which
+> Step 3a of the [redesign plan](redesign-plan.md) replaced. It stays until Step 7
+> rewrites the documentation; the current schema is in the
+> [data dictionary](data-dictionary.md).
+
 ## Overview
 
 Each Pull Request stores 21 data fields plus metadata. Fields are categorized by their sync behavior and data source.

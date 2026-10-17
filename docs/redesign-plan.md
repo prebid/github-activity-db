@@ -29,7 +29,7 @@ regenerate them with `ghactivity verify` once Step 3 lands.
 |------|-------|--------|
 | 1 | Guardrails | done (PR #5) |
 | 2 | GitHub source layer | done (PR #7) |
-| 3 | New schema, PR sync engine, cutover (pull requests 3a and 3b) | not started |
+| 3 | New schema, PR sync engine, cutover (pull requests 3a and 3b) | in progress: 3a done, 3b not started |
 | 4 | Issues and closing-issue links | not started |
 | 5 | Full bootstrap and verification | not started |
 | 6 | Scheduled sync and publication | not started |
@@ -194,10 +194,13 @@ The migration engine's connect listener sets it on the DBAPI connection, before 
 opens (the pragma has no effect inside one), and raises unless `PRAGMA foreign_keys` then returns 0;
 it does both before it turns off the driver's own transaction handling, because putting the
 connection into autocommit (`isolation_level = None`) commits a transaction already open on it
-(section 7, "Isolation level").
+(section 7, "Isolation level"). It also refuses a connection already inside a transaction, and
+it is registered ahead of SQLAlchemy's own connect handling, whose first-connect rollback would
+otherwise hide an open transaction from both checks (section 7, "Connect listener order").
 Nothing executes on the SQLAlchemy connection before `context.configure()`: a statement there makes
 alembic treat the transaction as external and never commit (gap 70). An upgrade is one transaction:
-the listener turns off the driver's own transaction handling, a `begin` listener emits `BEGIN`, and
+the listener turns off the driver's own transaction handling, a `begin` listener emits `BEGIN
+IMMEDIATE`, and
 `context.configure()` gets `transactional_ddl=True`, so a failed revision leaves the file at the
 revision the upgrade started from, with no revision of that upgrade applied. `PRAGMA
 foreign_key_check` runs inside that transaction after the last revision and raises on any row,
@@ -212,13 +215,15 @@ and `a2b3c4d5e6f7` take the head convention's names, which is harmless only beca
 those tables). The convention does not change after Step 3's migration.
 `downgrade()` raises (5.4); offline `--sql` mode is refused, because these checks need a live
 connection. `alembic/env.py` refuses to migrate the repository-root
-`github_activity.db` while D26 freezes it (gap 73).
+`github_activity.db` while D26 freezes it (gap 73), by a relative, symlinked, or hard-linked path
+too; that check compares file paths, so it also refuses a URL with query parameters, a `file:`
+URI filename, and any database but SQLite.
 
 `Base.metadata` names indexes, CHECK constraints, and foreign keys by convention, and every CHECK has
 a name: batch recreate keeps named CHECKs and drops unnamed ones (gap 72). Migrations pass names
 through `op.f()`, which keeps the convention from prefixing a given name twice. Unique constraints
 stay out of the convention, which would otherwise report the kept `user_tags`' unnamed `UNIQUE` to
-`alembic check`. Columns are NOT NULL unless this section names them nullable, the source record's
+`alembic check`; new ones carry explicit `uq_<table>_<columns>` names. Columns are NOT NULL unless this section names them nullable, the source record's
 value is optional, or the column has no value until a later write: `sync_runs.finished_at`,
 `exit_code`, and `halt_reason` (null while the run is `running`), and every `repo_sync_state` column
 except `repository_id`, `last_run_id`, and `last_outcome` (`index_issue_total` stays null until
@@ -1302,6 +1307,8 @@ Measured 2026-10-16 unless noted. "Index" means the created-order enumeration in
 | CI color forcing | typer sets `FORCE_TERMINAL` when `GITHUB_ACTIONS`, `FORCE_COLOR`, or `PY_COLORS` is set; two help-text tests failed only on GitHub Actions and reproduced locally with `GITHUB_ACTIONS=true` | installed typer `rich_utils.py`; CI run on `c7e0146` |
 | Alembic on SQLite | alembic 1.18.1, SQLAlchemy 2.0.45, SQLite 3.45.3; two revisions, the second dropping the first's table, creating another, and inserting a row. Default handling, second revision failing: the first table dropped and the second created empty, with the first revision stamped. A statement executed before `context.configure()`: `upgrade` exits 0 with no revision stamped and no row inserted. Transactional DDL (the driver's transaction handling off, `BEGIN` emitted on `begin`, `transactional_ddl=True`), second revision failing: nothing applied, not even the version table | probe through a real script directory and `env.py`, 2026-10-17 |
 | Isolation level | Assigning `isolation_level = None` to a Python `sqlite3` connection inside a transaction commits it, after which `PRAGMA foreign_keys=OFF` takes effect; set before the assignment, inside the transaction, the pragma leaves `foreign_keys` at 1 | probe, Python 3.13, SQLite 3.45.3 |
+| Connect listener order | SQLAlchemy 2.0.45's first-connect handling rolls a new connection back before connect listeners added after `create_engine` run: such a listener, given a connection the DBAPI returned inside a transaction with `foreign_keys=ON`, sees `in_transaction` false, and `PRAGMA foreign_keys=OFF` then takes effect. Registered with `insert=True`, it sees the open transaction and the pragma leaves `foreign_keys` at 1; SQLAlchemy's initialization and a `BEGIN IMMEDIATE` transaction still work after it | probe through a patched `sqlite3.dbapi2.connect`, 2026-10-17; `tests/db/test_migrations.py` |
+| URI filenames | Python 3.13's `sqlite3` with SQLite 3.45.3 (no `SQLITE_USE_URI` compile option) opens `file:target.db`, without `uri=True`, as a new file of that name, not as `target.db`. Other builds, CI's included, are not checked, so `alembic/env.py` refuses such a name rather than relying on either reading | probe |
 | Batch alter and views | `batch_alter_table(..., recreate="always")` on a table a view reads raises "error in view v: no such table: main.p"; with `PRAGMA legacy_alter_table=ON` it succeeds | probe, same versions |
 | CHECK constraints | Batch recreate keeps `CONSTRAINT ck_k_b CHECK (b < 10)` and drops the unnamed column-level `CHECK (a > 0)` and table-level `CHECK (n < 5)`. SQLAlchemy renders `Boolean` as `BOOLEAN` and `Enum` as `VARCHAR(6)`, without a CHECK, on SQLite. Under a `ck` naming convention an explicit `name="ck_prs_state"` becomes `ck_prs_ck_prs_state`, and `op.f("ck_prs2_state")` stays as given. `compare_metadata` reports nothing against a table with an unnamed `UNIQUE (name)` under an ix/ck/fk convention, and `add_constraint` under a `uq` convention | probe, same versions |
 | SQLite timestamps | SQLAlchemy's SQLite `DateTime` stores `2024-01-01 10:00:00.000000` (26 characters; microseconds always written) and stores 12:00+02:00 as `2024-01-01 12:00:00.000000`, dropping the offset | probe, same versions |

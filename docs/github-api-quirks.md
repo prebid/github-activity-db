@@ -1,5 +1,10 @@
 # GitHub API Quirks and Behaviors
 
+> **History.** This document describes the REST client in `github/`, which Step 3a of
+> the [redesign plan](redesign-plan.md) removed. It stays until Step 7 rewrites the
+> documentation; the GitHub behaviors the current source layer relies on are recorded
+> in the plan's section 7.
+
 This document captures non-obvious behaviors of the GitHub REST API that affect our implementation.
 
 ---

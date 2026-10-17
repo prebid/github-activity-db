@@ -1,5 +1,10 @@
 # Architecture Overview
 
+> **History.** This document describes the first pipeline (`github/`, `schemas/`,
+> `db/repositories/`, and the `sync` subcommands), which Step 3a of the
+> [redesign plan](redesign-plan.md) removed. It stays until Step 7 rewrites the
+> documentation; the current design is the redesign plan (code layout in section 5.7).
+
 ## Project Purpose
 
 GitHub Activity DB is a searchable data store for GitHub Pull Request data from Prebid organization repositories. It supports:
