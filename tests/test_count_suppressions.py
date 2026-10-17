@@ -67,8 +67,9 @@ NOQA_SPELLINGS = [
     "# ruff: disable [F401]\nimport os\n",
     "# ruff : disable[F401]\nimport os\n",
     "#\truff:\tdisable\t[F401]\nimport os\n",
-    "#　ruff:　disable[F401]\nimport os\n",
+    "#\u3000ruff:\u3000disable[F401]\nimport os\n",
     "# ruff: disable[ F401, ]  # reason\nimport os\n",
+    "# ruff: disable[F401] reason\nimport os\n",
     "def f() -> None:\n    # ruff: disable[F401]\n    import os\n",
     "# ruff: disable[F401]\nimport os\n# ruff: enable[F401]\n",
     # Not honored by ruff (uppercase), counted so that no honored spelling escapes.
@@ -158,7 +159,8 @@ def test_at_the_cap_passes_and_one_more_fails(
     assert f"{kind} comments: {len(sources)}" in over_cap.stdout
 
 
-# Files ruff reads differently from tokenize, or lints without a lowercase .py/.pyi suffix.
+# Files tokenize may read differently from ruff, or that pre-commit passes to ruff without a
+# lowercase .py/.pyi suffix (identify tags them python).
 REFUSED = [
     pytest.param(
         "module.py",
@@ -178,6 +180,13 @@ REFUSED = [
     pytest.param(
         "tool", b"#!/usr/bin/env python3\nimport os  # noqa: F401\n", True, id="python shebang"
     ),
+    pytest.param("app.wsgi", b"import os  # noqa: F401\n", False, id="wsgi suffix"),
+    pytest.param(
+        "tool",
+        b"#!/usr/bin/env nix-shell\n#! nix-shell -i python3\nimport os  # noqa: F401\n",
+        True,
+        id="nix-shell shebang",
+    ),
 ]
 ACCEPTED = [
     pytest.param("module.py", b"# -*- coding: utf-8 -*-\nimport os\n", False, id="utf-8"),
@@ -187,6 +196,9 @@ ACCEPTED = [
         "tool", b"#!/usr/bin/env python3\nimport os\n", False, id="shebang, not executable"
     ),
     pytest.param("tool.sh", b"#!/bin/sh\necho python\n", True, id="shell script"),
+    pytest.param(
+        "tool.sh", b"#!/usr/bin/env python3\nimport os\n", True, id="python shebang, shell suffix"
+    ),
 ]
 
 

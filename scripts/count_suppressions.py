@@ -3,11 +3,12 @@
 Suppressions are read from comment tokens (tokenize) and decorators (ast), so directive text
 inside a string does not count. Both .py and .pyi files are scanned.
 
-A file the counter cannot read the way ruff does is refused (exit 1, naming the file), not
-counted: a `.py` or `.pyi` suffix in another letter case, or an executable without one whose first
-line is a python shebang (pre-commit passes both to ruff); a coding declaration other than
-UTF-8 (ruff reads every file as UTF-8, tokenize follows the declaration); and a lone CR line ending
-(ruff ends a line there, tokenize does not).
+A file the counter may read differently from ruff is refused (exit 1, naming the file), not
+counted: a file without a lowercase `.py` or `.pyi` suffix that pre-commit's file tagging
+(identify) marks python or pyi, such as `module.PY`, `app.wsgi`, or an executable with a python
+shebang (pre-commit passes these to ruff); any coding declaration other than UTF-8 (ruff reads
+every file as UTF-8, tokenize follows the declaration); and a lone CR line ending (ruff ends a
+line there, tokenize does not).
 
 - noqa: line-level `# noqa`, `#NOQA`, `# noqa: F401`; file-level `# ruff: noqa`,
   `# ruff: noqa: F401`, `# flake8: noqa`, in any letter case; range suppressions
@@ -36,12 +37,13 @@ import argparse
 import ast
 import codecs
 import io
-import os
 import re
 import sys
 import tokenize
 from collections.abc import Iterator
 from pathlib import Path
+
+from identify.identify import tags_from_path
 
 NOQA = re.compile(
     r"#\s*(?:(?:ruff|flake8)\s*:\s*)?noqa\b"
@@ -72,15 +74,10 @@ def all_files(paths: list[Path]) -> Iterator[Path]:
 
 
 def refusal(path: Path) -> str | None:
-    """Why the counter cannot read this file as ruff does, or None when it can."""
+    """Why the counter may read this file differently from ruff, or None."""
     if path.suffix not in SUFFIXES:
-        if path.suffix.lower() in SUFFIXES:
-            return "a Python suffix in another letter case, which pre-commit passes to ruff"
-        if os.access(path, os.X_OK):
-            with path.open("rb") as file:
-                first = file.readline()
-            if first.startswith(b"#!") and b"python" in first:
-                return "an executable with a python shebang, which pre-commit passes to ruff"
+        if {"python", "pyi"} & tags_from_path(str(path)):
+            return "identify tags it python without a .py/.pyi suffix, so ruff lints it"
         return None
     source = path.read_bytes()
     if LONE_CR.search(source):
