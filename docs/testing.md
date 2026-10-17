@@ -165,8 +165,11 @@ tests/
 `tests/source` runs the real source layer (`GitHubSource`) against `httpx.MockTransport`. The
 transport answers from **units**: one file per resolve, label page, index page, pull request
 alias, overflow continuation, user, or compare page, recorded from public repositories. Every
-query document the source layer sends has at least one recorded unit; the only label page comes
-from `golang/go` (144 labels), because no tracked repository has more than 100.
+query document the source layer sends has a recorded unit except the labels and closing-issue
+continuations: no tracked PR has more than 100 labels or closing issues, so their tests use
+synthetic pages, and a change to those documents is caught by the hydration-version lock test,
+not by "re-record". The only label page comes from `golang/go` (144 labels), because no tracked
+repository has more than 100.
 
 - **Assembled, not replayed whole**: a batch, split, or solo retry is rebuilt from per-alias units,
   so a change of batch size needs no new recording.
@@ -197,8 +200,8 @@ from `golang/go` (144 labels), because no tracked repository has more than 100.
 - **Hydration version**: `tests/query_versions.json` maps each `<kind>:<version>` to the hash of
   that kind's documents. A test fails when the current documents differ from the current
   version's entry; on pull requests, CI runs the base commit's copy of
-  `scripts/check_query_lock.py`, which rejects an edited or removed entry, so a document change
-  needs a new version.
+  `scripts/check_query_lock.py` (the pull request's own copy where the base has none), which
+  rejects an edited or removed entry, so a document change needs a new version.
 
 ### Key Fixtures
 
@@ -532,8 +535,8 @@ uv run pre-commit install
 `.github/workflows/check.yml` runs on pull requests to `main` and pushes to `main`:
 
 - `lint and types`: `uv lock --locked` (uv.lock matches pyproject.toml), then pre-commit over
-  all files; on pull requests, the base commit's `scripts/check_query_lock.py` against the
-  hydration-version lock.
+  all files; on pull requests, the base commit's `scripts/check_query_lock.py` (the pull
+  request's own copy where the base has none) against the hydration-version lock.
 - `tests (Python 3.12 / 3.13)`: pytest with JUnit output; `scripts/check_junit.py --max-skipped 0`,
   which fails unless at least one test ran and none failed, errored, or was skipped (pytest
   reports `xfail` as skipped, so an `xfail` also fails the job); and `alembic upgrade head` plus

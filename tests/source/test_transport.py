@@ -6,7 +6,7 @@ import asyncio
 from collections.abc import Callable
 from datetime import datetime, timedelta
 from email.utils import format_datetime
-from typing import Any
+from typing import Any, cast
 
 import httpx
 import pytest
@@ -26,6 +26,7 @@ from github_activity_db.source.errors import (
     DeadlineReached,
     Forbidden,
     RateLimitWaitTooLong,
+    RepositoryNotFound,
     RepositoryRequestFailed,
     RequestTooHeavy,
     ServerError,
@@ -319,6 +320,21 @@ class TestPersistentLimits:
         assert clock.sleeps == waits
         assert waits[-1] <= MAX_RATE_LIMIT_WAIT < 2 * waits[-1]
 
+    async def test_a_limit_with_an_unreadable_reading_still_waits(
+        self, open_source, replay: Replay, clock: FakeClock
+    ) -> None:
+        body = {
+            "data": {"rateLimit": {"cost": 1, "remaining": 0, "resetAt": None}},
+            "errors": [{"type": "RATE_LIMITED", "message": "API rate limit exceeded"}],
+        }
+        replay.fault(
+            lambda request: httpx.Response(200, json=body, headers=date_header(clock)),
+            when=resolves,
+        )
+        async with open_source() as source:
+            await source.resolve(**RESOLVE)
+        assert clock.sleeps == [RATE_LIMIT_FALLBACK_WAIT]
+
     async def test_a_primary_limit_without_any_reset_falls_back(
         self, open_source, replay: Replay, clock: FakeClock
     ) -> None:
@@ -343,8 +359,9 @@ class TestOutOfRangeValues:
         [
             {"retry-after": HUGE},
             {"x-ratelimit-remaining": "0", "x-ratelimit-reset": HUGE},
+            {"x-ratelimit-remaining": "0", "x-ratelimit-reset": "100000000000000000"},
         ],
-        ids=["retry-after", "reset"],
+        ids=["retry-after", "reset", "reset-past-the-c-library"],
     )
     async def test_a_403_githubkit_cannot_read_falls_back(
         self, open_source, replay: Replay, clock: FakeClock, headers: dict[str, str]
@@ -370,6 +387,38 @@ class TestOutOfRangeValues:
         async with open_source() as source:
             await source.resolve(**RESOLVE)
         assert clock.sleeps == [RATE_LIMIT_FALLBACK_WAIT]
+
+    async def test_a_retry_after_too_long_for_a_float_is_too_long(
+        self, open_source, replay: Replay, clock: FakeClock
+    ) -> None:
+        replay.fault(
+            lambda request: synthetic(
+                "secondary_limit_graphql", headers={"retry-after": "9" * 400}
+            ),
+            when=resolves,
+        )
+        async with open_source() as source:
+            with pytest.raises(RateLimitWaitTooLong):
+                await source.resolve(**RESOLVE)
+
+    async def test_a_reset_centuries_away_meets_the_deadline(
+        self, open_source, replay: Replay, clock: FakeClock
+    ) -> None:
+        path, params = compare_unit(replay)
+        unit = next(u for u in replay.units.values() if u.kind == "compare")
+        headers = {
+            **unit.headers,
+            "x-ratelimit-remaining": "5",
+            "x-ratelimit-reset": "253402300799",
+        }
+        replay.fault(
+            lambda request: httpx.Response(200, json=unit.data, headers=headers),
+            when=lambda s: s.operation == "rest",
+        )
+        async with open_source(deadline=clock.now() + timedelta(minutes=10)) as source:
+            await source.transport.rest_get(path, params)
+            with pytest.raises(DeadlineReached):
+                await source.transport.rest_get(path, params)
 
     async def test_a_huge_retry_after_on_200_is_too_long(
         self, open_source, replay: Replay, clock: FakeClock
@@ -462,8 +511,22 @@ class TestMalformedHeaders:
 
     @pytest.mark.parametrize(
         ("remaining", "reset"),
-        [("5.0", None), ("5", "soon"), ("", None), ("5", "999999999999")],
-        ids=["remaining-not-integer", "reset-not-integer", "remaining-empty", "reset-out-of-range"],
+        [
+            ("5.0", None),
+            ("5", "soon"),
+            ("", None),
+            ("5", "999999999999"),
+            ("5", "100000000000000000"),
+            ("5", HUGE),
+        ],
+        ids=[
+            "remaining-not-integer",
+            "reset-not-integer",
+            "remaining-empty",
+            "reset-past-year-9999",
+            "reset-past-the-c-library",
+            "reset-past-a-c-long",
+        ],
     )
     async def test_unparseable_rest_rate_headers_are_ignored(
         self,
@@ -548,6 +611,55 @@ class TestCredentials:
             await source.resolve(**RESOLVE)
         assert clock.sleeps == [RATE_LIMIT_FALLBACK_WAIT]
 
+    async def test_a_token_mint_githubkit_cannot_read_waits(
+        self, open_source, replay: Replay, clock: FakeClock
+    ) -> None:
+        # The auth flow checks the mint's response with githubkit's own _check, as here.
+        when = format_datetime(clock.now() + timedelta(seconds=45), usegmt=True)
+
+        def limited(request: httpx.Request) -> httpx.Response:
+            response = httpx.Response(
+                403,
+                json={"message": "You have exceeded a secondary rate limit."},
+                headers={"retry-after": when},
+                request=request,
+            )
+            return build_github("test-token")._check(response).raw_response
+
+        replay.fault(limited, when=resolves)
+        async with open_source() as source:
+            await source.resolve(**RESOLVE)
+        assert clock.sleeps == [RATE_LIMIT_FALLBACK_WAIT]
+
+    async def test_a_token_mint_rate_limited_by_type_waits_for_the_last_reading(
+        self, open_source, replay: Replay, clock: FakeClock
+    ) -> None:
+        replay.modify(rate_limit(1, 4000, clock.now() + timedelta(seconds=300)), when=resolves)
+
+        def limited(request: httpx.Request) -> httpx.Response:
+            body = {"errors": [{"type": "RATE_LIMITED", "message": "API rate limit exceeded"}]}
+            raise RequestFailed(Response(httpx.Response(403, json=body, request=request), Any))
+
+        replay.fault(limited, when=resolves)
+        async with open_source() as source:
+            await source.resolve(**RESOLVE)
+            await source.resolve(**RESOLVE)
+        assert clock.sleeps == [300 + RESET_MARGIN]
+
+    @pytest.mark.parametrize(
+        "error",
+        [TypeError("not from githubkit's rate-limit readers"), ValueError("bad key data")],
+        ids=["type-error", "value-error"],
+    )
+    async def test_a_defect_inside_the_client_is_fatal(
+        self, open_source, replay: Replay, clock: FakeClock, error: Exception
+    ) -> None:
+        replay.fault(self.raising(error), when=resolves)
+        async with open_source() as source:
+            with pytest.raises(ClientFailure):
+                await source.resolve(**RESOLVE)
+        assert clock.sleeps == []
+
     async def test_a_client_failure_outside_the_network_is_fatal(
         self, open_source, replay: Replay, clock: FakeClock
     ) -> None:
@@ -583,6 +695,47 @@ class TestFatal:
         async with open_source() as source:
             with pytest.raises(UnexpectedResponse, match="noSuchField"):
                 await source.resolve(**RESOLVE)
+
+    async def test_a_not_found_naming_a_timeout_is_not_a_timeout(
+        self, open_source, replay: Replay, clock: FakeClock
+    ) -> None:
+        # A NOT_FOUND message repeats the requested name, which may contain "timeout".
+        message = "Could not resolve to a Repository with the name 'prebid/timeout-tools'."
+
+        def missing(body: dict[str, Any]) -> None:
+            body["data"]["repository"] = None
+            body["errors"] = [{"type": "NOT_FOUND", "path": ["repository"], "message": message}]
+
+        replay.modify(missing, when=resolves)
+        async with open_source() as source:
+            with pytest.raises(RepositoryNotFound):
+                await source.resolve(**RESOLVE)
+        assert clock.sleeps == []
+
+    async def test_a_403_with_malformed_errors_is_forbidden(
+        self, open_source, replay: Replay
+    ) -> None:
+        replay.fault(
+            lambda request: httpx.Response(
+                403, json={"message": "Resource not accessible by integration", "errors": 5}
+            ),
+            when=resolves,
+        )
+        async with open_source() as source:
+            with pytest.raises(Forbidden, match="Resource not accessible"):
+                await source.resolve(**RESOLVE)
+
+    async def test_a_defect_in_the_request_path_is_not_a_rate_limit(self, clock: FakeClock) -> None:
+        # A client whose arequest no longer accepts the transport's arguments: the TypeError is
+        # not raised by githubkit's rate-limit readers, so it propagates instead of waiting.
+        class Incompatible:
+            async def arequest(self, *args: object, **kwargs: object) -> object:
+                raise TypeError("arequest() got an unexpected keyword argument 'content'")
+
+        transport = Transport(cast("Any", Incompatible()), clock=clock)
+        with pytest.raises(TypeError, match="unexpected keyword"):
+            await transport.graphql("query Resolve { x }", {}, splittable=False)
+        assert clock.sleeps == []
 
     async def test_a_403_with_an_html_body_is_forbidden(self, open_source, replay: Replay) -> None:
         replay.fault(

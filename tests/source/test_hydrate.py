@@ -366,6 +366,15 @@ async def test_every_field_maps_from_its_wire_name(open_source, unit: Unit) -> N
         for node in data["files"]["nodes"]
     ]
     assert list(record.files[: len(files)]) == files
+    if not (
+        data["reviews"]["pageInfo"]["hasNextPage"] or data["comments"]["pageInfo"]["hasNextPage"]
+    ):
+        sightings = [data["author"], data["mergedBy"]]
+        sightings += [node["author"] for node in data["reviews"]["nodes"]]
+        sightings += [node["author"] for node in data["comments"]["nodes"]]
+        assert set(record.accounts()) == {
+            wire_account(actor) for actor in sightings if actor is not None
+        }
     if record.commits_source == "graphql":
         commits = [
             CommitRecord(
@@ -935,6 +944,27 @@ class TestSplitAndRetry:
         outcomes = await hydrate(open_source, PREBID_JS, [15724, 13481])
         assert all(isinstance(outcome, Hydrated) for outcome in outcomes)
         assert batches(replay) == [[15724, 13481], [13481]]
+
+    async def test_an_item_gone_on_its_solo_retry_is_gone(
+        self, open_source, replay: Replay
+    ) -> None:
+        def fail_13481(body: dict[str, Any]) -> None:
+            body["data"]["repository"]["p1"] = None
+            body.setdefault("errors", []).append(
+                {"type": "INTERNAL", "path": ["repository", "p1"], "message": "flaky"}
+            )
+
+        def gone(body: dict[str, Any]) -> None:
+            body["data"]["repository"]["p0"] = None
+            body.setdefault("errors", []).append(
+                {"type": "NOT_FOUND", "path": ["repository", "p0"], "message": "deleted"}
+            )
+
+        replay.modify(fail_13481, when=lambda s: is_batch(s) and s.numbers == [15724, 13481])
+        replay.modify(gone, when=lambda s: is_batch(s) and s.numbers == [13481])
+        outcomes = await hydrate(open_source, PREBID_JS, [15724, 13481])
+        assert isinstance(outcomes[0], Hydrated)
+        assert outcomes[1] == Gone(13481)
 
     async def test_an_item_that_fails_twice_is_failed(self, open_source, replay: Replay) -> None:
         unit = pr_unit(replay, 13481)

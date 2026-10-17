@@ -765,7 +765,7 @@ kind's normalized query documents (the batch request reduced to one alias, and e
 request reduced to one alias; comments removed and whitespace runs collapsed to one space). A test
 fails when the current documents differ from the current version's entry, and a CI step fails when
 a pull request changes or removes an entry that exists at the base commit; it runs the base
-commit's copy of the checker. Pull requests only: the issue shapes land in Step 4. Not wired into
+commit's copy of the checker, or the pull request's copy where the base has none. Pull requests only: the issue shapes land in Step 4. Not wired into
 the CLI; no configuration changes.
 
 Tests run through the `source/` client factory with an injected `httpx.MockTransport`.
@@ -1000,7 +1000,7 @@ Measured 2026-10-16 unless noted. "Index" means the created-order enumeration in
 | A PR file list above 3,000 entries (no tracked PR found) | Validation fails the item if `files` stops short of `totalCount`; Step 5 reports any |
 | Compare fallback on a PR whose head fork was deleted (only a live fork tested) | A count mismatch fails the item; Step 5 reports any |
 | Full bootstrap time, cost, and size are projections from two repositories | Step 5 measures them |
-| Overflow continuations per request (25), the reset margin (1 s), retry jitter (25%), the budget reserves (100 points, 100 calls), the longest accepted rate-limit wait (65 min), and the HTTP timeouts (read 30 s, connect 10 s) are chosen, not measured | Step 5 records secondary-limit responses, budget readings, and request times at these values |
+| Overflow continuations per request (25), the server retry delays (2, 4, 8 s), the reset margin (1 s), retry jitter (25%), the index boundary margin (60 s), the budget reserves (100 points, 100 calls), the longest accepted rate-limit wait (65 min), and the HTTP timeouts (read 30 s, connect 10 s) are chosen, not measured | Step 5 records secondary-limit responses, budget readings, and request times at these values |
 
 ## 9. Later work
 

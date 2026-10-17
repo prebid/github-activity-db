@@ -130,3 +130,53 @@ def test_the_checker_runs_isolated_from_site_packages(repo: Path) -> None:
     )
     assert result.returncode == 1
     assert "pull_request:1 changed" in result.stderr
+
+
+@pytest.mark.parametrize(
+    "content",
+    [b"\xff\xfe not utf-8", b"[" * 100_000 + b"]" * 100_000],
+    ids=["not-utf-8", "nested-too-deeply"],
+)
+def test_an_unreadable_lock_is_an_error_not_a_pass(repo: Path, content: bytes) -> None:
+    write_lock(repo, {"pull_request:1": "a" * 64})
+    commit(repo)
+    (repo / LOCK).write_bytes(content)
+    result = check(repo)
+    assert result.returncode == 2, result.stderr
+
+
+def test_a_malformed_lock_at_the_base_is_an_error_not_a_pass(repo: Path) -> None:
+    (repo / "tests").mkdir()
+    (repo / LOCK).write_text("{not json")
+    commit(repo)
+    write_lock(repo, {"pull_request:1": "a" * 64})
+    result = check(repo)
+    assert result.returncode == 2
+    assert "at main is not JSON" in result.stderr
+
+
+def test_a_lock_path_outside_the_repository_is_an_error_not_a_pass(repo: Path) -> None:
+    write_lock(repo, {"pull_request:1": "a" * 64})
+    commit(repo)
+    result = subprocess.run(
+        [sys.executable, str(SCRIPT), "--base", "main", "--lock", "../query_versions.json"],
+        cwd=repo,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 2
+    assert "relative" in result.stderr
+
+
+def test_without_git_the_check_is_an_error_not_a_pass(repo: Path) -> None:
+    write_lock(repo, {"pull_request:1": "a" * 64})
+    commit(repo)
+    result = subprocess.run(
+        [sys.executable, str(SCRIPT), "--base", "main"],
+        cwd=repo,
+        capture_output=True,
+        text=True,
+        env={"PATH": str(repo / "no-such-bin")},
+    )
+    assert result.returncode == 2
+    assert "git is not on PATH" in result.stderr

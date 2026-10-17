@@ -312,7 +312,7 @@ class PullRequestHydrator:
         except RequestFailedError as e:
             if len(group) == 1:
                 item = group[0][0]
-                item.error = item.error or ItemRequestFailed(item.number, e)
+                item.error = ItemRequestFailed(item.number, e)
                 return
             middle = len(group) // 2
             await self._continue(group[:middle])

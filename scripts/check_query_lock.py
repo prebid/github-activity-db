@@ -12,8 +12,8 @@ Run from the repository root. Uses only the standard library, so it runs with ``
 Exit 0 when every entry at <ref> is unchanged (new entries are fine, and so is a lock file that
 does not exist at <ref>); 1 when an entry was changed or removed (deleting the lock removes them
 all); 2 when the check cannot run: <ref> is not a commit, git is not on PATH, --lock is not a
-relative path, git fails, or a lock file is not a JSON object of strings. A checkout without the
-base therefore never passes by default.
+relative path, git fails, or a lock file cannot be read as a JSON object of strings. A checkout
+without the base therefore never passes by default.
 """
 
 from __future__ import annotations
@@ -94,8 +94,9 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         return check(args.base, args.lock)
-    except (CannotCheck, OSError) as e:
-        print(e, file=sys.stderr)
+    except (CannotCheck, OSError, UnicodeDecodeError, RecursionError) as e:
+        # UnicodeDecodeError: a lock that is not UTF-8; RecursionError: one nested too deeply.
+        print(f"cannot check: {e!r}", file=sys.stderr)
         return 2
 
 

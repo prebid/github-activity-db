@@ -34,11 +34,12 @@ COMPARE_PAGE_SIZE: Final = 100
 INDEX_CLOSING_LINKS: Final = 10
 
 # GitHub's `Date` header has one-second resolution and is set after the page is read, so the
-# index boundary sits this far before it (plan 5.3 step 2).
+# index boundary sits this far before it (plan 5.3 step 2). Chosen, not measured.
 INDEX_BOUNDARY_MARGIN: Final = timedelta(seconds=60)
 
 # Retries after the first attempt for 5xx, transport errors, and unsplittable timeouts
-# (plan 5.3 step 4). Jitter adds up to JITTER_FRACTION of each delay (chosen, not measured).
+# (plan 5.3 step 4). The delays and the jitter, up to JITTER_FRACTION of each delay, are chosen,
+# not measured.
 SERVER_RETRY_DELAYS: Final = (2.0, 4.0, 8.0)
 JITTER_FRACTION: Final = 0.25
 

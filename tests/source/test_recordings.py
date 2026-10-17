@@ -23,7 +23,7 @@ from tests.source.recordings import (
     split_graphql,
     whole_stamp,
 )
-from tests.source.replay import Replay
+from tests.source.replay import Replay, unused_faults
 
 UNITS = sorted(RECORDED.rglob("*.json"))
 WHOLE_DOCUMENTS = {
@@ -36,7 +36,8 @@ WHOLE_DOCUMENTS = {
 
 def test_fixtures_were_recorded() -> None:
     kinds = {Unit.load(path).kind for path in UNITS}
-    # One kind per query document the source layer sends, so each is stamped by a recording.
+    # Every kind of unit is recorded. Within overflow, the labels and closing-issue continuations
+    # have only synthetic pages: no tracked PR has more than 100 of either (docs/testing.md).
     assert kinds == {
         "resolve",
         "repository_labels",
@@ -151,6 +152,32 @@ def test_the_replay_refuses_a_continuation_bound_to_another_cursor() -> None:
         "variables": {"id0": "PR_a", "after0": "x", "id1": "PR_b", "after1": "y"},
     }
     assert "binds" in _refused(Replay.from_fixtures(), payload)
+
+
+def test_the_replay_refuses_a_batch_declaring_an_unsent_number() -> None:
+    query = documents.pull_request_batch(1).replace("$n0: Int!", "$n0: Int! $n1: Int!")
+    payload = {"query": query, "variables": {"owner": "prebid", "name": "Prebid.js", "n0": 13481}}
+    assert "declares" in _refused(Replay.from_fixtures(), payload)
+
+
+def test_the_replay_refuses_a_continuation_with_an_unbound_variable() -> None:
+    query = documents.overflow_continuation([documents.CONNECTIONS_BY_FIELD["commits"]])
+    payload = {"query": query, "variables": {"id0": "PR_a", "after0": "x", "id1": "PR_b"}}
+    assert "variables" in _refused(Replay.from_fixtures(), payload)
+
+
+def test_a_fault_never_served_or_not_used_up_is_reported() -> None:
+    replay = Replay.from_fixtures()
+    replay.fault(lambda request: httpx.Response(500), when=lambda seen: seen.operation == "Resolve")
+    replay.fault(lambda request: httpx.Response(500), times=2)
+    assert unused_faults(replay) == ["fault 0: served 0, 1 left", "fault 1: served 0, 2 left"]
+    payload = {"query": documents.RESOLVE, "variables": {"owner": "prebid", "name": "go-gdpr"}}
+    request = httpx.Request("POST", "https://api.github.com/graphql", json=payload)
+    replay.transport().handle_request(request)
+    assert unused_faults(replay) == ["fault 1: served 0, 2 left"]
+    replay.transport().handle_request(request)
+    replay.transport().handle_request(request)
+    assert unused_faults(replay) == []
 
 
 def test_splitting_a_replayed_batch_gives_back_its_units() -> None:

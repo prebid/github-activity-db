@@ -8,7 +8,8 @@ Failure classes:
 
 - rate limited: GraphQL ``RATE_LIMITED`` or a secondary-limit message (HTTP 200 or 403); REST
   403/429 with ``retry-after``, ``x-ratelimit-remaining: 0``, or a secondary-limit message.
-  Wait for ``retry-after``; else, when the primary limit is exhausted, until the reset; else 60 s.
+  Wait for ``retry-after``; else, when the primary limit is exhausted, until the reset; else 60 s,
+  which is also the wait when githubkit cannot read the headers.
   Each further limit before a success waits at least 60 s doubled per repeat, so a limit that
   never lifts reaches the longest accepted wait. The pause holds every request on this transport
   and is never counted as an attempt.
@@ -84,6 +85,15 @@ _TIMEOUT_STATUSES = frozenset({502, 504})
 # Waits are clamped so time arithmetic cannot overflow; a wait this long fails the run at
 # MAX_RATE_LIMIT_WAIT or at any deadline less than a year away.
 _LONGEST_WAIT = 366 * 24 * 3600.0
+# Errors whose message repeats request input (a repository name, a node id); their text is never
+# read for a timeout or server fault.
+_ECHOING_TYPES = frozenset({"NOT_FOUND"})
+# githubkit 0.14.2 reads a 403/429's retry-after, reset, and message in these methods of
+# GitHubCore, with int(), timedelta, fromtimestamp, and `in`.
+_GITHUBKIT_RATE_LIMIT_READERS = frozenset({"_check_rate_limit", "_extract_retry_after"})
+# What those readers raise on values GitHub's docs do not allow: an HTTP-date retry-after, a
+# reset out of range, a null message.
+_UNREADABLE_HEADER_ERRORS = (ValueError, OverflowError, TypeError, OSError)
 
 
 @dataclass(frozen=True)
@@ -139,7 +149,7 @@ class _Pause:
     """The rate-limit pause every request on the transport honours."""
 
     until: datetime | None = None
-    # Rate-limited responses since the last success.
+    # Rate-limited responses since the last success of any request on the transport.
     repeats: int = 0
 
 
@@ -290,14 +300,10 @@ class Transport:
             return self._classify_status(e.response, budget)
         except RequestError as e:
             return self._classify_wrapped(e, budget)
-        except (ValueError, OverflowError, TypeError) as e:
-            # githubkit reads the headers and body of a 403/429 itself, with int(), timedelta,
-            # fromtimestamp, and `in`; values GitHub's docs do not allow (an HTTP-date
-            # retry-after, a reset out of range, a null message) raise there. The request is
-            # encoded before the call, so nothing else in it raises these.
-            return _Failure(
-                "rate_limited", f"githubkit could not read a rate-limit response: {e!r}"
-            )
+        except _UNREADABLE_HEADER_ERRORS as e:
+            if not _raised_reading_rate_limit(e):
+                raise
+            return _unreadable_rate_limit(e)
         return read(response)
 
     def _classify_wrapped(self, error: RequestError[Any], budget: BudgetPool) -> _Failure:
@@ -324,6 +330,8 @@ class Transport:
             if status >= 500:
                 return _Failure("server", f"credential request, HTTP {status}: {body.summary}")
             raise Unauthorized(f"credential request failed: {inner!r}")
+        if isinstance(inner, _UNREADABLE_HEADER_ERRORS) and _raised_reading_rate_limit(inner):
+            return _unreadable_rate_limit(inner)
         if isinstance(inner, AuthCredentialError | AuthExpiredError):
             raise Unauthorized(f"credentials rejected: {inner!r}")
         if isinstance(inner, httpx.RequestError):
@@ -372,9 +380,17 @@ class Transport:
         if not isinstance(raw_errors, list) or not isinstance(data, dict | None):
             return _Failure("server", "GraphQL body has malformed data or errors")
         errors = tuple(_graphql_error(entry) for entry in raw_errors)
-        if data is not None and data.get("rateLimit") is not None:
-            # Counted whenever present, also on a response that fails below.
-            self._record_graphql_budget(data["rateLimit"])
+        reading = data.get("rateLimit") if data is not None else None
+        try:
+            parsed = RateLimitReading.model_validate(reading) if reading is not None else None
+        except ValidationError as e:
+            malformed: ValidationError | None = e
+            parsed = None
+        else:
+            malformed = None
+        if parsed is not None:
+            # Counted whenever readable, also on a response that fails below.
+            self._record_graphql_budget(parsed)
         limited = [
             error
             for error in errors
@@ -396,7 +412,9 @@ class Transport:
         if data is None or any(not error.path for error in errors):
             detail = "; ".join(error.message for error in errors)
             raise UnexpectedResponse(f"GraphQL request rejected: {detail}")
-        if data.get("rateLimit") is None:
+        if malformed is not None:
+            raise UnexpectedResponse(f"GraphQL rateLimit is malformed: {malformed}")
+        if parsed is None:
             # Every document selects rateLimit; without it points go uncounted (plan 5.3 step 4).
             raise UnexpectedResponse("GraphQL response has no rateLimit")
         return GraphQLResult(data=data, errors=errors, date=date)
@@ -415,13 +433,9 @@ class Transport:
             self.rest_budget.record(remaining, reset)
         return RestResult(body=body, date=date)
 
-    def _record_graphql_budget(self, reading: object) -> None:
-        try:
-            parsed = RateLimitReading.model_validate(reading)
-        except ValidationError as e:
-            raise UnexpectedResponse(f"GraphQL rateLimit is malformed: {e}") from e
-        self.usage.graphql_points += parsed.cost
-        self.graphql_budget.record(parsed.remaining, parsed.reset_at.astimezone(UTC))
+    def _record_graphql_budget(self, reading: RateLimitReading) -> None:
+        self.usage.graphql_points += reading.cost
+        self.graphql_budget.record(reading.remaining, reading.reset_at.astimezone(UTC))
 
     # ----------------------------------------------------------------------------------------
     # Waiting
@@ -515,16 +529,35 @@ def _whole_request_failure(errors: tuple[GraphQLError, ...]) -> _Failure | None:
 
     These describe the request rather than one alias, so they fail it whole.
     """
-    for error in errors:
+    readable = [error for error in errors if error.type not in _ECHOING_TYPES]
+    for error in readable:
         message = error.message.lower()
         if error.type in _TIMEOUT_TYPES or any(
             fragment in message for fragment in _TIMEOUT_FRAGMENTS
         ):
             return _Failure("timeout", f"GraphQL: {error.message}")
-    for error in errors:
+    for error in readable:
         if _SERVER_FAULT in error.message.lower():
             return _Failure("server", f"GraphQL: {error.message}")
     return None
+
+
+def _raised_reading_rate_limit(error: BaseException) -> bool:
+    """Whether githubkit raised ``error`` while reading a 403/429's rate-limit headers.
+
+    Anything else of the same type is a defect and propagates.
+    """
+    traceback = error.__traceback__
+    while traceback is not None:
+        if traceback.tb_frame.f_code.co_name in _GITHUBKIT_RATE_LIMIT_READERS:
+            return True
+        traceback = traceback.tb_next
+    return False
+
+
+def _unreadable_rate_limit(error: BaseException) -> _Failure:
+    """A rate limit githubkit could not read: no usable wait, so the 60 s fallback."""
+    return _Failure("rate_limited", f"githubkit could not read a rate-limit response: {error!r}")
 
 
 def _int_header(headers: httpx.Headers, name: str) -> int | None:
@@ -554,7 +587,7 @@ def _retry_after(headers: httpx.Headers, now: datetime) -> float | None:
         return None
     seconds = _int_header(headers, "retry-after")
     if seconds is not None:
-        return float(max(seconds, 0))
+        return float(min(max(seconds, 0), int(_LONGEST_WAIT)))
     try:
         when = parsedate_to_datetime(value)
     except (TypeError, ValueError):
