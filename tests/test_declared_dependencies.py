@@ -15,6 +15,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 FIRST_PARTY = "github_activity_db"
+# sys.stdlib_module_names leaves out `__main__` and typeshed's type-checking-only `_typeshed`.
+STANDARD_LIBRARY = sys.stdlib_module_names | {"__main__", "_typeshed"}
 REQUIREMENT_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")
 
 
@@ -25,7 +27,7 @@ def _normalize(name: str) -> str:
 def _declared(pyproject: Path) -> set[str]:
     declared: set[str] = set()
     for requirement in tomllib.loads(pyproject.read_text())["project"]["dependencies"]:
-        match = REQUIREMENT_NAME.match(requirement)
+        match = REQUIREMENT_NAME.match(requirement.strip())
         assert match is not None, requirement
         declared.add(_normalize(match.group()))
     return declared
@@ -53,7 +55,7 @@ def undeclared_imports(src: Path, pyproject: Path) -> tuple[int, dict[str, list[
     found: dict[str, list[str]] = {}
     for path in files:
         for name in sorted(_imported_top_levels(path)):
-            if name in sys.stdlib_module_names or name == FIRST_PARTY:
+            if name in STANDARD_LIBRARY or name == FIRST_PARTY:
                 continue
             if not {_normalize(owner) for owner in owners.get(name, [])} & declared:
                 found.setdefault(name, []).append(path.relative_to(src).as_posix())
@@ -68,7 +70,7 @@ def test_every_third_party_import_in_src_is_declared() -> None:
 
 def test_reports_undeclared_imports_in_a_planted_package(tmp_path: Path) -> None:
     (tmp_path / "pyproject.toml").write_text(
-        '[project]\nname = "planted"\ndependencies = ["rich>=13.0", "Pydantic-Settings>=2"]\n'
+        '[project]\nname = "planted"\ndependencies = [" rich>=13.0", "Pydantic-Settings>=2"]\n'
     )
     package = tmp_path / "src" / "planted"
     package.mkdir(parents=True)
@@ -80,12 +82,14 @@ def test_reports_undeclared_imports_in_a_planted_package(tmp_path: Path) -> None
         "from pydantic_settings import BaseSettings\n"
         "from . import b\n"
         "from github_activity_db import config\n"
+        "import __main__\n"
     )
     (package / "b.py").write_text(
         "from typing import TYPE_CHECKING\n"
         "if TYPE_CHECKING:\n"
         "    import rich\n"
         "    import httpx.Timeout\n"
+        "    from _typeshed import StrPath\n"
         "def f() -> None:\n"
         "    import not_an_installed_module_xyz\n"
         'DECOY = "import sqlalchemy"\n'
