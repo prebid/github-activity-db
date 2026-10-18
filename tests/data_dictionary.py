@@ -102,9 +102,21 @@ def consumer_pairs(entries: dict[str, dict[str, str]]) -> list[list[str]]:
 LockEntry = list[list[str]] | dict[str, Any]
 
 
-def read_lock() -> dict[str, LockEntry]:
-    lock: dict[str, LockEntry] = json.loads(SCHEMA_LOCK.read_text())
+def _unique_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    """A JSON object whose keys are distinct; ``json.loads`` alone keeps the last of two."""
+    keys = [key for key, _ in pairs]
+    if repeated := sorted({key for key in keys if keys.count(key) > 1}):
+        raise DictionaryError(f"key listed twice: {', '.join(repeated)}")
+    return dict(pairs)
+
+
+def parse_lock(text: str) -> dict[str, LockEntry]:
+    lock: dict[str, LockEntry] = json.loads(text, object_pairs_hook=_unique_keys)
     return lock
+
+
+def read_lock() -> dict[str, LockEntry]:
+    return parse_lock(SCHEMA_LOCK.read_text())
 
 
 def lock_columns(entry: LockEntry) -> list[list[str]]:
