@@ -2,19 +2,21 @@
 
 from __future__ import annotations
 
+import functools
 import hashlib
-import json
+import importlib.util
 import re
 import sqlite3
 from contextlib import closing
 from pathlib import Path
-from typing import Any
+from types import ModuleType
 
 from tests.db.schema_support import user_objects
 
 ROOT = Path(__file__).resolve().parents[1]
 DICTIONARY = ROOT / "docs" / "data-dictionary.md"
 SCHEMA_LOCK = ROOT / "tests" / "schema_versions.json"
+CHECKER = ROOT / "scripts" / "check_query_lock.py"
 USES = ("consumer", "internal")
 
 _HEADING = re.compile(r"^### `(?P<name>\w+)`$")
@@ -99,19 +101,25 @@ def consumer_pairs(entries: dict[str, dict[str, str]]) -> list[list[str]]:
     )
 
 
-LockEntry = list[list[str]] | dict[str, Any]
+# An entry as scripts/check_query_lock.py reads it: its consumer pairs and its view digests.
+LockEntry = tuple[set[tuple[str, str]], dict[str, str]]
 
 
-def _unique_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
-    """A JSON object whose keys are distinct; ``json.loads`` alone keeps the last of two."""
-    keys = [key for key, _ in pairs]
-    if repeated := sorted({key for key in keys if keys.count(key) > 1}):
-        raise DictionaryError(f"key listed twice: {', '.join(repeated)}")
-    return dict(pairs)
+@functools.cache
+def lock_checker() -> ModuleType:
+    """scripts/check_query_lock.py, the one reader of the lock, loaded from its file: CI runs it
+    standalone, so it is not a package module."""
+    spec = importlib.util.spec_from_file_location("check_query_lock", CHECKER)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def parse_lock(text: str) -> dict[str, LockEntry]:
-    lock: dict[str, LockEntry] = json.loads(text, object_pairs_hook=_unique_keys)
+    """Each version's entry, read by the checker's rule; raises its CannotCheck on a shape it
+    refuses (a key listed twice included)."""
+    lock: dict[str, LockEntry] = lock_checker().schema_entries(text, str(SCHEMA_LOCK))
     return lock
 
 
@@ -120,19 +128,13 @@ def read_lock() -> dict[str, LockEntry]:
 
 
 def lock_columns(entry: LockEntry) -> list[list[str]]:
-    """An entry's consumer pairs: the entry itself (version 1) or its ``columns``."""
-    if isinstance(entry, list):
-        return entry
-    columns: list[list[str]] = entry["columns"]
-    return columns
+    """An entry's consumer pairs, sorted, as the dictionary's consumer pairs are."""
+    return sorted([table, column] for table, column in entry[0])
 
 
 def lock_views(entry: LockEntry) -> dict[str, str]:
     """An entry's view digests; version 1 has none."""
-    if isinstance(entry, list):
-        return {}
-    views: dict[str, str] = entry["views"]
-    return views
+    return entry[1]
 
 
 def view_digest(sql: str) -> str:

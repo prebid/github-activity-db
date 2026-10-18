@@ -16,6 +16,7 @@ from tests.data_dictionary import (
     consumer_pairs,
     database_columns,
     differences,
+    lock_checker,
     lock_columns,
     lock_differences,
     lock_views,
@@ -279,11 +280,11 @@ class TestSchemaLock:
         ids=["version twice", "view twice"],
     )
     def test_a_key_listed_twice_is_refused(self, text: str) -> None:
-        with pytest.raises(DictionaryError, match="listed twice"):
+        with pytest.raises(lock_checker().CannotCheck, match="listed twice"):
             parse_lock(text)
 
     def test_the_lock_reads_without_repeated_keys(self) -> None:
-        assert parse_lock('{"1": [["t", "c"]]}') == {"1": [["t", "c"]]}
+        assert parse_lock('{"1": [["t", "c"]]}') == {"1": ({("t", "c")}, {})}
 
     def test_a_changed_view_changes_its_digest(self) -> None:
         sql = "CREATE VIEW v AS SELECT a FROM t"
