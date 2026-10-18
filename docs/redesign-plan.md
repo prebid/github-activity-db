@@ -59,7 +59,7 @@ Within scope the database collects and distinguishes data and never interprets i
 | D6 | Stored dates: PR created, merged, closed, published, and last edited; issue created and closed; review created, submitted, published, updated, and last edited; comment created, published, updated, and last edited; commit authored (the git author date, set by the committer's client), and a default-branch commit also committed (D30); repository created, updated, pushed, and archived; label created and updated; account created and updated; activity event time (D30). Review ids do not follow submission order (section 7, "Review order"), so submission order comes from `submitted_at`. |
 | D7 | No timeline history. The database mirrors GitHub's current state: a value GitHub changes is overwritten, except that a null actor never replaces a reference D28 keeps (the row's `*_reported` column records it); a child row a re-hydration no longer returns is removed (5.3 step 6); an item GitHub no longer lists is removed (5.3 step 7). History the database could keep instead is later work (section 9). |
 | D8 | Labels are stored as currently applied, with no history, by name and GitHub's label id; each repository's current label set is stored with its color, description, and default flag. |
-| D9 | The database file is published as a GitHub release asset. Data from the private tracked repository (`prebid-agent-skills`) is included. The release is in the public repository `prebid/github-activity-db`, so every asset is world-readable, private-repository rows included; that is accepted (the data is not proprietary, and the private repositories are expected to become public). |
+| D9 | The database file is published as a GitHub release asset. Data from the private tracked repository (`prebid-agent-skills`) is included. The release is in the public repository `prebid/github-activity-db`, so every asset is world-readable, private-repository rows included; that is accepted (the data is not proprietary, and the private repositories are expected to become public). The release is the only copy consumers read: no hosted database server is run, since its storage is not worth the cost (the maintainer, 2026-10-18); a consumer downloads the latest snapshot (5.6, "Consumer access"). |
 | D10 | The scheduled sync authenticates as a GitHub App installed on the `prebid` organization. |
 | D11 | The scheduled sync runs every 6 hours. |
 | D12 | `classify_tags` and `ai_summary` are removed. AI enrichment is out of scope (section 1); where its output would live is decided when it is planned, apart from GitHub's facts (D29). |
@@ -929,6 +929,14 @@ Workflow `.github/workflows/sync.yml`:
   trailing whitespace, and one final newline, the form the pre-commit file hooks accept on the next
   pull request.
 - `github_activity.db` is removed from git tracking in 6c (Step 6 lists the cleanup).
+- Consumer access: a consumer finds the latest pair through the Releases API, reads the manifest,
+  downloads the `.db.gz`, checks its SHA-256 against the manifest, decompresses it once, and
+  replaces its local copy by writing a temporary file and renaming it over the old one, so no query
+  reads a half-written file. It does this once per new snapshot (about every 6 hours, D11), not per
+  read, and queries its copy with SQLite. The download runs outside a browser, on a server or in a
+  build step, because GitHub's release downloads send no CORS header a web page could read across
+  origins (section 7, "Release downloads"); a browser that queries the database in WebAssembly reads
+  a copy re-hosted where it is served.
 
 A `workflow_dispatch` trigger runs only when the workflow file exists on the default branch, so the
 workflow merges first with the manual trigger only, is proven by manual runs, and the schedule is
@@ -1646,6 +1654,7 @@ Measured 2026-10-16 unless noted. "Index" means the created-order enumeration in
 | Conditional requests | A 304 response does not consume quota (3 conditional requests, used count unchanged) | live API; GitHub docs |
 | Permissions | Compare: Contents read; list PRs: Pull requests read; get PR: Pull requests read or Contents read; delete release asset: Contents write | GitHub docs |
 | Publishing repository | `prebid/github-activity-db` is public, so its release assets are world-readable (D9) | `gh repo view` |
+| Release downloads | For a public release asset (`cli/cli` v2.102.0), with an `Origin` header: `github.com/.../releases/download/...` answers 302 to `release-assets.githubusercontent.com` with no `access-control-allow-origin`; that host answers a range request with 206 (`accept-ranges: bytes`) and no `access-control-allow-origin`; the API asset endpoint (`api.github.com/repos/.../releases/assets/{id}`, `Accept: application/octet-stream`) answers 302 to the same host with `access-control-allow-origin: *`. So a browser page on another origin cannot read the file (inferred from the headers; no browser was run), and a server or build step can | `curl -D -`, 2026-10-18 |
 | Release assets | Each file under 2 GiB; at most 1,000 assets per release; an upload that ends in a 502 "may leave an empty asset with a state of starter"; the asset `digest` field is "string or null"; GitHub renames asset names containing special characters; `gh release upload --clobber` deletes before upload ("If the upload fails, the original assets will be lost.") | GitHub docs; gh source |
 | Large files | Git warns above 50 MiB; GitHub blocks files above 100 MiB | GitHub docs |
 | Schedules | Public-repo schedules disable after 60 days without repository activity; start of hour is high load; queued jobs may be dropped; `workflow_dispatch` requires the workflow on the default branch | GitHub docs |
@@ -1730,7 +1739,8 @@ Measured 2026-10-16 unless noted. "Index" means the created-order enumeration in
 
 ## 9. Later work
 
-Dashboard integration and replacement of its data layer, a query API, AI enrichment (D12),
+Dashboard integration and replacement of its data layer (it reads the snapshot as 5.6 "Consumer
+access" describes), a query API, AI enrichment (D12),
 company affiliation, CI check status, releases, additional repositories, and a consumer-side
 check that the latest manifest is recent (a disabled schedule fails no run). File classification
 and dependency tagging are not planned; excluding paths from line counts is the consumer's:
