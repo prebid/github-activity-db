@@ -33,14 +33,14 @@ entry here, or an entry names one that does not exist.
   stored. No column of GitHub's data holds a value the database chose, except the
   classifications named below (`targets_default_branch`, `is_pr_author`, `author_also_reviewed`,
   `automation_reason`, `email_automation_reason`), each a rule over stored columns of the same
-  file (D29), and the `ordinal` columns, which number GitHub's order from 0.
+  file (D29). An `ordinal` column is the entry's position in GitHub's list, numbered from 0.
 - The references D28 keeps (a pull request's author and merger, a review's reviewer, a
   comment's author, a commit's account) are null when GitHub returned no actor and the row had
   none stored; GitHub does not say why. A reference the database kept when GitHub later
   returned no actor has its `*_reported` column 0; on a commit, `linked_github_id` holds the
-  account id GitHub linked in the latest hydration (D28). The other references (editors,
-  requested accounts, assignees) take GitHub's current value, null included. Each column's
-  entry gives its further null cases. An account a lookup answered `NOT_FOUND` for keeps its
+  account id GitHub linked in the latest hydration (D28). Editors and requested accounts take
+  GitHub's current value, null included, and `pr_assignees` holds GitHub's current
+  `assignedActors` list. Each column's entry gives its further null cases. An account a lookup answered `NOT_FOUND` for keeps its
   row, its `not_found_at` set.
 - An account's `type` and the reason of the `[automation]` entry listing it are separate
   columns; nothing merges them into one flag, and the views keep every row (D29).

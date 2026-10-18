@@ -747,8 +747,8 @@ class TestIndex:
     async def test_a_state_its_dates_disagree_with_passes_through(
         self, open_source, replay: Replay
     ) -> None:
-        # The index does not fail the repository for one entry: such an entry counts as in
-        # coverage and is hydrated (plan section 3).
+        # The index does not fail the repository for one entry: the planner records such an
+        # entry as an item failure and keeps its stored row (plan section 3).
         disagreeing: dict[str, dict[str, str | None]] = {
             "CLOSED": {"mergedAt": None, "closedAt": None},
             "MERGED": {"mergedAt": None, "closedAt": "2024-05-01T00:00:00Z"},

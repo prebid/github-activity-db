@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import re
 from pathlib import Path
 
@@ -10,6 +9,7 @@ import pytest
 
 from github_activity_db.source import documents
 from github_activity_db.source.limits import OVERFLOW_ALIASES_PER_REQUEST
+from tests.data_dictionary import lock_checker
 from tests.source.graphql_cost import cost
 
 LOCK = Path(__file__).resolve().parent.parent / "query_versions.json"
@@ -31,7 +31,7 @@ class TestHydrationVersionLock:
     """``tests/query_versions.json`` ties each kind's version to its documents (plan Step 2)."""
 
     def test_current_documents_match_the_locked_hash(self) -> None:
-        lock = json.loads(LOCK.read_text())
+        lock = lock_checker().digests(LOCK.read_text(), str(LOCK))
         key = f"{documents.PULL_REQUEST_KIND}:{documents.PULL_REQUEST_HYDRATION_VERSION}"
         current = documents.document_hash(*documents.pull_request_documents())
         assert key in lock, f"add {key!r} to {LOCK.name}"
@@ -41,7 +41,7 @@ class TestHydrationVersionLock:
         )
 
     def test_lock_keys_name_a_kind_and_a_version(self) -> None:
-        for key, digest in json.loads(LOCK.read_text()).items():
+        for key, digest in lock_checker().digests(LOCK.read_text(), str(LOCK)).items():
             kind, version = key.split(":")
             assert kind == documents.PULL_REQUEST_KIND
             assert int(version) >= 1

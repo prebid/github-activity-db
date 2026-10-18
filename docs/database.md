@@ -121,7 +121,8 @@ Consumers read the views and the columns the dictionary marks consumer. The view
 row and leave counting to the query. For example, for each account, the merged pull requests of
 one tracked repository it approved, with the account's type and `[automation]` reason beside it,
 and the lines those pull requests changed, each pull request counted once however many times the
-account approved it:
+account approved it. An approval GitHub returned without a reviewer, which the database had none
+stored for, has null account columns; the query leaves those out:
 
 ```sql
 SELECT account_login, account_type, account_automation_reason,
@@ -135,6 +136,7 @@ FROM (
       AND relationship = 'review'
       AND review_state = 'APPROVED'
       AND pr_state = 'MERGED'
+      AND account_node_id IS NOT NULL
 )
 GROUP BY account_github_id, account_node_id
 ORDER BY pull_requests_approved DESC;

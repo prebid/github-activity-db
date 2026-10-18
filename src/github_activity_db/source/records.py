@@ -369,7 +369,8 @@ class PullRequestRecord:
     is_cross_repository: bool
     milestone: Milestone | None
     review_decision: str | None
-    # GitHub's merge state when the item was read; it changes without the PR's updatedAt.
+    # GitHub's merge state when the item was read; whether GitHub's recomputing it changes the
+    # PR's updatedAt is not measured (plan section 8).
     mergeable: str
     merge_state_status: str
     can_be_rebased: bool
