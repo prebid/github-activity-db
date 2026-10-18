@@ -376,14 +376,20 @@ def wire_request(node: dict[str, Any]) -> ReviewRequest:
             if typename in ("User", "Bot", "Mannequin")
             else None
         ),
-        team=(
-            RequestedTeam(
-                github_id=requested["databaseId"], node_id=requested["id"], slug=requested["slug"]
-            )
-            if typename == "Team"
-            else None
-        ),
+        team=wire_team(requested),
     )
+
+
+def wire_team(requested: dict[str, Any] | None) -> RequestedTeam | None:
+    """A Team by its databaseId; an EnterpriseTeam by its fullDatabaseId, a BigInt string."""
+    if requested is None or requested["__typename"] not in ("Team", "EnterpriseTeam"):
+        return None
+    if requested["__typename"] == "Team":
+        github_id = requested["databaseId"]
+    else:
+        full = requested["fullDatabaseId"]
+        github_id = int(full) if full is not None else None
+    return RequestedTeam(github_id=github_id, node_id=requested["id"], slug=requested["slug"])
 
 
 def wire_assignee(node: dict[str, Any]) -> Account:
@@ -948,9 +954,9 @@ async def test_a_duplicate_user_linked_issue(open_source, replay: Replay) -> Non
     assert error.connection == "userLinkedClosingIssues"
 
 
-async def test_review_requests_of_each_kind(open_source, replay: Replay) -> None:
-    # Synthetic: recorded #15771's user request, then a team, an enterprise team (only its type
-    # is selected), and a request GitHub returns with no reviewer.
+def review_requests_of_each_kind(replay: Replay) -> Unit:
+    """Recorded #15771's user request, then a team, an enterprise team, and a request GitHub
+    returns with no reviewer (synthetic), added to the replay."""
     unit = pr_unit(replay, 15771)
     user_request = unit.data["reviewRequests"]["nodes"][0]
     unit.data["reviewRequests"]["nodes"] = [
@@ -970,6 +976,12 @@ async def test_review_requests_of_each_kind(open_source, replay: Replay) -> None
     ]
     unit.data["reviewRequests"]["totalCount"] = 4
     replay.add(unit)
+    return unit
+
+
+async def test_review_requests_of_each_kind(open_source, replay: Replay) -> None:
+    unit = review_requests_of_each_kind(replay)
+    await test_every_field_maps_from_its_wire_name(open_source, unit)
     record = await hydrate_one(open_source, PREBID_JS, 15771)
     assert [
         (request.requested_type, request.account is not None, request.team, request.github_id)
@@ -989,6 +1001,39 @@ async def test_review_requests_of_each_kind(open_source, replay: Replay) -> None
     ]
     # A requested account is an actor sighting; a team or an enterprise team is not an account.
     assert record.review_requests[0].account in record.accounts()
+
+
+def enterprise_team_request(unit: Unit) -> dict[str, Any]:
+    (request,) = [
+        node
+        for node in unit.data["reviewRequests"]["nodes"]
+        if (node["requestedReviewer"] or {}).get("__typename") == "EnterpriseTeam"
+    ]
+    return request["requestedReviewer"]
+
+
+async def test_an_enterprise_team_without_a_full_database_id(open_source, replay: Replay) -> None:
+    # fullDatabaseId is nullable in GitHub's schema; the team is still told by its node id.
+    unit = review_requests_of_each_kind(replay)
+    enterprise_team_request(unit)["fullDatabaseId"] = None
+    replay.add(unit)
+    await test_every_field_maps_from_its_wire_name(open_source, unit)
+    record = await hydrate_one(open_source, PREBID_JS, 15771)
+    assert record.review_requests[2].team == RequestedTeam(
+        github_id=None, node_id="ET_kwDOAAAAAQ", slug="enterprise-reviewers"
+    )
+
+
+async def test_an_enterprise_team_id_that_is_not_a_big_int_fails_the_item(
+    open_source, replay: Replay
+) -> None:
+    # A BigInt arrives as a string of digits; a JSON number is a shape GitHub does not send.
+    unit = review_requests_of_each_kind(replay)
+    enterprise_team_request(unit)["fullDatabaseId"] = 9000000001
+    replay.add(unit)
+    error = await failure(open_source, PREBID_JS, 15771)
+    assert isinstance(error, ResponseShapeError)
+    assert "expected a BigInt, a string of digits: 9000000001" in str(error)
 
 
 async def test_a_stack_and_its_entry(open_source, replay: Replay) -> None:

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import dataclasses
+import itertools
 from datetime import UTC, datetime, timedelta
 from email.utils import format_datetime
 from typing import Any
@@ -386,37 +387,73 @@ def test_the_resolve_recordings_hold_a_value_for_each_added_field() -> None:
     assert empty == []
 
 
-async def test_resolve_fields_equal_in_every_recording_map_apart(
-    open_source, replay: Replay
-) -> None:
-    """Some resolve fields hold one value in every recording (forkingAllowed,
-    hasVulnerabilityAlertsEnabled, squashMergeAllowed, the plan features, archivedAt), and
-    mergeCommitAllowed equals rebaseMergeAllowed; here each differs from its siblings."""
+# Every true-or-false setting the resolve reads, in RepositoryRecord's order.
+RESOLVE_SETTINGS = (
+    "isPrivate",
+    "isArchived",
+    "isSecurityPolicyEnabled",
+    "forkingAllowed",
+    "allowUpdateBranch",
+    "webCommitSignoffRequired",
+    "hasWikiEnabled",
+    "hasDiscussionsEnabled",
+    "hasProjectsEnabled",
+    "hasVulnerabilityAlertsEnabled",
+    "usesCustomOpenGraphImage",
+    "mergeCommitAllowed",
+    "squashMergeAllowed",
+    "rebaseMergeAllowed",
+    "deleteBranchOnMerge",
+    "planFeatures.codeowners",
+    "planFeatures.teamReviewRequests",
+)
+SETTING_BITS = range((len(RESOLVE_SETTINGS) - 1).bit_length())
+
+
+def settings_variant(bit: int) -> dict[str, bool]:
+    """Setting i takes bit ``bit`` of i, so any two settings differ in some variant."""
+    return {name: bool(i >> bit & 1) for i, name in enumerate(RESOLVE_SETTINGS)}
+
+
+def test_the_settings_variants_tell_every_two_settings_apart() -> None:
+    flags = [
+        field.name
+        for field in dataclasses.fields(RepositoryRecord)
+        if field.type in ("bool", "bool | None")
+    ]
+    assert len(flags) == len(RESOLVE_SETTINGS)
+    variants = [settings_variant(bit) for bit in SETTING_BITS]
+    alike = [
+        (first, second)
+        for first, second in itertools.combinations(RESOLVE_SETTINGS, 2)
+        if all(variant[first] == variant[second] for variant in variants)
+    ]
+    assert alike == []
+
+
+@pytest.mark.parametrize("bit", SETTING_BITS)
+async def test_every_two_resolve_settings_map_apart(open_source, replay: Replay, bit: int) -> None:
+    """Several settings hold one value in every recording (forkingAllowed and
+    squashMergeAllowed among them); in these variants no two are equal throughout."""
     unit = replay.unit("resolve", owner="prebid", name="go-gdpr")
-    data = unit.data
-    data.update(
-        forkingAllowed=False,
-        hasVulnerabilityAlertsEnabled=True,
-        squashMergeAllowed=False,
-        mergeCommitAllowed=True,
-        rebaseMergeAllowed=False,
-        allowUpdateBranch=True,
-        deleteBranchOnMerge=False,
-        archivedAt="2026-02-01T00:00:00Z",
-        pushedAt="2026-01-01T00:00:00Z",
-    )
-    data["planFeatures"] = {
-        "codeowners": True,
-        "teamReviewRequests": False,
-        "maximumManualReviewRequests": 3,
-    }
-    unit.source = "synthetic: go-gdpr's resolve with settings that differ from each other"
+    for name, value in settings_variant(bit).items():
+        *parents, leaf = name.split(".")
+        target = unit.data
+        for parent in parents:
+            target = target[parent]
+        target[leaf] = value
+    unit.source = f"synthetic: go-gdpr's resolve, setting i set to bit {bit} of i"
     replay.add(unit)
-    flags = [data[name] for name in ("forkingAllowed", "hasVulnerabilityAlertsEnabled")]
-    assert len(set(flags)) == 2
-    assert data["squashMergeAllowed"] != data["mergeCommitAllowed"] != data["rebaseMergeAllowed"]
-    assert data["planFeatures"]["codeowners"] != data["planFeatures"]["teamReviewRequests"]
-    assert data["archivedAt"] != data["pushedAt"]
+    await test_resolve_maps_every_field_from_its_wire_name(open_source, unit)
+
+
+async def test_an_archived_at_time_maps(open_source, replay: Replay) -> None:
+    """archivedAt is null in every recording; here it holds a time pushedAt does not."""
+    unit = replay.unit("resolve", owner="prebid", name="go-gdpr")
+    unit.data.update(archivedAt="2026-02-01T00:00:00Z", pushedAt="2026-01-01T00:00:00Z")
+    unit.data["planFeatures"]["maximumManualReviewRequests"] = 3
+    unit.source = "synthetic: go-gdpr's resolve with an archivedAt time"
+    replay.add(unit)
     await test_resolve_maps_every_field_from_its_wire_name(open_source, unit)
 
 
@@ -706,6 +743,30 @@ class TestIndex:
         (entry,) = [entry for entry in index.entries if entry.closing_issues_total == 2]
         assert len(entry.closing_issues) == 1
         assert entry.closing_issues[0].repo_full_name != "prebid/renamed"
+
+    async def test_a_state_its_dates_disagree_with_passes_through(
+        self, open_source, replay: Replay
+    ) -> None:
+        # The index does not fail the repository for one entry: such an entry counts as in
+        # coverage and is hydrated (plan section 3).
+        disagreeing: dict[str, dict[str, str | None]] = {
+            "CLOSED": {"mergedAt": None, "closedAt": None},
+            "MERGED": {"mergedAt": None, "closedAt": "2024-05-01T00:00:00Z"},
+            "OPEN": {"mergedAt": "2024-05-01T00:00:00Z", "closedAt": None},
+        }
+
+        def disagree(body: dict[str, Any]) -> None:
+            nodes = body["data"]["repository"]["pullRequests"]["nodes"]
+            for node, (state, dates) in zip(nodes, disagreeing.items(), strict=False):
+                node.update(state=state, **dates)
+
+        replay.modify(disagree, when=operation("PullRequestIndex"))
+        async with open_source() as source:
+            index = await source.index_pull_requests(await source.resolve("prebid", "go-gdpr"))
+        assert [(entry.state, entry.merged_at, entry.closed_at) for entry in index.entries[:3]] == [
+            (state, wire_time(dates["mergedAt"]), wire_time(dates["closedAt"]))
+            for state, dates in disagreeing.items()
+        ]
 
     async def test_errors_in_an_index_page_fail_the_repository(
         self, open_source, replay: Replay

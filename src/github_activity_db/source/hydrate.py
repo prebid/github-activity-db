@@ -466,7 +466,8 @@ class PullRequestHydrator:
         review_requests = tuple(_review_request(request) for request in item.review_requests.nodes)
         assignees = tuple(union_account(actor) for actor in item.assigned_actors.nodes)
         # The database keys these entries, so a duplicate standing in for a missing entry would
-        # pass the count check and drop a row.
+        # pass the count check and drop a row. Review requests are stored by position, so theirs
+        # is compared by the request's own node id.
         _check_distinct(number, "labels", [label.name for label in labels])
         _check_distinct(
             number, "closingIssuesReferences", [link_key(link) for link in closing_issues]

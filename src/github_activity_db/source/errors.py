@@ -276,7 +276,8 @@ class PagingStalled(InvariantError):
 
 
 class DuplicateEntry(InvariantError):
-    """A connection listed an entry twice by the key the database stores it under."""
+    """A connection listed an entry twice: by the key the database stores it under, or, for a
+    review request, which is stored by its position, by its own node id."""
 
     def __init__(self, number: int, connection: str, key: object) -> None:
         super().__init__(number, f"{connection}: {key!r} listed twice")

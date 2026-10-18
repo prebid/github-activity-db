@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import itertools
 import shutil
 import sqlite3
 from collections.abc import Iterator
@@ -160,6 +161,29 @@ def seed(migrated_database: Path) -> Iterator[Seed]:
 
 def rows(seed: Seed, sql: str) -> list[tuple[object, ...]]:
     return [tuple(row) for row in seed.connection.exec_driver_sql(sql).fetchall()]
+
+
+def equal_columns(view: str, table: list[tuple[object, ...]]) -> list[tuple[str, str]]:
+    """The pairs of ``view``'s columns that hold equal values in every row of ``table``: a view
+    that read one of the pair from the other's source would return the same rows."""
+    names = COLUMNS[view]
+    return [
+        (names[i], names[j])
+        for i, j in itertools.combinations(range(len(names)), 2)
+        if all(row[i] == row[j] for row in table)
+    ]
+
+
+def test_equal_columns_names_only_the_pairs_equal_in_every_row() -> None:
+    names = COLUMNS["v_github_users"]
+    first = list(range(len(names)))
+    second = list(range(100, 100 + len(names)))
+    first[3] = first[5]  # type and created_at, equal in both rows
+    second[3] = second[5]
+    first[1] = first[2]  # node_id and login, equal in one row only
+    assert equal_columns("v_github_users", [tuple(first), tuple(second)]) == [
+        ("type", "created_at")
+    ]
 
 
 def github_id(seed: Seed, user_id: int) -> int:
@@ -625,7 +649,9 @@ class TestEveryColumn:
             claimant_github_id=5,
             refreshed_at=at(8),
         )
-        assert rows(seed, "SELECT * FROM v_github_users ORDER BY node_id") == [
+        table = rows(seed, "SELECT * FROM v_github_users ORDER BY node_id")
+        assert equal_columns("v_github_users", table) == []
+        assert table == [
             (
                 None,
                 "EUA_1",
@@ -708,7 +734,9 @@ class TestEveryColumn:
             pinned_items_remaining=6,
             refreshed_at=at(3),
         )
-        assert rows(seed, "SELECT * FROM v_account_profiles ORDER BY login") == [
+        table = rows(seed, "SELECT * FROM v_account_profiles ORDER BY login")
+        assert equal_columns("v_account_profiles", table) == []
+        assert table == [
             (
                 647727,
                 "U_muuki88",
@@ -783,9 +811,19 @@ class TestEveryColumn:
             inline_comments_total=4,
         )
         authorless = seed.pull_request(a["repository"], 9, None, github_id=99)
-        seed.review(authorless, 7, a["author"], "APPROVED", node_id="PRR_two", submitted_at=None)
+        seed.review(
+            authorless,
+            7,
+            a["author"],
+            "APPROVED",
+            node_id="PRR_two",
+            submitted_at=None,
+            reviewer_reported=False,
+        )
         keys = (39321023, REPO, 1)
-        assert rows(seed, "SELECT * FROM v_pr_reviews ORDER BY review_github_id") == [
+        table = rows(seed, "SELECT * FROM v_pr_reviews ORDER BY review_github_id")
+        assert equal_columns("v_pr_reviews", table) == []
+        assert table == [
             (
                 *keys,
                 9,
@@ -803,7 +841,7 @@ class TestEveryColumn:
                 "MEMBER",
                 1,
                 0,
-                1,
+                0,
                 11,
                 "U_author",
                 "author",
@@ -866,9 +904,12 @@ class TestEveryColumn:
             includes_created_edit=True,
             author_association="NONE",
         )
-        seed.comment(a["pr"], a["author"], 5, node_id="IC_two")
+        seed.comment(a["pr"], a["author"], 5, node_id="IC_two", includes_created_edit=True)
+        seed.comment(a["pr"], a["editor"], 6, node_id="IC_three", created_via_email=True)
         keys = (39321023, REPO, 1, 13481, 4891210785)
-        assert rows(seed, "SELECT * FROM v_pr_comments ORDER BY comment_github_id") == [
+        table = rows(seed, "SELECT * FROM v_pr_comments ORDER BY comment_github_id")
+        assert equal_columns("v_pr_comments", table) == []
+        assert table == [
             (
                 *keys,
                 5,
@@ -878,7 +919,7 @@ class TestEveryColumn:
                 stored(0),
                 None,
                 0,
-                0,
+                1,
                 "MEMBER",
                 1,
                 11,
@@ -892,6 +933,31 @@ class TestEveryColumn:
                 None,
                 None,
                 1,
+                0,
+            ),
+            (
+                *keys,
+                6,
+                "IC_three",
+                stored(0),
+                None,
+                stored(0),
+                None,
+                1,
+                0,
+                "MEMBER",
+                1,
+                33,
+                "U_editor",
+                "editor",
+                "User",
+                "editor reason",
+                None,
+                None,
+                None,
+                None,
+                None,
+                0,
                 0,
             ),
             (
@@ -933,7 +999,10 @@ class TestEveryColumn:
             author_email="NoReply@Anthropic.com",
             authored_at=at(1),
         )
-        assert rows(seed, "SELECT * FROM v_commit_authors") == [
+        seed.commit(a["pr"], "b" * 40, None, linked_github_id=987654)
+        table = rows(seed, "SELECT * FROM v_commit_authors ORDER BY sha")
+        assert equal_columns("v_commit_authors", table) == []
+        assert table == [
             (
                 39321023,
                 REPO,
@@ -951,6 +1020,24 @@ class TestEveryColumn:
                 "Bot",
                 "bot reason",
                 "email reason",
+            ),
+            (
+                39321023,
+                REPO,
+                1,
+                13481,
+                4891210785,
+                "b" * 40,
+                987654,
+                "A Developer",
+                "dev@example.com",
+                stored(0),
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
             ),
         ]
 
@@ -1052,10 +1139,9 @@ class TestEveryRelationshipColumn:
         merger_account = account_columns(22, "U_merger", "merger", "User", None)
         bot_account = account_columns(33, "B_bot", "bot", "Bot", "bot reason")
         editor_account = account_columns(44, "U_editor", "editor", "User", None)
-        assert rows(
-            seed,
-            "SELECT * FROM v_pr_relationships ORDER BY relationship",
-        ) == [
+        table = rows(seed, "SELECT * FROM v_pr_relationships ORDER BY relationship")
+        assert equal_columns("v_pr_relationships", table) == []
+        assert table == [
             relationship(relationship="assignee", **bot_account),
             relationship(relationship="author", reported=0, **author_account),
             relationship(relationship="comment", comment_github_id=202, reported=0, **bot_account),

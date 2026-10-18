@@ -30,19 +30,23 @@ entry here, or an entry names one that does not exist.
 - Values GitHub reports keep GitHub's names in snake case and its values. Every GitHub enum
   except a pull request's and a review's `state` (and `github_users.type`) is GitHub's text,
   stored without a check, such as `review_decision` or `mergeable`, so a value GitHub adds is
-  stored. No column holds a value the database chose, except the classifications named
-  below (`targets_default_branch`, `is_pr_author`, `author_also_reviewed`, `automation_reason`,
-  `email_automation_reason`), each a rule over stored columns of the same file (D29).
-- A null account reference means GitHub returned no actor for it and the row had none stored;
-  GitHub does not say why. A reference the database kept when GitHub later returned no actor
-  has its `*_reported` column 0; on a commit, `linked_github_id` holds the account id GitHub
-  linked in the latest hydration (D28). An account a lookup answered `NOT_FOUND` for keeps its
+  stored. No column of GitHub's data holds a value the database chose, except the
+  classifications named below (`targets_default_branch`, `is_pr_author`, `author_also_reviewed`,
+  `automation_reason`, `email_automation_reason`), each a rule over stored columns of the same
+  file (D29), and the `ordinal` columns, which number GitHub's order from 0.
+- The references D28 keeps (a pull request's author and merger, a review's reviewer, a
+  comment's author, a commit's account) are null when GitHub returned no actor and the row had
+  none stored; GitHub does not say why. A reference the database kept when GitHub later
+  returned no actor has its `*_reported` column 0; on a commit, `linked_github_id` holds the
+  account id GitHub linked in the latest hydration (D28). The other references (editors,
+  requested accounts, assignees) take GitHub's current value, null included. Each column's
+  entry gives its further null cases. An account a lookup answered `NOT_FOUND` for keeps its
   row, its `not_found_at` set.
 - An account's `type` and the reason of the `[automation]` entry listing it are separate
   columns; nothing merges them into one flag, and the views keep every row (D29).
 - The run records (`sync_runs`, `repo_sync_state`, `sync_pending`, `sync_failures`), the
-  automation lists, `is_tracked`, and `repo_group` describe the database's own configuration and
-  runs, not GitHub's data. A view's `relationship` column names the stored row a view row comes
+  automation lists, `is_tracked`, `repo_group`, and `pull_requests.hydration_version` describe
+  the database's own configuration and runs, not GitHub's data. A view's `relationship` column names the stored row a view row comes
   from.
 
 The decisions cited (D3, D17, ...) are in [docs/redesign-plan.md](redesign-plan.md).
@@ -178,7 +182,7 @@ Pull requests in coverage: open ones, ones merged on or after the coverage floor
 | `author_association` | consumer | GitHub's current `authorAssociation` (`MEMBER`, `CONTRIBUTOR`, ...), which GitHub computes when read |
 | `created_at` | consumer | GitHub's `createdAt` |
 | `merged_at` | consumer | GitHub's `mergedAt`; set exactly when `state` is `MERGED` |
-| `closed_at` | consumer | GitHub's `closedAt`; null while open |
+| `closed_at` | consumer | GitHub's `closedAt`; set for every `CLOSED` or `MERGED` row (plan 5.3 step 5) |
 | `published_at` | consumer | GitHub's `publishedAt`; null when GitHub returns none |
 | `last_edited_at` | consumer | GitHub's `lastEditedAt`; null when GitHub returns none |
 | `editor_id` | consumer | Row id of the account GitHub lists as the last editor; null when GitHub returns none |
@@ -306,7 +310,7 @@ The file list, one row per entry; a path can appear twice.
 | Column | Use | Meaning |
 |--------|-----|---------|
 | `pr_id` | consumer | Row id of the pull request |
-| `ordinal` | consumer | Position in GitHub's file list |
+| `ordinal` | consumer | Position in GitHub's file list, from 0 |
 | `path` | consumer | File path |
 | `change_type` | consumer | GitHub's `changeType` (`ADDED`, `MODIFIED`, ...) |
 | `additions` | consumer | Lines added to the file |
@@ -334,7 +338,7 @@ GitHub's `reviewRequests` for the pull request, one row per entry as GitHub curr
 | Column | Use | Meaning |
 |--------|-----|---------|
 | `pr_id` | consumer | Row id of the pull request |
-| `ordinal` | consumer | Position in GitHub's list |
+| `ordinal` | consumer | Position in GitHub's list, from 0 |
 | `request_github_id` | consumer | The request's own `databaseId`; null when GitHub returns none |
 | `request_node_id` | consumer | The request's own node id |
 | `requested_type` | consumer | GitHub's type of the requested reviewer (`User`, `Bot`, `Mannequin`, `Team`, `EnterpriseTeam`); null when GitHub returns no requested reviewer |
@@ -619,7 +623,8 @@ One row per stored commit.
 ### `v_pr_relationships`
 
 One row per relationship of a pull request to an account, a team, or an actor GitHub did not
-return, from the stored rows, with the pull request's size. `relationship` names the source:
+return, from the stored rows, with the pull request's `additions`, `deletions`, and
+`changed_files`. `relationship` names the source:
 `author` (one per pull request), `merged_by` (one per merged pull request), `review` (one per
 review), `comment` (one per comment), `review_request` (one per request), `assignee` (one per
 assignee), `commit_author` (one per commit), and `pr_editor`, `review_editor`, and
@@ -638,7 +643,7 @@ assignee), `commit_author` (one per commit), and `pr_editor`, `review_editor`, a
 | `comment_github_id` | consumer | The comment's id, on `comment` and `comment_editor` rows |
 | `request_node_id` | consumer | The request's node id, on `review_request` rows |
 | `request_github_id` | consumer | The request's `databaseId`, on `review_request` rows |
-| `request_ordinal` | consumer | The request's position in GitHub's list, on `review_request` rows |
+| `request_ordinal` | consumer | The request's position in GitHub's list, from 0, on `review_request` rows |
 | `commit_sha` | consumer | The commit's SHA, on `commit_author` rows |
 | `reported` | consumer | The source row's `*_reported` value, on `author`, `merged_by`, `review`, and `comment` rows |
 | `account_github_id` | consumer | The account's numeric id |
