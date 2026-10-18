@@ -56,7 +56,7 @@ def package_without_resource(tmp_path: Path) -> Path:
 def test_passes_when_the_packaged_file_is_read(checkout: Path) -> None:
     result = _run(checkout)
     assert result.returncode == 0, result.stdout
-    assert "tracked repositories from the packaged tracking.toml: 18" in result.stdout
+    assert "tracked repositories from the packaged tracking.toml: 29" in result.stdout
 
 
 @pytest.mark.parametrize("spelling", SPELLINGS)

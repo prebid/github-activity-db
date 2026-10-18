@@ -94,3 +94,58 @@ group = "Tools"
 owner = "prebid"
 name = "prebid-integration-monitor"
 group = "Tools"
+
+[[repositories]]
+owner = "prebid"
+name = "prebid-cache"
+group = "Server"
+
+[[repositories]]
+owner = "prebid"
+name = "user-sync"
+group = "Server"
+
+[[repositories]]
+owner = "prebid"
+name = "shared-id"
+group = "Server"
+
+[[repositories]]
+owner = "prebid"
+name = "Shared-id-v2"
+group = "Server"
+
+[[repositories]]
+owner = "prebid"
+name = "prebid-mobile-ios-adapters"
+group = "Mobile"
+
+[[repositories]]
+owner = "prebid"
+name = "prebid-js-build-generator"
+group = "Tools"
+
+[[repositories]]
+owner = "prebid"
+name = "code-scanner"
+group = "Tools"
+
+[[repositories]]
+owner = "prebid"
+name = "currency-file"
+group = "Tools"
+
+[[repositories]]
+owner = "prebid"
+name = "currency-file-generator"
+group = "Tools"
+
+[[repositories]]
+owner = "prebid"
+name = "prebidjs-releaser"
+group = "Tools"
+
+[[repositories]]
+owner = "prebid"
+name = "automation-testing"
+group = "Tools"
