@@ -27,6 +27,17 @@ EXPECTED_REPOS = [
     "prebid/openrtb",
     "prebid/github-activity-db",
     "prebid/prebid-integration-monitor",
+    "prebid/prebid-cache",
+    "prebid/user-sync",
+    "prebid/shared-id",
+    "prebid/Shared-id-v2",
+    "prebid/prebid-mobile-ios-adapters",
+    "prebid/prebid-js-build-generator",
+    "prebid/code-scanner",
+    "prebid/currency-file",
+    "prebid/currency-file-generator",
+    "prebid/prebidjs-releaser",
+    "prebid/automation-testing",
 ]
 
 
