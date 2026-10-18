@@ -155,7 +155,7 @@ subprocess, for exit codes and tracebacks outside `CliRunner`.
 ```bash
 uv run pytest                                  # everything
 uv run pytest tests/db -v                      # one directory
-uv run pytest tests/db/test_views.py -k final_verdict
+uv run pytest tests/db/test_views.py -k relationships
 uv run pytest --junitxml="${TMPDIR:-/tmp}/junit.xml" \
   && uv run python scripts/check_junit.py "${TMPDIR:-/tmp}/junit.xml" --max-skipped 0
 ```

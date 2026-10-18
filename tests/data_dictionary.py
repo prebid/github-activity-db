@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import sqlite3
 from contextlib import closing
 from pathlib import Path
+from typing import Any
 
 from tests.db.schema_support import user_objects
 
@@ -97,9 +99,33 @@ def consumer_pairs(entries: dict[str, dict[str, str]]) -> list[list[str]]:
     )
 
 
-def read_lock() -> dict[str, list[list[str]]]:
-    lock: dict[str, list[list[str]]] = json.loads(SCHEMA_LOCK.read_text())
+LockEntry = list[list[str]] | dict[str, Any]
+
+
+def read_lock() -> dict[str, LockEntry]:
+    lock: dict[str, LockEntry] = json.loads(SCHEMA_LOCK.read_text())
     return lock
+
+
+def lock_columns(entry: LockEntry) -> list[list[str]]:
+    """An entry's consumer pairs: the entry itself (version 1) or its ``columns``."""
+    if isinstance(entry, list):
+        return entry
+    columns: list[list[str]] = entry["columns"]
+    return columns
+
+
+def lock_views(entry: LockEntry) -> dict[str, str]:
+    """An entry's view digests; version 1 has none."""
+    if isinstance(entry, list):
+        return {}
+    views: dict[str, str] = entry["views"]
+    return views
+
+
+def view_digest(sql: str) -> str:
+    """SHA-256 of a view's frozen SQL, whitespace runs collapsed as the view comparison does."""
+    return hashlib.sha256(" ".join(sql.split()).encode()).hexdigest()
 
 
 def lock_differences(entry: list[list[str]], consumer: list[list[str]]) -> list[str]:

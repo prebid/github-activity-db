@@ -101,8 +101,8 @@ def test_stored_text_orders_as_time(migrated_database: Path) -> None:
 
 def test_null_passes_through(migrated_database: Path) -> None:
     with connect(migrated_database) as connection:
-        Seed(connection).user("someone", deleted_at=None)
-        assert connection.execute(select(GitHubUser.deleted_at)).scalar_one() is None
+        Seed(connection).user("someone", not_found_at=None)
+        assert connection.execute(select(GitHubUser.not_found_at)).scalar_one() is None
 
 
 def test_the_default_is_now_in_utc(migrated_database: Path) -> None:

@@ -111,18 +111,29 @@ dictionary and the schema-version lock. CI also runs `alembic check`.
 | `a2b3c4d5e6f7` | Adds `sync_failures` |
 | `b3c4d5e6f7g8` | Renames `pull_requests.filenames` to `file_changes` |
 | `33f8570f6540` | Step 3 schema: drops the first schema's tables except `user_tags`, creates the 5.1 tables and views, sets `user_version` 1 |
+| `94a52e4f1d57` | Step 3b-1 collection schema: refuses a file holding rows in a table it adds columns to, recreates those tables with the 5.1 columns, adds `repo_labels`, `pr_review_requests`, `pr_assignees`, and `account_profiles`, replaces the views with the row-level views, sets `user_version` 2 |
 
 ## Querying
 
-Consumers read the views and the columns the dictionary marks consumer. For example, the
-reviewers of one repository's pull requests, with their final verdicts:
+Consumers read the views and the columns the dictionary marks consumer. The views keep every
+row and leave counting to the query. For example, each account's approving reviews of one
+repository's merged pull requests, with the account's type and `[automation]` reason beside it,
+and the lines those pull requests changed:
 
 ```sql
-SELECT pr_number, reviewer_login, final_verdict, comment_count
-FROM v_pr_reviewers
+SELECT account_login, account_type, account_automation_reason,
+       COUNT(*) AS approvals, SUM(additions + deletions) AS lines_changed
+FROM v_pr_relationships
 WHERE repository_full_name = 'prebid/Prebid.js'
-ORDER BY pr_number;
+  AND relationship = 'review'
+  AND review_state = 'APPROVED'
+  AND pr_state = 'MERGED'
+GROUP BY account_github_id, account_node_id
+ORDER BY approvals DESC;
 ```
+
+An account that approved one pull request twice counts twice here; `COUNT(DISTINCT pr_github_id)`
+counts the pull requests instead. That choice is the query's, not the view's.
 
 Application code uses `get_session()`, which commits on a clean exit and rolls back on an
 exception:

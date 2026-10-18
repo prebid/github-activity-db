@@ -10,9 +10,16 @@ from __future__ import annotations
 from typing import Final
 
 # PRAGMA user_version of a database at head (redesign plan 5.1). Bumped when a consumer column is
-# removed, renamed, or changes meaning, never for an additive change; the newest migration sets it.
-SCHEMA_VERSION: Final = 1
+# removed, renamed, or changes meaning, or a consumer view's rows or derivation change, never for
+# an added table column, table, or view; the newest migration sets it.
+SCHEMA_VERSION: Final = 2
 
 # Every migration revision id, oldest first.
-MIGRATION_REVISIONS: Final = ("01421d8dfaeb", "a2b3c4d5e6f7", "b3c4d5e6f7g8", "33f8570f6540")
+MIGRATION_REVISIONS: Final = (
+    "01421d8dfaeb",
+    "a2b3c4d5e6f7",
+    "b3c4d5e6f7g8",
+    "33f8570f6540",
+    "94a52e4f1d57",
+)
 HEAD_REVISION: Final = MIGRATION_REVISIONS[-1]
