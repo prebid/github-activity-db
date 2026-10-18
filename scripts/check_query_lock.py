@@ -48,18 +48,24 @@ class CannotCheck(Exception):
     """The check cannot run (exit 2)."""
 
 
+class RepeatedKey(ValueError):
+    """A JSON object lists a key twice, which JSON allows and ``json.loads`` reads as the last."""
+
+
 def _unique_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
-    """A JSON object whose keys are distinct: ``json.loads`` would keep the last of two."""
+    """A JSON object whose keys are distinct."""
     keys = [key for key, _ in pairs]
     if repeated := sorted({key for key in keys if keys.count(key) > 1}):
-        raise ValueError(f"key listed twice: {', '.join(repeated)}")
+        raise RepeatedKey(f"key listed twice: {', '.join(repeated)}")
     return dict(pairs)
 
 
 def _object(text: str, where: str) -> dict[str, Any]:
     try:
         entries = json.loads(text, object_pairs_hook=_unique_keys)
-    except ValueError as e:  # JSONDecodeError, a repeated key, and an integer past the digit limit
+    except RepeatedKey as e:
+        raise CannotCheck(f"{where}: {e}") from e
+    except ValueError as e:  # JSONDecodeError, and an integer past the digit limit
         raise CannotCheck(f"{where} is not JSON: {e}") from e
     if not isinstance(entries, dict):
         raise CannotCheck(f"{where} is not a JSON object")
@@ -100,7 +106,10 @@ def schema_entries(text: str, where: str) -> dict[str, SchemaEntry]:
     read: dict[str, SchemaEntry] = {}
     for key, value in entries.items():
         if re.fullmatch(r"[1-9][0-9]{0,8}", key) is None:
-            raise CannotCheck(f"{where}: schema version {key!r} is not a positive integer")
+            raise CannotCheck(
+                f"{where}: schema version {key!r} is not a positive integer of at most nine "
+                "digits without leading zeros"
+            )
         if isinstance(value, dict):
             if set(value) != {"columns", "views"}:
                 raise CannotCheck(f"{where}: {key} must have exactly columns and views")

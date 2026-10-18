@@ -233,10 +233,19 @@ V2: dict[str, Any] = {
 }
 
 
-def with_views(views: dict[str, str], *, key: str = "2") -> dict[str, Any]:
-    """V2 with entry ``key``'s views replaced."""
-    entry = {**V2[key], "views": views} if key == "2" else V2[key]
-    return {**V2, key: entry}
+# Two entries with views, so a view can be edited in one that is not the newest at the base.
+V3: dict[str, Any] = {
+    **V2,
+    "3": {
+        "columns": V2["2"]["columns"],
+        "views": {"v_pr_reviews": "c" * 64, "v_github_users": "b" * 64},
+    },
+}
+
+
+def with_views(views: dict[str, str]) -> dict[str, Any]:
+    """V2 with version 2's views replaced."""
+    return {**V2, "2": {**V2["2"], "views": views}}
 
 
 class TestSchemaLock:
@@ -357,13 +366,53 @@ class TestSchemaLock:
     def test_an_edit_to_a_superseded_entry_fails(
         self, repo: Path, current: dict[str, Any], message: str
     ) -> None:
-        """The rule holds for every base entry, not only the newest one."""
+        """An entry stays fixed once a newer one is added."""
         write_schema_lock(repo, V2)
         commit(repo)
         write_schema_lock(repo, current)
         result = check(repo)
         assert result.returncode == 1
         assert message in result.stderr
+
+    @pytest.mark.parametrize(
+        ("views", "message"),
+        [
+            pytest.param(
+                {**V2["2"]["views"], "v_pr_reviews": "d" * 64},
+                "schema version 2 changed view v_pr_reviews",
+                id="changed digest",
+            ),
+            pytest.param(
+                {"v_pr_reviews": "a" * 64},
+                "schema version 2 lost view v_github_users",
+                id="removed view",
+            ),
+        ],
+    )
+    def test_a_view_edit_below_the_newest_entry_at_the_base_fails(
+        self, repo: Path, views: dict[str, str], message: str
+    ) -> None:
+        """Views are kept in every base entry, not only in the base's newest one."""
+        write_schema_lock(repo, V3)
+        commit(repo)
+        write_schema_lock(repo, {**V3, "2": {**V3["2"], "views": views}})
+        result = check(repo)
+        assert result.returncode == 1
+        assert message in result.stderr
+
+    def test_a_version_has_at_most_nine_digits(self, repo: Path) -> None:
+        write_schema_lock(repo, V1)
+        commit(repo)
+        write_schema_lock(repo, {**V1, "999999999": []})
+        result = check(repo)
+        assert result.returncode == 0, result.stderr
+        write_schema_lock(repo, {**V1, "1000000000": []})
+        result = check(repo)
+        assert result.returncode == 2
+        assert (
+            "schema version '1000000000' is not a positive integer of at most nine digits "
+            "without leading zeros" in result.stderr
+        )
 
     def test_a_view_added_to_the_newest_entry_passes(self, repo: Path) -> None:
         write_schema_lock(repo, V2)
@@ -498,6 +547,7 @@ class TestSchemaLock:
         result = check(repo)
         assert result.returncode == 2, result.stderr
         assert "listed twice" in result.stderr
+        assert "is not JSON" not in result.stderr
 
     def test_both_locks_are_checked_by_default(self, repo: Path) -> None:
         write_lock(repo, {"pull_request:1": "a" * 64})
