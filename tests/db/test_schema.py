@@ -29,11 +29,15 @@ from github_activity_db.db.models import (
 from github_activity_db.source.records import AccountType, ReviewState
 from tests.db.alembic_support import alembic_config, query
 from tests.db.schema_support import (
+    delete_actions,
     frozen_views,
     named_constraints,
+    nullable_columns,
+    objects_outside_the_comparison,
     schema_of,
     schema_tables,
     unindexed_foreign_keys,
+    unique_sets,
     view_differences,
 )
 from tests.db.seed import T0, Seed, connect
@@ -217,6 +221,170 @@ class TestViews:
             "not frozen v_extra",
             "differs v_github_users",
         ]
+
+
+class TestObjectsOutsideTheComparison:
+    """schema_of reads tables and the indexes and triggers on them, view_differences the views;
+    an object attached to neither, such as a trigger on a view, would pass both."""
+
+    def test_head_has_none(self, head_template: Path) -> None:
+        frozen = frozen_views(alembic_config(head_template))
+        assert objects_outside_the_comparison(head_template, frozen) == []
+
+    def test_each_planted_object_is_reported(self, head_template: Path, tmp_path: Path) -> None:
+        tampered = _tampered(
+            head_template,
+            tmp_path / "tampered.db",
+            "CREATE TRIGGER tr_view INSTEAD OF DELETE ON v_github_users BEGIN SELECT 1; END",
+            "CREATE INDEX ix_version ON alembic_version (version_num)",
+            "CREATE TRIGGER tr_version AFTER UPDATE ON alembic_version BEGIN SELECT 1; END",
+            "ANALYZE",
+        )
+        frozen = frozen_views(alembic_config(head_template))
+        assert objects_outside_the_comparison(tampered, frozen) == [
+            ("index", "ix_version"),
+            ("table", "sqlite_stat1"),
+            ("trigger", "tr_version"),
+            ("trigger", "tr_view"),
+        ]
+
+
+# Plan 5.1, transcribed: the comparison above holds the models and the migration to each other,
+# and these hold both to the plan.
+NULLABLE = frozenset(
+    {
+        ("github_users", "deleted_at"),
+        ("pull_requests", "author_id"),
+        ("pull_requests", "merged_at"),
+        ("pull_requests", "merged_by_id"),
+        ("pr_reviews", "reviewer_id"),
+        ("pr_comments", "author_id"),
+        ("pr_commits", "author_id"),
+        # Optional in the source record (CommitRecord).
+        ("pr_commits", "author_name"),
+        ("pr_commits", "author_email"),
+        ("sync_runs", "deadline_at"),
+        ("sync_runs", "finished_at"),
+        ("sync_runs", "exit_code"),
+        ("sync_runs", "deletions_approved"),
+        ("sync_runs", "halt_reason"),
+        ("repo_sync_state", "last_index_started_at"),
+        ("repo_sync_state", "index_pr_total"),
+        ("repo_sync_state", "index_issue_total"),
+        ("repo_sync_state", "last_success_at"),
+        ("repo_sync_state", "halt_reason"),
+        ("user_tags", "description"),
+        ("user_tags", "color"),
+        ("pr_user_tags", "created_at"),
+    }
+)
+UNIQUE: dict[str, set[tuple[str, tuple[str, ...]]]] = {
+    "repositories": {("u", ("github_id",))},
+    "github_users": {("u", ("github_id",)), ("u", ("node_id",))},
+    "pull_requests": {("u", ("repository_id", "number")), ("u", ("github_id",))},
+    "pr_labels": {("pk", ("pr_id", "name"))},
+    "pr_reviews": {("u", ("github_id",))},
+    "pr_comments": {("u", ("github_id",))},
+    "pr_commits": {("pk", ("pr_id", "sha"))},
+    "pr_files": {("pk", ("pr_id", "ordinal"))},
+    "pr_closing_issues": {("pk", ("pr_id", "issue_repo_github_id", "issue_number"))},
+    "automation_accounts": {("u", ("github_id",))},
+    "automation_emails": {("u", ("email",))},
+    "sync_runs": set(),
+    "repo_sync_state": set(),  # its primary key, repository_id, is the rowid
+    "sync_pending": {("pk", ("repository_id", "item_kind", "number"))},
+    "sync_failures": {("u", ("repository_id", "item_kind", "number"))},
+    # Kept from the first schema unchanged.
+    "user_tags": {("u", ("name",))},
+    "pr_user_tags": {("pk", ("pr_id", "user_tag_id"))},
+}
+# References to repositories, pull_requests, and issues cascade; references to github_users are
+# set null (D3, D28).
+DELETE_ACTIONS = {
+    "repositories": "CASCADE",
+    "pull_requests": "CASCADE",
+    "issues": "CASCADE",
+    "github_users": "SET NULL",
+}
+# References to other tables, which the rule does not cover.
+OUTSIDE_THE_DELETE_RULE = frozenset(
+    {
+        ("repo_sync_state", "last_run_id"),
+        ("sync_pending", "run_id"),
+        ("pr_user_tags", "user_tag_id"),
+    }
+)
+
+
+def delete_rule_problems(
+    database: Path,
+) -> tuple[set[tuple[str, str, str]], frozenset[tuple[str, str]]]:
+    """References whose action breaks the rule, and the references the rule does not cover."""
+    actions = delete_actions(database)
+    wrong = {
+        (table, column, action)
+        for table, column, referenced, action in actions
+        if referenced in DELETE_ACTIONS and action != DELETE_ACTIONS[referenced]
+    }
+    return wrong, frozenset(
+        (table, column)
+        for table, column, referenced, _ in actions
+        if referenced not in DELETE_ACTIONS
+    )
+
+
+class TestPlanRules:
+    def test_the_nullable_columns_are_the_plans(self, head_template: Path) -> None:
+        assert nullable_columns(head_template) == NULLABLE
+
+    def test_the_unique_column_sets_are_the_plans(self, head_template: Path) -> None:
+        assert unique_sets(head_template) == UNIQUE
+
+    def test_references_cascade_or_set_null_as_the_plan_says(self, head_template: Path) -> None:
+        assert delete_rule_problems(head_template) == (set(), OUTSIDE_THE_DELETE_RULE)
+
+    def test_a_changed_rule_is_reported(self, head_template: Path, tmp_path: Path) -> None:
+        tampered = _tampered(
+            head_template,
+            tmp_path / "tampered.db",
+            *_redefined(head_template, "pr_files", "path TEXT NOT NULL", "path TEXT"),
+            *_redefined(
+                head_template,
+                "pr_reviews",
+                "REFERENCES github_users (id) ON DELETE SET NULL, \n\t"
+                "CONSTRAINT uq_pr_reviews_github_id UNIQUE (github_id)",
+                "REFERENCES github_users (id) ON DELETE CASCADE",
+            ),
+        )
+        assert nullable_columns(tampered) - NULLABLE == {("pr_files", "path")}
+        assert unique_sets(tampered)["pr_reviews"] == set()
+        assert delete_rule_problems(tampered) == (
+            {("pr_reviews", "reviewer_id", "CASCADE")},
+            OUTSIDE_THE_DELETE_RULE,
+        )
+
+    def test_a_primary_key_column_and_a_second_reference_are_read(
+        self, head_template: Path, tmp_path: Path
+    ) -> None:
+        """SQLite holds a composite primary key's columns NOT NULL only as declared, and one
+        column can carry two foreign keys."""
+        tampered = _tampered(
+            head_template,
+            tmp_path / "tampered.db",
+            *_redefined(head_template, "pr_labels", "name TEXT NOT NULL", "name TEXT"),
+            *_redefined(
+                head_template,
+                "pr_reviews",
+                "ON DELETE SET NULL, \n\t",
+                "ON DELETE SET NULL, \n\t"
+                "FOREIGN KEY(reviewer_id) REFERENCES github_users (id) ON DELETE CASCADE, \n\t",
+            ),
+        )
+        assert nullable_columns(tampered) - NULLABLE == {("pr_labels", "name")}
+        assert delete_rule_problems(tampered) == (
+            {("pr_reviews", "reviewer_id", "CASCADE")},
+            OUTSIDE_THE_DELETE_RULE,
+        )
 
 
 class TestForeignKeyIndexes:

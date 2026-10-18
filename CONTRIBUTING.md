@@ -90,7 +90,6 @@ We believe in:
 |----------|---------|-------------|
 | JSON/dict serialization | `dict[str, Any]` | N/A (legitimate use) |
 | Pydantic validators | `v: Any` | N/A (Pydantic pattern) |
-| ORM factories | `from_orm(obj: Any)` | N/A (accepts any ORM) |
 | Log context binding | `**context: Any` | N/A (dynamic logging) |
 | **Lazy initialization** | **Forbidden** | Use `T \| None` with `TYPE_CHECKING` |
 | **Avoiding generics** | **Forbidden** | Use `TYPE_CHECKING` block |

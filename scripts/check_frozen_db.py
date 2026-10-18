@@ -33,6 +33,10 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     failed = False
     for path in args.databases:
+        if path.is_symlink():
+            print(f"{path}: is a symlink; git would store the link, not the frozen database")
+            failed = True
+            continue
         try:
             found = sha256(path)
         except OSError as e:

@@ -74,13 +74,16 @@ repos:
         language: system
         files: ^github_activity\.db$
 
-      # A journal, WAL, or shared-memory file beside the database changes what SQLite reads
-      # from it, past the pinned digest, the next time the database is opened.
+      # A journal or WAL file beside the database changes what SQLite reads from it, past the
+      # pinned digest, the next time the database is opened, and a shared-memory file is the
+      # WAL's index; a case-insensitive file system finds each under any letter case. `types: []` drops the
+      # default `[file]`, which a symlink does not have, so the name alone decides.
       - id: tracked-db-no-sidecar
         name: no journal, WAL, or shared-memory file of github_activity.db in git (D20, D26)
         entry: remove it from git; SQLite would apply it to github_activity.db on the next open
         language: fail
-        files: ^github_activity\.db-(journal|wal|shm)$
+        files: (?i)^github_activity\.db-(journal|wal|shm)$
+        types: []
 
       - id: prevent-any-aliases
         name: Prevent new Any type aliases

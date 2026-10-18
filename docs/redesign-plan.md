@@ -72,7 +72,7 @@ status, releases, and repositories not in the tracked list.
 | D23 | Closing-issue links are read by the index as well as by hydration, and the stored links are compared with the index on every run, so a link added after merge, which does not change the PR's `updatedAt`, is captured (5.3 step 3). |
 | D24 | Conversation comments are stored one row per comment, its `github_id` and author and never its text, so a comment by an account the database never stored is a row with a null author, never dropped (D28). |
 | D25 | A run, scheduled or manual, publishes when its starting database is valid (the downloaded snapshot passed `verify --db-only`, or `bootstrap` started from an empty database), sync exited 0 or 2, and verify exited 0 (no error, 5.4). The manifest records the sync exit code and verify's counts per class. A final job that runs whatever the others did then marks the workflow failed if sync exited 2, verify failed, or nothing was published, so a failure is visible after the data is saved. |
-| D26 | The Step 5 database is not committed; it becomes the first snapshot of release `db` (Step 6b). From Step 3 until 6c removes it, the tracked `github_activity.db` keeps its pre-Step-3 content: the default `DATABASE_URL` moves to a git-ignored file, and `scripts/check_frozen_db.py` fails when the file's SHA-256 differs from the digest it pins, as a pre-commit hook on the file (so CI's `--all-files` run checks it) and as a test. |
+| D26 | The Step 5 database is not committed; it becomes the first snapshot of release `db` (Step 6b). From Step 3 until 6c removes it, the tracked `github_activity.db` keeps its pre-Step-3 content: the default `DATABASE_URL` moves to a git-ignored file, and `scripts/check_frozen_db.py` fails when the file's SHA-256 differs from the digest it pins, as a pre-commit hook on the file (so CI's `--all-files` run checks it) and as a test; the tests also fail when git stores the file other than as one regular file, and the `tracked-db-no-sidecar` hook refuses a committed `-journal` or `-wal` file beside it, which SQLite would apply on the next open, and the `-shm` index that goes with a `-wal`. |
 | D27 | A stored repository no longer listed in `tracking.toml` is reported on every run (exit 2), and its rows stay until `ghactivity sync --prune-untracked` deletes them; the prune is recorded in `sync_runs`. |
 | D28 | The database keeps a person attached to everything it attributed to them. A stored account stays stored after GitHub deletes it, with its last known login and type, and every reference to it stays: when GitHub later returns that actor as null, as a re-hydration after the deletion does, the writer keeps the stored reference of the same object (the PR's author and merger, the issue's author, the review or comment with the same `github_id`, and this PR's commit with the same SHA). `deleted_at` records that a lookup found the account deleted; it changes no reference, the 24-hour refresh skips the account, and a later sighting of the account clears it. An actor the database cannot attribute (GitHub returns null and the object has no stored reference) is represented as deleted, one way everywhere: a null reference, and no `github_users` row for an account never stored. A non-null actor GitHub returns replaces the stored one; a commit link whose account lookup returns null counts as null. Deleted accounts are identified as stored ones by `deleted_at IS NOT NULL`, and unattributed ones by a null actor reference on a PR, issue, review, or comment; on a commit a null link also means an email linked to no account, so commits do not single out deleted accounts. The attribution lives in the stored rows and cascades with them, so anything that re-creates a row from GitHub drops it for accounts deleted before then: a bootstrap (it starts from an empty file), a PR reopened after D3 deleted it, a transferred issue (new `github_id`), and a repository pruned and re-added (D27). |
 
@@ -204,7 +204,8 @@ IMMEDIATE`, and
 `context.configure()` gets `transactional_ddl=True`, so a failed revision leaves the file at the
 revision the upgrade started from, with no revision of that upgrade applied. `PRAGMA
 foreign_key_check` runs inside that transaction after the last revision and raises on any row,
-before the commit. A migration that batch-alters a table a view reads drops those views first and
+before the commit; a command that ran no revision and changed no row (`current`, `check`, or
+`stamp` to the file's own revision) is not checked. A migration that batch-alters a table a view reads drops those views first and
 recreates them afterwards from its own frozen SQL; `legacy_alter_table` stays off, so a view left
 in place fails the migration (gap 71). Migrations import only the standard library, alembic, and
 SQLAlchemy, never application code, and name every index, CHECK constraint, and foreign key they create through
@@ -219,12 +220,23 @@ connection. `alembic/env.py` refuses to migrate the repository-root
 it opened (`PRAGMA database_list`) and refuses the tracked file by any path, URI, symlink, or hard
 link, and any file named `github_activity.db`, such as another checkout's copy. A path predicted
 from the URL is not enough: the driver drops `..` as text, so a path through a symlinked directory
-names another file once symlinks are followed. It migrates SQLite only. An SQLite authorizer on
-the migration connection allows `BEGIN` only to open the upgrade's transaction, `COMMIT` only
-after `foreign_key_check` passed, and `ROLLBACK` only once the upgrade or its commit failed; it
-refuses every statement while the upgrade is open and no transaction is (SQLite ends one by
-itself on `INSERT OR ROLLBACK` or `RAISE(ROLLBACK)`), and refuses `ATTACH`. So no SQL a revision
-runs commits part of an upgrade; Python code in a revision can still remove the authorizer, which
+names another file once symlinks are followed. It migrates SQLite only, by a file path: SQLite URI
+filenames are refused, because URI parameters (`nolock`, `immutable`, `vfs`) can remove the
+locking an upgrade relies on. An SQLite authorizer on the migration connection allows only the
+actions it lists, the main database's DDL and DML and the reads alembic and reflection make, so
+`ATTACH`, temporary objects (`TEMP` or a `temp.` name), virtual tables, and `SAVEPOINT` are
+refused. It allows `BEGIN` only
+to open the upgrade's transaction, `COMMIT` only after `foreign_key_check` passed, and `ROLLBACK`
+only once the upgrade or its commit failed. A pragma may set a value only for `user_version` and
+the pragmas SQLAlchemy's reflection reads with an argument (`table_info`, `table_xinfo`, `index_list`, `index_info`, `foreign_key_list`), so
+`journal_mode`, `legacy_alter_table`, and
+`ignore_check_constraints` keep the values the connection opened with. It refuses every
+statement while the upgrade is open and no transaction is (SQLite ends one by itself on
+`INSERT OR ROLLBACK` or `RAISE(ROLLBACK)`). SQLite runs the authorizer when it prepares a statement, so the migration
+connection keeps no prepared-statement cache, which would otherwise rerun a statement prepared
+before that rollback without the check (section 7, "Prepared statements"). So no SQL statement a
+revision runs commits part of an upgrade or changes how it runs; Python code in a revision can
+still remove the authorizer, or feed one `executemany` statement rows while running others, which
 no check here prevents.
 
 `Base.metadata` names indexes, CHECK constraints, and foreign keys by convention, and every CHECK has
@@ -1222,7 +1234,9 @@ revision before the last migration, and one holding an extra repository absent f
 (a sync exit 2). It then runs one normal manual run and one bootstrap run. 6c enables the
 schedule and stops tracking `github_activity.db`: it removes the file
 from the index, the `!/github_activity.db` exception from `.gitignore`, the `check-added-large-files`
-exclude, the `tracked-db-rollback-journal` hook, and the D26 freeze check; replaces the tracked-file
+exclude, the `tracked-db-rollback-journal` and `tracked-db-no-sidecar` hooks, the D26 freeze
+check, and `alembic/env.py`'s refusal of the repository-root `github_activity.db` and of any file
+of that name (gap 73); replaces the tracked-file
 journal test with one on the snapshot `VACUUM INTO` writes; records the D20 WAL decision for the
 working file; and documents how to download the latest snapshot.
 
@@ -1322,9 +1336,11 @@ Measured 2026-10-16 unless noted. "Index" means the created-order enumeration in
 | Alembic on SQLite | alembic 1.18.1, SQLAlchemy 2.0.45, SQLite 3.45.3; two revisions, the second dropping the first's table, creating another, and inserting a row. Default handling, second revision failing: the first table dropped and the second created empty, with the first revision stamped. A statement executed before `context.configure()`: `upgrade` exits 0 with no revision stamped and no row inserted. Transactional DDL (the driver's transaction handling off, `BEGIN` emitted on `begin`, `transactional_ddl=True`), second revision failing: nothing applied, not even the version table | probe through a real script directory and `env.py`, 2026-10-17 |
 | Isolation level | Assigning `isolation_level = None` to a Python `sqlite3` connection inside a transaction commits it, after which `PRAGMA foreign_keys=OFF` takes effect; set before the assignment, inside the transaction, the pragma leaves `foreign_keys` at 1 | probe, Python 3.13, SQLite 3.45.3 |
 | Connect listener order | SQLAlchemy 2.0.45's first-connect handling rolls a new connection back before connect listeners added after `create_engine` run: such a listener, given a connection the DBAPI returned inside a transaction with `foreign_keys=ON`, sees `in_transaction` false, and `PRAGMA foreign_keys=OFF` then takes effect. Registered with `insert=True`, it sees the open transaction and the pragma leaves `foreign_keys` at 1; SQLAlchemy's initialization and a `BEGIN IMMEDIATE` transaction still work after it | probe through a patched `sqlite3.dbapi2.connect`, 2026-10-17; `tests/db/test_migrations.py` |
-| URI filenames | Python 3.13's `sqlite3` with SQLite 3.45.3 (no `SQLITE_USE_URI` compile option) opens `file:target.db`, without `uri=True`, as a new file of that name, not as `target.db`. Other builds, CI's included, are not checked; `alembic/env.py` checks the file SQLite opened, so either reading is covered | probe |
+| URI filenames | Python 3.13's `sqlite3` with SQLite 3.45.3 (no `SQLITE_USE_URI` compile option) opens `file:target.db`, without `uri=True`, as a new file of that name, not as `target.db`. Other builds, CI's included, are not checked; `alembic/env.py` refuses `uri=true` URLs and checks the file SQLite opened, so either reading is covered | probe |
 | Path from the URL | SQLAlchemy 2.0.45's pysqlite dialect opens `os.path.abspath(database)`, which drops `..` as text, while `Path.resolve()` follows symlinks first: `/tmp/..` before the tracked path (on macOS `/tmp` is a symlink) and `<symlinked dir>/../github_activity.db` name the tracked file to the driver and a missing file to `resolve()`. An env.py that checked the resolved URL path migrated a stand-in of the tracked file through the second spelling; `PRAGMA database_list` on the opened connection names the file SQLite opened | review probe at `f90eee9`, 2026-10-17; `tests/db/test_migrations.py` |
 | Commit inside a revision | Under `transactional_ddl=True`, a revision's `op.execute("COMMIT")`, `op.execute("END")`, or `autocommit_block()` committed its writes before a later failure, leaving the file at head with a foreign-key violation. An SQLite authorizer that denies `SQLITE_TRANSACTION` statements other than the upgrade's own refuses each, and `connection.commit()` too | review probe at `f90eee9`; `tests/db/test_migrations.py` |
+| Prepared statements | Python's `sqlite3` reuses a prepared statement by its SQL text (128 by default), and SQLite runs the authorizer only when it prepares one. SQLite's own rollback (`INSERT OR ROLLBACK`, `RAISE(ROLLBACK)`) expires prepared statements only when the transaction changed the schema, so in a data-only upgrade a statement the revision repeated after a swallowed rollback ran in autocommit: its row was committed with a foreign-key violation, and a repeated `SAVEPOINT` reopened a transaction env.py then committed, the earlier writes lost. With `cached_statements=0` every execute is prepared and refused | review probes at `c5b41fe`, SQLite 3.45.3 and 3.47.1; `tests/db/test_migrations.py` |
+| Pragmas in a revision | Inside the upgrade's `BEGIN IMMEDIATE` and before its first write, `PRAGMA journal_mode=OFF` takes effect: pages a large revision then spilled reached the file unjournaled, and a failure after them left it unreadable ("malformed database schema"). `legacy_alter_table=ON` let a batch alter under the views pass, and `ignore_check_constraints=ON` committed a row a named CHECK refuses | review probes at `c5b41fe`, SQLite 3.45.3 and 3.47.1; `tests/db/test_migrations.py` |
 | Batch alter and views | `batch_alter_table(..., recreate="always")` on a table a view reads raises "error in view v: no such table: main.p"; with `PRAGMA legacy_alter_table=ON` it succeeds | probe, same versions |
 | CHECK constraints | Batch recreate keeps `CONSTRAINT ck_k_b CHECK (b < 10)` and drops the unnamed column-level `CHECK (a > 0)` and table-level `CHECK (n < 5)`. SQLAlchemy renders `Boolean` as `BOOLEAN` and `Enum` as `VARCHAR(6)`, without a CHECK, on SQLite. Under a `ck` naming convention an explicit `name="ck_prs_state"` becomes `ck_prs_ck_prs_state`, and `op.f("ck_prs2_state")` stays as given. `compare_metadata` reports nothing against a table with an unnamed `UNIQUE (name)` under an ix/ck/fk convention, and `add_constraint` under a `uq` convention | probe, same versions |
 | SQLite timestamps | SQLAlchemy's SQLite `DateTime` stores `2024-01-01 10:00:00.000000` (26 characters; microseconds always written) and stores 12:00+02:00 as `2024-01-01 12:00:00.000000`, dropping the offset | probe, same versions |
@@ -1356,7 +1372,7 @@ Measured 2026-10-16 unless noted. "Index" means the created-order enumeration in
 | Whether Prebid.js, salesagent, or prebid-server holds an in-coverage dismissed review (the plan's example, `prebid-server-java#4637`, is in none of them) | Step 3b's acceptance queries its database; without one, prebid-server-java joins the acceptance run |
 | Whether REST compare and GraphQL give one account's node id in the same form (the recordings use the `MDQ6...` form in both); a lookup checks the returned id against the requested one | A mismatch fails the waiting item, which exit 2 makes visible; Step 3b's acceptance reports any |
 | The cost of one commit per item in rollback-journal mode, and of a live Step 3b acceptance run (not measured) | Step 3b's acceptance records its points, REST calls, and time; Step 5 measures the full run |
-| `--help` anywhere on a command line exits 0 without doing any work (click), the code D25 publishes on, so a workflow input that expands to `--help` would publish the unchanged database | Step 6's workflow passes inputs as validated option values, never as raw arguments |
+| `--help` anywhere on a command line, or `--version` before the subcommand, exits 0 without doing any work (click's eager options), the code D25 publishes on, so a workflow input that expands to either would publish the unchanged database | Step 6's workflow passes inputs as validated option values, never as raw arguments |
 
 ## 9. Later work
 

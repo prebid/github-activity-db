@@ -48,8 +48,10 @@ def show_rate_limit(
         f"resets {_time(limits.graphql_reset_at)}"
     )
     table = Table(title="REST /rate_limit")
-    for column in ("Pool", "Remaining", "Limit", "Used", "Resets"):
-        table.add_column(column, justify="left" if column == "Pool" else "right")
+    # Kept whole at 80 columns, where Rich would otherwise shorten the longest pool names.
+    table.add_column("Pool", no_wrap=True)
+    for column in ("Remaining", "Limit", "Used", "Resets"):
+        table.add_column(column, justify="right")
     for pool in limits.rest:
         if all_pools or pool.resource in DEFAULT_POOLS:
             table.add_row(

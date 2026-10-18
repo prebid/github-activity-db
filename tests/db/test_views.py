@@ -286,3 +286,43 @@ class TestCommitAuthors:
         assert rows(
             seed, "SELECT author_name, author_email, authored_at FROM v_commit_authors"
         ) == [("Dev", "dev@example.com", "2026-01-01 00:00:00.000000")]
+
+
+class TestScoping:
+    def test_each_row_comes_from_its_own_repository_pull_request_and_account(
+        self, seed: Seed
+    ) -> None:
+        """Two repositories, and on one PR two reviewers and two commenters whose verdicts and
+        counts differ; the highest review id belongs to no account."""
+        first, second = seed.repository("prebid/a"), seed.repository("prebid/b")
+        r1, r2, c1, c2 = (seed.user(login) for login in ("r1", "r2", "c1", "c2"))
+        pr = seed.pull_request(first, 1, None)
+        other = seed.pull_request(second, 2, None)
+        base = seed.next_id() * 100
+        seed.review(pr, base + 10, r1, "CHANGES_REQUESTED")
+        seed.review(pr, base + 11, r2, "CHANGES_REQUESTED")
+        seed.review(pr, base + 12, r1, "APPROVED")
+        seed.review(pr, base + 13, None, "DISMISSED")
+        seed.review(other, base + 14, r2, "APPROVED")
+        for account in (r1, r1, r2, c1, c1, c2):
+            seed.comment(pr, account)
+        seed.comment(other, c2)
+        seed.commit(pr, "1" * 40)
+        seed.commit(other, "2" * 40)
+        assert rows(
+            seed,
+            "SELECT repository_full_name, pr_number, reviewer_login, final_verdict, comment_count "
+            "FROM v_pr_reviewers ORDER BY pr_number, reviewer_login",
+        ) == [
+            ("prebid/a", 1, "r1", "APPROVED", 2),
+            ("prebid/a", 1, "r2", "CHANGES_REQUESTED", 1),
+            ("prebid/b", 2, "r2", "APPROVED", 0),
+        ]
+        assert rows(
+            seed,
+            "SELECT repository_full_name, pr_number, commenter_login, comment_count "
+            "FROM v_pr_commenters ORDER BY pr_number, commenter_login",
+        ) == [("prebid/a", 1, "c1", 2), ("prebid/a", 1, "c2", 1), ("prebid/b", 2, "c2", 1)]
+        assert rows(
+            seed, "SELECT repository_full_name, pr_number, sha FROM v_commit_authors ORDER BY sha"
+        ) == [("prebid/a", 1, "1" * 40), ("prebid/b", 2, "2" * 40)]

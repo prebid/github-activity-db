@@ -93,8 +93,8 @@ uv run ghactivity github test --pr 4343       # The first repository in tracking
 ```
 
 There is no `sync` command until Step 3b of the [redesign plan](redesign-plan.md). A command
-line that never starts its work (a usage error, an invalid `tracking.toml`, a missing token)
-exits 1.
+line that never starts its work (a usage error, an invalid `tracking.toml` or setting, a log
+file that cannot be opened, a missing token) exits 1; an interrupt (Ctrl-C) exits 130.
 
 ### Code Quality
 
@@ -171,7 +171,10 @@ uv run alembic history
 ```
 
 Migrations are never downgraded (`downgrade()` raises), and `alembic upgrade` refuses the
-tracked `github_activity.db` ([database.md](database.md)).
+tracked `github_activity.db` ([database.md](database.md)). Every `alembic` command that connects,
+`current` and `check` included, takes the database's write lock, so it waits up to 5 seconds
+while another connection, such as a running sync, holds the file, and then fails with "database
+is locked".
 
 ## Pre-commit Hooks
 
@@ -349,11 +352,9 @@ uv add greenlet
 
 ### Alembic can't find models
 
-Ensure `alembic/env.py` imports the models:
-```python
-from github_activity_db.db.models import Base
-target_metadata = Base.metadata
-```
+`alembic/env.py` imports `Base` from `github_activity_db.db.models` and passes `Base.metadata`
+to `context.configure()` as `target_metadata`, so `alembic check` and autogenerate compare the
+tables `db/models.py` defines.
 
 ### SQLite "database is locked"
 

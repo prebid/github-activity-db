@@ -9,7 +9,8 @@ Two locks, each with its own rule:
 - tests/schema_versions.json maps each schema version to its consumer (table or view, column)
   pairs (plan 5.1). A test ties the current entry to the data dictionary; this check keeps every
   entry at the base and every pair in it, so removing or renaming a consumer column needs a new
-  schema version. Pairs may be added.
+  schema version. Pairs may be added to the newest entry only: an older version describes
+  databases that never had the added column.
 
 Usage: check_query_lock.py --base <git ref> [--lock <one of the locks above>]
 
@@ -19,14 +20,16 @@ Uses only the standard library, so it runs with ``python -I -S``.
 Exit 0 when every entry at <ref> is kept (new entries are fine, and so is a lock file that does
 not exist at <ref>); 1 when an entry was changed or removed (deleting the lock removes them all);
 2 when the check cannot run: <ref> is not a commit, git is not on PATH, --lock is not one of the
-locks, git fails, or a lock file cannot be read as the JSON its rule expects. A checkout without
-the base therefore never passes by default.
+locks, git fails, or a lock file cannot be read as the JSON its rule expects (a schema version is
+a positive integer without leading zeros). A checkout without the base therefore never passes by
+default.
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import re
 import shutil
 import subprocess
 import sys
@@ -63,6 +66,8 @@ def pairs(text: str, where: str) -> dict[str, set[tuple[str, str]]]:
     entries = _object(text, where)
     read: dict[str, set[tuple[str, str]]] = {}
     for key, value in entries.items():
+        if re.fullmatch(r"[1-9][0-9]*", key) is None:
+            raise CannotCheck(f"{where}: schema version {key!r} is not a positive integer")
         if not isinstance(value, list) or not all(
             isinstance(pair, list) and len(pair) == 2 and all(isinstance(p, str) for p in pair)
             for pair in value
@@ -86,9 +91,11 @@ def digest_problems(base: dict[str, str], current: dict[str, str]) -> list[str]:
 def pair_problems(
     base: dict[str, set[tuple[str, str]]], current: dict[str, set[tuple[str, str]]]
 ) -> list[str]:
-    """Entries of ``base`` that ``current`` removed, and pairs it removed from one."""
+    """Entries of ``base`` that ``current`` removed, pairs it removed from one, and pairs it
+    added to one that is not its newest."""
     found = []
-    for key, listed in sorted(base.items()):
+    newest = max(current, key=int, default=None)
+    for key, listed in sorted(base.items(), key=lambda entry: int(entry[0])):
         if key not in current:
             found.append(f"schema version {key} was removed; lock entries are append-only")
             continue
@@ -97,6 +104,12 @@ def pair_problems(
                 f"schema version {key} lost {table}.{column}; removing or renaming a consumer "
                 "column needs a new schema version"
             )
+        if key != newest:
+            for table, column in sorted(current[key] - listed):
+                found.append(
+                    f"schema version {key} gained {table}.{column}; only the newest version, "
+                    f"{newest}, gains columns"
+                )
     return found
 
 

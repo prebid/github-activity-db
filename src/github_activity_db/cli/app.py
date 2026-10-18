@@ -8,8 +8,6 @@ from typing import Annotated, Any, NoReturn
 
 import click
 import typer
-from pydantic import ValidationError
-from pydantic_settings import SettingsError
 from rich.console import Console
 from rich.markup import escape
 from typer import rich_utils
@@ -27,8 +25,10 @@ class ExitCodeGroup(TyperGroup):
     """A command line that never starts its work exits 1 (redesign plan 5.3 step 8, gap 69).
 
     click exits 2 on a usage error, the code a scheduled run publishes on (D25). Usage errors, an
-    invalid tracking.toml, and invalid settings exit 1 here; a command's own exit code passes
-    through. CliRunner tests and the installed script both run this ``main``.
+    invalid tracking.toml, invalid settings, and a log file that cannot be set up exit 1 here; a
+    command's own exit code passes through, and an interrupt exits 130 (typer turns
+    KeyboardInterrupt into it before click's Abort). CliRunner tests and the installed script
+    both run this ``main``.
     """
 
     def main(self, *args: Any, **kwargs: Any) -> NoReturn:
@@ -96,22 +96,32 @@ def main(
     """GitHub Activity DB - Store and search GitHub PR data."""
     try:
         settings = get_settings()
-    except (ValidationError, SettingsError) as e:  # SettingsError: an unparsable JSON value
+    # ValueError: pydantic's ValidationError, an unparsable JSON value (SettingsError), and a
+    # .env that is not UTF-8; OSError: a .env that cannot be read.
+    except (ValueError, OSError) as e:
         error_console.print(
             f"[red]Error:[/red] invalid settings:\n{escape(str(e))}", highlight=False
         )
         raise typer.Exit(1) from None
     log_config = settings.logging
 
-    setup_logging(
-        level=settings.log_level,
-        verbose=verbose,
-        quiet=quiet,
-        log_file=Path(log_config.log_file) if log_config.log_file else None,
-        rotation=log_config.rotation,
-        retention=log_config.retention,
-        serialize=log_config.serialize,
-    )
+    try:
+        setup_logging(
+            level=settings.log_level,
+            verbose=verbose,
+            quiet=quiet,
+            log_file=Path(log_config.log_file) if log_config.log_file else None,
+            rotation=log_config.rotation,
+            retention=log_config.retention,
+            serialize=log_config.serialize,
+        )
+    # loguru's ValueError for a rotation or retention it cannot parse, OSError for a log file
+    # it cannot open.
+    except (ValueError, OSError) as e:
+        error_console.print(
+            f"[red]Error:[/red] cannot set up logging: {escape(str(e))}", highlight=False
+        )
+        raise typer.Exit(1) from None
 
 
 app.add_typer(github_cmd.app, name="github")

@@ -143,6 +143,12 @@ class TestDictionary:
             ),
             ("## Tables\n\n| `x` | internal | X |\n", "outside an object"),
             (ENTRY + "\n### `empty`\n\nNo rows.\n", "objects without columns: empty"),
+            # An orphan row written slightly wrong would otherwise be skipped, not compared.
+            (ENTRY.replace("| `name` |", "| name |", 1), "not a `| column"),
+            (ENTRY.replace("| `name` |", " | `name` |", 1), "not a `| column"),
+            (ENTRY.replace("| `name` |", "|`name`|", 1), "not a `| column"),
+            # GFM continues a table on a non-blank line without the leading pipe.
+            (ENTRY.replace("| `name` | consumer |", "`name` | consumer |", 1), "continues a table"),
         ],
         ids=[
             "unknown use",
@@ -151,6 +157,10 @@ class TestDictionary:
             "column twice",
             "row outside",
             "empty object",
+            "unquoted column",
+            "indented row",
+            "unspaced row",
+            "row without its leading pipe",
         ],
     )
     def test_rejects_shapes_it_does_not_model(self, text: str, message: str) -> None:

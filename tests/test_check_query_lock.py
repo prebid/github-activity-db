@@ -226,21 +226,39 @@ V1 = {"1": [["pull_requests", "number"], ["v_pr_reviewers", "final_verdict"]]}
 
 
 class TestSchemaLock:
-    """tests/schema_versions.json: entries and their pairs are kept; pairs may be added."""
+    """tests/schema_versions.json: entries and their pairs are kept; only the newest entry may
+    gain pairs."""
 
-    def test_an_added_pair_and_an_added_version_pass(self, repo: Path) -> None:
+    def test_a_pair_added_to_the_newest_entry_passes(self, repo: Path) -> None:
+        write_schema_lock(repo, V1)
+        commit(repo)
+        write_schema_lock(repo, {"1": [*V1["1"], ["pull_requests", "title"]]})
+        result = check(repo)
+        assert result.returncode == 0, result.stderr
+        assert "tests/schema_versions.json: 1 entries at main kept; 1 entries now" in result.stdout
+
+    def test_an_added_version_passes(self, repo: Path) -> None:
+        write_schema_lock(repo, V1)
+        commit(repo)
+        write_schema_lock(repo, {**V1, "2": [["pull_requests", "number"]]})
+        result = check(repo)
+        assert result.returncode == 0, result.stderr
+        assert "tests/schema_versions.json: 1 entries at main kept; 2 entries now" in result.stdout
+
+    def test_a_pair_added_to_a_superseded_entry_fails(self, repo: Path) -> None:
+        """Version 1 describes databases that never had a column version 2 added."""
         write_schema_lock(repo, V1)
         commit(repo)
         write_schema_lock(
             repo,
-            {
-                "1": [*V1["1"], ["pull_requests", "title"]],
-                "2": [["pull_requests", "number"]],
-            },
+            {"1": [*V1["1"], ["pull_requests", "title"]], "2": [["pull_requests", "number"]]},
         )
         result = check(repo)
-        assert result.returncode == 0, result.stderr
-        assert "tests/schema_versions.json: 1 entries at main kept; 2 entries now" in result.stdout
+        assert result.returncode == 1
+        assert (
+            "schema version 1 gained pull_requests.title; only the newest version, 2, gains "
+            "columns" in result.stderr
+        )
 
     def test_a_pair_removed_from_a_base_entry_fails(self, repo: Path) -> None:
         write_schema_lock(repo, V1)
@@ -276,8 +294,22 @@ class TestSchemaLock:
 
     @pytest.mark.parametrize(
         "text",
-        ['{"1": "pull_requests.number"}', '{"1": [["pull_requests"]]}', '{"1": [[1, 2]]}', "[]"],
-        ids=["string entry", "short pair", "non-string pair", "not an object"],
+        [
+            '{"1": "pull_requests.number"}',
+            '{"1": [["pull_requests"]]}',
+            '{"1": [[1, 2]]}',
+            "[]",
+            '{"1": [], "v2": []}',
+            '{"1": [], "02": []}',
+        ],
+        ids=[
+            "string entry",
+            "short pair",
+            "non-string pair",
+            "not an object",
+            "version not a number",
+            "version with a leading zero",
+        ],
     )
     def test_a_malformed_lock_is_an_error_not_a_pass(self, repo: Path, text: str) -> None:
         write_schema_lock(repo, V1)

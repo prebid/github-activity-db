@@ -52,7 +52,7 @@ One row per repository the sync has resolved.
 | `is_private` | consumer | Whether the repository is private |
 | `is_archived` | consumer | Whether the repository is archived |
 | `default_branch` | consumer | The default branch's name |
-| `is_tracked` | consumer | 1 when `tracking.toml` listed the repository at the last sync that checked (redesign plan 5.3 step 1); an untracked repository's rows stay until `ghactivity sync --prune-untracked` (D27) |
+| `is_tracked` | consumer | 1 when `tracking.toml` listed the repository at the last sync that checked (redesign plan 5.3 step 1); an untracked repository's rows stay until `ghactivity sync --prune-untracked` (D27), which arrives with Step 3b's sync |
 
 ### `github_users`
 

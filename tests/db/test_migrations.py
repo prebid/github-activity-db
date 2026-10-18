@@ -22,6 +22,7 @@ from typing import Any
 import pytest
 from alembic import command
 from alembic.script import ScriptDirectory
+from sqlalchemy import create_engine
 
 from github_activity_db.config import get_settings
 from github_activity_db.db.models import Base
@@ -148,6 +149,71 @@ class TestChain:
             command.downgrade(alembic_config(migrated_database), FIRST_SCHEMA_HEAD)
         assert snapshot(migrated_database) == before
 
+    @pytest.mark.parametrize(
+        "run",
+        [
+            pytest.param(command.current, id="current"),
+            pytest.param(command.check, id="check"),
+            pytest.param(lambda config: command.stamp(config, "head"), id="stamp head"),
+            pytest.param(lambda config: command.upgrade(config, "head"), id="upgrade at head"),
+        ],
+    )
+    def test_a_command_that_runs_no_revision_reads_the_file_as_it_is(
+        self, migrated_database: Path, run: Any
+    ) -> None:
+        """The foreign-key check covers what a command's revisions changed; a command that ran
+        none and changed no row leaves a violation already in the file to the file."""
+        with closing(sqlite3.connect(migrated_database)) as connection, connection:
+            connection.execute("INSERT INTO pr_labels (pr_id, name) VALUES (999, 'orphan')")
+        before = snapshot(migrated_database)
+        run(alembic_config(migrated_database))
+        assert snapshot(migrated_database) == before
+
+    @pytest.mark.parametrize(
+        "run",
+        [
+            pytest.param(command.current, id="current"),
+            pytest.param(command.check, id="check"),
+            pytest.param(lambda config: command.stamp(config, "head"), id="stamp head"),
+        ],
+    )
+    def test_a_command_that_runs_no_revision_but_changes_a_row_is_checked(
+        self, migrated_database: Path, tmp_path: Path, run: Any
+    ) -> None:
+        """alembic loads each revision module inside the transaction, so code at a module's top
+        level runs even when no upgrade() does."""
+        versions = tmp_path / "versions"
+        versions.mkdir()
+        (versions / f"{TEST_REVISION}_module_level.py").write_text(
+            "from alembic import op\n\n"
+            f"revision = {TEST_REVISION!r}\n"
+            f"down_revision = {HEAD_REVISION!r}\n"
+            "branch_labels = None\n"
+            "depends_on = None\n\n"
+            f"{ORPHAN}\n\n\n"
+            "def upgrade() -> None:\n"
+            "    pass\n\n\n"
+            "def downgrade() -> None:\n"
+            "    raise RuntimeError('test-only revision')\n"
+        )
+        # At the test revision already, so no command runs a revision or finds the file behind.
+        with closing(sqlite3.connect(migrated_database)) as connection, connection:
+            connection.execute("UPDATE alembic_version SET version_num = ?", (TEST_REVISION,))
+        before = snapshot(migrated_database)
+        with pytest.raises(RuntimeError) as error:
+            run(alembic_config(migrated_database, test_versions=versions))
+        assert "1 foreign-key violations" in refusal(error)
+        assert snapshot(migrated_database) == before
+
+    def test_an_in_memory_database_is_migrated(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.chdir(tmp_path)
+        config = alembic_config(tmp_path / "unused.db")
+        config.attributes["database_url"] = "sqlite+aiosqlite://"
+        command.upgrade(config, "head")
+        assert list(tmp_path.iterdir()) == []
+
 
 class TestStep3Migration:
     def test_upgrades_a_seeded_first_schema_database(self, first_schema: Path) -> None:
@@ -241,7 +307,7 @@ class TestOneTransaction:
         before = snapshot(migrated_database)
         with pytest.raises(RuntimeError) as error:
             upgrade(migrated_database, test_versions=versions)
-        assert "1 foreign-key violations after the upgrade" in refusal(error)
+        assert "1 foreign-key violations after the migration" in refusal(error)
         assert "('pr_labels', 1, 'pull_requests', 0)" in refusal(error)
         assert snapshot(migrated_database) == before
 
@@ -308,6 +374,28 @@ class TestOneTransaction:
 
 
 ORPHAN = "op.execute(\"INSERT INTO pr_labels (pr_id, name) VALUES (999, 'orphan')\")"
+# SQLite rolls back by itself; the revision swallows the error and goes on.
+SWALLOWED_ROLLBACK = (
+    "try:\n"
+    '    op.execute("INSERT OR ROLLBACK INTO alembic_version "\n'
+    f"               \"VALUES ('{HEAD_REVISION}')\")\n"
+    "except Exception:\n"
+    "    pass\n"
+)
+STOP_TRIGGER = (
+    "CREATE TRIGGER stop BEFORE INSERT ON pr_labels WHEN NEW.name = 'stop' "
+    "BEGIN SELECT RAISE(ROLLBACK, 'stop'); END"
+)
+STOPPED_INSERT = (
+    "try:\n"
+    "    op.execute(\"INSERT INTO pr_labels (pr_id, name) VALUES (999, 'stop')\")\n"
+    "except Exception:\n"
+    "    pass\n"
+)
+BOUND_INSERT = (
+    'op.get_bind().exec_driver_sql("INSERT INTO pr_labels (pr_id, name) VALUES (?, ?)", '
+    "(999, {!r}))"
+)
 
 
 class TestTransactionControl:
@@ -324,13 +412,8 @@ class TestTransactionControl:
                 f"with op.get_context().autocommit_block():\n    {ORPHAN}", id="autocommit_block"
             ),
             pytest.param(
-                # SQLite rolls back by itself; the revision swallows the error and goes on.
                 "op.execute('CREATE TABLE early (x INTEGER)')\n"
-                "try:\n"
-                '    op.execute("INSERT OR ROLLBACK INTO alembic_version "\n'
-                f"               \"VALUES ('{HEAD_REVISION}')\")\n"
-                "except Exception:\n"
-                "    pass\n"
+                f"{SWALLOWED_ROLLBACK}"
                 f"op.execute('CREATE TABLE late (x INTEGER)')\n{ORPHAN}",
                 id="INSERT OR ROLLBACK",
             ),
@@ -355,6 +438,74 @@ class TestTransactionControl:
         with pytest.raises(Exception, match="not authorized"):
             upgrade(first_schema, test_versions=versions)
         assert snapshot(first_schema) == before
+
+    @pytest.mark.parametrize(
+        ("body", "url_query"),
+        [
+            pytest.param(f"{ORPHAN}\n{SWALLOWED_ROLLBACK}{ORPHAN}", "", id="INSERT OR ROLLBACK"),
+            pytest.param(
+                f"{ORPHAN}\n{STOPPED_INSERT}{ORPHAN}",
+                "",
+                id="RAISE(ROLLBACK) of a trigger in the file",
+            ),
+            pytest.param(
+                f"{BOUND_INSERT.format('a')}\n{SWALLOWED_ROLLBACK}{BOUND_INSERT.format('b')}",
+                "",
+                id="bound parameters",
+            ),
+            pytest.param(
+                f"{ORPHAN}\n{SWALLOWED_ROLLBACK}{ORPHAN}",
+                "?cached_statements=128",
+                id="statement cache asked for by the URL",
+            ),
+        ],
+    )
+    def test_a_statement_run_before_sqlite_ended_the_transaction_is_refused_after(
+        self, migrated_database: Path, tmp_path: Path, body: str, url_query: str
+    ) -> None:
+        """SQLite authorizes a statement when it prepares it. A data-only upgrade changes no
+        schema, so SQLite's own rollback expires nothing the driver could reuse by its text."""
+        with closing(sqlite3.connect(migrated_database)) as connection, connection:
+            connection.execute(STOP_TRIGGER)
+        versions = tmp_path / "versions"
+        write_revision(versions, TEST_REVISION, HEAD_REVISION, body)
+        config = alembic_config(migrated_database, test_versions=versions)
+        config.attributes["database_url"] += url_query
+        before = snapshot(migrated_database)
+        with pytest.raises(Exception, match="not authorized"):
+            command.upgrade(config, "head")
+        assert snapshot(migrated_database) == before
+
+    @pytest.mark.parametrize(
+        "statement",
+        [
+            # The rollback of a failed upgrade could not restore pages spilled to the file.
+            "PRAGMA journal_mode=OFF",
+            "PRAGMA main.JOURNAL_MODE=OFF",
+            # A batch alter under a view would pass (gap 71).
+            "PRAGMA legacy_alter_table=ON",
+            # Rows the named CHECK constraints refuse would be committed.
+            "PRAGMA ignore_check_constraints=ON",
+            "PRAGMA writable_schema=ON",
+            "SAVEPOINT early",
+            "CREATE TEMP TABLE scratch (x INTEGER)",
+            # Schema-qualified, these reach SQLite as the main database's action codes.
+            "CREATE TABLE temp.scratch (x INTEGER)",
+            "CREATE VIEW temp.scratch AS SELECT 1 AS x",
+            "CREATE TRIGGER temp.drop_labels BEFORE INSERT ON pr_labels "
+            "BEGIN SELECT RAISE(IGNORE); END",
+            "ANALYZE",
+        ],
+    )
+    def test_a_revision_runs_only_the_actions_the_authorizer_lists(
+        self, migrated_database: Path, tmp_path: Path, statement: str
+    ) -> None:
+        versions = tmp_path / "versions"
+        write_revision(versions, TEST_REVISION, HEAD_REVISION, f"op.execute({statement!r})")
+        before = snapshot(migrated_database)
+        with pytest.raises(Exception, match="not authorized"):
+            upgrade(migrated_database, test_versions=versions)
+        assert snapshot(migrated_database) == before
 
     def test_a_revision_cannot_attach_another_database(
         self, migrated_database: Path, tmp_path: Path
@@ -614,8 +765,8 @@ class TestRefusals:
             (tmp_path / "symlink.db").symlink_to(tracked)
             database = str(tmp_path / "symlink.db")
         elif spelling == "after /tmp/..":
-            # The driver drops `..` as text; where /tmp is a symlink (macOS), following it
-            # first names a file that does not exist.
+            # Where /tmp is a symlink (macOS), resolving the path names a missing file, while
+            # the driver drops `..` as text; the name check refuses it before connecting.
             database = f"/tmp/..{tracked}"  # noqa: S108 - the spelling under test
         elif spelling == "URI":
             database = f"file:{tracked}?uri=true"
@@ -647,15 +798,117 @@ class TestRefusals:
         upgrade(other, script_location=checkout / "alembic")
         assert revision_of(other) == HEAD_REVISION
 
-    def test_a_missing_file_of_that_name_is_refused_before_it_is_created(
-        self, tmp_path: Path
+    def test_the_file_sqlite_opened_is_refused_by_its_name(
+        self, tmp_path: Path, first_schema: Path
     ) -> None:
-        target = tmp_path / "fresh" / "github_activity.db"
+        """The opened-file name check alone: the URL names alias.db, Python's realpath (symlinks
+        first, then ..) names a missing file, and the driver, which drops .. as text, opens
+        alias.db, a symlink to another checkout's github_activity.db."""
+        target = tmp_path / "other-checkout" / "github_activity.db"
         target.parent.mkdir()
+        shutil.copyfile(first_schema, target)
+        checkout = tmp_path / "checkout"
+        (tmp_path / "far" / "deep").mkdir(parents=True)
+        checkout.mkdir()
+        (checkout / "link").symlink_to(tmp_path / "far" / "deep")
+        (checkout / "alias.db").symlink_to(target)
+        before = snapshot(target)
+        config = alembic_config(tmp_path / "unused.db")
+        config.attributes["database_url"] = f"sqlite+aiosqlite:///{checkout}/link/../alias.db"
         with pytest.raises(RuntimeError) as error:
-            upgrade(target)
+            command.upgrade(config, "head")
+        assert "(the file SQLite opened)" in refusal(error)
+        assert snapshot(target) == before
+
+    @pytest.mark.parametrize(
+        "spelling",
+        [
+            "path",
+            "upper case",
+            "symlink to a missing file",
+            "symlinked directory then .. to a symlink to a missing file",
+        ],
+    )
+    def test_a_missing_file_of_that_name_is_refused_before_it_is_created(
+        self, tmp_path: Path, spelling: str
+    ) -> None:
+        directory = tmp_path / "fresh"
+        directory.mkdir()
+        database = directory / "github_activity.db"
+        if spelling == "upper case":
+            database = directory / "GITHUB_ACTIVITY.DB"
+        elif spelling == "symlink to a missing file":
+            (directory / "alias.db").symlink_to(directory / "github_activity.db")
+            database = directory / "alias.db"
+        elif spelling == "symlinked directory then .. to a symlink to a missing file":
+            # The driver drops `..` as text and opens alias.db; Python's realpath of the URL's
+            # path follows link first and names a missing far/alias.db.
+            (tmp_path / "far" / "deep").mkdir(parents=True)
+            (directory / "link").symlink_to(tmp_path / "far" / "deep")
+            (directory / "alias.db").symlink_to(directory / "github_activity.db")
+            database = directory / "link" / ".." / "alias.db"
+        entries = sorted(directory.iterdir())
+        with pytest.raises(RuntimeError) as error:
+            upgrade(database)
         assert "refusing to migrate" in refusal(error)
-        assert list(target.parent.iterdir()) == []
+        assert sorted(directory.iterdir()) == entries
+        assert not (directory / "github_activity.db").exists()
+
+    @pytest.mark.parametrize("name", ["other.db", "github_activity.db"])
+    def test_sqlite_uri_filenames_are_refused(
+        self, tmp_path: Path, first_schema: Path, name: str
+    ) -> None:
+        """URI parameters such as nolock or immutable would remove the locking an upgrade relies
+        on, and only SQLite reads the path a URI names; github_activity.db here is missing."""
+        target = tmp_path / name
+        if name == "other.db":
+            shutil.copyfile(first_schema, target)
+        entries = sorted(tmp_path.iterdir())
+        before = snapshot(target) if target.exists() else None
+        config = alembic_config(tmp_path / "unused.db")
+        config.attributes["database_url"] = f"sqlite+aiosqlite:///file:{target}?uri=true"
+        with pytest.raises(RuntimeError) as error:
+            command.upgrade(config, "head")
+        assert "SQLite URI filenames are not supported" in refusal(error)
+        assert sorted(tmp_path.iterdir()) == entries
+        assert (snapshot(target) if target.exists() else None) == before
+
+    def test_a_caller_supplied_connection_is_refused(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, isolated_settings: None
+    ) -> None:
+        """alembic's documented attributes["connection"] would otherwise be ignored, and the
+        settings' database migrated instead."""
+        decoy = tmp_path / "decoy.db"
+        monkeypatch.setenv("DATABASE_URL", f"sqlite+aiosqlite:///{decoy}")
+        callers = tmp_path / "callers.db"
+        config = alembic_config(callers)
+        del config.attributes["database_url"]
+        engine = create_engine(f"sqlite:///{callers}")
+        try:
+            with engine.connect() as connection:
+                config.attributes["connection"] = connection
+                with pytest.raises(RuntimeError) as error:
+                    command.upgrade(config, "head")
+        finally:
+            engine.dispose()
+        assert "a caller-supplied connection is not used" in refusal(error)
+        assert not decoy.exists()
+        assert table_names(callers) == set()
+
+    def test_sqlalchemy_url_is_refused(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, isolated_settings: None
+    ) -> None:
+        decoy = tmp_path / "decoy.db"
+        monkeypatch.setenv("DATABASE_URL", f"sqlite+aiosqlite:///{decoy}")
+        named = tmp_path / "named.db"
+        config = alembic_config(named)
+        del config.attributes["database_url"]
+        config.set_main_option("sqlalchemy.url", f"sqlite:///{named}")
+        with pytest.raises(RuntimeError) as error:
+            command.upgrade(config, "head")
+        assert "sqlalchemy.url is not used" in refusal(error)
+        assert not decoy.exists()
+        assert not named.exists()
 
     def test_the_alembic_command_refuses_the_tracked_file(self) -> None:
         result = subprocess.run(

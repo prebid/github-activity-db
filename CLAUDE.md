@@ -122,7 +122,6 @@ This project enforces strict type safety through mypy strict mode and custom qua
 |----------|---------|-------------|
 | JSON/dict serialization | `dict[str, Any]` | N/A |
 | Pydantic validators | `v: Any` | N/A |
-| ORM factories | `from_orm(obj: Any)` | N/A |
 | Log context | `**context: Any` | N/A |
 | **Lazy initialization** | Use `T \| None` with TYPE_CHECKING |
 | **Avoiding generics** | Use TYPE_CHECKING block |

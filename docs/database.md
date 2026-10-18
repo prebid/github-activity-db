@@ -50,15 +50,27 @@ converted to UTC, and returns aware UTC values. Defaults are `utc_now()`, never 
   the pragma does not take effect or a transaction is already open.
 - `BEGIN IMMEDIATE` opens the transaction and `PRAGMA foreign_key_check` runs after the last
   revision, before the commit. A failed revision, or a violation, leaves the file at the
-  revision the upgrade started from. A revision cannot end the transaction early: an SQLite
-  authorizer refuses any `BEGIN`, `COMMIT`, `END`, or `ROLLBACK` but the upgrade's own, every
-  statement once SQLite has ended the transaction by itself (`INSERT OR ROLLBACK`,
-  `RAISE(ROLLBACK)`), and `ATTACH`.
-- Refused: offline `--sql` mode, databases other than SQLite, and the tracked
+  revision the upgrade started from. A command that runs no revision and changes no row
+  (`current`, `check`, or `stamp` to the file's own revision) is not checked, but it opens the
+  same transaction, so like an upgrade it waits up to 5 seconds for the write lock and fails if
+  another connection holds the file that long.
+- An SQLite authorizer allows only the actions `ALLOWED_ACTIONS` in `env.py` lists: the main
+  database's DDL and DML, and the reads alembic and SQLAlchemy's reflection make. No statement
+  a revision runs commits part of the upgrade: the authorizer refuses any `BEGIN`, `COMMIT`, `END`, or
+  `ROLLBACK` but the upgrade's own, `SAVEPOINT`, and every statement once SQLite has ended the
+  transaction by itself (`INSERT OR ROLLBACK`, `RAISE(ROLLBACK)`); the connection keeps no
+  prepared statements, so a repeated statement is checked again. It refuses `ATTACH`, temporary
+  objects (`TEMP` or a `temp.` name), virtual tables, and a pragma value other than
+  `user_version` and the pragmas reflection reads with an argument (`table_info`, `table_xinfo`, `index_list`, `index_info`, `foreign_key_list`),
+  so `journal_mode`, `legacy_alter_table`, and
+  `ignore_check_constraints` keep the values the connection opened with.
+- Refused: offline `--sql` mode, databases other than SQLite, SQLite URI filenames
+  (`?uri=true`), a caller-supplied connection or `sqlalchemy.url`, and the tracked
   `github_activity.db`. The connect listener asks SQLite which file it opened, so the tracked
-  file is refused through any path, URI, symlink, or hard link, and so is any file named
-  `github_activity.db`, such as another checkout's copy; a missing path of that name is refused
-  before SQLite would create it.
+  file is refused through any path, symlink, or hard link, and so is any file named
+  `github_activity.db`, such as another checkout's copy; a missing path of that name, or a
+  missing file the driver's path resolves to under that name, is refused before SQLite would
+  create it.
 - `downgrade()` raises: migrations are never downgraded, and a database the code cannot upgrade
   is rebuilt (redesign plan 5.4).
 
@@ -74,8 +86,8 @@ A migration changes the models (`db/models.py`), the chain, and the documents to
 - Before batch-altering a table a view reads, drop the view, and recreate it afterwards from
   the migration's own frozen `VIEWS` constant; a view left in place fails the migration
   (gap 71). A migration that creates or replaces a view embeds its SQL in `VIEWS`.
-- Add the revision id to `MIGRATION_REVISIONS` in `db/schema.py`; the installed package reads
-  the chain from there.
+- Add the revision id to `MIGRATION_REVISIONS` in `db/schema.py`: code that must refuse a
+  database not at head reads the chain from there (Step 3b's head check, gap 74).
 - Update `docs/data-dictionary.md` and, for a consumer column, `tests/schema_versions.json`. A
   removed, renamed, or redefined consumer column needs a new `SCHEMA_VERSION`, set by the
   migration as `PRAGMA user_version`.
@@ -83,10 +95,12 @@ A migration changes the models (`db/models.py`), the chain, and the documents to
   bumps that kind's hydration version (plan 5.1).
 
 The tests that hold these: `tests/db/test_schema.py` compares a migrated database with the
-models (CHECK names and text, index SQL, and triggers included) and each view with its frozen
-SQL; `tests/db/test_migrations.py` covers the chain, `env.py`, and each revision's imports and
-`VIEWS` constant; `tests/test_data_dictionary.py`
-covers the dictionary and the schema-version lock. CI also runs `alembic check`.
+models (CHECK names and text, index SQL, and triggers on tables included) and each view with its
+frozen SQL, refuses any schema object neither comparison reads (a trigger on a view, an index on
+`alembic_version`, an `ANALYZE` table), and holds both to plan 5.1's nullable columns, unique
+column sets, and delete actions; `tests/db/test_migrations.py` covers the chain, `env.py`, and
+each revision's imports and `VIEWS` constant; `tests/test_data_dictionary.py` covers the
+dictionary and the schema-version lock. CI also runs `alembic check`.
 
 | Revision | Description |
 |----------|-------------|

@@ -8,17 +8,21 @@ from pathlib import Path
 
 import httpx
 import pytest
+from rich.console import Console
 from typer.testing import CliRunner
 
 from github_activity_db.cli import common
+from github_activity_db.cli import github as github_cli
 from github_activity_db.cli.app import app
 from github_activity_db.config import get_settings
 from github_activity_db.source import GitHubSource
 from tests.source.conftest import FakeClock
 from tests.source.replay import Replay, synthetic, unused_faults
 
-# Wide enough that Rich never wraps a table cell.
-runner = CliRunner(env={"COLUMNS": "200"})
+runner = CliRunner()
+# Rich's width when none of stdin, stdout, and stderr is a terminal and COLUMNS is unset, as in
+# CI and under pytest's capture.
+DEFAULT_WIDTH = 80
 _ANSI_ESCAPE = re.compile(r"\x1b\[[0-9;?]*[ -/]*[@-~]")
 _BOX_DRAWING = re.compile(r"[\u2500-\u257f]")
 
@@ -33,7 +37,7 @@ def replay(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Iterator[Replay]:
     """Every command reads GitHub through the replay; it must answer every request it gets."""
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("GITHUB_TOKEN", "test-token")
-    monkeypatch.delenv("TRACKING_CONFIG_PATH", raising=False)
+    monkeypatch.setattr(github_cli, "console", Console(width=DEFAULT_WIDTH))
     get_settings.cache_clear()
     recorded = Replay.from_fixtures()
     monkeypatch.setattr(
@@ -77,6 +81,25 @@ class TestRateLimit:
         result = runner.invoke(app, ["github", "rate-limit"])
         assert result.exit_code == 0, result.output
         assert "core 4931 5000 69 2026-10-17 20:19:29 UTC" in _plain(result.stdout)
+
+    def test_a_dropped_rate_object_is_not_a_failed_reading(self, replay: Replay) -> None:
+        """Nothing reads the top-level ``rate``, which the recording shows equal to
+        ``resources.core``."""
+        unit = replay.unit("rest_rate_limit")
+        del unit.data["rate"]
+        replay.add(unit)
+        result = runner.invoke(app, ["github", "rate-limit"])
+        assert result.exit_code == 0, result.output
+        assert "core 4931 5000 69 2026-10-17 20:19:29 UTC" in _plain(result.stdout)
+
+    def test_a_pool_without_a_field_it_reads_exits_1(self, replay: Replay) -> None:
+        unit = replay.unit("rest_rate_limit")
+        del unit.data["resources"]["core"]["remaining"]
+        replay.add(unit)
+        result = runner.invoke(app, ["github", "rate-limit"])
+        assert result.exit_code == 1
+        assert "unexpected /rate_limit shape" in _plain(result.stderr)
+        assert "resources.core.remaining" in _plain(result.stderr)
 
     def test_a_refused_rate_limit_request_exits_1(self, replay: Replay) -> None:
         replay.fault(

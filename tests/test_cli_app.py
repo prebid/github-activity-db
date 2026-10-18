@@ -62,17 +62,8 @@ def _no_requests(token: str) -> object:
 
 @pytest.fixture(autouse=True)
 def isolated_settings(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Iterator[None]:
-    """No .env, no token, and the packaged tracking.toml, whatever the developer's shell has."""
+    """No .env and fresh settings; tests/conftest.py unsets the shell's settings variables."""
     monkeypatch.chdir(tmp_path)
-    for name in (
-        "GITHUB_TOKEN",
-        "TRACKING_CONFIG_PATH",
-        "LOG_LEVEL",
-        "DATABASE_URL",
-        "LOGGING",
-        "LOGGING__SERIALIZE",
-    ):
-        monkeypatch.delenv(name, raising=False)
     get_settings.cache_clear()
     yield
     get_settings.cache_clear()
@@ -173,6 +164,30 @@ class TestExitCodes:
         assert runner.invoke(planted, ["done"]).exit_code == 0
         assert runner.invoke(planted, ["--nope"]).exit_code == 1
 
+    @pytest.mark.parametrize(
+        ("error", "code"),
+        [
+            pytest.param(EOFError, 1, id="end of input"),
+            pytest.param(KeyboardInterrupt, 130, id="interrupt"),
+        ],
+    )
+    def test_an_aborted_command_line(self, error: type[BaseException], code: int) -> None:
+        """click turns end of input into Abort, which exits 1 here; typer turns an interrupt
+        into exit 130 before click sees it."""
+        planted = typer.Typer(cls=ExitCodeGroup)
+
+        @planted.command()
+        def ask() -> None:
+            raise error
+
+        @planted.command()
+        def other() -> None:
+            pass
+
+        result = runner.invoke(planted, ["ask"])
+        assert result.exit_code == code, result.output
+        assert isinstance(result.exception, SystemExit), result.exception
+
 
 def _installed(
     *args: str, env: dict[str, str], cwd: Path, script: str | None = None
@@ -204,6 +219,44 @@ class TestInstalledEntryPoint:
         result = _installed("github", "rate-limit", env={"LOGGING": "notjson"}, cwd=tmp_path)
         assert result.returncode == 1
         assert "invalid settings" in _words(result.stderr)
+        assert "Traceback" not in result.stderr
+
+    @pytest.mark.parametrize(
+        ("dotenv", "mode"),
+        [
+            pytest.param(b"LOG_LEVEL=\xff\n", 0o644, id="not UTF-8"),
+            pytest.param(b"", 0o000, id="unreadable"),
+        ],
+    )
+    def test_an_unreadable_env_file_exits_1_without_a_traceback(
+        self, tmp_path: Path, dotenv: bytes, mode: int
+    ) -> None:
+        env_file = tmp_path / ".env"
+        env_file.write_bytes(dotenv)
+        env_file.chmod(mode)
+        try:
+            result = _installed("github", "rate-limit", env={}, cwd=tmp_path)
+        finally:
+            env_file.chmod(0o644)
+        assert result.returncode == 1
+        assert "invalid settings" in _words(result.stderr)
+        assert "Traceback" not in result.stderr
+
+    @pytest.mark.parametrize(
+        "env",
+        [
+            pytest.param({"LOGGING__ROTATION": "garbage"}, id="rotation"),
+            pytest.param({"LOGGING__RETENTION": "garbage"}, id="retention"),
+            pytest.param({"LOGGING__LOG_FILE": "/dev/null/x.log"}, id="log file"),
+        ],
+    )
+    def test_a_log_file_that_cannot_be_set_up_exits_1_without_a_traceback(
+        self, tmp_path: Path, env: dict[str, str]
+    ) -> None:
+        settings = {"LOGGING__LOG_FILE": str(tmp_path / "x.log"), **env}
+        result = _installed("github", "rate-limit", env=settings, cwd=tmp_path)
+        assert result.returncode == 1
+        assert "cannot set up logging" in _words(result.stderr)
         assert "Traceback" not in result.stderr
 
     def test_a_missing_token_exits_1(self, tmp_path: Path) -> None:

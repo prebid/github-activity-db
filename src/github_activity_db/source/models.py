@@ -290,10 +290,12 @@ class RestRateLimitPool(BaseModel):
 
 
 class RestRateLimits(BaseModel):
+    """``/rate_limit``: the pools are read from ``resources``; the top-level ``rate`` (equal to
+    ``resources.core`` in the recorded response) is ignored like any other field."""
+
     model_config = ConfigDict(extra="ignore", frozen=True)
 
     resources: dict[StrictStr, RestRateLimitPool]
-    rate: RestRateLimitPool
 
 
 class CompareGitAuthor(RestModel):

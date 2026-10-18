@@ -4,7 +4,7 @@ scripts/check_db_journal.py and scripts/check_frozen_db.py also run as pre-commi
 github_activity.db. Step 6 moves the database out of git and revisits these tests.
 """
 
-import re
+import os
 import shutil
 import sqlite3
 import subprocess
@@ -92,6 +92,31 @@ class TestFrozenContent:
         assert result.returncode == 1
         assert "cannot read" in result.stdout
 
+    def test_a_symlink_to_an_identical_copy_fails(self, tmp_path: Path) -> None:
+        """git would store the link text, not the database."""
+        copy = tmp_path / "copy.db"
+        shutil.copyfile(REPO_ROOT / "github_activity.db", copy)
+        (tmp_path / "github_activity.db").symlink_to(copy)
+        result = _frozen(tmp_path / "github_activity.db")
+        assert result.returncode == 1
+        assert "is a symlink" in result.stdout
+
+    def test_git_stores_the_tracked_file_as_a_regular_file(self) -> None:
+        """What a clone or a raw download gets: deleted, renamed, or committed as a symlink, the
+        file is not this one entry."""
+        assert GIT is not None
+        result = subprocess.run(
+            [GIT, "ls-files", "--stage", "--", "github_activity.db"],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=60,
+        )
+        (entry,) = result.stdout.splitlines()
+        mode, _blob, stage_and_path = entry.split(" ")
+        assert (mode, stage_and_path) == ("100644", "0\tgithub_activity.db")
+
 
 class TestGitignore:
     """Only the repository-root github_activity.db escapes the *.db rule (D26)."""
@@ -125,16 +150,22 @@ class TestGitignore:
         assert not self._ignored("github_activity.db")
 
 
+def _git(repo: Path, *args: str) -> None:
+    assert GIT is not None
+    subprocess.run([GIT, *args], cwd=repo, check=True, capture_output=True, timeout=60)
+
+
 class TestNoSidecarFiles:
     """A journal, WAL, or shared-memory file beside github_activity.db would change what SQLite
-    reads from it on the next open, past the pinned digest."""
+    reads from it on the next open, past the pinned digest. On a case-insensitive file system
+    SQLite finds it under any letter case."""
 
     SIDECARS = ("github_activity.db-journal", "github_activity.db-wal", "github_activity.db-shm")
 
     def test_none_is_tracked(self) -> None:
         assert GIT is not None
         result = subprocess.run(
-            [GIT, "ls-files", "--", *self.SIDECARS],
+            [GIT, "ls-files", "--", *(f":(icase){name}" for name in self.SIDECARS)],
             cwd=REPO_ROOT,
             capture_output=True,
             text=True,
@@ -143,13 +174,47 @@ class TestNoSidecarFiles:
         )
         assert result.stdout == ""
 
-    def test_the_hook_refuses_each(self) -> None:
+    @staticmethod
+    def _run_hook(tmp_path: Path, name: str, *, symlink: bool = False) -> int:
+        """pre-commit itself, on a scratch repository holding ``name``, with the hook's lines
+        copied from the real config (a local hook, so nothing is fetched)."""
         config = (REPO_ROOT / ".pre-commit-config.yaml").read_text()
-        (pattern,) = re.findall(
-            r"- id: tracked-db-no-sidecar\n(?:\s+\w+: .*\n)*?\s+files: (\S+)\n", config
+        start = config.index("      - id: tracked-db-no-sidecar\n")
+        hook = config[start : config.index("\n      - id: ", start)]
+        hooks = tmp_path / "hooks.yaml"
+        hooks.write_text(f"repos:\n  - repo: local\n    hooks:\n{hook}\n")
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        _git(repo, "init", "-q")
+        if symlink:
+            (repo / "target").write_text("journal bytes")
+            (repo / name).symlink_to("target")
+        else:
+            (repo / name).write_text("journal bytes")
+        _git(repo, "add", "-f", "--", name)
+        result = subprocess.run(
+            [sys.executable, "-m", "pre_commit", "run", "--all-files", "--config", str(hooks)],
+            cwd=repo,
+            env={**os.environ, "PRE_COMMIT_HOME": str(tmp_path / "pre-commit-home")},
+            capture_output=True,
+            text=True,
+            timeout=120,
         )
-        assert "language: fail" in config.split("- id: tracked-db-no-sidecar")[1].split("- id:")[0]
-        for name in self.SIDECARS:
-            assert re.search(pattern, name), name
-        for name in ("github_activity.db", "github_activity.local.db-journal"):
-            assert not re.search(pattern, name), name
+        assert "no journal, WAL, or shared-memory file" in result.stdout, result.stdout
+        return result.returncode
+
+    @pytest.mark.parametrize(
+        ("name", "symlink"),
+        [
+            *((name, False) for name in SIDECARS),
+            ("github_activity.db-journal", True),
+            ("GITHUB_ACTIVITY.DB-JOURNAL", False),
+            ("GitHub_Activity.db-wal", False),
+        ],
+    )
+    def test_the_hook_refuses_each(self, tmp_path: Path, name: str, symlink: bool) -> None:
+        assert self._run_hook(tmp_path, name, symlink=symlink) == 1
+
+    @pytest.mark.parametrize("name", ["github_activity.db", "github_activity.local.db-journal"])
+    def test_the_hook_passes_other_files(self, tmp_path: Path, name: str) -> None:
+        assert self._run_hook(tmp_path, name) == 0

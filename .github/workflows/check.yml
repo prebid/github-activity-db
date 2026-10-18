@@ -72,6 +72,9 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - name: Install project and dev tools from uv.lock
         run: uv sync --frozen --extra dev
+      # The migration tests depend on SQLite's behavior; record which build they ran on.
+      - name: Python and SQLite versions
+        run: uv run --no-sync python -c "import sqlite3, sys; print(sys.version, sqlite3.sqlite_version)"
       - name: pytest
         run: uv run --no-sync pytest --junitxml="$RUNNER_TEMP/junit.xml"
       - name: Require an executed, passing test run with no skips

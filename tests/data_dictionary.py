@@ -17,6 +17,7 @@ USES = ("consumer", "internal")
 
 _HEADING = re.compile(r"^### `(?P<name>\w+)`$")
 _ROW = re.compile(r"^\| `(?P<column>\w+)` \| (?P<use>\w+) \| (?P<meaning>.*\S) \|$")
+_TABLE_HEADER = ("| Column | Use | Meaning |", "|--------|-----|---------|")
 
 
 class DictionaryError(ValueError):
@@ -26,13 +27,19 @@ class DictionaryError(ValueError):
 def read_dictionary(text: str) -> dict[str, dict[str, str]]:
     """``{object: {column: use}}`` from ``### `object` `` headings and their column rows.
 
-    A row is ``| `column` | consumer or internal | meaning |``; any other line starting with
-    ``| ` `` is an error rather than a skipped line, as is a row outside an object, a name listed
+    A row is ``| `column` | consumer or internal | meaning |``; any other line that starts with
+    ``|`` after its indentation, except the table's header and separator rows, is an error
+    rather than a skipped line, as is a non-blank line right after a table line that does not
+    start with ``|`` (GFM reads it as another row), a row outside an object, a name listed
     twice, and an object without rows.
     """
     entries: dict[str, dict[str, str]] = {}
     current: str | None = None
+    in_table = False
     for number, line in enumerate(text.splitlines(), start=1):
+        if in_table and line.strip() and not line.lstrip().startswith("|"):
+            raise DictionaryError(f"line {number}: continues a table without a leading |")
+        in_table = line.lstrip().startswith("|")
         if heading := _HEADING.match(line):
             name = str(heading["name"])
             if name in entries:
@@ -41,7 +48,7 @@ def read_dictionary(text: str) -> dict[str, dict[str, str]]:
             current = name
         elif line.startswith("#"):
             current = None
-        elif line.startswith("| `"):
+        elif line.lstrip().startswith("|") and line not in _TABLE_HEADER:
             row = _ROW.match(line)
             if row is None:
                 raise DictionaryError(f"line {number}: not a `| column | use | meaning |` row")

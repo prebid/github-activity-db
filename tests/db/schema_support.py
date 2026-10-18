@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sqlite3
+from collections.abc import Iterable
 from contextlib import closing
 from pathlib import Path
 from typing import Any
@@ -134,6 +135,68 @@ def schema_of(database: Path) -> dict[str, dict[str, Any]]:
             ),
         }
     return schema
+
+
+def nullable_columns(database: Path) -> set[tuple[str, str]]:
+    """(table, column) for every column declared without NOT NULL, primary-key columns included:
+    SQLite holds only an INTEGER PRIMARY KEY, or a WITHOUT ROWID table's key, NOT NULL itself."""
+    return {
+        (table, str(row[1]))
+        for table in schema_tables(database)
+        for row in _rows(database, f'PRAGMA table_xinfo("{table}")')
+        if not row[3]
+    }
+
+
+def unique_sets(database: Path) -> dict[str, set[tuple[str, tuple[str, ...]]]]:
+    """Per table, each unique index's origin (``u`` a UNIQUE, ``pk`` a composite or non-integer
+    primary key) and its columns; an INTEGER PRIMARY KEY is the rowid, with no index."""
+    return {
+        table: {
+            (
+                str(origin),
+                tuple(str(row[2]) for row in _rows(database, f'PRAGMA index_info("{name}")')),
+            )
+            for _seq, name, unique, origin, _partial in _rows(
+                database, f'PRAGMA index_list("{table}")'
+            )
+            if unique
+        }
+        for table in schema_tables(database)
+    }
+
+
+def delete_actions(database: Path) -> set[tuple[str, str, str, str]]:
+    """(table, column, referenced table, ON DELETE action) for every foreign-key column, each of
+    a column's foreign keys counted."""
+    return {
+        (table, str(row[3]), str(row[2]), str(row[6]))
+        for table in schema_tables(database)
+        for row in _rows(database, f'PRAGMA foreign_key_list("{table}")')
+    }
+
+
+# alembic's own: the version table and the index behind its primary key.
+ALEMBIC_OBJECTS = frozenset(
+    {("table", "alembic_version"), ("index", "sqlite_autoindex_alembic_version_1")}
+)
+
+
+def objects_outside_the_comparison(database: Path, frozen: Iterable[str]) -> list[tuple[str, str]]:
+    """Every ``sqlite_master`` row that neither ``schema_of`` nor ``view_differences`` reads:
+    not a schema table, an index or trigger on one, a frozen view, or alembic's own. SQLite's
+    ``sqlite_`` tables are not exempt, so an ``ANALYZE`` statistics table counts."""
+    tables, views_frozen = set(schema_tables(database)), set(frozen)
+    return [
+        (str(kind), str(name))
+        for kind, name, table in _rows(
+            database, "SELECT type, name, tbl_name FROM sqlite_master ORDER BY type, name"
+        )
+        if (kind, name) not in ALEMBIC_OBJECTS
+        and not (kind == "table" and name in tables)
+        and not (kind in ("index", "trigger") and table in tables)
+        and not (kind == "view" and name in views_frozen)
+    ]
 
 
 def unindexed_foreign_keys(database: Path) -> set[tuple[str, tuple[str, ...]]]:
