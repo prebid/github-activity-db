@@ -83,6 +83,8 @@ SELECT
     u.node_id AS node_id,
     u.login AS login,
     u.type AS type,
+    (SELECT a.reason FROM automation_accounts AS a WHERE a.github_id = u.github_id)
+        AS automation_reason,
     p.company AS company,
     p.location AS location,
     p.website_url AS website_url,

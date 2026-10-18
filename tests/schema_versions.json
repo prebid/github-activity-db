@@ -344,6 +344,7 @@
       ["sync_runs", "status"],
       ["sync_runs", "trigger"],
       ["v_account_profiles", "archived_at"],
+      ["v_account_profiles", "automation_reason"],
       ["v_account_profiles", "company"],
       ["v_account_profiles", "description"],
       ["v_account_profiles", "email"],
@@ -484,7 +485,7 @@
       ["v_pr_reviews", "updated_at"]
     ],
     "views": {
-      "v_account_profiles": "a5f78cfaab03c4dedba07000d4aee2c8f3a82133b46968e864544a05cb4d3d69",
+      "v_account_profiles": "9005a58a7edd3609768e14be4cada80cceed7a52fddcb4c67645164d0e692244",
       "v_commit_authors": "f7c21ec35d06295a81909384c9ca42b0b6716d2b58e98c3eeb4945373cc131d3",
       "v_github_users": "c2793ddb985502e11a366488bc71624163b4cdb22b31336983269e484cebe4e9",
       "v_pr_comments": "5d7b86e065235bb96dc415c340356b2d627d9d3f35417bdef6d1a28462bb192b",

@@ -88,12 +88,14 @@ A migration changes the models (`db/models.py`), the chain, and the documents to
   unnamed ones (gap 72).
 - Before batch-altering a table a view reads, drop the view, and recreate it afterwards from
   the migration's own frozen `VIEWS` constant; a view left in place fails the migration
-  (gap 71). A migration that creates or replaces a view embeds its SQL in `VIEWS`.
+  (gap 71). A migration that creates or replaces a view embeds its SQL in `VIEWS`, and one that
+  drops a view without replacing it names it in `DROPPED_VIEWS`, which the view comparison reads.
 - Add the revision id to `MIGRATION_REVISIONS` in `db/schema.py`: code that must refuse a
   database not at head reads the chain from there (Step 3b's head check, gap 74).
-- Update `docs/data-dictionary.md` and, for a consumer column, `tests/schema_versions.json`. A
-  removed, renamed, or redefined consumer column needs a new `SCHEMA_VERSION`, set by the
-  migration as `PRAGMA user_version`.
+- Update `docs/data-dictionary.md` and `tests/schema_versions.json`: the consumer columns, and
+  the SHA-256 of each view's frozen SQL. A removed, renamed, or redefined consumer column, and a
+  view whose rows or derivation change (a new column on an existing view included), needs a new
+  `SCHEMA_VERSION`, set by the migration as `PRAGMA user_version`.
 - A migration that adds or redefines a GitHub-derived column of a table that may hold rows
   bumps that kind's hydration version (plan 5.1).
 
@@ -116,24 +118,30 @@ dictionary and the schema-version lock. CI also runs `alembic check`.
 ## Querying
 
 Consumers read the views and the columns the dictionary marks consumer. The views keep every
-row and leave counting to the query. For example, each account's approving reviews of one
-repository's merged pull requests, with the account's type and `[automation]` reason beside it,
-and the lines those pull requests changed:
+row and leave counting to the query. For example, for each account, the merged pull requests of
+one tracked repository it approved, with the account's type and `[automation]` reason beside it,
+and the lines those pull requests changed, each pull request counted once however many times the
+account approved it:
 
 ```sql
 SELECT account_login, account_type, account_automation_reason,
-       COUNT(*) AS approvals, SUM(additions + deletions) AS lines_changed
-FROM v_pr_relationships
-WHERE repository_full_name = 'prebid/Prebid.js'
-  AND relationship = 'review'
-  AND review_state = 'APPROVED'
-  AND pr_state = 'MERGED'
+       COUNT(*) AS pull_requests_approved, SUM(additions + deletions) AS lines_changed
+FROM (
+    SELECT DISTINCT account_github_id, account_node_id, account_login, account_type,
+           account_automation_reason, pr_github_id, additions, deletions
+    FROM v_pr_relationships
+    WHERE repository_full_name = 'prebid/Prebid.js'
+      AND repository_is_tracked = 1
+      AND relationship = 'review'
+      AND review_state = 'APPROVED'
+      AND pr_state = 'MERGED'
+)
 GROUP BY account_github_id, account_node_id
-ORDER BY approvals DESC;
+ORDER BY pull_requests_approved DESC;
 ```
 
-An account that approved one pull request twice counts twice here; `COUNT(DISTINCT pr_github_id)`
-counts the pull requests instead. That choice is the query's, not the view's.
+Counting approvals rather than pull requests, or lines once per approval, is the query's choice,
+not the view's.
 
 Application code uses `get_session()`, which commits on a clean exit and rolls back on an
 exception:

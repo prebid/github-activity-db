@@ -443,6 +443,21 @@ class TestPlanRules:
             OUTSIDE_THE_DELETE_RULE,
         )
 
+    def test_the_cascade_exceptions_are_the_primary_key_references(
+        self, head_template: Path
+    ) -> None:
+        in_a_primary_key = {
+            (table, str(row[3]))
+            for table in schema_tables(head_template)
+            for row in query(head_template, f"PRAGMA foreign_key_list({table})")
+            if row[2] == "github_users"
+            and any(
+                column[1] == row[3] and column[5]
+                for column in query(head_template, f"PRAGMA table_info({table})")
+            )
+        }
+        assert in_a_primary_key == GITHUB_USERS_IN_A_PRIMARY_KEY
+
     def test_a_primary_key_reference_set_null_is_reported(
         self, head_template: Path, tmp_path: Path
     ) -> None:

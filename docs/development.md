@@ -310,8 +310,8 @@ tests/
    `src/github_activity_db/db/__init__.py`
 2. Write the migration as "Writing a migration" in [database.md](database.md) describes, and
    add its revision id to `MIGRATION_REVISIONS` in `db/schema.py`
-3. Add the table to [data-dictionary.md](data-dictionary.md), and its consumer columns to
-   `tests/schema_versions.json`
+3. Add the table to [data-dictionary.md](data-dictionary.md), and its consumer columns (and the
+   digest of any view the migration creates) to `tests/schema_versions.json`
 
 ### 2. New CLI Command
 

@@ -383,32 +383,48 @@ class TestStep3b1Migration:
         assert query(step3a_database, "SELECT name FROM user_tags") == [("kept",)]
 
     def test_the_refusal_covers_every_table_the_revision_recreates(
-        self, head_template: Path
+        self, step3a_database: Path, head_template: Path
     ) -> None:
-        """CHANGED_TABLES, which the refusal counts, is exactly the set of tables whose
-        definition differs between Step 3a and head, apart from the tables Step 3b-1 adds."""
-        script = ScriptDirectory.from_config(alembic_config(head_template))
-        module = script.get_revision(HEAD_REVISION).module
-        added = {"repo_labels", "pr_review_requests", "pr_assignees", "account_profiles"}
-        at_head = {
-            table
-            for (table,) in query(
-                head_template, "SELECT name FROM sqlite_master WHERE type = 'table'"
-            )
+        """CHANGED_TABLES, which the refusal counts, is exactly the set of tables present at
+        Step 3a whose definition differs at head; a table it leaves alone is unchanged."""
+        module = (
+            ScriptDirectory.from_config(alembic_config(head_template))
+            .get_revision(HEAD_REVISION)
+            .module
+        )
+        before, after = table_definitions(step3a_database), table_definitions(head_template)
+        changed = {table for table in before if before[table] != after.get(table)}
+        assert set(module.CHANGED_TABLES) == changed
+        assert after.keys() - before.keys() == {
+            "repo_labels",
+            "pr_review_requests",
+            "pr_assignees",
+            "account_profiles",
         }
-        recreated = at_head - added - set(CHANGED_KEPT) - {"alembic_version"}
-        assert set(module.CHANGED_TABLES) == recreated
+
+    def test_the_definition_reading_sees_a_changed_table(
+        self, step3a_database: Path, tmp_path: Path
+    ) -> None:
+        """Positive control: a column added to a table is a changed definition."""
+        changed = tmp_path / "changed.db"
+        shutil.copyfile(step3a_database, changed)
+        with closing(sqlite3.connect(changed)) as connection, connection:
+            connection.execute("ALTER TABLE pr_files ADD COLUMN probe INTEGER")
+        assert (
+            table_definitions(changed)["pr_files"] != table_definitions(step3a_database)["pr_files"]
+        )
 
 
-# Tables Step 3b-1 leaves as Step 3a created them.
-CHANGED_KEPT = (
-    "pr_files",
-    "repo_sync_state",
-    "sync_pending",
-    "sync_failures",
-    "user_tags",
-    "pr_user_tags",
-)
+def table_definitions(database: Path) -> dict[str, str]:
+    """Each table's CREATE statement, whitespace collapsed, alembic's own table excluded."""
+    return {
+        str(name): " ".join(str(sql).split())
+        for name, sql in query(
+            database,
+            "SELECT name, sql FROM sqlite_master WHERE type = 'table' "
+            "AND name <> 'alembic_version'",
+        )
+    }
 
 
 class TestOneTransaction:

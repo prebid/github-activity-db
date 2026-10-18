@@ -27,9 +27,10 @@ entry here, or an entry names one that does not exist.
   changed.
 - Timestamps are UTC, stored as `YYYY-MM-DD HH:MM:SS.ffffff` text, so text order is time order.
   Booleans are stored as 0 and 1.
-- Values GitHub reports keep GitHub's names in snake case and its values: an enum such as
-  `review_decision` or `mergeable` is GitHub's text, stored without a check, so a value GitHub
-  adds is stored. No column holds a value the database chose, except the classifications named
+- Values GitHub reports keep GitHub's names in snake case and its values. Every GitHub enum
+  except a pull request's and a review's `state` (and `github_users.type`) is GitHub's text,
+  stored without a check, such as `review_decision` or `mergeable`, so a value GitHub adds is
+  stored. No column holds a value the database chose, except the classifications named
   below (`targets_default_branch`, `is_pr_author`, `author_also_reviewed`, `automation_reason`,
   `email_automation_reason`), each a rule over stored columns of the same file (D29).
 - A null account reference means GitHub returned no actor for it and the row had none stored;
@@ -125,7 +126,7 @@ Every account the database has stored, kept after a lookup answers `NOT_FOUND` f
 | `id` | consumer | Row id |
 | `github_id` | consumer | GitHub's numeric account id; null only for an `EnterpriseUserAccount`, which has none |
 | `node_id` | consumer | GitHub's GraphQL node id; the key of an account with a null `github_id` |
-| `login` | consumer | Last known login, not unique; set by lookups only, and each sync refreshes accounts last refreshed more than 24 hours ago |
+| `login` | consumer | Last known login, not unique; an actor sighting sets it when it inserts the account and only lookups change it; each sync refreshes accounts last refreshed more than 24 hours ago, except those with `not_found_at` set |
 | `type` | consumer | GitHub's type: `User`, `Bot`, `Organization`, `Mannequin`, or `EnterpriseUserAccount` |
 | `name` | consumer | GitHub's `name`; null until the account's first lookup, for a `Bot`, and when GitHub returns none |
 | `created_at` | consumer | GitHub's `createdAt`; null until the account's first lookup |
@@ -189,7 +190,7 @@ Pull requests in coverage: open ones, ones merged on or after the coverage floor
 | `base_ref_oid` | consumer | GitHub's `baseRefOid` |
 | `head_ref_name` | consumer | GitHub's `headRefName` |
 | `head_ref_oid` | consumer | GitHub's `headRefOid` |
-| `head_repo_github_id` | consumer | Numeric id of GitHub's `headRepository`; null when GitHub returns none (as for a deleted fork) or no id |
+| `head_repo_github_id` | consumer | Numeric id of GitHub's `headRepository`; null when GitHub returns no head repository or no id for it |
 | `head_repo_full_name` | consumer | `nameWithOwner` of GitHub's `headRepository`; null when GitHub returns none |
 | `head_repo_owner_node_id` | consumer | Node id of GitHub's `headRepositoryOwner`; null when GitHub returns none |
 | `head_repo_owner_login` | consumer | Login of GitHub's `headRepositoryOwner`; null when GitHub returns none |
@@ -292,7 +293,7 @@ message (D19); co-authors are not stored (D15).
 |--------|-----|---------|
 | `pr_id` | consumer | Row id of the pull request |
 | `sha` | consumer | Commit SHA |
-| `author_id` | consumer | Row id of the account GitHub links the commit to; null when GitHub links none and the row had none stored |
+| `author_id` | consumer | Row id of the account GitHub links the commit to; null when GitHub links none and the row had none stored, and when the linked account was never stored because a lookup answered `NOT_FOUND` for it (`linked_github_id` then holds its id) |
 | `linked_github_id` | consumer | The account id GitHub linked the commit to in the latest hydration, whether or not a lookup found the account; null when it linked none (D28) |
 | `author_name` | consumer | Git author name |
 | `author_email` | consumer | Git author email |
@@ -337,10 +338,10 @@ GitHub's `reviewRequests` for the pull request, one row per entry as GitHub curr
 | `request_github_id` | consumer | The request's own `databaseId`; null when GitHub returns none |
 | `request_node_id` | consumer | The request's own node id |
 | `requested_type` | consumer | GitHub's type of the requested reviewer (`User`, `Bot`, `Mannequin`, `Team`, `EnterpriseTeam`); null when GitHub returns no requested reviewer |
-| `requested_github_id` | consumer | The requested account's or team's numeric id; null for an `EnterpriseTeam`, whose fields are not read, and when GitHub returns none |
-| `requested_node_id` | consumer | The requested account's or team's node id; null for an `EnterpriseTeam` and when GitHub returns no requested reviewer |
-| `account_id` | consumer | Row id of the requested account; null for a team, which is not an account |
-| `team_slug` | consumer | The requested team's `slug`; null for an account |
+| `requested_github_id` | consumer | The requested account's or `Team`'s `databaseId`, or an `EnterpriseTeam`'s `fullDatabaseId`; null when GitHub returns none |
+| `requested_node_id` | consumer | The requested account's, team's, or enterprise team's node id; null when GitHub returns no requested reviewer |
+| `account_id` | consumer | Row id of the requested account; null for a `Team` or an `EnterpriseTeam`, which is not an account, and when GitHub returns no requested reviewer |
+| `team_slug` | consumer | The requested team's or enterprise team's `slug`; null for an account and when GitHub returns no requested reviewer |
 | `as_code_owner` | consumer | GitHub's `asCodeOwner` |
 
 ### `pr_assignees`
@@ -508,6 +509,7 @@ One row per `account_profiles` row, with its account's keys.
 | `node_id` | consumer | The account's node id |
 | `login` | consumer | The account's last known login |
 | `type` | consumer | `User` or `Organization` |
+| `automation_reason` | consumer | Classification: the reason of the `automation_accounts` entry for the account's `github_id`; null when none lists it |
 | `company` | consumer | A user's profile `company` |
 | `location` | consumer | The profile's `location` |
 | `website_url` | consumer | The profile's `websiteUrl` |

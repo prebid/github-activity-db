@@ -6,6 +6,7 @@ import shutil
 import sqlite3
 from collections.abc import Iterator
 from contextlib import closing
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -55,6 +56,7 @@ COLUMNS = {
         "node_id",
         "login",
         "type",
+        "automation_reason",
         "company",
         "location",
         "website_url",
@@ -183,6 +185,39 @@ class TestShape:
         assert {"id", "pr_id", "author_id", "reviewer_id", "account_id", "editor_id"} <= row_ids
         for view, columns in COLUMNS.items():
             assert row_ids.isdisjoint(columns), view
+
+    def test_no_view_value_is_a_row_id(self, seed: Seed) -> None:
+        """Row ids set far from every GitHub id and count, so a row id a view projects under
+        any name shows up as a value."""
+        ids = iter(range(7_000_000_001, 7_000_001_000))
+        author = seed.user("author", id=next(ids))
+        editor = seed.user("editor", id=next(ids))
+        seed.profile(author, company="c")
+        repository = seed.repository(REPO, id=next(ids))
+        pr = seed.pull_request(
+            repository,
+            1,
+            author,
+            id=next(ids),
+            state="MERGED",
+            merged_at=T0,
+            merged_by_id=author,
+            editor_id=editor,
+        )
+        seed.review(pr, seed.next_id(), author, "APPROVED", id=next(ids), editor_id=editor)
+        seed.comment(pr, author, id=next(ids), editor_id=editor)
+        seed.commit(pr, "a" * 40, author)
+        seed.review_request(pr, 0, account_id=author, requested_type="User")
+        seed.assignee(pr, author)
+        seed.sync_run(id=next(ids))
+        row_ids = set(range(7_000_000_001, next(ids)))
+        for view in COLUMNS:
+            values = {value for row in rows(seed, f"SELECT * FROM {view}") for value in row}
+            assert values, view
+            assert values.isdisjoint(row_ids), (view, values & row_ids)
+        # Positive control: a row id projected under a consumer name is caught.
+        renamed = {value for (value,) in rows(seed, "SELECT id AS pr_number FROM pull_requests")}
+        assert renamed & row_ids
 
 
 class Scenario:
@@ -336,6 +371,7 @@ class TestAccounts:
         user = seed.user("muuki88", github_id=647727, node_id="MDQ6VXNlcjY0NzcyNw==")
         organization = seed.user("prebid", type="Organization", github_id=13242760)
         seed.user("no-profile")
+        seed.automation_account(13242760, "prebid", "organization")
         seed.profile(user, company="gutefrage.net", location="Munich")
         seed.profile(
             organization,
@@ -345,6 +381,10 @@ class TestAccounts:
             has_sponsors_listing=False,
             pinned_items_remaining=6,
         )
+        assert rows(
+            seed,
+            "SELECT login, automation_reason FROM v_account_profiles ORDER BY login",
+        ) == [("muuki88", None), ("prebid", "organization")]
         assert rows(
             seed,
             "SELECT github_id, node_id, login, type, company, location, email, "
@@ -539,6 +579,518 @@ class TestRelationships:
             "review_github_id, review_state, review_submitted_at",
             "relationship = 'review'",
         ) == [(3886287882, "DISMISSED", "2026-01-01 00:00:00.000000")]
+
+
+def at(seconds: int) -> datetime:
+    return T0 + timedelta(seconds=seconds)
+
+
+def stored(seconds: int) -> str:
+    """How a timestamp ``seconds`` after T0 reads back from a view."""
+    return at(seconds).strftime("%Y-%m-%d %H:%M:%S.%f")
+
+
+class TestEveryColumn:
+    """Each view's whole rows, every source column seeded with a value no other column holds,
+    so a column read from the wrong source shows."""
+
+    def test_v_github_users(self, seed: Seed) -> None:
+        seed.user(
+            "person",
+            github_id=583231,
+            node_id="U_person",
+            name="P Erson",
+            created_at=at(1),
+            updated_at=at(2),
+            refreshed_at=at(3),
+            not_found_at=at(4),
+        )
+        seed.automation_account(583231, "person", "listed")
+        for number in (1, 2):
+            seed.user(
+                f"corp_{number}",
+                type="EnterpriseUserAccount",
+                node_id=f"EUA_{number}",
+                name=f"Corp {number}",
+                created_at=at(5),
+                updated_at=at(6),
+                linked_user_github_id=7 + number,
+                refreshed_at=at(7),
+            )
+        seed.user(
+            "imported",
+            type="Mannequin",
+            github_id=501,
+            node_id="MQ_1",
+            claimant_github_id=5,
+            refreshed_at=at(8),
+        )
+        assert rows(seed, "SELECT * FROM v_github_users ORDER BY node_id") == [
+            (
+                None,
+                "EUA_1",
+                "corp_1",
+                "EnterpriseUserAccount",
+                "Corp 1",
+                stored(5),
+                stored(6),
+                8,
+                None,
+                stored(7),
+                None,
+                None,
+            ),
+            (
+                None,
+                "EUA_2",
+                "corp_2",
+                "EnterpriseUserAccount",
+                "Corp 2",
+                stored(5),
+                stored(6),
+                9,
+                None,
+                stored(7),
+                None,
+                None,
+            ),
+            (
+                501,
+                "MQ_1",
+                "imported",
+                "Mannequin",
+                None,
+                None,
+                None,
+                None,
+                5,
+                stored(8),
+                None,
+                None,
+            ),
+            (
+                583231,
+                "U_person",
+                "person",
+                "User",
+                "P Erson",
+                stored(1),
+                stored(2),
+                None,
+                None,
+                stored(3),
+                stored(4),
+                "listed",
+            ),
+        ]
+
+    def test_v_account_profiles(self, seed: Seed) -> None:
+        user = seed.user("muuki88", github_id=647727, node_id="U_muuki88")
+        organization = seed.user("prebid", type="Organization", github_id=13242760, node_id="O_1")
+        seed.automation_account(13242760, "prebid", "organization")
+        seed.profile(
+            user,
+            company="gutefrage.net",
+            location="Munich",
+            website_url="https://mukis.de",
+            refreshed_at=at(1),
+        )
+        seed.profile(
+            organization,
+            location="Earth",
+            website_url="www.prebid.org",
+            description="Prebid",
+            email="info@prebid.org",
+            twitter_username="prebid_org",
+            is_verified=True,
+            archived_at=at(2),
+            has_sponsors_listing=False,
+            pinned_items_remaining=6,
+            refreshed_at=at(3),
+        )
+        assert rows(seed, "SELECT * FROM v_account_profiles ORDER BY login") == [
+            (
+                647727,
+                "U_muuki88",
+                "muuki88",
+                "User",
+                None,
+                "gutefrage.net",
+                "Munich",
+                "https://mukis.de",
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                stored(1),
+            ),
+            (
+                13242760,
+                "O_1",
+                "prebid",
+                "Organization",
+                "organization",
+                None,
+                "Earth",
+                "www.prebid.org",
+                "Prebid",
+                "info@prebid.org",
+                "prebid_org",
+                1,
+                stored(2),
+                0,
+                6,
+                stored(3),
+            ),
+        ]
+
+    def participants(self, seed: Seed) -> dict[str, int]:
+        accounts = {
+            "author": seed.user("author", github_id=11, node_id="U_author"),
+            "bot": seed.user("bot", type="Bot", github_id=22, node_id="B_bot"),
+            "editor": seed.user("editor", github_id=33, node_id="U_editor"),
+        }
+        seed.automation_account(22, "bot", "bot reason")
+        seed.automation_account(33, "editor", "editor reason")
+        accounts["repository"] = seed.repository(REPO, github_id=39321023)
+        accounts["pr"] = seed.pull_request(
+            accounts["repository"], 13481, accounts["author"], github_id=4891210785
+        )
+        return accounts
+
+    def test_v_pr_reviews(self, seed: Seed) -> None:
+        a = self.participants(seed)
+        seed.review(
+            a["pr"],
+            3886287882,
+            a["bot"],
+            "DISMISSED",
+            node_id="PRR_one",
+            reviewer_reported=False,
+            created_at=at(1),
+            submitted_at=at(2),
+            published_at=at(3),
+            updated_at=at(4),
+            last_edited_at=at(5),
+            editor_id=a["editor"],
+            includes_created_edit=True,
+            commit_oid="c" * 40,
+            author_association="CONTRIBUTOR",
+            author_can_push_to_repository=False,
+            inline_comments_total=4,
+        )
+        authorless = seed.pull_request(a["repository"], 9, None, github_id=99)
+        seed.review(authorless, 7, a["author"], "APPROVED", node_id="PRR_two", submitted_at=None)
+        keys = (39321023, REPO, 1)
+        assert rows(seed, "SELECT * FROM v_pr_reviews ORDER BY review_github_id") == [
+            (
+                *keys,
+                9,
+                99,
+                7,
+                "PRR_two",
+                "APPROVED",
+                stored(0),
+                None,
+                None,
+                stored(0),
+                None,
+                0,
+                None,
+                "MEMBER",
+                1,
+                0,
+                1,
+                11,
+                "U_author",
+                "author",
+                "User",
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+            ),
+            (
+                *keys,
+                13481,
+                4891210785,
+                3886287882,
+                "PRR_one",
+                "DISMISSED",
+                stored(1),
+                stored(2),
+                stored(3),
+                stored(4),
+                stored(5),
+                1,
+                "c" * 40,
+                "CONTRIBUTOR",
+                0,
+                4,
+                0,
+                22,
+                "B_bot",
+                "bot",
+                "Bot",
+                "bot reason",
+                33,
+                "U_editor",
+                "editor",
+                "User",
+                "editor reason",
+                0,
+            ),
+        ]
+
+    def test_v_pr_comments(self, seed: Seed) -> None:
+        a = self.participants(seed)
+        seed.review(a["pr"], 1, a["bot"], "COMMENTED")
+        seed.comment(
+            a["pr"],
+            a["bot"],
+            3047425183,
+            node_id="IC_one",
+            author_reported=False,
+            created_at=at(1),
+            published_at=at(2),
+            updated_at=at(3),
+            last_edited_at=at(4),
+            editor_id=a["editor"],
+            created_via_email=True,
+            includes_created_edit=True,
+            author_association="NONE",
+        )
+        seed.comment(a["pr"], a["author"], 5, node_id="IC_two")
+        keys = (39321023, REPO, 1, 13481, 4891210785)
+        assert rows(seed, "SELECT * FROM v_pr_comments ORDER BY comment_github_id") == [
+            (
+                *keys,
+                5,
+                "IC_two",
+                stored(0),
+                None,
+                stored(0),
+                None,
+                0,
+                0,
+                "MEMBER",
+                1,
+                11,
+                "U_author",
+                "author",
+                "User",
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                1,
+                0,
+            ),
+            (
+                *keys,
+                3047425183,
+                "IC_one",
+                stored(1),
+                stored(2),
+                stored(3),
+                stored(4),
+                1,
+                1,
+                "NONE",
+                0,
+                22,
+                "B_bot",
+                "bot",
+                "Bot",
+                "bot reason",
+                33,
+                "U_editor",
+                "editor",
+                "User",
+                "editor reason",
+                0,
+                1,
+            ),
+        ]
+
+    def test_v_commit_authors(self, seed: Seed) -> None:
+        a = self.participants(seed)
+        seed.automation_email("noreply@anthropic.com", "email reason")
+        seed.commit(
+            a["pr"],
+            "a" * 40,
+            a["bot"],
+            linked_github_id=22,
+            author_name="Dev",
+            author_email="NoReply@Anthropic.com",
+            authored_at=at(1),
+        )
+        assert rows(seed, "SELECT * FROM v_commit_authors") == [
+            (
+                39321023,
+                REPO,
+                1,
+                13481,
+                4891210785,
+                "a" * 40,
+                22,
+                "Dev",
+                "NoReply@Anthropic.com",
+                stored(1),
+                22,
+                "B_bot",
+                "bot",
+                "Bot",
+                "bot reason",
+                "email reason",
+            ),
+        ]
+
+
+COLUMNS_OF_RELATIONSHIPS = COLUMNS["v_pr_relationships"]
+
+
+def relationship(**values: object) -> tuple[object, ...]:
+    """A v_pr_relationships row of the merged pull request below, in column order."""
+    row: dict[str, object] = dict.fromkeys(COLUMNS_OF_RELATIONSHIPS)
+    row.update(
+        repository_github_id=39321023,
+        repository_full_name=REPO,
+        repository_is_tracked=1,
+        pr_number=13481,
+        pr_github_id=4891210785,
+        pr_state="MERGED",
+        pr_created_at=stored(1),
+        pr_merged_at=stored(2),
+        pr_closed_at=stored(3),
+        base_ref="main",
+        targets_default_branch=0,
+        merge_commit_oid="m" * 40,
+        additions=10,
+        deletions=2,
+        changed_files=3,
+    )
+    for name, value in values.items():
+        assert name in row, name
+        row[name] = value
+    return tuple(row[name] for name in COLUMNS_OF_RELATIONSHIPS)
+
+
+def account_columns(github_id: int, node_id: str, login: str, type_: str, reason: str | None):
+    return {
+        "account_github_id": github_id,
+        "account_node_id": node_id,
+        "account_login": login,
+        "account_type": type_,
+        "account_automation_reason": reason,
+    }
+
+
+class TestEveryRelationshipColumn:
+    def test_every_relationship_row_whole(self, seed: Seed) -> None:
+        author = seed.user("author", github_id=11, node_id="U_author", not_found_at=at(9))
+        merger = seed.user("merger", github_id=22, node_id="U_merger")
+        bot = seed.user("bot", type="Bot", github_id=33, node_id="B_bot")
+        editor = seed.user("editor", github_id=44, node_id="U_editor")
+        seed.automation_account(33, "bot", "bot reason")
+        seed.automation_email("noreply@anthropic.com", "email reason")
+        repository = seed.repository(REPO, github_id=39321023, default_branch="master")
+        pr = seed.pull_request(
+            repository,
+            13481,
+            author,
+            github_id=4891210785,
+            author_reported=False,
+            created_at=at(1),
+            state="MERGED",
+            merged_at=at(2),
+            closed_at=at(3),
+            merged_by_id=merger,
+            merged_by_reported=True,
+            base_ref="main",
+            targets_default_branch=False,
+            merge_commit_oid="m" * 40,
+            additions=10,
+            deletions=2,
+            changed_files=3,
+            editor_id=editor,
+        )
+        seed.review(pr, 101, bot, "CHANGES_REQUESTED", submitted_at=at(4), editor_id=editor)
+        seed.comment(pr, bot, 202, author_reported=False, editor_id=editor)
+        seed.review_request(
+            pr,
+            0,
+            request_github_id=303,
+            request_node_id="RR_one",
+            requested_type="User",
+            requested_github_id=22,
+            requested_node_id="U_merger",
+            account_id=merger,
+            as_code_owner=True,
+        )
+        seed.assignee(pr, bot)
+        seed.commit(
+            pr,
+            "a" * 40,
+            author,
+            linked_github_id=11,
+            author_name="Dev",
+            author_email="NoReply@Anthropic.com",
+        )
+        author_account = {
+            **account_columns(11, "U_author", "author", "User", None),
+            "account_not_found_at": stored(9),
+        }
+        merger_account = account_columns(22, "U_merger", "merger", "User", None)
+        bot_account = account_columns(33, "B_bot", "bot", "Bot", "bot reason")
+        editor_account = account_columns(44, "U_editor", "editor", "User", None)
+        assert rows(
+            seed,
+            "SELECT * FROM v_pr_relationships ORDER BY relationship",
+        ) == [
+            relationship(relationship="assignee", **bot_account),
+            relationship(relationship="author", reported=0, **author_account),
+            relationship(relationship="comment", comment_github_id=202, reported=0, **bot_account),
+            relationship(relationship="comment_editor", comment_github_id=202, **editor_account),
+            relationship(
+                relationship="commit_author",
+                commit_sha="a" * 40,
+                linked_github_id=11,
+                author_name="Dev",
+                author_email="NoReply@Anthropic.com",
+                email_automation_reason="email reason",
+                **author_account,
+            ),
+            relationship(relationship="merged_by", reported=1, **merger_account),
+            relationship(relationship="pr_editor", **editor_account),
+            relationship(
+                relationship="review",
+                review_github_id=101,
+                reported=1,
+                review_state="CHANGES_REQUESTED",
+                review_submitted_at=stored(4),
+                **bot_account,
+            ),
+            relationship(relationship="review_editor", review_github_id=101, **editor_account),
+            relationship(
+                relationship="review_request",
+                request_node_id="RR_one",
+                request_github_id=303,
+                request_ordinal=0,
+                requested_type="User",
+                requested_github_id=22,
+                as_code_owner=1,
+                **merger_account,
+            ),
+        ]
 
 
 def _one_account_on_every_pull_request(database: Path, prs: int) -> None:
