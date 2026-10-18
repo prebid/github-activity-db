@@ -198,16 +198,16 @@
       "totalCount": 0
     }
   },
-  "document_sha256": "d9504d2e5167f4a1a6b2a756e422bebab6c478da2016bd0508171f696e0c5643",
+  "document_sha256": "3527b3fa77b23d4166d3a8a063506be04f20c8bec7cee75e2bf801d0d608c26c",
   "errors": [],
   "extra": {},
   "headers": {
-    "date": "Sun, 18 Oct 2026 20:09:24 GMT",
+    "date": "Sun, 18 Oct 2026 21:11:51 GMT",
     "x-ratelimit-limit": "5000",
-    "x-ratelimit-remaining": "4755",
-    "x-ratelimit-reset": "1792356065",
+    "x-ratelimit-remaining": "4971",
+    "x-ratelimit-reset": "1792360091",
     "x-ratelimit-resource": "graphql",
-    "x-ratelimit-used": "245"
+    "x-ratelimit-used": "29"
   },
   "key": {
     "name": "Prebid.js",
@@ -215,6 +215,6 @@
     "owner": "prebid"
   },
   "kind": "pull_request",
-  "recorded_at": "2026-10-18T20:09:16Z",
+  "recorded_at": "2026-10-18T21:11:43Z",
   "source": "live"
 }

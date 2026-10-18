@@ -31,12 +31,12 @@
   "errors": [],
   "extra": {},
   "headers": {
-    "date": "Sun, 18 Oct 2026 20:09:26 GMT",
+    "date": "Sun, 18 Oct 2026 21:11:51 GMT",
     "x-ratelimit-limit": "5000",
-    "x-ratelimit-remaining": "4754",
-    "x-ratelimit-reset": "1792356065",
+    "x-ratelimit-remaining": "4970",
+    "x-ratelimit-reset": "1792360091",
     "x-ratelimit-resource": "graphql",
-    "x-ratelimit-used": "246"
+    "x-ratelimit-used": "30"
   },
   "key": {
     "after": "MTAw",
@@ -44,6 +44,6 @@
     "id": "PR_kwDOAlf9v85oRaET"
   },
   "kind": "overflow",
-  "recorded_at": "2026-10-18T20:09:16Z",
+  "recorded_at": "2026-10-18T21:11:43Z",
   "source": "live"
 }

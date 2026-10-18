@@ -154,18 +154,18 @@
   "errors": [],
   "extra": {},
   "headers": {
-    "date": "Sun, 18 Oct 2026 20:09:17 GMT",
+    "date": "Sun, 18 Oct 2026 21:11:43 GMT",
     "x-ratelimit-limit": "5000",
-    "x-ratelimit-remaining": "4761",
-    "x-ratelimit-reset": "1792356065",
+    "x-ratelimit-remaining": "4978",
+    "x-ratelimit-reset": "1792360091",
     "x-ratelimit-resource": "graphql",
-    "x-ratelimit-used": "239"
+    "x-ratelimit-used": "22"
   },
   "key": {
     "name": "go-gdpr",
     "owner": "prebid"
   },
   "kind": "resolve",
-  "recorded_at": "2026-10-18T20:09:16Z",
+  "recorded_at": "2026-10-18T21:11:43Z",
   "source": "live"
 }

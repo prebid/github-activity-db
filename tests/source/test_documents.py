@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 
 from github_activity_db.source import documents
+from github_activity_db.source.limits import OVERFLOW_ALIASES_PER_REQUEST
 from tests.source.graphql_cost import cost
 
 LOCK = Path(__file__).resolve().parent.parent / "query_versions.json"
@@ -65,10 +66,17 @@ class TestCost:
             (documents.RESOLVE, 1),
             (documents.REPOSITORY_LABELS, 1),
             (documents.USER_LOOKUP, 1),
-            (documents.overflow_continuation([documents.FILES] * 25), 1),
-            (documents.overflow_continuation([documents.REVIEW_REQUESTS] * 25), 1),
-            (documents.overflow_continuation([documents.ASSIGNED_ACTORS] * 25), 1),
-            (documents.overflow_continuation([documents.USER_LINKED_CLOSING_ISSUES] * 25), 1),
+            *(
+                (documents.overflow_continuation([connection] * 25), 1)
+                for connection in documents.PULL_REQUEST_CONNECTIONS
+            ),
+            # 25 aliases across every connection: still 1 point.
+            (
+                documents.overflow_continuation(
+                    ([*documents.PULL_REQUEST_CONNECTIONS] * 3)[:OVERFLOW_ALIASES_PER_REQUEST]
+                ),
+                1,
+            ),
         ],
     )
     def test_document_cost(self, document: str, points: int) -> None:
@@ -109,6 +117,20 @@ class TestDocuments:
             "b",
             "c",
         ]
+
+    def test_the_user_linked_continuation_keeps_its_filter(self) -> None:
+        """The aliased connection continues with userLinkedOnly; the full list never has it."""
+        user_linked = documents.normalize(
+            documents.overflow_continuation([documents.USER_LINKED_CLOSING_ISSUES])
+        )
+        assert (
+            "userLinkedClosingIssues: closingIssuesReferences(first: 100, after: $after0, "
+            "userLinkedOnly: true)" in user_linked
+        )
+        full = documents.normalize(documents.overflow_continuation([documents.CLOSING_ISSUES]))
+        assert "closingIssuesReferences(first: 100, after: $after0)" in full
+        assert "userLinkedOnly" not in full
+        assert documents.normalize(documents.PULL_REQUEST_FIELDS).count("userLinkedOnly") == 1
 
     def test_the_documents_select_the_plans_pull_request_fields(self) -> None:
         """The fields plan 5.8 lists for Step 3b-1, every one at the pull request's top level."""

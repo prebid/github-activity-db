@@ -9,7 +9,7 @@
     },
     "deleteBranchOnMerge": false,
     "description": "Prebid Mobile SDK for iOS applications",
-    "diskUsage": 348598,
+    "diskUsage": 348599,
     "forkCount": 128,
     "forkingAllowed": true,
     "hasDiscussionsEnabled": false,
@@ -235,18 +235,18 @@
   "errors": [],
   "extra": {},
   "headers": {
-    "date": "Sun, 18 Oct 2026 20:09:32 GMT",
+    "date": "Sun, 18 Oct 2026 21:11:54 GMT",
     "x-ratelimit-limit": "5000",
-    "x-ratelimit-remaining": "4988",
-    "x-ratelimit-reset": "1792357002",
+    "x-ratelimit-remaining": "4967",
+    "x-ratelimit-reset": "1792360091",
     "x-ratelimit-resource": "graphql",
-    "x-ratelimit-used": "12"
+    "x-ratelimit-used": "33"
   },
   "key": {
     "name": "prebid-mobile-ios",
     "owner": "prebid"
   },
   "kind": "resolve",
-  "recorded_at": "2026-10-18T20:09:16Z",
+  "recorded_at": "2026-10-18T21:11:43Z",
   "source": "live"
 }

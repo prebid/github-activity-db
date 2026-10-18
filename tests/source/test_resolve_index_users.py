@@ -386,6 +386,61 @@ def test_the_resolve_recordings_hold_a_value_for_each_added_field() -> None:
     assert empty == []
 
 
+async def test_resolve_fields_equal_in_every_recording_map_apart(
+    open_source, replay: Replay
+) -> None:
+    """Some resolve fields hold one value in every recording (forkingAllowed,
+    hasVulnerabilityAlertsEnabled, squashMergeAllowed, the plan features, archivedAt), and
+    mergeCommitAllowed equals rebaseMergeAllowed; here each differs from its siblings."""
+    unit = replay.unit("resolve", owner="prebid", name="go-gdpr")
+    data = unit.data
+    data.update(
+        forkingAllowed=False,
+        hasVulnerabilityAlertsEnabled=True,
+        squashMergeAllowed=False,
+        mergeCommitAllowed=True,
+        rebaseMergeAllowed=False,
+        allowUpdateBranch=True,
+        deleteBranchOnMerge=False,
+        archivedAt="2026-02-01T00:00:00Z",
+        pushedAt="2026-01-01T00:00:00Z",
+    )
+    data["planFeatures"] = {
+        "codeowners": True,
+        "teamReviewRequests": False,
+        "maximumManualReviewRequests": 3,
+    }
+    unit.source = "synthetic: go-gdpr's resolve with settings that differ from each other"
+    replay.add(unit)
+    flags = [data[name] for name in ("forkingAllowed", "hasVulnerabilityAlertsEnabled")]
+    assert len(set(flags)) == 2
+    assert data["squashMergeAllowed"] != data["mergeCommitAllowed"] != data["rebaseMergeAllowed"]
+    assert data["planFeatures"]["codeowners"] != data["planFeatures"]["teamReviewRequests"]
+    assert data["archivedAt"] != data["pushedAt"]
+    await test_resolve_maps_every_field_from_its_wire_name(open_source, unit)
+
+
+async def test_organization_fields_equal_in_the_recording_map_apart(
+    open_source, replay: Replay
+) -> None:
+    """The recorded organization has isVerified and hasSponsorsListing both false and no
+    twitterUsername or archivedAt; here each has a value of its own."""
+    unit = replay.unit("user", id="MDEyOk9yZ2FuaXphdGlvbjEzMjQyNzYw")
+    unit.data.update(
+        isVerified=True,
+        hasSponsorsListing=False,
+        twitterUsername="prebid_org",
+        archivedAt="2026-03-01T00:00:00Z",
+        email="info@example.org",
+        websiteUrl="https://example.org",
+    )
+    unit.source = "synthetic: prebid's lookup with profile fields that differ from each other"
+    replay.add(unit)
+    assert unit.data["isVerified"] != unit.data["hasSponsorsListing"]
+    assert unit.data["email"] != unit.data["websiteUrl"]
+    await test_a_lookup_maps_every_field_from_its_wire_name(open_source, unit)
+
+
 async def test_a_label_id_listed_twice_fails_the_repository(open_source, replay: Replay) -> None:
     unit = replay.unit("resolve", owner="prebid", name="go-gdpr")
     nodes = unit.data["labels"]["nodes"]
@@ -1011,10 +1066,13 @@ class TestUserLookup:
     ) -> None:
         replay.modify(change, when=operation("UserLookup"))
         async with open_source() as source:
-            accounts, failed = await all_lookups(source, [PATMMCCANN, DEPENDABOT])
-        assert accounts == {}
-        assert set(failed) == {PATMMCCANN, DEPENDABOT}
-        assert all(isinstance(error.cause, LookupShapeError) for error in failed.values())
+            lookups = [lookup async for lookup in source.lookup_users([PATMMCCANN, DEPENDABOT])]
+        (lookup,) = lookups
+        assert lookup.accounts == {}
+        assert set(lookup.failed) == {PATMMCCANN, DEPENDABOT}
+        assert all(isinstance(error.cause, LookupShapeError) for error in lookup.failed.values())
+        # A response came, so it has a time: the first unit's Date header the replay served.
+        assert lookup.looked_up_at == parsed_date(replay.unit("user", id=PATMMCCANN))
 
     async def test_a_failed_request_fails_its_batch_and_later_batches_continue(
         self, open_source, replay: Replay
@@ -1026,10 +1084,16 @@ class TestUserLookup:
             times=None,
         )
         async with open_source() as source:
-            accounts, failed = await all_lookups(source, ids)
-        assert list(failed) == ids[:100]
-        assert all(isinstance(error.cause, ServerError) for error in failed.values())
-        assert list(accounts) == ids[100:]
+            lookups = [lookup async for lookup in source.lookup_users(ids)]
+        first, second = lookups
+        assert list(first.failed) == ids[:100]
+        assert all(isinstance(error.cause, ServerError) for error in first.failed.values())
+        assert first.accounts == {}
+        # The failed request has no response, so no response time; the next batch has one.
+        assert first.looked_up_at is None
+        assert list(second.accounts) == ids[100:]
+        assert second.failed == {}
+        assert second.looked_up_at is not None
 
     async def test_a_lookup_timeout_is_retried(
         self, open_source, replay: Replay, clock: FakeClock

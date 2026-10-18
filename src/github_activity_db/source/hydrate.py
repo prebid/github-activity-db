@@ -36,6 +36,7 @@ from .documents import (
 )
 from .errors import (
     AliasError,
+    CloseTimeMissing,
     CompareCountMismatch,
     CompareRefused,
     ConnectionCountMismatch,
@@ -74,6 +75,7 @@ from .models import (
     Page,
     PullRequestNode,
     RequestedAccount,
+    RequestedEnterpriseTeam,
     RequestedTeamNode,
     ReviewNode,
     ReviewRequestNode,
@@ -301,6 +303,8 @@ class PullRequestHydrator:
             return IdentityMismatch(number, "number", number, node.number)
         if (node.state == "MERGED") != (node.merged_at is not None):
             return MergeStateMismatch(number, node.state, node.merged_at is not None)
+        if node.state != "OPEN" and node.closed_at is None:
+            return CloseTimeMissing(number, node.state)
         try:
             return _Item(
                 number=number,
@@ -472,6 +476,7 @@ class PullRequestHydrator:
         _check_distinct(number, "comments", [comment.github_id for comment in comments])
         _check_distinct(number, "commits", [commit.sha for commit in commits])
         _check_distinct(number, "assignedActors", [assignee.node_id for assignee in assignees])
+        _check_distinct(number, "reviewRequests", [request.node_id for request in review_requests])
         listed = {link_key(link) for link in closing_issues}
         for key in user_linked:
             if key not in listed:
@@ -722,14 +727,23 @@ def _review_request(node: ReviewRequestNode) -> ReviewRequest:
         as_code_owner=node.as_code_owner,
         requested_type=requested.typename if requested is not None else None,
         account=union_account(requested) if isinstance(requested, RequestedAccount) else None,
-        team=(
-            RequestedTeam(
-                github_id=requested.database_id, node_id=requested.id, slug=requested.slug
-            )
-            if isinstance(requested, RequestedTeamNode)
-            else None
-        ),
+        team=_requested_team(requested),
     )
+
+
+def _requested_team(
+    requested: RequestedAccount | RequestedTeamNode | RequestedEnterpriseTeam | None,
+) -> RequestedTeam | None:
+    """A ``Team`` or an ``EnterpriseTeam``; neither is an account."""
+    if isinstance(requested, RequestedTeamNode):
+        return RequestedTeam(
+            github_id=requested.database_id, node_id=requested.id, slug=requested.slug
+        )
+    if isinstance(requested, RequestedEnterpriseTeam):
+        return RequestedTeam(
+            github_id=requested.full_database_id, node_id=requested.id, slug=requested.slug
+        )
+    return None
 
 
 def _graphql_commit(node: CommitNode) -> CommitRecord:

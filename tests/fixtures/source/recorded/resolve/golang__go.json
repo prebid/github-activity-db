@@ -954,8 +954,8 @@
     "squashMergeAllowed": true,
     "squashMergeCommitMessage": "COMMIT_MESSAGES",
     "squashMergeCommitTitle": "COMMIT_OR_PR_TITLE",
-    "stargazerCount": 139314,
-    "updatedAt": "2026-10-18T19:56:49Z",
+    "stargazerCount": 139317,
+    "updatedAt": "2026-10-18T20:47:22Z",
     "usesCustomOpenGraphImage": false,
     "visibility": "PUBLIC",
     "webCommitSignoffRequired": false
@@ -964,18 +964,18 @@
   "errors": [],
   "extra": {},
   "headers": {
-    "date": "Sun, 18 Oct 2026 20:09:50 GMT",
+    "date": "Sun, 18 Oct 2026 21:12:04 GMT",
     "x-ratelimit-limit": "5000",
-    "x-ratelimit-remaining": "4741",
-    "x-ratelimit-reset": "1792356065",
+    "x-ratelimit-remaining": "4957",
+    "x-ratelimit-reset": "1792360091",
     "x-ratelimit-resource": "graphql",
-    "x-ratelimit-used": "259"
+    "x-ratelimit-used": "43"
   },
   "key": {
     "name": "go",
     "owner": "golang"
   },
   "kind": "resolve",
-  "recorded_at": "2026-10-18T20:09:16Z",
+  "recorded_at": "2026-10-18T21:11:43Z",
   "source": "live"
 }

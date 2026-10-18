@@ -253,7 +253,11 @@ class FileChange:
 
 @dataclass(frozen=True, slots=True)
 class RequestedTeam:
-    """A team a review is requested from; a team is not an account."""
+    """A team or an enterprise team a review is requested from; neither is an account.
+
+    ``github_id`` is a ``Team``'s ``databaseId`` or an ``EnterpriseTeam``'s ``fullDatabaseId``,
+    either nullable in GitHub's schema.
+    """
 
     github_id: int | None
     node_id: str
@@ -266,7 +270,7 @@ class ReviewRequest:
 
     ``requested_type`` is GitHub's ``__typename`` of the requested reviewer, None when GitHub
     returns none. ``account`` is set for a ``User``, ``Bot``, or ``Mannequin``, ``team`` for a
-    ``Team``; an ``EnterpriseTeam`` carries its type alone, since its fields are not selected.
+    ``Team`` or an ``EnterpriseTeam``.
     """
 
     github_id: int | None

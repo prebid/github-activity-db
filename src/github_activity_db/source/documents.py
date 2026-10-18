@@ -119,13 +119,14 @@ COMMITS: Final = Connection(
     "commit { oid authoredDate author { name email user { id databaseId login } } }",
 )
 FILES: Final = Connection("files", "", "path changeType additions deletions")
-# GitHub's RequestedReviewer union also holds EnterpriseTeam, of which only the type is read.
+# GitHub's RequestedReviewer union also holds EnterpriseTeam, which has fullDatabaseId instead
+# of databaseId.
 REVIEW_REQUESTS: Final = Connection(
     "reviewRequests",
     "",
     f"id databaseId asCodeOwner requestedReviewer {{ __typename ... on User {{ {_ACCOUNT} }} "
     f"... on Bot {{ {_ACCOUNT} }} ... on Mannequin {{ {_ACCOUNT} }} "
-    "... on Team { id databaseId slug } }",
+    "... on Team { id databaseId slug } ... on EnterpriseTeam { id fullDatabaseId slug } }",
 )
 # `assignedActors`, unlike `assignees`, lists bots and organizations too (D14).
 ASSIGNED_ACTORS: Final = Connection(

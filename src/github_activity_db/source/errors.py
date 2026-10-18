@@ -293,6 +293,14 @@ class MergeStateMismatch(InvariantError):
         self.merged = merged
 
 
+class CloseTimeMissing(InvariantError):
+    """A closed or merged pull request without ``closedAt``, which the coverage rule reads."""
+
+    def __init__(self, number: int, state: str) -> None:
+        super().__init__(number, f"state {state} without closedAt")
+        self.state = state
+
+
 class NullEntry(InvariantError):
     """A connection, or an entry in one, was null; never counted as zero."""
 

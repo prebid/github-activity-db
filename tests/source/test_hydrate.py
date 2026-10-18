@@ -9,6 +9,7 @@ place and says which one.
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+from email.utils import format_datetime
 from typing import Any
 
 import httpx
@@ -44,6 +45,7 @@ from github_activity_db.source.documents import (
 )
 from github_activity_db.source.errors import (
     AliasError,
+    CloseTimeMissing,
     CompareCountMismatch,
     CompareRefused,
     ConnectionCountMismatch,
@@ -259,19 +261,21 @@ class TestRecordedScenarios:
     async def test_hydrated_at_is_the_alias_response_date(
         self, open_source, replay: Replay, number: int
     ) -> None:
-        # The alias answered before its continuation (11155) or compare pages (8858).
+        # The alias answered before its continuation (11155) or compare pages (8858). Their
+        # recorded Date headers can fall in the same second, so each later response is served
+        # an hour after the alias's.
         unit = pr_unit(replay, number)
+        kind = "overflow" if number == 11155 else "compare"
         later = [
             u
             for u in replay.units.values()
-            if (u.kind == "overflow" and u.key["id"] == unit.data["id"]) or u.kind == "compare"
+            if u.kind == kind and (kind == "compare" or u.key["id"] == unit.data["id"])
         ]
-        if number == 11155:
-            later = [u for u in later if u.kind == "overflow"]
-        else:
-            later = [u for u in later if u.kind == "compare"]
+        assert later
         alias_date = parsed_date(unit)
-        assert any(parsed_date(u) != alias_date for u in later)
+        for u in later:
+            u.headers["date"] = format_datetime(alias_date + timedelta(hours=1), usegmt=True)
+        assert all(parsed_date(u) != alias_date for u in later)
         record = await hydrate_one(open_source, PREBID_JS, number)
         assert record.hydrated_at == alias_date
 
@@ -858,6 +862,81 @@ async def test_a_duplicate_assignee(open_source, replay: Replay) -> None:
     assert error.connection == "assignedActors"
 
 
+async def test_a_duplicate_review_request(open_source, replay: Replay) -> None:
+    # A request listed again in place of a missing one would pass the count check.
+    unit = pr_unit(replay, 15771)
+    page = unit.data["reviewRequests"]
+    page["nodes"].append(dict(page["nodes"][0]))
+    page["totalCount"] = 2
+    replay.add(unit)
+    error = await failure(open_source, PREBID_JS, 15771)
+    assert isinstance(error, DuplicateEntry)
+    assert error.connection == "reviewRequests"
+
+
+@pytest.mark.parametrize("state", ["CLOSED", "MERGED"])
+async def test_a_closed_or_merged_pull_request_without_a_close_time(
+    open_source, replay: Replay, state: str
+) -> None:
+    # The coverage rule reads closedAt for a closed pull request (plan section 3).
+    unit = pr_unit(replay, 15771 if state == "CLOSED" else 13481)
+    assert unit.data["state"] == state and unit.data["closedAt"] is not None
+    unit.data["closedAt"] = None
+    replay.add(unit)
+    error = await failure(open_source, PREBID_JS, unit.key["number"])
+    assert isinstance(error, CloseTimeMissing)
+    assert error.state == state
+
+
+async def test_an_open_pull_request_needs_no_close_time(open_source, replay: Replay) -> None:
+    record = await hydrate_one(open_source, ("prebid", "salesagent"), 2360)
+    assert (record.state, record.closed_at) == ("OPEN", None)
+
+
+@pytest.mark.parametrize(
+    ("recorded", "edit"),
+    [
+        (
+            13481,
+            lambda data: (
+                data.__setitem__("publishedAt", "2025-07-01T15:00:00Z"),
+                data["reviews"]["nodes"][0].__setitem__("publishedAt", "2025-07-01T16:00:00Z"),
+                data["reviews"]["nodes"][0].__setitem__("updatedAt", "2025-07-01T17:00:00Z"),
+            ),
+        ),
+        (
+            12975,
+            lambda data: (
+                data.__setitem__("publishedAt", "2025-03-01T09:00:00Z"),
+                data["reviews"]["nodes"][0].__setitem__("publishedAt", "2025-03-01T09:30:00Z"),
+                data["reviews"]["nodes"][0].__setitem__("updatedAt", "2025-03-01T09:45:00Z"),
+                data["comments"]["nodes"][0].__setitem__("publishedAt", "2025-03-01T10:00:00Z"),
+                data["comments"]["nodes"][0].__setitem__("updatedAt", "2025-03-01T11:00:00Z"),
+                data["comments"]["nodes"][0].__setitem__("lastEditedAt", "2025-03-01T12:00:00Z"),
+            ),
+        ),
+    ],
+    ids=["pull-request-and-review-times", "comment-times"],
+)
+async def test_fields_equal_in_every_recording_map_apart(
+    open_source, replay: Replay, recorded: int, edit
+) -> None:
+    """publishedAt equals createdAt in every recorded pull request, review, and comment, so the
+    mapping test alone cannot tell them apart; here each time differs from its siblings."""
+    unit = pr_unit(replay, recorded)
+    edit(unit.data)
+    unit.source = f"synthetic: recorded #{recorded} with times that differ from createdAt"
+    replay.add(unit)
+    for node in (
+        unit.data,
+        *unit.data["reviews"]["nodes"][:1],
+        *unit.data["comments"]["nodes"][:1],
+    ):
+        times = [node.get(name) for name in ("createdAt", "publishedAt", "updatedAt")]
+        assert len(set(times)) == 3, times
+    await test_every_field_maps_from_its_wire_name(open_source, unit)
+
+
 async def test_a_duplicate_user_linked_issue(open_source, replay: Replay) -> None:
     unit = pr_unit(replay, 15753)
     page = unit.data["userLinkedClosingIssues"]
@@ -880,7 +959,12 @@ async def test_review_requests_of_each_kind(open_source, replay: Replay) -> None
         {
             **REQUESTED_TEAM,
             "id": "RR_enterprise",
-            "requestedReviewer": {"__typename": "EnterpriseTeam"},
+            "requestedReviewer": {
+                "__typename": "EnterpriseTeam",
+                "id": "ET_kwDOAAAAAQ",
+                "fullDatabaseId": "9000000001",
+                "slug": "enterprise-reviewers",
+            },
         },
         {**REQUESTED_TEAM, "id": "RR_none", "databaseId": None, "requestedReviewer": None},
     ]
@@ -893,10 +977,17 @@ async def test_review_requests_of_each_kind(open_source, replay: Replay) -> None
     ] == [
         ("User", True, None, 3843805356),
         ("Team", False, RequestedTeam(github_id=5, node_id="T_kwDOAAAAAQ", slug="core"), 77),
-        ("EnterpriseTeam", False, None, 77),
+        (
+            "EnterpriseTeam",
+            False,
+            RequestedTeam(
+                github_id=9000000001, node_id="ET_kwDOAAAAAQ", slug="enterprise-reviewers"
+            ),
+            77,
+        ),
         (None, False, None, None),
     ]
-    # A requested account is an actor sighting; a team is not an account.
+    # A requested account is an actor sighting; a team or an enterprise team is not an account.
     assert record.review_requests[0].account in record.accounts()
 
 

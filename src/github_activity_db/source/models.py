@@ -361,9 +361,13 @@ class RequestedTeamNode(GraphQLModel):
 
 
 class RequestedEnterpriseTeam(GraphQLModel):
-    """A member of GitHub's ``RequestedReviewer`` union whose fields are not selected."""
+    """An enterprise team, which GitHub identifies by ``fullDatabaseId`` (nullable), not
+    ``databaseId``."""
 
     typename: Literal["EnterpriseTeam"] = Field(alias="__typename")
+    id: StrictStr
+    full_database_id: BigInt | None = Field(alias="fullDatabaseId")
+    slug: StrictStr
 
 
 RequestedReviewer = Annotated[

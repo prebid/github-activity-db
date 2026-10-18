@@ -875,12 +875,12 @@
   "errors": [],
   "extra": {},
   "headers": {
-    "date": "Sun, 18 Oct 2026 20:09:20 GMT",
+    "date": "Sun, 18 Oct 2026 21:11:46 GMT",
     "x-ratelimit-limit": "5000",
-    "x-ratelimit-remaining": "4989",
-    "x-ratelimit-reset": "1792357002",
+    "x-ratelimit-remaining": "4973",
+    "x-ratelimit-reset": "1792360091",
     "x-ratelimit-resource": "graphql",
-    "x-ratelimit-used": "11"
+    "x-ratelimit-used": "27"
   },
   "key": {
     "after": "Y3Vyc29yOnYyOpK0MjAyNC0wMy0wMVQwOToxODo0MlrOaGKwgQ==",
@@ -888,6 +888,6 @@
     "owner": "prebid"
   },
   "kind": "index",
-  "recorded_at": "2026-10-18T20:09:16Z",
+  "recorded_at": "2026-10-18T21:11:43Z",
   "source": "live"
 }
