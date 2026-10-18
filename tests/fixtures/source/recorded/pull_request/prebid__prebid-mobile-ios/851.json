@@ -1,6 +1,14 @@
 {
   "data": {
     "additions": 910,
+    "assignedActors": {
+      "nodes": [],
+      "pageInfo": {
+        "endCursor": null,
+        "hasNextPage": false
+      },
+      "totalCount": 0
+    },
     "author": {
       "__typename": "User",
       "databaseId": 92721590,
@@ -11,7 +19,9 @@
     "baseRefName": "master",
     "baseRefOid": "be3bab2cb3fa8149a0a38ab8a850aa2fee8bbef1",
     "body": "#839 ",
+    "canBeRebased": false,
     "changedFiles": 101,
+    "closedAt": "2023-05-24T06:52:38Z",
     "closingIssuesReferences": {
       "nodes": [],
       "pageInfo": {
@@ -129,6 +139,7 @@
     },
     "createdAt": "2023-05-23T09:31:02Z",
     "deletions": 254,
+    "editor": null,
     "files": {
       "nodes": [
         {
@@ -739,8 +750,18 @@
       "totalCount": 101
     },
     "fullDatabaseId": "1361019629",
+    "headRefName": "add-test-stored-configs",
     "headRefOid": "0c19f81f430aae7bb98c499aaf7c969a132d14e5",
+    "headRepository": {
+      "databaseId": 96349829,
+      "nameWithOwner": "prebid/prebid-mobile-ios"
+    },
+    "headRepositoryOwner": {
+      "id": "MDEyOk9yZ2FuaXphdGlvbjEzMjQyNzYw",
+      "login": "prebid"
+    },
     "id": "PR_kwDOBb4uhc5RH4Lt",
+    "includesCreatedEdit": false,
     "isCrossRepository": false,
     "isDraft": false,
     "labels": {
@@ -751,6 +772,13 @@
       },
       "totalCount": 0
     },
+    "lastEditedAt": null,
+    "maintainerCanModify": false,
+    "mergeCommit": {
+      "oid": "47ab82c4585253b74805bf3a94513360f7b6a308"
+    },
+    "mergeStateStatus": "UNKNOWN",
+    "mergeable": "UNKNOWN",
     "mergedAt": "2023-05-24T06:52:38Z",
     "mergedBy": {
       "__typename": "User",
@@ -758,7 +786,19 @@
       "id": "MDQ6VXNlcjIxMTY5Njk1",
       "login": "YuriyVelichkoPI"
     },
+    "milestone": null,
     "number": 851,
+    "potentialMergeCommit": null,
+    "publishedAt": "2023-05-23T09:31:02Z",
+    "reviewDecision": "APPROVED",
+    "reviewRequests": {
+      "nodes": [],
+      "pageInfo": {
+        "endCursor": null,
+        "hasNextPage": false
+      },
+      "totalCount": 0
+    },
     "reviews": {
       "nodes": [
         {
@@ -768,8 +808,24 @@
             "id": "MDQ6VXNlcjIxMTY5Njk1",
             "login": "YuriyVelichkoPI"
           },
+          "authorAssociation": "MEMBER",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 0
+          },
+          "commit": {
+            "oid": "0c19f81f430aae7bb98c499aaf7c969a132d14e5"
+          },
+          "createdAt": "2023-05-24T06:52:30Z",
+          "editor": null,
           "fullDatabaseId": "1441055632",
-          "state": "APPROVED"
+          "id": "PRR_kwDOBb4uhc5V5MOQ",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2023-05-24T06:52:30Z",
+          "state": "APPROVED",
+          "submittedAt": "2023-05-24T06:52:30Z",
+          "updatedAt": "2023-05-24T06:52:30Z"
         }
       ],
       "pageInfo": {
@@ -778,20 +834,31 @@
       },
       "totalCount": 1
     },
+    "stack": null,
+    "stackEntry": null,
     "state": "MERGED",
     "title": "Add test stored configs",
-    "updatedAt": "2023-05-24T06:52:39Z"
+    "totalCommentsCount": 1,
+    "updatedAt": "2023-05-24T06:52:39Z",
+    "userLinkedClosingIssues": {
+      "nodes": [],
+      "pageInfo": {
+        "endCursor": null,
+        "hasNextPage": false
+      },
+      "totalCount": 0
+    }
   },
-  "document_sha256": "39fd2b5d7744d57be4fd58ba38b2fcf50319c5bd19e1c3796ae4771203af3ea0",
+  "document_sha256": "d9504d2e5167f4a1a6b2a756e422bebab6c478da2016bd0508171f696e0c5643",
   "errors": [],
   "extra": {},
   "headers": {
-    "date": "Sat, 17 Oct 2026 12:09:28 GMT",
+    "date": "Sun, 18 Oct 2026 20:09:33 GMT",
     "x-ratelimit-limit": "5000",
-    "x-ratelimit-remaining": "4988",
-    "x-ratelimit-reset": "1792242556",
+    "x-ratelimit-remaining": "4751",
+    "x-ratelimit-reset": "1792356065",
     "x-ratelimit-resource": "graphql",
-    "x-ratelimit-used": "12"
+    "x-ratelimit-used": "249"
   },
   "key": {
     "name": "prebid-mobile-ios",
@@ -799,6 +866,6 @@
     "owner": "prebid"
   },
   "kind": "pull_request",
-  "recorded_at": "2026-10-17T12:09:19Z",
+  "recorded_at": "2026-10-18T20:09:16Z",
   "source": "live"
 }

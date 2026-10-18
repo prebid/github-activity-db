@@ -1,82 +1,234 @@
 {
   "data": {
+    "allowUpdateBranch": false,
+    "archivedAt": null,
+    "createdAt": "2018-03-09T15:05:17Z",
     "databaseId": 124555222,
     "defaultBranchRef": {
       "name": "master"
     },
+    "deleteBranchOnMerge": true,
+    "description": "Java version of Prebid Server",
+    "diskUsage": 35459,
+    "forkCount": 258,
+    "forkingAllowed": true,
+    "hasDiscussionsEnabled": true,
+    "hasProjectsEnabled": true,
+    "hasVulnerabilityAlertsEnabled": true,
+    "hasWikiEnabled": true,
+    "homepageUrl": null,
     "id": "MDEwOlJlcG9zaXRvcnkxMjQ1NTUyMjI=",
     "isArchived": false,
     "isPrivate": false,
+    "isSecurityPolicyEnabled": false,
     "labels": {
       "nodes": [
         {
-          "name": "bug"
+          "color": "d73a4a",
+          "createdAt": "2018-03-09T15:05:17Z",
+          "description": "Something isn't working",
+          "id": "MDU6TGFiZWw4NjE3MTA0MDg=",
+          "isDefault": true,
+          "name": "bug",
+          "updatedAt": "2018-03-09T15:05:17Z"
         },
         {
-          "name": "duplicate"
+          "color": "cfd3d7",
+          "createdAt": "2018-03-09T15:05:17Z",
+          "description": "This issue or pull request already exists",
+          "id": "MDU6TGFiZWw4NjE3MTA0MDk=",
+          "isDefault": true,
+          "name": "duplicate",
+          "updatedAt": "2018-03-09T15:05:17Z"
         },
         {
-          "name": "enhancement"
+          "color": "a2eeef",
+          "createdAt": "2018-03-09T15:05:17Z",
+          "description": "New improvement",
+          "id": "MDU6TGFiZWw4NjE3MTA0MTA=",
+          "isDefault": true,
+          "name": "enhancement",
+          "updatedAt": "2021-12-05T09:33:00Z"
         },
         {
-          "name": "good first issue"
+          "color": "7057ff",
+          "createdAt": "2018-03-09T15:05:17Z",
+          "description": "Good for newcomers",
+          "id": "MDU6TGFiZWw4NjE3MTA0MTI=",
+          "isDefault": true,
+          "name": "good first issue",
+          "updatedAt": "2018-03-09T15:05:17Z"
         },
         {
-          "name": "help wanted"
+          "color": "008672",
+          "createdAt": "2018-03-09T15:05:17Z",
+          "description": "Extra attention is needed",
+          "id": "MDU6TGFiZWw4NjE3MTA0MTE=",
+          "isDefault": true,
+          "name": "help wanted",
+          "updatedAt": "2018-03-09T15:05:17Z"
         },
         {
-          "name": "invalid"
+          "color": "e4e669",
+          "createdAt": "2018-03-09T15:05:17Z",
+          "description": "This doesn't seem right",
+          "id": "MDU6TGFiZWw4NjE3MTA0MTM=",
+          "isDefault": true,
+          "name": "invalid",
+          "updatedAt": "2018-03-09T15:05:17Z"
         },
         {
-          "name": "question"
+          "color": "d876e3",
+          "createdAt": "2018-03-09T15:05:17Z",
+          "description": "Further information is requested",
+          "id": "MDU6TGFiZWw4NjE3MTA0MTQ=",
+          "isDefault": true,
+          "name": "question",
+          "updatedAt": "2018-03-09T15:05:17Z"
         },
         {
-          "name": "wontfix"
+          "color": "ffffff",
+          "createdAt": "2018-03-09T15:05:17Z",
+          "description": "This will not be worked on",
+          "id": "MDU6TGFiZWw4NjE3MTA0MTU=",
+          "isDefault": true,
+          "name": "wontfix",
+          "updatedAt": "2018-03-09T15:05:17Z"
         },
         {
-          "name": "dependencies"
+          "color": "0366d6",
+          "createdAt": "2019-11-02T20:38:43Z",
+          "description": "Pull requests that update a dependency file",
+          "id": "MDU6TGFiZWwxNjUzOTY3MDYy",
+          "isDefault": false,
+          "name": "dependencies",
+          "updatedAt": "2019-11-02T20:38:43Z"
         },
         {
-          "name": "do not merge"
+          "color": "FF0000",
+          "createdAt": "2020-12-13T23:27:41Z",
+          "description": "Not the time for merging yet",
+          "id": "MDU6TGFiZWwyNTgxMDc0MDYx",
+          "isDefault": false,
+          "name": "do not merge",
+          "updatedAt": "2022-06-22T08:42:05Z"
         },
         {
-          "name": "work in progress"
+          "color": "C8C722",
+          "createdAt": "2021-04-11T23:15:48Z",
+          "description": "Signals not finished work",
+          "id": "MDU6TGFiZWwyOTA1NjU3MzE5",
+          "isDefault": false,
+          "name": "work in progress",
+          "updatedAt": "2021-12-21T12:44:23Z"
         },
         {
-          "name": "refactoring"
+          "color": "305080",
+          "createdAt": "2021-04-13T09:35:14Z",
+          "description": "Never stop to rework of existing",
+          "id": "MDU6TGFiZWwyOTEwMTU0NDky",
+          "isDefault": false,
+          "name": "refactoring",
+          "updatedAt": "2021-12-10T04:37:24Z"
         },
         {
-          "name": "tests"
+          "color": "0052CC",
+          "createdAt": "2021-10-22T15:35:42Z",
+          "description": "Functional or other tests",
+          "id": "LA_kwDOB2yP1s7PSZg4",
+          "isDefault": false,
+          "name": "tests",
+          "updatedAt": "2021-12-05T09:39:31Z"
         },
         {
-          "name": "feature"
+          "color": "28BD5C",
+          "createdAt": "2021-11-29T11:21:58Z",
+          "description": "New feature",
+          "id": "LA_kwDOB2yP1s7WN_3k",
+          "isDefault": false,
+          "name": "feature",
+          "updatedAt": "2021-12-07T12:58:36Z"
         },
         {
-          "name": "on hold"
+          "color": "BE7132",
+          "createdAt": "2022-04-05T09:28:24Z",
+          "description": "",
+          "id": "LA_kwDOB2yP1s7ukWkS",
+          "isDefault": false,
+          "name": "on hold",
+          "updatedAt": "2022-04-05T09:28:24Z"
         },
         {
-          "name": "port to go"
+          "color": "8E48A8",
+          "createdAt": "2022-09-28T20:11:13Z",
+          "description": "",
+          "id": "LA_kwDOB2yP1s8AAAABEYhDnQ",
+          "isDefault": false,
+          "name": "port to go",
+          "updatedAt": "2022-09-28T20:11:13Z"
         },
         {
-          "name": "auto"
+          "color": "CCCCCC",
+          "createdAt": "2023-01-26T17:34:29Z",
+          "description": "",
+          "id": "LA_kwDOB2yP1s8AAAABLuzTJQ",
+          "isDefault": false,
+          "name": "auto",
+          "updatedAt": "2023-01-26T17:34:29Z"
         },
         {
-          "name": "do not port"
+          "color": "BF3ACA",
+          "createdAt": "2023-01-26T17:34:42Z",
+          "description": "",
+          "id": "LA_kwDOB2yP1s8AAAABLuzV1g",
+          "isDefault": false,
+          "name": "do not port",
+          "updatedAt": "2023-01-26T17:34:42Z"
         },
         {
-          "name": "PBS 3.0"
+          "color": "85B979",
+          "createdAt": "2023-10-26T13:23:57Z",
+          "description": "Major release version",
+          "id": "LA_kwDOB2yP1s8AAAABbYf5CA",
+          "isDefault": false,
+          "name": "PBS 3.0",
+          "updatedAt": "2023-10-26T13:23:57Z"
         },
         {
-          "name": "needs community"
+          "color": "60D0FB",
+          "createdAt": "2024-11-13T20:41:00Z",
+          "description": "",
+          "id": "LA_kwDOB2yP1s8AAAABzZYG2w",
+          "isDefault": false,
+          "name": "needs community",
+          "updatedAt": "2024-11-13T20:41:00Z"
         },
         {
-          "name": "blocked"
+          "color": "5D5B50",
+          "createdAt": "2024-12-18T14:23:01Z",
+          "description": "",
+          "id": "LA_kwDOB2yP1s8AAAAB1uiaTw",
+          "isDefault": false,
+          "name": "blocked",
+          "updatedAt": "2024-12-18T14:23:01Z"
         },
         {
-          "name": "PBS 4.0"
+          "color": "B92595",
+          "createdAt": "2025-04-02T13:29:45Z",
+          "description": "",
+          "id": "LA_kwDOB2yP1s8AAAAB9DIwIw",
+          "isDefault": false,
+          "name": "PBS 4.0",
+          "updatedAt": "2025-04-02T13:30:08Z"
         },
         {
-          "name": "github_actions"
+          "color": "000000",
+          "createdAt": "2026-02-18T15:59:10Z",
+          "description": "Pull requests that update GitHub Actions code",
+          "id": "LA_kwDOB2yP1s8AAAACYiqnVg",
+          "isDefault": false,
+          "name": "github_actions",
+          "updatedAt": "2026-02-18T15:59:10Z"
         }
       ],
       "pageInfo": {
@@ -85,28 +237,52 @@
       },
       "totalCount": 23
     },
+    "licenseInfo": {
+      "spdxId": "Apache-2.0"
+    },
+    "mergeCommitAllowed": false,
+    "mergeCommitMessage": "PR_TITLE",
+    "mergeCommitTitle": "MERGE_MESSAGE",
     "name": "prebid-server-java",
     "nameWithOwner": "prebid/prebid-server-java",
     "owner": {
       "login": "prebid"
-    }
+    },
+    "planFeatures": {
+      "codeowners": true,
+      "maximumManualReviewRequests": 15,
+      "teamReviewRequests": true
+    },
+    "primaryLanguage": {
+      "name": "Java"
+    },
+    "pushedAt": "2026-10-16T12:10:38Z",
+    "rebaseMergeAllowed": false,
+    "squashMergeAllowed": true,
+    "squashMergeCommitMessage": "BLANK",
+    "squashMergeCommitTitle": "PR_TITLE",
+    "stargazerCount": 107,
+    "updatedAt": "2026-10-15T13:05:51Z",
+    "usesCustomOpenGraphImage": false,
+    "visibility": "PUBLIC",
+    "webCommitSignoffRequired": false
   },
-  "document_sha256": "035aef891393ccd81c36161af0b0d2e10034e582cac4bae68e62c9e5b035790e",
+  "document_sha256": "1911b98b9e2cc2b0446feebf94442c77d8c064810fa681773523ffe914c07a37",
   "errors": [],
   "extra": {},
   "headers": {
-    "date": "Sat, 17 Oct 2026 12:09:26 GMT",
+    "date": "Sun, 18 Oct 2026 20:09:30 GMT",
     "x-ratelimit-limit": "5000",
-    "x-ratelimit-remaining": "4991",
-    "x-ratelimit-reset": "1792242556",
+    "x-ratelimit-remaining": "4753",
+    "x-ratelimit-reset": "1792356065",
     "x-ratelimit-resource": "graphql",
-    "x-ratelimit-used": "9"
+    "x-ratelimit-used": "247"
   },
   "key": {
     "name": "prebid-server-java",
     "owner": "prebid"
   },
   "kind": "resolve",
-  "recorded_at": "2026-10-17T12:09:19Z",
+  "recorded_at": "2026-10-18T20:09:16Z",
   "source": "live"
 }

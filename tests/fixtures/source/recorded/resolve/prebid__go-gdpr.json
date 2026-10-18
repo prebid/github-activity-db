@@ -1,43 +1,117 @@
 {
   "data": {
+    "allowUpdateBranch": false,
+    "archivedAt": null,
+    "createdAt": "2018-05-10T14:53:30Z",
     "databaseId": 132915235,
     "defaultBranchRef": {
       "name": "master"
     },
+    "deleteBranchOnMerge": false,
+    "description": "Golang support for the IAB's GDPR framework",
+    "diskUsage": 160,
+    "forkCount": 20,
+    "forkingAllowed": true,
+    "hasDiscussionsEnabled": true,
+    "hasProjectsEnabled": false,
+    "hasVulnerabilityAlertsEnabled": true,
+    "hasWikiEnabled": false,
+    "homepageUrl": "",
     "id": "MDEwOlJlcG9zaXRvcnkxMzI5MTUyMzU=",
     "isArchived": false,
     "isPrivate": false,
+    "isSecurityPolicyEnabled": false,
     "labels": {
       "nodes": [
         {
-          "name": "bug"
+          "color": "d73a4a",
+          "createdAt": "2018-05-10T14:53:30Z",
+          "description": "Something isn't working",
+          "id": "MDU6TGFiZWw5Mjg5ODIzMDE=",
+          "isDefault": true,
+          "name": "bug",
+          "updatedAt": "2018-05-10T14:53:30Z"
         },
         {
-          "name": "duplicate"
+          "color": "cfd3d7",
+          "createdAt": "2018-05-10T14:53:30Z",
+          "description": "This issue or pull request already exists",
+          "id": "MDU6TGFiZWw5Mjg5ODIzMDI=",
+          "isDefault": true,
+          "name": "duplicate",
+          "updatedAt": "2018-05-10T14:53:30Z"
         },
         {
-          "name": "enhancement"
+          "color": "a2eeef",
+          "createdAt": "2018-05-10T14:53:31Z",
+          "description": "New feature or request",
+          "id": "MDU6TGFiZWw5Mjg5ODIzMDM=",
+          "isDefault": true,
+          "name": "enhancement",
+          "updatedAt": "2018-05-10T14:53:31Z"
         },
         {
-          "name": "good first issue"
+          "color": "7057ff",
+          "createdAt": "2018-05-10T14:53:31Z",
+          "description": "Good for newcomers",
+          "id": "MDU6TGFiZWw5Mjg5ODIzMDU=",
+          "isDefault": true,
+          "name": "good first issue",
+          "updatedAt": "2018-05-10T14:53:31Z"
         },
         {
-          "name": "help wanted"
+          "color": "008672",
+          "createdAt": "2018-05-10T14:53:31Z",
+          "description": "Extra attention is needed",
+          "id": "MDU6TGFiZWw5Mjg5ODIzMDQ=",
+          "isDefault": true,
+          "name": "help wanted",
+          "updatedAt": "2018-05-10T14:53:31Z"
         },
         {
-          "name": "invalid"
+          "color": "e4e669",
+          "createdAt": "2018-05-10T14:53:31Z",
+          "description": "This doesn't seem right",
+          "id": "MDU6TGFiZWw5Mjg5ODIzMDY=",
+          "isDefault": true,
+          "name": "invalid",
+          "updatedAt": "2018-05-10T14:53:31Z"
         },
         {
-          "name": "question"
+          "color": "d876e3",
+          "createdAt": "2018-05-10T14:53:31Z",
+          "description": "Further information is requested",
+          "id": "MDU6TGFiZWw5Mjg5ODIzMDc=",
+          "isDefault": true,
+          "name": "question",
+          "updatedAt": "2018-05-10T14:53:31Z"
         },
         {
-          "name": "wontfix"
+          "color": "ffffff",
+          "createdAt": "2018-05-10T14:53:31Z",
+          "description": "This will not be worked on",
+          "id": "MDU6TGFiZWw5Mjg5ODIzMDg=",
+          "isDefault": true,
+          "name": "wontfix",
+          "updatedAt": "2018-05-10T14:53:31Z"
         },
         {
-          "name": "dependencies"
+          "color": "0366d6",
+          "createdAt": "2026-09-14T07:12:58Z",
+          "description": "Pull requests that update a dependency file",
+          "id": "LA_kwDOB-wgI88AAAAC1mLtlA",
+          "isDefault": false,
+          "name": "dependencies",
+          "updatedAt": "2026-09-14T07:12:58Z"
         },
         {
-          "name": "go"
+          "color": "16e2e2",
+          "createdAt": "2026-09-14T07:12:58Z",
+          "description": "Pull requests that update go code",
+          "id": "LA_kwDOB-wgI88AAAAC1mLtmw",
+          "isDefault": false,
+          "name": "go",
+          "updatedAt": "2026-09-14T07:12:58Z"
         }
       ],
       "pageInfo": {
@@ -46,28 +120,52 @@
       },
       "totalCount": 10
     },
+    "licenseInfo": {
+      "spdxId": "Apache-2.0"
+    },
+    "mergeCommitAllowed": false,
+    "mergeCommitMessage": "PR_TITLE",
+    "mergeCommitTitle": "MERGE_MESSAGE",
     "name": "go-gdpr",
     "nameWithOwner": "prebid/go-gdpr",
     "owner": {
       "login": "prebid"
-    }
+    },
+    "planFeatures": {
+      "codeowners": true,
+      "maximumManualReviewRequests": 15,
+      "teamReviewRequests": true
+    },
+    "primaryLanguage": {
+      "name": "Go"
+    },
+    "pushedAt": "2026-09-14T07:12:57Z",
+    "rebaseMergeAllowed": false,
+    "squashMergeAllowed": true,
+    "squashMergeCommitMessage": "COMMIT_MESSAGES",
+    "squashMergeCommitTitle": "COMMIT_OR_PR_TITLE",
+    "stargazerCount": 26,
+    "updatedAt": "2026-09-14T07:11:21Z",
+    "usesCustomOpenGraphImage": false,
+    "visibility": "PUBLIC",
+    "webCommitSignoffRequired": false
   },
-  "document_sha256": "035aef891393ccd81c36161af0b0d2e10034e582cac4bae68e62c9e5b035790e",
+  "document_sha256": "1911b98b9e2cc2b0446feebf94442c77d8c064810fa681773523ffe914c07a37",
   "errors": [],
   "extra": {},
   "headers": {
-    "date": "Sat, 17 Oct 2026 12:09:20 GMT",
+    "date": "Sun, 18 Oct 2026 20:09:17 GMT",
     "x-ratelimit-limit": "5000",
-    "x-ratelimit-remaining": "4998",
-    "x-ratelimit-reset": "1792242556",
+    "x-ratelimit-remaining": "4761",
+    "x-ratelimit-reset": "1792356065",
     "x-ratelimit-resource": "graphql",
-    "x-ratelimit-used": "2"
+    "x-ratelimit-used": "239"
   },
   "key": {
     "name": "go-gdpr",
     "owner": "prebid"
   },
   "kind": "resolve",
-  "recorded_at": "2026-10-17T12:09:19Z",
+  "recorded_at": "2026-10-18T20:09:16Z",
   "source": "live"
 }

@@ -112,7 +112,7 @@ def test_connection(
             error_console.print(f"[red]Error:[/red] {escape(str(error))}")
             raise typer.Exit(1)
         case Hydrated(record=record):
-            author = record.author.login if record.author is not None else "(deleted account)"
+            author = record.author.login if record.author is not None else "none returned by GitHub"
             totals = record.totals
             console.print(f"#{record.number} {record.state}: {escape(record.title)}")
             console.print(f"  author {author}, created {_time(record.created_at)}")

@@ -157,6 +157,16 @@ class TestTest:
         assert "repository must be owner/name: 'prebid'" in _plain(result.stderr)
         assert replay.seen == []
 
+    def test_a_null_author_is_printed_as_github_reports_it(self, replay: Replay) -> None:
+        # GitHub returned no author for #12975 and does not say why (D28, gap 89).
+        result = runner.invoke(
+            app, ["github", "test", "--repo", "prebid/Prebid.js", "--pr", "12975"]
+        )
+        assert result.exit_code == 0, result.output
+        out = _plain(result.stdout)
+        assert "author none returned by GitHub" in out
+        assert "deleted" not in out
+
     def test_markup_in_github_text_is_printed_as_written(self, replay: Replay) -> None:
         unit = replay.unit("pull_request", owner="prebid", name="Prebid.js", number=13481)
         unit.data["title"] = "[bold]not markup[/bold]"

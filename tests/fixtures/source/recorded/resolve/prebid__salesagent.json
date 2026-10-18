@@ -1,91 +1,261 @@
 {
   "data": {
+    "allowUpdateBranch": false,
+    "archivedAt": null,
+    "createdAt": "2025-07-23T18:47:35Z",
     "databaseId": 1025117899,
     "defaultBranchRef": {
       "name": "main"
     },
+    "deleteBranchOnMerge": false,
+    "description": "A media sales agent that implements the AdCP Media Buy protocol",
+    "diskUsage": 43535,
+    "forkCount": 60,
+    "forkingAllowed": true,
+    "hasDiscussionsEnabled": true,
+    "hasProjectsEnabled": true,
+    "hasVulnerabilityAlertsEnabled": true,
+    "hasWikiEnabled": true,
+    "homepageUrl": "",
     "id": "R_kgDOPRoOyw",
     "isArchived": false,
     "isPrivate": false,
+    "isSecurityPolicyEnabled": true,
     "labels": {
       "nodes": [
         {
-          "name": "bug"
+          "color": "d73a4a",
+          "createdAt": "2025-07-23T18:47:36Z",
+          "description": "Something isn't working",
+          "id": "LA_kwDOPRoOy88AAAACGAAxOg",
+          "isDefault": true,
+          "name": "bug",
+          "updatedAt": "2025-07-23T18:47:36Z"
         },
         {
-          "name": "documentation"
+          "color": "0075ca",
+          "createdAt": "2025-07-23T18:47:37Z",
+          "description": "Improvements or additions to documentation",
+          "id": "LA_kwDOPRoOy88AAAACGAAxPg",
+          "isDefault": true,
+          "name": "documentation",
+          "updatedAt": "2025-07-23T18:47:37Z"
         },
         {
-          "name": "duplicate"
+          "color": "cfd3d7",
+          "createdAt": "2025-07-23T18:47:37Z",
+          "description": "This issue or pull request already exists",
+          "id": "LA_kwDOPRoOy88AAAACGAAxQg",
+          "isDefault": true,
+          "name": "duplicate",
+          "updatedAt": "2025-07-23T18:47:37Z"
         },
         {
-          "name": "enhancement"
+          "color": "a2eeef",
+          "createdAt": "2025-07-23T18:47:37Z",
+          "description": "New feature or request",
+          "id": "LA_kwDOPRoOy88AAAACGAAxRw",
+          "isDefault": true,
+          "name": "enhancement",
+          "updatedAt": "2025-07-23T18:47:37Z"
         },
         {
-          "name": "good first issue"
+          "color": "7057ff",
+          "createdAt": "2025-07-23T18:47:37Z",
+          "description": "Good for newcomers",
+          "id": "LA_kwDOPRoOy88AAAACGAAxSg",
+          "isDefault": true,
+          "name": "good first issue",
+          "updatedAt": "2025-07-23T18:47:37Z"
         },
         {
-          "name": "help wanted"
+          "color": "008672",
+          "createdAt": "2025-07-23T18:47:37Z",
+          "description": "Extra attention is needed",
+          "id": "LA_kwDOPRoOy88AAAACGAAxTw",
+          "isDefault": true,
+          "name": "help wanted",
+          "updatedAt": "2025-07-23T18:47:37Z"
         },
         {
-          "name": "invalid"
+          "color": "e4e669",
+          "createdAt": "2025-07-23T18:47:37Z",
+          "description": "This doesn't seem right",
+          "id": "LA_kwDOPRoOy88AAAACGAAxVQ",
+          "isDefault": true,
+          "name": "invalid",
+          "updatedAt": "2025-07-23T18:47:37Z"
         },
         {
-          "name": "question"
+          "color": "d876e3",
+          "createdAt": "2025-07-23T18:47:37Z",
+          "description": "Further information is requested",
+          "id": "LA_kwDOPRoOy88AAAACGAAxWQ",
+          "isDefault": true,
+          "name": "question",
+          "updatedAt": "2025-07-23T18:47:37Z"
         },
         {
-          "name": "wontfix"
+          "color": "ffffff",
+          "createdAt": "2025-07-23T18:47:37Z",
+          "description": "This will not be worked on",
+          "id": "LA_kwDOPRoOy88AAAACGAAxXw",
+          "isDefault": true,
+          "name": "wontfix",
+          "updatedAt": "2025-07-23T18:47:37Z"
         },
         {
-          "name": "autorelease: pending"
+          "color": "ededed",
+          "createdAt": "2025-11-07T12:31:12Z",
+          "description": null,
+          "id": "LA_kwDOPRoOy88AAAACPGCYKA",
+          "isDefault": false,
+          "name": "autorelease: pending",
+          "updatedAt": "2025-11-07T12:31:12Z"
         },
         {
-          "name": "adcp-2.5"
+          "color": "aaaaaa",
+          "createdAt": "2025-12-02T20:35:50Z",
+          "description": null,
+          "id": "LA_kwDOPRoOy88AAAACRad7og",
+          "isDefault": false,
+          "name": "adcp-2.5",
+          "updatedAt": "2025-12-02T20:35:50Z"
         },
         {
-          "name": "autorelease: tagged"
+          "color": "ededed",
+          "createdAt": "2025-12-20T16:51:48Z",
+          "description": null,
+          "id": "LA_kwDOPRoOy88AAAACS-nmFw",
+          "isDefault": false,
+          "name": "autorelease: tagged",
+          "updatedAt": "2025-12-20T16:51:48Z"
         },
         {
-          "name": "codex"
+          "color": "ededed",
+          "createdAt": "2026-01-29T19:57:47Z",
+          "description": null,
+          "id": "LA_kwDOPRoOy88AAAACWa3V1w",
+          "isDefault": false,
+          "name": "codex",
+          "updatedAt": "2026-01-29T19:57:47Z"
         },
         {
-          "name": "Ready for Dev"
+          "color": "78df32",
+          "createdAt": "2026-02-11T16:49:46Z",
+          "description": "This is a good issue to work on",
+          "id": "LA_kwDOPRoOy88AAAACXzHJcA",
+          "isDefault": false,
+          "name": "Ready for Dev",
+          "updatedAt": "2026-02-11T16:49:46Z"
         },
         {
-          "name": "adcp-v3"
+          "color": "0075ca",
+          "createdAt": "2026-02-12T16:25:22Z",
+          "description": "AdCP v3 spec gap",
+          "id": "LA_kwDOPRoOy88AAAACX6otOg",
+          "isDefault": false,
+          "name": "adcp-v3",
+          "updatedAt": "2026-02-12T16:25:22Z"
         },
         {
-          "name": "dev topic"
+          "color": "aaaaaa",
+          "createdAt": "2026-02-18T15:37:54Z",
+          "description": null,
+          "id": "LA_kwDOPRoOy88AAAACYihTIg",
+          "isDefault": false,
+          "name": "dev topic",
+          "updatedAt": "2026-02-18T15:37:54Z"
         },
         {
-          "name": "refactor"
+          "color": "b28162",
+          "createdAt": "2026-03-12T01:53:13Z",
+          "description": "Refactor / code maintenance",
+          "id": "LA_kwDOPRoOy88AAAACbDznIQ",
+          "isDefault": false,
+          "name": "refactor",
+          "updatedAt": "2026-03-12T01:53:13Z"
         },
         {
-          "name": "2.0 Release"
+          "color": "71fc68",
+          "createdAt": "2026-04-08T13:03:37Z",
+          "description": "",
+          "id": "LA_kwDOPRoOy88AAAACei712A",
+          "isDefault": false,
+          "name": "2.0 Release",
+          "updatedAt": "2026-04-08T13:03:37Z"
         },
         {
-          "name": "Post 2.0"
+          "color": "fbca04",
+          "createdAt": "2026-04-15T15:13:06Z",
+          "description": "",
+          "id": "LA_kwDOPRoOy88AAAACfdq4JA",
+          "isDefault": false,
+          "name": "Post 2.0",
+          "updatedAt": "2026-04-15T15:13:06Z"
         },
         {
-          "name": "needs contributor"
+          "color": "D5AD2C",
+          "createdAt": "2026-04-22T19:14:38Z",
+          "description": "",
+          "id": "LA_kwDOPRoOy88AAAACgYmMuQ",
+          "isDefault": false,
+          "name": "needs contributor",
+          "updatedAt": "2026-04-22T19:14:38Z"
         },
         {
-          "name": "ready for rereview"
+          "color": "9d7784",
+          "createdAt": "2026-05-02T20:27:51Z",
+          "description": "",
+          "id": "LA_kwDOPRoOy88AAAAChpaVyA",
+          "isDefault": false,
+          "name": "ready for rereview",
+          "updatedAt": "2026-05-02T20:27:51Z"
         },
         {
-          "name": "on hold"
+          "color": "b4035a",
+          "createdAt": "2026-06-16T17:23:42Z",
+          "description": "",
+          "id": "LA_kwDOPRoOy88AAAACnsAwGg",
+          "isDefault": false,
+          "name": "on hold",
+          "updatedAt": "2026-06-16T17:23:42Z"
         },
         {
-          "name": "dependencies"
+          "color": "0366d6",
+          "createdAt": "2026-06-21T11:54:49Z",
+          "description": "Pull requests that update a dependency file",
+          "id": "LA_kwDOPRoOy88AAAACoT3N5Q",
+          "isDefault": false,
+          "name": "dependencies",
+          "updatedAt": "2026-06-21T11:54:49Z"
         },
         {
-          "name": "python:uv"
+          "color": "2b67c6",
+          "createdAt": "2026-06-21T11:54:49Z",
+          "description": "Pull requests that update python:uv code",
+          "id": "LA_kwDOPRoOy88AAAACoT3N5g",
+          "isDefault": false,
+          "name": "python:uv",
+          "updatedAt": "2026-06-21T11:54:49Z"
         },
         {
-          "name": "test"
+          "color": "ededed",
+          "createdAt": "2026-08-25T07:12:14Z",
+          "description": null,
+          "id": "LA_kwDOPRoOy88AAAACyD3P-g",
+          "isDefault": false,
+          "name": "test",
+          "updatedAt": "2026-08-25T07:12:14Z"
         },
         {
-          "name": "javascript"
+          "color": "168700",
+          "createdAt": "2026-09-03T02:09:27Z",
+          "description": "Pull requests that update javascript code",
+          "id": "LA_kwDOPRoOy88AAAACzf_bVA",
+          "isDefault": false,
+          "name": "javascript",
+          "updatedAt": "2026-09-03T02:09:27Z"
         }
       ],
       "pageInfo": {
@@ -94,28 +264,52 @@
       },
       "totalCount": 26
     },
+    "licenseInfo": {
+      "spdxId": "Apache-2.0"
+    },
+    "mergeCommitAllowed": true,
+    "mergeCommitMessage": "PR_TITLE",
+    "mergeCommitTitle": "MERGE_MESSAGE",
     "name": "salesagent",
     "nameWithOwner": "prebid/salesagent",
     "owner": {
       "login": "prebid"
-    }
+    },
+    "planFeatures": {
+      "codeowners": true,
+      "maximumManualReviewRequests": 15,
+      "teamReviewRequests": true
+    },
+    "primaryLanguage": {
+      "name": "Python"
+    },
+    "pushedAt": "2026-10-17T14:34:13Z",
+    "rebaseMergeAllowed": true,
+    "squashMergeAllowed": true,
+    "squashMergeCommitMessage": "COMMIT_MESSAGES",
+    "squashMergeCommitTitle": "COMMIT_OR_PR_TITLE",
+    "stargazerCount": 39,
+    "updatedAt": "2026-10-17T14:34:10Z",
+    "usesCustomOpenGraphImage": false,
+    "visibility": "PUBLIC",
+    "webCommitSignoffRequired": true
   },
-  "document_sha256": "035aef891393ccd81c36161af0b0d2e10034e582cac4bae68e62c9e5b035790e",
+  "document_sha256": "1911b98b9e2cc2b0446feebf94442c77d8c064810fa681773523ffe914c07a37",
   "errors": [],
   "extra": {},
   "headers": {
-    "date": "Sat, 17 Oct 2026 12:09:28 GMT",
+    "date": "Sun, 18 Oct 2026 20:09:34 GMT",
     "x-ratelimit-limit": "5000",
-    "x-ratelimit-remaining": "4928",
-    "x-ratelimit-reset": "1792241340",
+    "x-ratelimit-remaining": "4749",
+    "x-ratelimit-reset": "1792356065",
     "x-ratelimit-resource": "graphql",
-    "x-ratelimit-used": "72"
+    "x-ratelimit-used": "251"
   },
   "key": {
     "name": "salesagent",
     "owner": "prebid"
   },
   "kind": "resolve",
-  "recorded_at": "2026-10-17T12:09:19Z",
+  "recorded_at": "2026-10-18T20:09:16Z",
   "source": "live"
 }

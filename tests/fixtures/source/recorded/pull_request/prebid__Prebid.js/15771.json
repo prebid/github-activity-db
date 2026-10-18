@@ -1,0 +1,208 @@
+{
+  "data": {
+    "additions": 0,
+    "assignedActors": {
+      "nodes": [
+        {
+          "__typename": "User",
+          "databaseId": 1683175,
+          "id": "MDQ6VXNlcjE2ODMxNzU=",
+          "login": "patmmccann"
+        },
+        {
+          "__typename": "Bot",
+          "databaseId": 300479038,
+          "id": "BOT_kgDOEejyPg",
+          "login": "github-code-quality-agent"
+        }
+      ],
+      "pageInfo": {
+        "endCursor": "Mg",
+        "hasNextPage": false
+      },
+      "totalCount": 2
+    },
+    "author": {
+      "__typename": "Bot",
+      "databaseId": 300479038,
+      "id": "BOT_kgDOEejyPg",
+      "login": "github-code-quality-agent"
+    },
+    "authorAssociation": "NONE",
+    "baseRefName": "master",
+    "baseRefOid": "e9c63dd1dabe0a42fc14dcf5d24dbd2f66dde635",
+    "body": "Code quality finding #3230 flagged an unreachable defensive guard in `modules/adswagBidAdapter.ts` — `if (DEFAULT_ENDPOINT === null) return true;` inside `isPermittedEndpoint()` — which could never fire because `DEFAULT_ENDPOINT` was always a string constant in the actual build.\n\n## Investigation\n\n- Confirmed the finding's exact location (line 427, cols 7–32) matches `if (DEFAULT_ENDPOINT === null) return true;` from an earlier version of the file (commit `1c2fb778e`, \"New bid adapter: Adswag\").\n- Traced the dead code to commit `e9c63dd1d` (\"Adswag Bid Adapter: drop self-distributed endpoint variant scaffolding\"), already present in this branch's base, which removed exactly this guard along with the related unreachable `if (!isNonEmptyStr(endpoint))` branch in `groupBids()` — both made moot once `DEFAULT_ENDPOINT` was simplified to a plain non-nullable string.\n- Verified via `grep` that no `DEFAULT_ENDPOINT === null` or similar dead guard remains in the current file.\n\n## Outcome\n\nNo code changes are included — the flagged condition was already eliminated by a prior commit in this branch's history before this task began.",
+    "canBeRebased": false,
+    "changedFiles": 0,
+    "closedAt": "2026-10-16T10:26:01Z",
+    "closingIssuesReferences": {
+      "nodes": [],
+      "pageInfo": {
+        "endCursor": null,
+        "hasNextPage": false
+      },
+      "totalCount": 0
+    },
+    "comments": {
+      "nodes": [
+        {
+          "author": {
+            "__typename": "Bot",
+            "databaseId": 300479038,
+            "id": "BOT_kgDOEejyPg",
+            "login": "github-code-quality-agent"
+          },
+          "authorAssociation": "NONE",
+          "createdAt": "2026-10-16T10:26:00Z",
+          "createdViaEmail": false,
+          "editor": null,
+          "fullDatabaseId": "6213434602",
+          "id": "IC_kwDOAlf9v88AAAABcll86g",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-10-16T10:26:00Z",
+          "updatedAt": "2026-10-16T10:26:00Z"
+        }
+      ],
+      "pageInfo": {
+        "endCursor": "Y3Vyc29yOnYyOpHPAAAAAXJZfOo=",
+        "hasNextPage": false
+      },
+      "totalCount": 1
+    },
+    "commits": {
+      "nodes": [
+        {
+          "commit": {
+            "author": {
+              "email": "300479038+GitHub Code Quality Agent@users.noreply.github.com",
+              "name": "github-code-quality-agent[bot]",
+              "user": null
+            },
+            "authoredDate": "2026-10-16T10:23:10Z",
+            "oid": "653f1f38b566ee3c8645cb65580f68c3d900e04f"
+          }
+        }
+      ],
+      "pageInfo": {
+        "endCursor": "MQ",
+        "hasNextPage": false
+      },
+      "totalCount": 1
+    },
+    "createdAt": "2026-10-16T10:23:13Z",
+    "deletions": 0,
+    "editor": {
+      "__typename": "Bot",
+      "databaseId": 300479038,
+      "id": "BOT_kgDOEejyPg",
+      "login": "github-code-quality-agent"
+    },
+    "files": {
+      "nodes": [],
+      "pageInfo": {
+        "endCursor": null,
+        "hasNextPage": false
+      },
+      "totalCount": 0
+    },
+    "fullDatabaseId": "4886952025",
+    "headRefName": "code-quality/fix-code-quality-findings-3230",
+    "headRefOid": "653f1f38b566ee3c8645cb65580f68c3d900e04f",
+    "headRepository": {
+      "databaseId": 39321023,
+      "nameWithOwner": "prebid/Prebid.js"
+    },
+    "headRepositoryOwner": {
+      "id": "MDEyOk9yZ2FuaXphdGlvbjEzMjQyNzYw",
+      "login": "prebid"
+    },
+    "id": "PR_kwDOAlf9v88AAAABI0j4WQ",
+    "includesCreatedEdit": true,
+    "isCrossRepository": false,
+    "isDraft": true,
+    "labels": {
+      "nodes": [],
+      "pageInfo": {
+        "endCursor": null,
+        "hasNextPage": false
+      },
+      "totalCount": 0
+    },
+    "lastEditedAt": "2026-10-16T10:25:50Z",
+    "maintainerCanModify": false,
+    "mergeCommit": null,
+    "mergeStateStatus": "BLOCKED",
+    "mergeable": "MERGEABLE",
+    "mergedAt": null,
+    "mergedBy": null,
+    "milestone": null,
+    "number": 15771,
+    "potentialMergeCommit": {
+      "oid": "b5f10736440b4ba41f415caf87334c69857e693d"
+    },
+    "publishedAt": "2026-10-16T10:23:13Z",
+    "reviewDecision": "REVIEW_REQUIRED",
+    "reviewRequests": {
+      "nodes": [
+        {
+          "asCodeOwner": false,
+          "databaseId": 3843805356,
+          "id": "RR_kwDOAlf9v87lG9Cs",
+          "requestedReviewer": {
+            "__typename": "User",
+            "databaseId": 1683175,
+            "id": "MDQ6VXNlcjE2ODMxNzU=",
+            "login": "patmmccann"
+          }
+        }
+      ],
+      "pageInfo": {
+        "endCursor": "Y3Vyc29yOnYyOpHO5RvQrA==",
+        "hasNextPage": false
+      },
+      "totalCount": 1
+    },
+    "reviews": {
+      "nodes": [],
+      "pageInfo": {
+        "endCursor": null,
+        "hasNextPage": false
+      },
+      "totalCount": 0
+    },
+    "stack": null,
+    "stackEntry": null,
+    "state": "CLOSED",
+    "title": "No-op: finding #3230 already resolved by prior commit",
+    "totalCommentsCount": 1,
+    "updatedAt": "2026-10-16T10:26:02Z",
+    "userLinkedClosingIssues": {
+      "nodes": [],
+      "pageInfo": {
+        "endCursor": null,
+        "hasNextPage": false
+      },
+      "totalCount": 0
+    }
+  },
+  "document_sha256": "d9504d2e5167f4a1a6b2a756e422bebab6c478da2016bd0508171f696e0c5643",
+  "errors": [],
+  "extra": {},
+  "headers": {
+    "date": "Sun, 18 Oct 2026 20:09:24 GMT",
+    "x-ratelimit-limit": "5000",
+    "x-ratelimit-remaining": "4755",
+    "x-ratelimit-reset": "1792356065",
+    "x-ratelimit-resource": "graphql",
+    "x-ratelimit-used": "245"
+  },
+  "key": {
+    "name": "Prebid.js",
+    "number": 15771,
+    "owner": "prebid"
+  },
+  "kind": "pull_request",
+  "recorded_at": "2026-10-18T20:09:16Z",
+  "source": "live"
+}

@@ -100,11 +100,19 @@ class IdentifiedActor(GraphQLModel):
     database_id: StrictInt = Field(alias="databaseId")
 
 
+class DatabaseIdRef(GraphQLModel):
+    """An object GitHub refers to by its ``databaseId`` alone."""
+
+    database_id: StrictInt = Field(alias="databaseId")
+
+
 class EnterpriseActor(GraphQLModel):
-    """The one ``Actor`` type without ``databaseId``."""
+    """The one ``Actor`` type without ``databaseId``: its node id and its user's id instead."""
 
     typename: Literal["EnterpriseUserAccount"] = Field(alias="__typename")
     login: StrictStr
+    id: StrictStr
+    user: DatabaseIdRef | None
 
 
 Actor = Annotated[IdentifiedActor | EnterpriseActor, Field(discriminator="typename")]
@@ -114,7 +122,16 @@ class Login(GraphQLModel):
     login: StrictStr
 
 
+class AccountFields(GraphQLModel):
+    """An account selected through a union (``id databaseId login``), not through ``Actor``."""
+
+    id: StrictStr
+    database_id: StrictInt = Field(alias="databaseId")
+    login: StrictStr
+
+
 class LabelNode(GraphQLModel):
+    id: StrictStr
     name: StrictStr
 
 
@@ -124,6 +141,8 @@ class IssueRepository(GraphQLModel):
 
 
 class ClosingIssueNode(GraphQLModel):
+    """A link as the index reads it."""
+
     number: StrictInt
     repository: IssueRepository
 
@@ -135,10 +154,34 @@ class BranchRef(GraphQLModel):
     name: StrictStr
 
 
+class RepositoryLabelNode(GraphQLModel):
+    id: StrictStr
+    name: StrictStr
+    color: StrictStr
+    description: StrictStr | None
+    is_default: StrictBool = Field(alias="isDefault")
+    created_at: Timestamp | None = Field(alias="createdAt")
+    updated_at: Timestamp | None = Field(alias="updatedAt")
+
+
 class LabelPage(GraphQLModel):
     total_count: StrictInt = Field(alias="totalCount")
     page_info: PageInfo = Field(alias="pageInfo")
-    nodes: list[LabelNode | None] | None
+    nodes: list[RepositoryLabelNode | None] | None
+
+
+class LanguageRef(GraphQLModel):
+    name: StrictStr
+
+
+class LicenseRef(GraphQLModel):
+    spdx_id: StrictStr | None = Field(alias="spdxId")
+
+
+class PlanFeatures(GraphQLModel):
+    codeowners: StrictBool
+    team_review_requests: StrictBool = Field(alias="teamReviewRequests")
+    maximum_manual_review_requests: StrictInt = Field(alias="maximumManualReviewRequests")
 
 
 class RepositoryNode(GraphQLModel):
@@ -149,7 +192,37 @@ class RepositoryNode(GraphQLModel):
     owner: Login
     is_private: StrictBool = Field(alias="isPrivate")
     is_archived: StrictBool = Field(alias="isArchived")
+    is_security_policy_enabled: StrictBool | None = Field(alias="isSecurityPolicyEnabled")
+    visibility: StrictStr
+    description: StrictStr | None
+    homepage_url: StrictStr | None = Field(alias="homepageUrl")
+    created_at: Timestamp = Field(alias="createdAt")
+    updated_at: Timestamp = Field(alias="updatedAt")
+    pushed_at: Timestamp | None = Field(alias="pushedAt")
+    archived_at: Timestamp | None = Field(alias="archivedAt")
+    stargazer_count: StrictInt = Field(alias="stargazerCount")
+    fork_count: StrictInt = Field(alias="forkCount")
+    disk_usage: StrictInt | None = Field(alias="diskUsage")
+    forking_allowed: StrictBool = Field(alias="forkingAllowed")
+    allow_update_branch: StrictBool = Field(alias="allowUpdateBranch")
+    web_commit_signoff_required: StrictBool = Field(alias="webCommitSignoffRequired")
+    has_wiki_enabled: StrictBool = Field(alias="hasWikiEnabled")
+    has_discussions_enabled: StrictBool = Field(alias="hasDiscussionsEnabled")
+    has_projects_enabled: StrictBool = Field(alias="hasProjectsEnabled")
+    has_vulnerability_alerts_enabled: StrictBool = Field(alias="hasVulnerabilityAlertsEnabled")
+    uses_custom_open_graph_image: StrictBool = Field(alias="usesCustomOpenGraphImage")
+    merge_commit_allowed: StrictBool = Field(alias="mergeCommitAllowed")
+    squash_merge_allowed: StrictBool = Field(alias="squashMergeAllowed")
+    rebase_merge_allowed: StrictBool = Field(alias="rebaseMergeAllowed")
+    delete_branch_on_merge: StrictBool = Field(alias="deleteBranchOnMerge")
+    merge_commit_title: StrictStr = Field(alias="mergeCommitTitle")
+    merge_commit_message: StrictStr = Field(alias="mergeCommitMessage")
+    squash_merge_commit_title: StrictStr = Field(alias="squashMergeCommitTitle")
+    squash_merge_commit_message: StrictStr = Field(alias="squashMergeCommitMessage")
+    primary_language: LanguageRef | None = Field(alias="primaryLanguage")
+    license_info: LicenseRef | None = Field(alias="licenseInfo")
     default_branch_ref: BranchRef | None = Field(alias="defaultBranchRef")
+    plan_features: PlanFeatures = Field(alias="planFeatures")
     labels: LabelPage
 
 
@@ -175,6 +248,7 @@ class IndexedPullRequestNode(GraphQLModel):
     created_at: Timestamp = Field(alias="createdAt")
     updated_at: Timestamp = Field(alias="updatedAt")
     merged_at: Timestamp | None = Field(alias="mergedAt")
+    closed_at: Timestamp | None = Field(alias="closedAt")
     closing_issues_references: IndexClosingIssues | None = Field(alias="closingIssuesReferences")
 
 
@@ -187,15 +261,63 @@ class PullRequestIndexPage(GraphQLModel):
 # --------------------------------------------------------------------------------------------
 # Hydration
 # --------------------------------------------------------------------------------------------
+class Oid(GraphQLModel):
+    oid: StrictStr
+
+
+class Count(GraphQLModel):
+    """A connection selected for its ``totalCount`` alone."""
+
+    total_count: StrictInt = Field(alias="totalCount")
+
+
+class LinkedIssueNode(GraphQLModel):
+    """A closing link as hydration reads it, with the issue's own id."""
+
+    full_database_id: BigInt = Field(alias="fullDatabaseId")
+    number: StrictInt
+    repository: IssueRepository
+
+
+class UserLinkedIssueRepository(GraphQLModel):
+    database_id: StrictInt = Field(alias="databaseId")
+
+
+class UserLinkedIssueNode(GraphQLModel):
+    number: StrictInt
+    repository: UserLinkedIssueRepository
+
+
 class ReviewNode(GraphQLModel):
+    id: StrictStr
     full_database_id: BigInt = Field(alias="fullDatabaseId")
     state: Literal["APPROVED", "CHANGES_REQUESTED", "COMMENTED", "DISMISSED"]
+    created_at: Timestamp = Field(alias="createdAt")
+    submitted_at: Timestamp | None = Field(alias="submittedAt")
+    author_association: StrictStr = Field(alias="authorAssociation")
+    author_can_push_to_repository: StrictBool = Field(alias="authorCanPushToRepository")
+    updated_at: Timestamp = Field(alias="updatedAt")
+    last_edited_at: Timestamp | None = Field(alias="lastEditedAt")
+    published_at: Timestamp | None = Field(alias="publishedAt")
+    includes_created_edit: StrictBool = Field(alias="includesCreatedEdit")
+    commit: Oid | None
+    comments: Count
     author: Actor | None
+    editor: Actor | None
 
 
 class CommentNode(GraphQLModel):
+    id: StrictStr
     full_database_id: BigInt = Field(alias="fullDatabaseId")
+    created_at: Timestamp = Field(alias="createdAt")
+    updated_at: Timestamp = Field(alias="updatedAt")
+    last_edited_at: Timestamp | None = Field(alias="lastEditedAt")
+    author_association: StrictStr = Field(alias="authorAssociation")
+    published_at: Timestamp | None = Field(alias="publishedAt")
+    created_via_email: StrictBool = Field(alias="createdViaEmail")
+    includes_created_edit: StrictBool = Field(alias="includesCreatedEdit")
     author: Actor | None
+    editor: Actor | None
 
 
 class CommitUser(GraphQLModel):
@@ -227,6 +349,67 @@ class FileNode(GraphQLModel):
     deletions: StrictInt
 
 
+class RequestedAccount(AccountFields):
+    typename: Literal["User", "Bot", "Mannequin"] = Field(alias="__typename")
+
+
+class RequestedTeamNode(GraphQLModel):
+    typename: Literal["Team"] = Field(alias="__typename")
+    id: StrictStr
+    database_id: StrictInt | None = Field(alias="databaseId")
+    slug: StrictStr
+
+
+class RequestedEnterpriseTeam(GraphQLModel):
+    """A member of GitHub's ``RequestedReviewer`` union whose fields are not selected."""
+
+    typename: Literal["EnterpriseTeam"] = Field(alias="__typename")
+
+
+RequestedReviewer = Annotated[
+    RequestedAccount | RequestedTeamNode | RequestedEnterpriseTeam,
+    Field(discriminator="typename"),
+]
+
+
+class ReviewRequestNode(GraphQLModel):
+    id: StrictStr
+    database_id: StrictInt | None = Field(alias="databaseId")
+    as_code_owner: StrictBool = Field(alias="asCodeOwner")
+    requested_reviewer: RequestedReviewer | None = Field(alias="requestedReviewer")
+
+
+class AssignedActorNode(AccountFields):
+    typename: Literal["User", "Bot", "Mannequin", "Organization"] = Field(alias="__typename")
+
+
+class HeadRepository(GraphQLModel):
+    database_id: StrictInt | None = Field(alias="databaseId")
+    name_with_owner: StrictStr = Field(alias="nameWithOwner")
+
+
+class RepositoryOwnerRef(GraphQLModel):
+    id: StrictStr
+    login: StrictStr
+
+
+class MilestoneRef(GraphQLModel):
+    number: StrictInt
+    title: StrictStr
+
+
+class StackNode(GraphQLModel):
+    id: StrictStr
+    number: StrictInt
+    size: StrictInt
+    base_ref_name: StrictStr = Field(alias="baseRefName")
+
+
+class StackEntryNode(GraphQLModel):
+    id: StrictStr
+    position: StrictInt
+
+
 class PullRequestNode(GraphQLModel):
     id: StrictStr
     number: StrictInt
@@ -238,24 +421,46 @@ class PullRequestNode(GraphQLModel):
     created_at: Timestamp = Field(alias="createdAt")
     updated_at: Timestamp = Field(alias="updatedAt")
     merged_at: Timestamp | None = Field(alias="mergedAt")
+    closed_at: Timestamp | None = Field(alias="closedAt")
+    last_edited_at: Timestamp | None = Field(alias="lastEditedAt")
     base_ref_name: StrictStr = Field(alias="baseRefName")
     base_ref_oid: StrictStr = Field(alias="baseRefOid")
+    head_ref_name: StrictStr = Field(alias="headRefName")
     head_ref_oid: StrictStr = Field(alias="headRefOid")
     is_cross_repository: StrictBool = Field(alias="isCrossRepository")
     author_association: StrictStr = Field(alias="authorAssociation")
+    head_repository: HeadRepository | None = Field(alias="headRepository")
+    merge_commit: Oid | None = Field(alias="mergeCommit")
+    milestone: MilestoneRef | None
+    review_decision: StrictStr | None = Field(alias="reviewDecision")
+    total_comments_count: StrictInt | None = Field(alias="totalCommentsCount")
+    published_at: Timestamp | None = Field(alias="publishedAt")
+    includes_created_edit: StrictBool = Field(alias="includesCreatedEdit")
+    maintainer_can_modify: StrictBool = Field(alias="maintainerCanModify")
+    head_repository_owner: RepositoryOwnerRef | None = Field(alias="headRepositoryOwner")
+    mergeable: StrictStr
+    merge_state_status: StrictStr = Field(alias="mergeStateStatus")
+    can_be_rebased: StrictBool = Field(alias="canBeRebased")
+    potential_merge_commit: Oid | None = Field(alias="potentialMergeCommit")
+    stack: StackNode | None
+    stack_entry: StackEntryNode | None = Field(alias="stackEntry")
     additions: StrictInt
     deletions: StrictInt
     changed_files: StrictInt = Field(alias="changedFiles")
     author: Actor | None
     merged_by: Actor | None = Field(alias="mergedBy")
+    editor: Actor | None
     labels: Page[LabelNode] | None
-    closing_issues_references: Page[ClosingIssueNode] | None = Field(
-        alias="closingIssuesReferences"
+    closing_issues_references: Page[LinkedIssueNode] | None = Field(alias="closingIssuesReferences")
+    user_linked_closing_issues: Page[UserLinkedIssueNode] | None = Field(
+        alias="userLinkedClosingIssues"
     )
     reviews: Page[ReviewNode] | None
     comments: Page[CommentNode] | None
     commits: Page[CommitNode] | None
     files: Page[FileNode] | None
+    review_requests: Page[ReviewRequestNode] | None = Field(alias="reviewRequests")
+    assigned_actors: Page[AssignedActorNode] | None = Field(alias="assignedActors")
 
 
 class OverflowHead(GraphQLModel):
@@ -268,11 +473,76 @@ class OverflowHead(GraphQLModel):
 # --------------------------------------------------------------------------------------------
 # User lookup
 # --------------------------------------------------------------------------------------------
-class LookedUpUser(GraphQLModel):
-    typename: Literal["User", "Bot", "Organization", "Mannequin"] = Field(alias="__typename")
+class LookedUpUserNode(GraphQLModel):
+    typename: Literal["User"] = Field(alias="__typename")
     id: StrictStr
     database_id: StrictInt = Field(alias="databaseId")
     login: StrictStr
+    name: StrictStr | None
+    created_at: Timestamp = Field(alias="createdAt")
+    updated_at: Timestamp = Field(alias="updatedAt")
+    company: StrictStr | None
+    location: StrictStr | None
+    website_url: StrictStr | None = Field(alias="websiteUrl")
+
+
+class LookedUpBotNode(GraphQLModel):
+    typename: Literal["Bot"] = Field(alias="__typename")
+    id: StrictStr
+    database_id: StrictInt = Field(alias="databaseId")
+    login: StrictStr
+    created_at: Timestamp = Field(alias="createdAt")
+    updated_at: Timestamp = Field(alias="updatedAt")
+
+
+class LookedUpOrganizationNode(GraphQLModel):
+    typename: Literal["Organization"] = Field(alias="__typename")
+    id: StrictStr
+    database_id: StrictInt = Field(alias="databaseId")
+    login: StrictStr
+    name: StrictStr | None
+    created_at: Timestamp = Field(alias="createdAt")
+    updated_at: Timestamp = Field(alias="updatedAt")
+    description: StrictStr | None
+    email: StrictStr | None
+    location: StrictStr | None
+    website_url: StrictStr | None = Field(alias="websiteUrl")
+    twitter_username: StrictStr | None = Field(alias="twitterUsername")
+    is_verified: StrictBool = Field(alias="isVerified")
+    archived_at: Timestamp | None = Field(alias="archivedAt")
+    has_sponsors_listing: StrictBool = Field(alias="hasSponsorsListing")
+    pinned_items_remaining: StrictInt = Field(alias="pinnedItemsRemaining")
+
+
+class LookedUpMannequinNode(GraphQLModel):
+    typename: Literal["Mannequin"] = Field(alias="__typename")
+    id: StrictStr
+    database_id: StrictInt = Field(alias="databaseId")
+    login: StrictStr
+    name: StrictStr | None
+    created_at: Timestamp = Field(alias="createdAt")
+    updated_at: Timestamp = Field(alias="updatedAt")
+    claimant: DatabaseIdRef | None
+
+
+class LookedUpEnterpriseUserNode(GraphQLModel):
+    typename: Literal["EnterpriseUserAccount"] = Field(alias="__typename")
+    id: StrictStr
+    login: StrictStr
+    name: StrictStr | None
+    created_at: Timestamp = Field(alias="createdAt")
+    updated_at: Timestamp = Field(alias="updatedAt")
+    user: DatabaseIdRef | None
+
+
+LookedUpNode = Annotated[
+    LookedUpUserNode
+    | LookedUpBotNode
+    | LookedUpOrganizationNode
+    | LookedUpMannequinNode
+    | LookedUpEnterpriseUserNode,
+    Field(discriminator="typename"),
+]
 
 
 # --------------------------------------------------------------------------------------------

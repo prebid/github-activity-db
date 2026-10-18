@@ -1,25 +1,31 @@
 {
   "data": {
     "__typename": "User",
+    "company": null,
+    "createdAt": "2012-04-26T20:36:13Z",
     "databaseId": 1683175,
     "id": "MDQ6VXNlcjE2ODMxNzU=",
-    "login": "patmmccann"
+    "location": "New York",
+    "login": "patmmccann",
+    "name": "Patrick McCann",
+    "updatedAt": "2026-09-28T11:29:39Z",
+    "websiteUrl": null
   },
-  "document_sha256": "44f7dff7d0dcb9a44d57565e162dfc14ef737ca75b49807d61ae52e19771e4c0",
+  "document_sha256": "8ff584c890202fea5cbc1f0e26a1466c737702d2f6b5be23eeb23343264bce9b",
   "errors": [],
   "extra": {},
   "headers": {
-    "date": "Sat, 17 Oct 2026 12:09:32 GMT",
+    "date": "Sun, 18 Oct 2026 20:09:52 GMT",
     "x-ratelimit-limit": "5000",
-    "x-ratelimit-remaining": "4979",
-    "x-ratelimit-reset": "1792242556",
+    "x-ratelimit-remaining": "4739",
+    "x-ratelimit-reset": "1792356065",
     "x-ratelimit-resource": "graphql",
-    "x-ratelimit-used": "21"
+    "x-ratelimit-used": "261"
   },
   "key": {
     "id": "MDQ6VXNlcjE2ODMxNzU="
   },
   "kind": "user",
-  "recorded_at": "2026-10-17T12:09:19Z",
+  "recorded_at": "2026-10-18T20:09:16Z",
   "source": "live"
 }

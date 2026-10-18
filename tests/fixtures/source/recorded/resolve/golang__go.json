@@ -1,313 +1,927 @@
 {
   "data": {
+    "allowUpdateBranch": false,
+    "archivedAt": null,
+    "createdAt": "2014-08-19T04:33:40Z",
     "databaseId": 23096959,
     "defaultBranchRef": {
       "name": "master"
     },
+    "deleteBranchOnMerge": false,
+    "description": "The Go programming language",
+    "diskUsage": 462902,
+    "forkCount": 22646,
+    "forkingAllowed": true,
+    "hasDiscussionsEnabled": true,
+    "hasProjectsEnabled": true,
+    "hasVulnerabilityAlertsEnabled": true,
+    "hasWikiEnabled": true,
+    "homepageUrl": "https://go.dev",
     "id": "MDEwOlJlcG9zaXRvcnkyMzA5Njk1OQ==",
     "isArchived": false,
     "isPrivate": false,
+    "isSecurityPolicyEnabled": true,
     "labels": {
       "nodes": [
         {
-          "name": "Documentation"
-        },
-        {
-          "name": "ExpertNeeded"
-        },
-        {
-          "name": "GarbageCollector"
-        },
-        {
-          "name": "LanguageChange"
-        },
-        {
-          "name": "Performance"
-        },
-        {
-          "name": "RaceDetector"
-        },
-        {
-          "name": "Security"
-        },
-        {
-          "name": "Suggested"
-        },
-        {
-          "name": "Testing"
-        },
-        {
-          "name": "Thinking"
-        },
-        {
-          "name": "Unfortunate"
-        },
-        {
-          "name": "help wanted"
-        },
-        {
-          "name": "v2"
-        },
-        {
-          "name": "OS-Dragonfly"
-        },
-        {
-          "name": "OS-FreeBSD"
-        },
-        {
-          "name": "OS-Linux"
-        },
-        {
-          "name": "OS-Darwin"
-        },
-        {
-          "name": "OS-NaCl"
-        },
-        {
-          "name": "OS-NetBSD"
-        },
-        {
-          "name": "OS-OpenBSD"
-        },
-        {
-          "name": "OS-Plan9"
-        },
-        {
-          "name": "OS-Solaris"
-        },
-        {
-          "name": "OS-Windows"
-        },
-        {
-          "name": "Builders"
-        },
-        {
-          "name": "OS-Android"
-        },
-        {
-          "name": "Proposal"
-        },
-        {
-          "name": "Proposal-Accepted"
-        },
-        {
-          "name": "Vendoring"
-        },
-        {
-          "name": "WaitingForInfo"
-        },
-        {
-          "name": "ToolSpeed"
-        },
-        {
-          "name": "NeedsFix"
-        },
-        {
-          "name": "NeedsDecision"
-        },
-        {
-          "name": "NeedsInvestigation"
-        },
-        {
-          "name": "FeatureRequest"
-        },
-        {
-          "name": "FrozenDueToAge"
-        },
-        {
-          "name": "Proposal-Hold"
-        },
-        {
-          "name": "GoCommand"
-        },
-        {
-          "name": "Debugging"
-        },
-        {
-          "name": "DevExp"
-        },
-        {
-          "name": "early-in-cycle"
-        },
-        {
-          "name": "release-blocker"
-        },
-        {
-          "name": "mobile"
-        },
-        {
-          "name": "CherryPickApproved"
-        },
-        {
-          "name": "Community"
-        },
-        {
-          "name": "package-management"
-        },
-        {
-          "name": "cla: no"
-        },
-        {
-          "name": "cla: yes"
-        },
-        {
-          "name": "Proposal-Crypto"
-        },
-        {
-          "name": "CherryPickCandidate"
-        },
-        {
-          "name": "Soon"
-        },
-        {
-          "name": "arch-wasm"
-        },
-        {
-          "name": "modules"
-        },
-        {
-          "name": "OS-AIX"
-        },
-        {
-          "name": "new-builder"
-        },
-        {
-          "name": "OS-JS"
-        },
-        {
-          "name": "arch-riscv"
-        },
-        {
-          "name": "OS-Fuchsia"
-        },
-        {
-          "name": "arch-ppc64x"
-        },
-        {
-          "name": "gopls"
-        },
-        {
-          "name": "OS-illumos"
-        },
-        {
-          "name": "Proposal-FinalCommentPeriod"
-        },
-        {
-          "name": "Tools"
-        },
-        {
-          "name": "error-handling"
-        },
-        {
-          "name": "generics"
-        },
-        {
-          "name": "dotdotdot"
-        },
-        {
-          "name": "pkgsite"
-        },
-        {
-          "name": "arch-arm64"
-        },
-        {
-          "name": "UX"
-        },
-        {
-          "name": "arch-s390x"
-        },
-        {
-          "name": "binary-size"
-        },
-        {
-          "name": "upstream-tools"
-        },
-        {
-          "name": "okay-after-beta1"
-        },
-        {
-          "name": "website"
-        },
-        {
-          "name": "recurring"
-        },
-        {
-          "name": "umbrella"
-        },
-        {
-          "name": "arch-arm"
-        },
-        {
-          "name": "Analysis"
-        },
-        {
-          "name": "fuzz"
-        },
-        {
-          "name": "gopls/performance"
-        },
-        {
-          "name": "arch-386"
-        },
-        {
-          "name": "vulncheck or vulndb"
-        },
-        {
-          "name": "arch-mips"
-        },
-        {
-          "name": "gopls/parsing"
-        },
-        {
-          "name": "gopls/analysis"
-        },
-        {
-          "name": "gopls/metadata"
-        },
-        {
-          "name": "gopls/file-corruption"
-        },
-        {
-          "name": "Refactoring"
-        },
-        {
-          "name": "TypeInference"
-        },
-        {
-          "name": "gopls/workspace"
-        },
-        {
-          "name": "gopls/completion"
-        },
-        {
-          "name": "gopls/generics"
-        },
-        {
-          "name": "pkgsite/license"
-        },
-        {
-          "name": "pkgsite/frontend"
-        },
-        {
-          "name": "pkgsite/package-removal"
-        },
-        {
-          "name": "pkgsite/search"
-        },
-        {
-          "name": "pkgsite/cmd"
-        },
-        {
-          "name": "pkgsite/dochtml"
-        },
-        {
-          "name": "arch-loong64"
-        },
-        {
-          "name": "proxy.golang.org"
-        },
-        {
-          "name": "compiler/runtime"
+          "color": "aaffaa",
+          "createdAt": "2014-11-24T11:45:12Z",
+          "description": "Issues describing a change to documentation.",
+          "id": "MDU6TGFiZWwxNTA4ODAyMDk=",
+          "isDefault": false,
+          "name": "Documentation",
+          "updatedAt": "2025-01-02T18:39:44Z"
+        },
+        {
+          "color": "ffaaaa",
+          "createdAt": "2014-11-24T11:45:12Z",
+          "description": null,
+          "id": "MDU6TGFiZWwxNTA4ODAxNjA=",
+          "isDefault": false,
+          "name": "ExpertNeeded",
+          "updatedAt": "2015-04-14T19:52:02Z"
+        },
+        {
+          "color": "ffaaaa",
+          "createdAt": "2014-11-24T11:45:12Z",
+          "description": null,
+          "id": "MDU6TGFiZWwxNTA4ODAyMjc=",
+          "isDefault": false,
+          "name": "GarbageCollector",
+          "updatedAt": "2015-04-14T19:52:45Z"
+        },
+        {
+          "color": "ffaaaa",
+          "createdAt": "2014-11-24T11:45:12Z",
+          "description": "Suggested changes to the Go language",
+          "id": "MDU6TGFiZWwxNTA4ODAyMDA=",
+          "isDefault": false,
+          "name": "LanguageChange",
+          "updatedAt": "2024-08-06T16:52:08Z"
+        },
+        {
+          "color": "ededed",
+          "createdAt": "2014-11-24T11:45:12Z",
+          "description": null,
+          "id": "MDU6TGFiZWwxNTA4ODAxOTE=",
+          "isDefault": false,
+          "name": "Performance",
+          "updatedAt": "2015-04-14T16:51:44Z"
+        },
+        {
+          "color": "ededed",
+          "createdAt": "2014-11-24T11:45:12Z",
+          "description": null,
+          "id": "MDU6TGFiZWwxNTA4ODAyMTY=",
+          "isDefault": false,
+          "name": "RaceDetector",
+          "updatedAt": "2015-04-14T16:51:08Z"
+        },
+        {
+          "color": "D93F0B",
+          "createdAt": "2014-11-24T11:45:12Z",
+          "description": "",
+          "id": "MDU6TGFiZWwxNTA4ODAyMTk=",
+          "isDefault": false,
+          "name": "Security",
+          "updatedAt": "2021-03-29T19:06:44Z"
+        },
+        {
+          "color": "ddffdd",
+          "createdAt": "2014-11-24T11:45:12Z",
+          "description": "Issues that may be good for new contributors looking for work to do.",
+          "id": "MDU6TGFiZWwxNTA4ODAxNjE=",
+          "isDefault": false,
+          "name": "Suggested",
+          "updatedAt": "2018-12-09T15:42:12Z"
+        },
+        {
+          "color": "aaffaa",
+          "createdAt": "2014-11-24T11:45:12Z",
+          "description": "An issue that has been verified to require only test changes, not just a test failure.",
+          "id": "MDU6TGFiZWwxNTA4ODAyMDU=",
+          "isDefault": false,
+          "name": "Testing",
+          "updatedAt": "2019-11-04T19:52:51Z"
+        },
+        {
+          "color": "ffaaaa",
+          "createdAt": "2014-11-24T11:45:12Z",
+          "description": null,
+          "id": "MDU6TGFiZWwxNTA4ODAyMjU=",
+          "isDefault": false,
+          "name": "Thinking",
+          "updatedAt": "2015-04-14T19:52:31Z"
+        },
+        {
+          "color": "C5DEF5",
+          "createdAt": "2014-11-24T11:45:12Z",
+          "description": "",
+          "id": "MDU6TGFiZWwxNTA4ODAxNzg=",
+          "isDefault": false,
+          "name": "Unfortunate",
+          "updatedAt": "2021-05-26T21:50:27Z"
+        },
+        {
+          "color": "fbca04",
+          "createdAt": "2014-11-24T11:45:13Z",
+          "description": null,
+          "id": "MDU6TGFiZWwxNTA4ODAyNDM=",
+          "isDefault": true,
+          "name": "help wanted",
+          "updatedAt": "2017-12-11T20:11:04Z"
+        },
+        {
+          "color": "ffaaaa",
+          "createdAt": "2014-11-24T11:45:13Z",
+          "description": "An incompatible library change",
+          "id": "MDU6TGFiZWwxNTA4ODAyNDk=",
+          "isDefault": false,
+          "name": "v2",
+          "updatedAt": "2024-08-28T16:24:54Z"
+        },
+        {
+          "color": "ededed",
+          "createdAt": "2015-04-15T01:36:42Z",
+          "description": null,
+          "id": "MDU6TGFiZWwxOTk3NTI3ODk=",
+          "isDefault": false,
+          "name": "OS-Dragonfly",
+          "updatedAt": "2015-04-15T01:45:31Z"
+        },
+        {
+          "color": "990000",
+          "createdAt": "2015-04-15T01:37:17Z",
+          "description": "",
+          "id": "MDU6TGFiZWwxOTk3NTI5MjQ=",
+          "isDefault": false,
+          "name": "OS-FreeBSD",
+          "updatedAt": "2022-06-21T09:41:43Z"
+        },
+        {
+          "color": "ededed",
+          "createdAt": "2015-04-15T01:38:38Z",
+          "description": null,
+          "id": "MDU6TGFiZWwxOTk3NTMyMTU=",
+          "isDefault": false,
+          "name": "OS-Linux",
+          "updatedAt": "2021-05-20T02:44:32Z"
+        },
+        {
+          "color": "ededed",
+          "createdAt": "2015-04-15T01:39:13Z",
+          "description": null,
+          "id": "MDU6TGFiZWwxOTk3NTMzODQ=",
+          "isDefault": false,
+          "name": "OS-Darwin",
+          "updatedAt": "2021-02-12T20:03:23Z"
+        },
+        {
+          "color": "ededed",
+          "createdAt": "2015-04-15T01:39:25Z",
+          "description": "GOOS=nacl, Native Client, removed in Go 1.14",
+          "id": "MDU6TGFiZWwxOTk3NTM0NzY=",
+          "isDefault": false,
+          "name": "OS-NaCl",
+          "updatedAt": "2023-04-28T17:36:59Z"
+        },
+        {
+          "color": "ededed",
+          "createdAt": "2015-04-15T01:39:44Z",
+          "description": null,
+          "id": "MDU6TGFiZWwxOTk3NTM1ODk=",
+          "isDefault": false,
+          "name": "OS-NetBSD",
+          "updatedAt": "2021-03-05T02:58:54Z"
+        },
+        {
+          "color": "ededed",
+          "createdAt": "2015-04-15T01:40:01Z",
+          "description": null,
+          "id": "MDU6TGFiZWwxOTk3NTM3MDI=",
+          "isDefault": false,
+          "name": "OS-OpenBSD",
+          "updatedAt": "2021-05-10T14:48:06Z"
+        },
+        {
+          "color": "ededed",
+          "createdAt": "2015-04-15T01:40:26Z",
+          "description": null,
+          "id": "MDU6TGFiZWwxOTk3NTM4MDg=",
+          "isDefault": false,
+          "name": "OS-Plan9",
+          "updatedAt": "2021-02-23T15:04:13Z"
+        },
+        {
+          "color": "ededed",
+          "createdAt": "2015-04-15T01:40:47Z",
+          "description": null,
+          "id": "MDU6TGFiZWwxOTk3NTM5MDA=",
+          "isDefault": false,
+          "name": "OS-Solaris",
+          "updatedAt": "2021-05-25T13:24:37Z"
+        },
+        {
+          "color": "ededed",
+          "createdAt": "2015-04-15T01:41:03Z",
+          "description": null,
+          "id": "MDU6TGFiZWwxOTk3NTM5OTI=",
+          "isDefault": false,
+          "name": "OS-Windows",
+          "updatedAt": "2021-02-04T06:26:06Z"
+        },
+        {
+          "color": "ededed",
+          "createdAt": "2015-06-11T20:59:24Z",
+          "description": "x/build issues (builders, bots, dashboards)",
+          "id": "MDU6TGFiZWwyMjM0MDE0NjE=",
+          "isDefault": false,
+          "name": "Builders",
+          "updatedAt": "2018-05-17T14:03:27Z"
+        },
+        {
+          "color": "ededed",
+          "createdAt": "2015-06-19T02:27:56Z",
+          "description": null,
+          "id": "MDU6TGFiZWwyMjYzMjc2NTE=",
+          "isDefault": false,
+          "name": "OS-Android",
+          "updatedAt": "2015-06-19T02:27:56Z"
+        },
+        {
+          "color": "ededed",
+          "createdAt": "2015-07-15T03:53:41Z",
+          "description": null,
+          "id": "MDU6TGFiZWwyMzY0MTk1MTI=",
+          "isDefault": false,
+          "name": "Proposal",
+          "updatedAt": "2021-01-29T16:17:36Z"
+        },
+        {
+          "color": "009800",
+          "createdAt": "2015-08-10T22:50:09Z",
+          "description": null,
+          "id": "MDU6TGFiZWwyNDYzNTAyMzM=",
+          "isDefault": false,
+          "name": "Proposal-Accepted",
+          "updatedAt": "2015-08-10T22:50:09Z"
+        },
+        {
+          "color": "ededed",
+          "createdAt": "2016-04-10T02:30:46Z",
+          "description": null,
+          "id": "MDU6TGFiZWwzNTU1MjcwMjE=",
+          "isDefault": false,
+          "name": "Vendoring",
+          "updatedAt": "2016-04-10T02:30:59Z"
+        },
+        {
+          "color": "D93F0B",
+          "createdAt": "2016-04-12T18:42:27Z",
+          "description": "Issue is not actionable because of missing required information, which needs to be provided.",
+          "id": "MDU6TGFiZWwzNTcwMzM4NTM=",
+          "isDefault": false,
+          "name": "WaitingForInfo",
+          "updatedAt": "2021-05-26T21:50:39Z"
+        },
+        {
+          "color": "ededed",
+          "createdAt": "2016-04-15T14:44:11Z",
+          "description": null,
+          "id": "MDU6TGFiZWwzNTg3MzIyMjU=",
+          "isDefault": false,
+          "name": "ToolSpeed",
+          "updatedAt": "2016-04-15T14:44:11Z"
+        },
+        {
+          "color": "ededed",
+          "createdAt": "2016-05-09T19:14:46Z",
+          "description": "The path to resolution is known, but the work has not been done.",
+          "id": "MDU6TGFiZWwzNzMzOTk5OTg=",
+          "isDefault": false,
+          "name": "NeedsFix",
+          "updatedAt": "2018-03-13T17:14:43Z"
+        },
+        {
+          "color": "ededed",
+          "createdAt": "2016-05-09T19:19:53Z",
+          "description": "Feedback is required from experts, contributors, and/or the community before a change can be made.",
+          "id": "MDU6TGFiZWwzNzM0MDE5NTY=",
+          "isDefault": false,
+          "name": "NeedsDecision",
+          "updatedAt": "2018-04-06T01:52:07Z"
+        },
+        {
+          "color": "ededed",
+          "createdAt": "2016-05-09T19:20:51Z",
+          "description": "Someone must examine and confirm this is a valid issue and not a duplicate of an existing one.",
+          "id": "MDU6TGFiZWwzNzM0MDIyODk=",
+          "isDefault": false,
+          "name": "NeedsInvestigation",
+          "updatedAt": "2018-03-13T17:14:22Z"
+        },
+        {
+          "color": "bfd4f2",
+          "createdAt": "2016-05-10T01:56:06Z",
+          "description": "Issues asking for a new feature that does not need a proposal.",
+          "id": "MDU6TGFiZWwzNzM1NDAxMDU=",
+          "isDefault": false,
+          "name": "FeatureRequest",
+          "updatedAt": "2025-01-02T18:39:44Z"
+        },
+        {
+          "color": "1d76db",
+          "createdAt": "2016-06-24T18:31:15Z",
+          "description": null,
+          "id": "MDU6TGFiZWwzOTgwNjkzMDE=",
+          "isDefault": false,
+          "name": "FrozenDueToAge",
+          "updatedAt": "2016-06-24T18:32:16Z"
+        },
+        {
+          "color": "fbca04",
+          "createdAt": "2016-11-07T21:13:30Z",
+          "description": null,
+          "id": "MDU6TGFiZWw0NzcxNTYyMjI=",
+          "isDefault": false,
+          "name": "Proposal-Hold",
+          "updatedAt": "2016-11-07T21:13:30Z"
+        },
+        {
+          "color": "006b75",
+          "createdAt": "2016-12-19T21:35:17Z",
+          "description": "cmd/go",
+          "id": "MDU6TGFiZWw1MDM3NjMwNDY=",
+          "isDefault": false,
+          "name": "GoCommand",
+          "updatedAt": "2018-05-17T14:04:42Z"
+        },
+        {
+          "color": "bfd4f2",
+          "createdAt": "2017-04-06T20:05:01Z",
+          "description": null,
+          "id": "MDU6TGFiZWw1NzgyMzc5NjY=",
+          "isDefault": false,
+          "name": "Debugging",
+          "updatedAt": "2017-04-06T20:05:01Z"
+        },
+        {
+          "color": "5319e7",
+          "createdAt": "2017-05-17T22:02:34Z",
+          "description": "anything around developer experience",
+          "id": "MDU6TGFiZWw2MDc0OTM4NjA=",
+          "isDefault": false,
+          "name": "DevExp",
+          "updatedAt": "2018-05-17T14:03:46Z"
+        },
+        {
+          "color": "505050",
+          "createdAt": "2017-06-13T23:30:33Z",
+          "description": "A change that should be done early in the 3 month dev cycle.",
+          "id": "MDU6TGFiZWw2MjYxMTQxNDM=",
+          "isDefault": false,
+          "name": "early-in-cycle",
+          "updatedAt": "2020-08-12T18:04:03Z"
+        },
+        {
+          "color": "b60205",
+          "createdAt": "2017-06-13T23:32:11Z",
+          "description": null,
+          "id": "MDU6TGFiZWw2MjYxMTQ4MjA=",
+          "isDefault": false,
+          "name": "release-blocker",
+          "updatedAt": "2017-06-13T23:32:11Z"
+        },
+        {
+          "color": "A4C639",
+          "createdAt": "2017-07-20T19:58:10Z",
+          "description": "Android, iOS, and x/mobile",
+          "id": "MDU6TGFiZWw2NTE1NTE4NzQ=",
+          "isDefault": false,
+          "name": "mobile",
+          "updatedAt": "2018-05-17T14:04:55Z"
+        },
+        {
+          "color": "0e8a16",
+          "createdAt": "2017-10-14T00:17:04Z",
+          "description": "Used during the release process for point releases",
+          "id": "MDU6TGFiZWw3MTk0MTkwOTU=",
+          "isDefault": false,
+          "name": "CherryPickApproved",
+          "updatedAt": "2018-04-18T17:45:51Z"
+        },
+        {
+          "color": "c2f9a7",
+          "createdAt": "2017-11-06T21:40:18Z",
+          "description": null,
+          "id": "MDU6TGFiZWw3NDI1MTQyMzg=",
+          "isDefault": false,
+          "name": "Community",
+          "updatedAt": "2017-11-06T21:40:18Z"
+        },
+        {
+          "color": "e2b263",
+          "createdAt": "2017-12-26T13:57:30Z",
+          "description": null,
+          "id": "MDU6TGFiZWw3ODgyMTIwODM=",
+          "isDefault": false,
+          "name": "package-management",
+          "updatedAt": "2017-12-26T13:57:30Z"
+        },
+        {
+          "color": "ce2208",
+          "createdAt": "2018-02-08T23:07:04Z",
+          "description": "Used by googlebot to label PRs as having an invalid CLA. The text of this label should not change.",
+          "id": "MDU6TGFiZWw4MzE3MDcwMDE=",
+          "isDefault": false,
+          "name": "cla: no",
+          "updatedAt": "2018-03-06T21:57:08Z"
+        },
+        {
+          "color": "0e8a16",
+          "createdAt": "2018-02-08T23:07:04Z",
+          "description": "Used by googlebot to label PRs as having a valid CLA. The text of this label should not change.",
+          "id": "MDU6TGFiZWw4MzE3MDcwMDA=",
+          "isDefault": false,
+          "name": "cla: yes",
+          "updatedAt": "2018-03-06T21:56:56Z"
+        },
+        {
+          "color": "890b3b",
+          "createdAt": "2018-03-20T21:53:37Z",
+          "description": "Proposal related to crypto packages or other security issues",
+          "id": "MDU6TGFiZWw4NzQwMzU5MjI=",
+          "isDefault": false,
+          "name": "Proposal-Crypto",
+          "updatedAt": "2018-03-20T21:53:37Z"
+        },
+        {
+          "color": "fbca04",
+          "createdAt": "2018-04-18T17:44:54Z",
+          "description": "Used during the release process for point releases",
+          "id": "MDU6TGFiZWw5MDYzMjAyNTg=",
+          "isDefault": false,
+          "name": "CherryPickCandidate",
+          "updatedAt": "2018-04-18T17:45:39Z"
+        },
+        {
+          "color": "b60205",
+          "createdAt": "2018-05-17T17:07:40Z",
+          "description": "This needs action soon. (recent regressions, service outages, unusual time-sensitive situations)",
+          "id": "MDU6TGFiZWw5MzY0NjQ2OTk=",
+          "isDefault": false,
+          "name": "Soon",
+          "updatedAt": "2024-05-29T19:08:30Z"
+        },
+        {
+          "color": "5319e7",
+          "createdAt": "2018-05-24T04:43:14Z",
+          "description": "WebAssembly issues",
+          "id": "MDU6TGFiZWw5NDMwNDE5NjU=",
+          "isDefault": false,
+          "name": "arch-wasm",
+          "updatedAt": "2021-10-14T13:56:29Z"
+        },
+        {
+          "color": "bac2ff",
+          "createdAt": "2018-07-12T21:08:02Z",
+          "description": "",
+          "id": "MDU6TGFiZWw5OTIxODkzMjc=",
+          "isDefault": false,
+          "name": "modules",
+          "updatedAt": "2018-07-13T02:45:29Z"
+        },
+        {
+          "color": "ededed",
+          "createdAt": "2018-10-03T14:59:34Z",
+          "description": "",
+          "id": "MDU6TGFiZWwxMDc4MTQ3OTEz",
+          "isDefault": false,
+          "name": "OS-AIX",
+          "updatedAt": "2019-10-29T23:35:43Z"
+        },
+        {
+          "color": "a0e8ff",
+          "createdAt": "2018-10-24T21:36:04Z",
+          "description": "",
+          "id": "MDU6TGFiZWwxMTAzNDM2MDc0",
+          "isDefault": false,
+          "name": "new-builder",
+          "updatedAt": "2018-10-24T21:36:04Z"
+        },
+        {
+          "color": "ededed",
+          "createdAt": "2018-11-08T21:45:05Z",
+          "description": "",
+          "id": "MDU6TGFiZWwxMTIxMTUxOTI5",
+          "isDefault": false,
+          "name": "OS-JS",
+          "updatedAt": "2018-11-08T21:45:05Z"
+        },
+        {
+          "color": "283272",
+          "createdAt": "2019-02-15T19:04:34Z",
+          "description": "Issues solely affecting the riscv64 architecture.",
+          "id": "MDU6TGFiZWwxMjM1MDA0NTcx",
+          "isDefault": false,
+          "name": "arch-riscv",
+          "updatedAt": "2022-05-25T01:45:17Z"
+        },
+        {
+          "color": "FF00FF",
+          "createdAt": "2019-02-15T22:09:35Z",
+          "description": "",
+          "id": "MDU6TGFiZWwxMjM1MTY5MzM0",
+          "isDefault": false,
+          "name": "OS-Fuchsia",
+          "updatedAt": "2019-04-09T03:33:24Z"
+        },
+        {
+          "color": "466BB0",
+          "createdAt": "2019-02-21T04:05:54Z",
+          "description": "",
+          "id": "MDU6TGFiZWwxMjQyMTEyMTc5",
+          "isDefault": false,
+          "name": "arch-ppc64x",
+          "updatedAt": "2019-02-21T04:05:54Z"
+        },
+        {
+          "color": "f4c8a6",
+          "createdAt": "2019-03-12T19:52:39Z",
+          "description": "Issues related to the Go language server, gopls.",
+          "id": "MDU6TGFiZWwxMjcwMTkzMDAy",
+          "isDefault": false,
+          "name": "gopls",
+          "updatedAt": "2020-05-11T16:51:04Z"
+        },
+        {
+          "color": "ededed",
+          "createdAt": "2019-04-30T21:26:01Z",
+          "description": "",
+          "id": "MDU6TGFiZWwxMzQyNjY4MzM1",
+          "isDefault": false,
+          "name": "OS-illumos",
+          "updatedAt": "2019-10-29T23:35:29Z"
+        },
+        {
+          "color": "b60205",
+          "createdAt": "2019-08-20T20:28:01Z",
+          "description": "",
+          "id": "MDU6TGFiZWwxNTEwNTAyMTk5",
+          "isDefault": false,
+          "name": "Proposal-FinalCommentPeriod",
+          "updatedAt": "2019-08-20T20:28:01Z"
+        },
+        {
+          "color": "fbca04",
+          "createdAt": "2019-09-09T19:36:42Z",
+          "description": "This label describes issues relating to any tools in the x/tools repository.",
+          "id": "MDU6TGFiZWwxNTQ2MjAxODM2",
+          "isDefault": false,
+          "name": "Tools",
+          "updatedAt": "2019-09-09T19:36:42Z"
+        },
+        {
+          "color": "e5fc50",
+          "createdAt": "2019-10-29T21:38:51Z",
+          "description": "Language & library change proposals that are about error handling.",
+          "id": "MDU6TGFiZWwxNjQ1OTg1MjMx",
+          "isDefault": false,
+          "name": "error-handling",
+          "updatedAt": "2019-10-29T23:39:15Z"
+        },
+        {
+          "color": "bac2ff",
+          "createdAt": "2019-10-29T23:30:15Z",
+          "description": "Issue is related to generics",
+          "id": "MDU6TGFiZWwxNjQ2MTI4NDc2",
+          "isDefault": false,
+          "name": "generics",
+          "updatedAt": "2022-04-18T23:02:54Z"
+        },
+        {
+          "color": "eeeeee",
+          "createdAt": "2019-11-26T22:20:01Z",
+          "description": "...",
+          "id": "MDU6TGFiZWwxNzAwMTQxODM0",
+          "isDefault": false,
+          "name": "dotdotdot",
+          "updatedAt": "2019-12-11T23:35:23Z"
+        },
+        {
+          "color": "efacc1",
+          "createdAt": "2020-01-09T21:23:43Z",
+          "description": "",
+          "id": "MDU6TGFiZWwxNzc4NDgzNTc0",
+          "isDefault": false,
+          "name": "pkgsite",
+          "updatedAt": "2020-07-14T14:06:06Z"
+        },
+        {
+          "color": "7c45b7",
+          "createdAt": "2020-02-16T02:30:09Z",
+          "description": "",
+          "id": "MDU6TGFiZWwxODUwMjY1ODM5",
+          "isDefault": false,
+          "name": "arch-arm64",
+          "updatedAt": "2020-02-16T02:30:09Z"
+        },
+        {
+          "color": "5d53ed",
+          "createdAt": "2020-02-28T22:48:34Z",
+          "description": "Issues that involve UXD/UXR input",
+          "id": "MDU6TGFiZWwxODc3OTM2NzM2",
+          "isDefault": false,
+          "name": "UX",
+          "updatedAt": "2020-02-28T22:50:47Z"
+        },
+        {
+          "color": "5d2699",
+          "createdAt": "2020-04-01T10:17:03Z",
+          "description": "Issues solely affecting the s390x architecture.",
+          "id": "MDU6TGFiZWwxOTUzNDI0NjA5",
+          "isDefault": false,
+          "name": "arch-s390x",
+          "updatedAt": "2020-04-01T10:18:15Z"
+        },
+        {
+          "color": "86e8e3",
+          "createdAt": "2020-05-01T14:26:50Z",
+          "description": "",
+          "id": "MDU6TGFiZWwyMDI5Mzg4NTIw",
+          "isDefault": false,
+          "name": "binary-size",
+          "updatedAt": "2020-05-01T14:26:50Z"
+        },
+        {
+          "color": "f202e2",
+          "createdAt": "2020-05-11T12:02:58Z",
+          "description": null,
+          "id": "MDU6TGFiZWwzOTYyMTU5OTQ3",
+          "isDefault": false,
+          "name": "upstream-tools",
+          "updatedAt": "2022-03-24T13:23:00Z"
+        },
+        {
+          "color": "C2E0C6",
+          "createdAt": "2020-05-14T17:48:52Z",
+          "description": "Used by release team to mark a release-blocker issue as okay to resolve either before or after beta1",
+          "id": "MDU6TGFiZWwyMDYxMjExMDE0",
+          "isDefault": false,
+          "name": "okay-after-beta1",
+          "updatedAt": "2021-05-26T21:49:44Z"
+        },
+        {
+          "color": "5dc9e2",
+          "createdAt": "2020-07-14T20:36:43Z",
+          "description": "",
+          "id": "MDU6TGFiZWwyMjA0MTg1NTcx",
+          "isDefault": false,
+          "name": "website",
+          "updatedAt": "2022-05-20T14:58:19Z"
+        },
+        {
+          "color": "f1f2f3",
+          "createdAt": "2020-07-30T15:39:01Z",
+          "description": "Issues that should never be closed, but moved to the next milestone once fixed in the current one.",
+          "id": "MDU6TGFiZWwyMjQyMTY0MjE0",
+          "isDefault": false,
+          "name": "recurring",
+          "updatedAt": "2020-07-30T15:39:01Z"
+        },
+        {
+          "color": "f094fc",
+          "createdAt": "2020-08-12T17:16:58Z",
+          "description": "",
+          "id": "MDU6TGFiZWwyMjcxNzAyNDI0",
+          "isDefault": false,
+          "name": "umbrella",
+          "updatedAt": "2020-08-12T17:16:58Z"
+        },
+        {
+          "color": "4a79bf",
+          "createdAt": "2020-08-14T14:38:57Z",
+          "description": "Issues solely affecting the 32-bit arm architecture.",
+          "id": "MDU6TGFiZWwyMjc2MDY3OTEy",
+          "isDefault": false,
+          "name": "arch-arm",
+          "updatedAt": "2020-08-14T14:38:57Z"
+        },
+        {
+          "color": "53C09B",
+          "createdAt": "2021-01-13T22:00:49Z",
+          "description": "Issues related to static analysis (vet, x/tools/go/analysis)",
+          "id": "MDU6TGFiZWwyNjU1OTk0NzQ4",
+          "isDefault": false,
+          "name": "Analysis",
+          "updatedAt": "2021-01-13T22:00:49Z"
+        },
+        {
+          "color": "fbe2a6",
+          "createdAt": "2021-02-08T19:12:42Z",
+          "description": "Issues related to native fuzzing support",
+          "id": "MDU6TGFiZWwyNzI2MTY1NjU3",
+          "isDefault": false,
+          "name": "fuzz",
+          "updatedAt": "2021-02-08T23:20:55Z"
+        },
+        {
+          "color": "EEDAE4",
+          "createdAt": "2021-10-08T18:39:45Z",
+          "description": "Issues related to gopls performance (CPU, memory, etc).",
+          "id": "LA_kwDOAWBuf87MjrXc",
+          "isDefault": false,
+          "name": "gopls/performance",
+          "updatedAt": "2021-10-08T18:39:45Z"
+        },
+        {
+          "color": "773CBF",
+          "createdAt": "2021-10-14T13:55:50Z",
+          "description": "Issues solely affecting the 32-bit x86 architecture",
+          "id": "LA_kwDOAWBuf87NqxPc",
+          "isDefault": false,
+          "name": "arch-386",
+          "updatedAt": "2021-10-14T13:55:50Z"
+        },
+        {
+          "color": "68dd9f",
+          "createdAt": "2021-12-22T18:32:38Z",
+          "description": "Issues for the x/vuln or x/vulndb repo",
+          "id": "LA_kwDOAWBuf87agG85",
+          "isDefault": false,
+          "name": "vulncheck or vulndb",
+          "updatedAt": "2022-09-02T19:27:54Z"
+        },
+        {
+          "color": "A86E86",
+          "createdAt": "2022-01-07T21:39:15Z",
+          "description": "",
+          "id": "LA_kwDOAWBuf87dCkVB",
+          "isDefault": false,
+          "name": "arch-mips",
+          "updatedAt": "2022-01-07T21:39:15Z"
+        },
+        {
+          "color": "D4C5F9",
+          "createdAt": "2022-01-19T19:39:01Z",
+          "description": "Issues related to parsing / poor parser recovery.",
+          "id": "LA_kwDOAWBuf87fS5hF",
+          "isDefault": false,
+          "name": "gopls/parsing",
+          "updatedAt": "2022-01-19T19:39:01Z"
+        },
+        {
+          "color": "98E86E",
+          "createdAt": "2022-04-11T19:40:41Z",
+          "description": "Issues related to running analysis in gopls",
+          "id": "LA_kwDOAWBuf87v5qRi",
+          "isDefault": false,
+          "name": "gopls/analysis",
+          "updatedAt": "2022-04-11T19:40:41Z"
+        },
+        {
+          "color": "935824",
+          "createdAt": "2022-04-11T19:41:18Z",
+          "description": "Issues related to metadata loading in gopls",
+          "id": "LA_kwDOAWBuf87v5qq8",
+          "isDefault": false,
+          "name": "gopls/metadata",
+          "updatedAt": "2022-04-11T19:41:18Z"
+        },
+        {
+          "color": "176E89",
+          "createdAt": "2022-04-11T19:41:54Z",
+          "description": "Issues related to file corruption in gopls",
+          "id": "LA_kwDOAWBuf87v5rGk",
+          "isDefault": false,
+          "name": "gopls/file-corruption",
+          "updatedAt": "2025-04-08T17:27:04Z"
+        },
+        {
+          "color": "D66C57",
+          "createdAt": "2022-04-11T22:17:44Z",
+          "description": "Issues related to refactoring tools",
+          "id": "LA_kwDOAWBuf87v7JWa",
+          "isDefault": false,
+          "name": "Refactoring",
+          "updatedAt": "2023-04-24T19:56:06Z"
+        },
+        {
+          "color": "38EAD9",
+          "createdAt": "2022-04-18T23:03:52Z",
+          "description": "Issue is related to generic type inference",
+          "id": "LA_kwDOAWBuf87xQOBO",
+          "isDefault": false,
+          "name": "TypeInference",
+          "updatedAt": "2022-04-18T23:12:52Z"
+        },
+        {
+          "color": "11E18F",
+          "createdAt": "2022-05-10T16:08:34Z",
+          "description": "Issues related to support for modules or multi-module workspaces.",
+          "id": "LA_kwDOAWBuf871bq2a",
+          "isDefault": false,
+          "name": "gopls/workspace",
+          "updatedAt": "2022-05-10T16:08:34Z"
+        },
+        {
+          "color": "38F3F2",
+          "createdAt": "2022-05-10T17:49:47Z",
+          "description": "Issues related to auto-completion in gopls.",
+          "id": "LA_kwDOAWBuf871c0MQ",
+          "isDefault": false,
+          "name": "gopls/completion",
+          "updatedAt": "2022-05-10T17:49:47Z"
+        },
+        {
+          "color": "57978E",
+          "createdAt": "2022-05-17T21:33:01Z",
+          "description": "Issues related to gopls' support for generics",
+          "id": "LA_kwDOAWBuf8723Gmj",
+          "isDefault": false,
+          "name": "gopls/generics",
+          "updatedAt": "2022-05-17T21:33:01Z"
+        },
+        {
+          "color": "0052cc",
+          "createdAt": "2022-05-20T15:34:55Z",
+          "description": "Issues related to licenses on pkg.go.dev. See our license policy https://pkg.go.dev/license-policy",
+          "id": "LA_kwDOAWBuf873dAYZ",
+          "isDefault": false,
+          "name": "pkgsite/license",
+          "updatedAt": "2022-05-20T15:34:55Z"
+        },
+        {
+          "color": "b60205",
+          "createdAt": "2022-05-20T15:55:02Z",
+          "description": "Issues related to pkgsite HTML/CSS/JavaScript and frontend development",
+          "id": "LA_kwDOAWBuf873dOne",
+          "isDefault": false,
+          "name": "pkgsite/frontend",
+          "updatedAt": "2022-05-20T15:55:02Z"
+        },
+        {
+          "color": "C6D225",
+          "createdAt": "2022-05-20T15:59:29Z",
+          "description": "Issues for package removal. See https://pkg.go.dev/about#removing-a-package",
+          "id": "LA_kwDOAWBuf873dRkG",
+          "isDefault": false,
+          "name": "pkgsite/package-removal",
+          "updatedAt": "2022-05-20T15:59:29Z"
+        },
+        {
+          "color": "D303D3",
+          "createdAt": "2022-05-20T16:02:38Z",
+          "description": "Issues related to pkg.go.dev search functionality",
+          "id": "LA_kwDOAWBuf873dTzV",
+          "isDefault": false,
+          "name": "pkgsite/search",
+          "updatedAt": "2022-05-20T16:02:38Z"
+        },
+        {
+          "color": "4EDDE4",
+          "createdAt": "2022-05-20T16:07:22Z",
+          "description": "Issues related to x/pkgsite/cmd/pkgsite",
+          "id": "LA_kwDOAWBuf873dW5R",
+          "isDefault": false,
+          "name": "pkgsite/cmd",
+          "updatedAt": "2022-05-20T16:07:22Z"
+        },
+        {
+          "color": "1d76db",
+          "createdAt": "2022-05-20T16:25:22Z",
+          "description": "Issues related to package documentation in pkgsite",
+          "id": "LA_kwDOAWBuf873di4X",
+          "isDefault": false,
+          "name": "pkgsite/dochtml",
+          "updatedAt": "2022-05-20T16:25:22Z"
+        },
+        {
+          "color": "876C66",
+          "createdAt": "2022-05-21T08:29:32Z",
+          "description": "Issues solely affecting the loongson architecture.",
+          "id": "LA_kwDOAWBuf873kMgD",
+          "isDefault": false,
+          "name": "arch-loong64",
+          "updatedAt": "2022-05-25T01:43:30Z"
+        },
+        {
+          "color": "ededed",
+          "createdAt": "2022-05-31T13:29:45Z",
+          "description": null,
+          "id": "LA_kwDOAWBuf875hVMF",
+          "isDefault": false,
+          "name": "proxy.golang.org",
+          "updatedAt": "2022-05-31T13:29:45Z"
+        },
+        {
+          "color": "486AF7",
+          "createdAt": "2022-06-23T16:59:25Z",
+          "description": "Issues related to the Go compiler and/or runtime.",
+          "id": "LA_kwDOAWBuf87-DeOD",
+          "isDefault": false,
+          "name": "compiler/runtime",
+          "updatedAt": "2022-07-07T17:38:18Z"
         }
       ],
       "pageInfo": {
@@ -316,28 +930,52 @@
       },
       "totalCount": 144
     },
+    "licenseInfo": {
+      "spdxId": "BSD-3-Clause"
+    },
+    "mergeCommitAllowed": true,
+    "mergeCommitMessage": "PR_TITLE",
+    "mergeCommitTitle": "MERGE_MESSAGE",
     "name": "go",
     "nameWithOwner": "golang/go",
     "owner": {
       "login": "golang"
-    }
+    },
+    "planFeatures": {
+      "codeowners": true,
+      "maximumManualReviewRequests": 100,
+      "teamReviewRequests": true
+    },
+    "primaryLanguage": {
+      "name": "Go"
+    },
+    "pushedAt": "2026-10-17T01:15:20Z",
+    "rebaseMergeAllowed": true,
+    "squashMergeAllowed": true,
+    "squashMergeCommitMessage": "COMMIT_MESSAGES",
+    "squashMergeCommitTitle": "COMMIT_OR_PR_TITLE",
+    "stargazerCount": 139314,
+    "updatedAt": "2026-10-18T19:56:49Z",
+    "usesCustomOpenGraphImage": false,
+    "visibility": "PUBLIC",
+    "webCommitSignoffRequired": false
   },
-  "document_sha256": "035aef891393ccd81c36161af0b0d2e10034e582cac4bae68e62c9e5b035790e",
+  "document_sha256": "1911b98b9e2cc2b0446feebf94442c77d8c064810fa681773523ffe914c07a37",
   "errors": [],
   "extra": {},
   "headers": {
-    "date": "Sat, 17 Oct 2026 12:09:32 GMT",
+    "date": "Sun, 18 Oct 2026 20:09:50 GMT",
     "x-ratelimit-limit": "5000",
-    "x-ratelimit-remaining": "4981",
-    "x-ratelimit-reset": "1792242556",
+    "x-ratelimit-remaining": "4741",
+    "x-ratelimit-reset": "1792356065",
     "x-ratelimit-resource": "graphql",
-    "x-ratelimit-used": "19"
+    "x-ratelimit-used": "259"
   },
   "key": {
     "name": "go",
     "owner": "golang"
   },
   "kind": "resolve",
-  "recorded_at": "2026-10-17T12:09:19Z",
+  "recorded_at": "2026-10-18T20:09:16Z",
   "source": "live"
 }

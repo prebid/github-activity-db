@@ -1,6 +1,27 @@
 {
   "data": {
     "additions": 1981,
+    "assignedActors": {
+      "nodes": [
+        {
+          "__typename": "User",
+          "databaseId": 46747754,
+          "id": "MDQ6VXNlcjQ2NzQ3NzU0",
+          "login": "florianerl"
+        },
+        {
+          "__typename": "User",
+          "databaseId": 283858362,
+          "id": "U_kgDOEOtVug",
+          "login": "mkostromin-sigma"
+        }
+      ],
+      "pageInfo": {
+        "endCursor": "Mg",
+        "hasNextPage": false
+      },
+      "totalCount": 2
+    },
     "author": {
       "__typename": "User",
       "databaseId": 283858362,
@@ -11,10 +32,13 @@
     "baseRefName": "main",
     "baseRefOid": "6c378a6763d4fbf21451607ee7af0457cbf5fdbd",
     "body": "## Summary\n- Extract shared `tests.e2e.stack_readiness.wait_for_e2e_stack` with ordered hard gate **postgres → creative-agent → adcp `/health`** and a single structured compose log dump.\n- Wire both `docker_services_e2e` paths (verify-only when `ADCP_TESTING=true` / `--skip-docker`, and standalone after self-`up`) through that helper; dedupe `wait_for_server_readiness` as a thin delegate.\n- Add architecture guard `tests/unit/test_architecture_e2e_stack_readiness.py` plus behavioral coverage in `tests/unit/test_e2e_stack_readiness_behavior.py` (mutation self-tests, oracles, compose argv SSOT).\n\nCloses #1668\n\n## Scope\n**#1668 only** — rebased onto latest `main` (2026-09-02). IPR / CI pre-start / free-disk work stays on **#1669** and is **not** in this diff.\n\n## Spec-Grounding\nN/A — test infrastructure only (no AdCP protocol behavior change).\n\n## Test plan\n- [x] `uv run pytest tests/unit/test_architecture_e2e_stack_readiness.py tests/unit/test_e2e_stack_readiness_behavior.py`\n- [x] Mutation proofs via guard self-tests (probe registry, call sites, no divergent wait loops)\n- [ ] CI on this tip\n\n## Out of scope\n- #1669 IPR verify/sign, `.github/workflows` pre-start E2E, `_free-disk`, zizmor/actionlint\n- Parent epic #1666 closure",
+    "canBeRebased": false,
     "changedFiles": 12,
+    "closedAt": null,
     "closingIssuesReferences": {
       "nodes": [
         {
+          "fullDatabaseId": "4904771623",
           "number": 1668,
           "repository": {
             "databaseId": 1025117899,
@@ -37,7 +61,16 @@
             "id": "MDQ6VXNlcjM0NDQ3Mjc=",
             "login": "ChrisHuie"
           },
-          "fullDatabaseId": "5053187377"
+          "authorAssociation": "MEMBER",
+          "createdAt": "2026-07-23T01:01:07Z",
+          "createdViaEmail": false,
+          "editor": null,
+          "fullDatabaseId": "5053187377",
+          "id": "IC_kwDOPRoOy88AAAABLTGFMQ",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-07-23T01:01:07Z",
+          "updatedAt": "2026-07-23T01:01:07Z"
         },
         {
           "author": {
@@ -46,7 +79,16 @@
             "id": "U_kgDOEOtVug",
             "login": "mkostromin-sigma"
           },
-          "fullDatabaseId": "5062089980"
+          "authorAssociation": "COLLABORATOR",
+          "createdAt": "2026-07-23T18:43:08Z",
+          "createdViaEmail": false,
+          "editor": null,
+          "fullDatabaseId": "5062089980",
+          "id": "IC_kwDOPRoOy88AAAABLblc_A",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-07-23T18:43:08Z",
+          "updatedAt": "2026-07-23T18:43:08Z"
         },
         {
           "author": {
@@ -55,7 +97,16 @@
             "id": "U_kgDOEOtVug",
             "login": "mkostromin-sigma"
           },
-          "fullDatabaseId": "5097052062"
+          "authorAssociation": "COLLABORATOR",
+          "createdAt": "2026-07-27T21:32:36Z",
+          "createdViaEmail": false,
+          "editor": null,
+          "fullDatabaseId": "5097052062",
+          "id": "IC_kwDOPRoOy88AAAABL87Xng",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-07-27T21:32:36Z",
+          "updatedAt": "2026-07-27T21:32:36Z"
         },
         {
           "author": {
@@ -64,7 +115,16 @@
             "id": "U_kgDOEOtVug",
             "login": "mkostromin-sigma"
           },
-          "fullDatabaseId": "5108983898"
+          "authorAssociation": "COLLABORATOR",
+          "createdAt": "2026-07-28T19:53:37Z",
+          "createdViaEmail": false,
+          "editor": null,
+          "fullDatabaseId": "5108983898",
+          "id": "IC_kwDOPRoOy88AAAABMIToWg",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-07-28T19:53:37Z",
+          "updatedAt": "2026-07-28T19:53:37Z"
         },
         {
           "author": {
@@ -73,7 +133,16 @@
             "id": "U_kgDOEOtVug",
             "login": "mkostromin-sigma"
           },
-          "fullDatabaseId": "5123495359"
+          "authorAssociation": "COLLABORATOR",
+          "createdAt": "2026-07-29T21:21:43Z",
+          "createdViaEmail": false,
+          "editor": null,
+          "fullDatabaseId": "5123495359",
+          "id": "IC_kwDOPRoOy88AAAABMWJVvw",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-07-29T21:21:43Z",
+          "updatedAt": "2026-07-29T21:21:43Z"
         },
         {
           "author": {
@@ -82,7 +151,16 @@
             "id": "U_kgDOEOtVug",
             "login": "mkostromin-sigma"
           },
-          "fullDatabaseId": "5148124284"
+          "authorAssociation": "COLLABORATOR",
+          "createdAt": "2026-07-31T22:51:32Z",
+          "createdViaEmail": false,
+          "editor": null,
+          "fullDatabaseId": "5148124284",
+          "id": "IC_kwDOPRoOy88AAAABMtokfA",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-07-31T22:51:32Z",
+          "updatedAt": "2026-07-31T22:51:32Z"
         },
         {
           "author": {
@@ -91,7 +169,16 @@
             "id": "U_kgDOEOtVug",
             "login": "mkostromin-sigma"
           },
-          "fullDatabaseId": "5172635758"
+          "authorAssociation": "COLLABORATOR",
+          "createdAt": "2026-08-03T22:59:57Z",
+          "createdViaEmail": false,
+          "editor": null,
+          "fullDatabaseId": "5172635758",
+          "id": "IC_kwDOPRoOy88AAAABNFAobg",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-08-03T22:59:57Z",
+          "updatedAt": "2026-08-03T22:59:57Z"
         },
         {
           "author": {
@@ -100,7 +187,16 @@
             "id": "U_kgDOEOtVug",
             "login": "mkostromin-sigma"
           },
-          "fullDatabaseId": "5258159036"
+          "authorAssociation": "COLLABORATOR",
+          "createdAt": "2026-08-11T19:57:55Z",
+          "createdViaEmail": false,
+          "editor": null,
+          "fullDatabaseId": "5258159036",
+          "id": "IC_kwDOPRoOy88AAAABOWkjvA",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-08-11T19:57:55Z",
+          "updatedAt": "2026-08-11T19:57:55Z"
         },
         {
           "author": {
@@ -109,7 +205,16 @@
             "id": "U_kgDOEOtVug",
             "login": "mkostromin-sigma"
           },
-          "fullDatabaseId": "5273960918"
+          "authorAssociation": "COLLABORATOR",
+          "createdAt": "2026-08-12T23:23:37Z",
+          "createdViaEmail": false,
+          "editor": null,
+          "fullDatabaseId": "5273960918",
+          "id": "IC_kwDOPRoOy88AAAABOlpB1g",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-08-12T23:23:37Z",
+          "updatedAt": "2026-08-12T23:23:37Z"
         },
         {
           "author": {
@@ -118,7 +223,21 @@
             "id": "U_kgDOEOtVug",
             "login": "mkostromin-sigma"
           },
-          "fullDatabaseId": "5413691930"
+          "authorAssociation": "COLLABORATOR",
+          "createdAt": "2026-08-25T16:46:27Z",
+          "createdViaEmail": false,
+          "editor": {
+            "__typename": "User",
+            "databaseId": 283858362,
+            "id": "U_kgDOEOtVug",
+            "login": "mkostromin-sigma"
+          },
+          "fullDatabaseId": "5413691930",
+          "id": "IC_kwDOPRoOy88AAAABQq5iGg",
+          "includesCreatedEdit": true,
+          "lastEditedAt": "2026-08-25T17:41:19Z",
+          "publishedAt": "2026-08-25T16:46:27Z",
+          "updatedAt": "2026-08-25T17:41:19Z"
         },
         {
           "author": {
@@ -127,7 +246,16 @@
             "id": "U_kgDOEOtVug",
             "login": "mkostromin-sigma"
           },
-          "fullDatabaseId": "5414155726"
+          "authorAssociation": "COLLABORATOR",
+          "createdAt": "2026-08-25T17:25:23Z",
+          "createdViaEmail": false,
+          "editor": null,
+          "fullDatabaseId": "5414155726",
+          "id": "IC_kwDOPRoOy88AAAABQrV1zg",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-08-25T17:25:23Z",
+          "updatedAt": "2026-08-25T17:25:23Z"
         },
         {
           "author": {
@@ -136,7 +264,21 @@
             "id": "U_kgDOEOtVug",
             "login": "mkostromin-sigma"
           },
-          "fullDatabaseId": "5415082594"
+          "authorAssociation": "COLLABORATOR",
+          "createdAt": "2026-08-25T18:44:20Z",
+          "createdViaEmail": false,
+          "editor": {
+            "__typename": "User",
+            "databaseId": 283858362,
+            "id": "U_kgDOEOtVug",
+            "login": "mkostromin-sigma"
+          },
+          "fullDatabaseId": "5415082594",
+          "id": "IC_kwDOPRoOy88AAAABQsOaYg",
+          "includesCreatedEdit": true,
+          "lastEditedAt": "2026-09-03T20:04:19Z",
+          "publishedAt": "2026-08-25T18:44:20Z",
+          "updatedAt": "2026-09-03T20:04:19Z"
         }
       ],
       "pageInfo": {
@@ -171,6 +313,12 @@
     },
     "createdAt": "2026-07-22T14:43:04Z",
     "deletions": 189,
+    "editor": {
+      "__typename": "User",
+      "databaseId": 283858362,
+      "id": "U_kgDOEOtVug",
+      "login": "mkostromin-sigma"
+    },
     "files": {
       "nodes": [
         {
@@ -253,13 +401,24 @@
       "totalCount": 12
     },
     "fullDatabaseId": "4109134584",
+    "headRefName": "fix/1668-e2e-shared-readiness",
     "headRefOid": "9c337ab1d7d3e63ca5b76ce5e5e4618ae3622380",
+    "headRepository": {
+      "databaseId": 1246090824,
+      "nameWithOwner": "mkostromin-sigma/salesagent"
+    },
+    "headRepositoryOwner": {
+      "id": "U_kgDOEOtVug",
+      "login": "mkostromin-sigma"
+    },
     "id": "PR_kwDOPRoOy8707Gr4",
+    "includesCreatedEdit": true,
     "isCrossRepository": true,
     "isDraft": false,
     "labels": {
       "nodes": [
         {
+          "id": "LA_kwDOPRoOy88AAAACei712A",
           "name": "2.0 Release"
         }
       ],
@@ -269,9 +428,29 @@
       },
       "totalCount": 1
     },
+    "lastEditedAt": "2026-09-02T01:06:42Z",
+    "maintainerCanModify": true,
+    "mergeCommit": null,
+    "mergeStateStatus": "UNKNOWN",
+    "mergeable": "UNKNOWN",
     "mergedAt": null,
     "mergedBy": null,
+    "milestone": {
+      "number": 3,
+      "title": "2.X (Non breaking)"
+    },
     "number": 1699,
+    "potentialMergeCommit": null,
+    "publishedAt": "2026-07-22T14:43:04Z",
+    "reviewDecision": "REVIEW_REQUIRED",
+    "reviewRequests": {
+      "nodes": [],
+      "pageInfo": {
+        "endCursor": null,
+        "hasNextPage": false
+      },
+      "totalCount": 0
+    },
     "reviews": {
       "nodes": [
         {
@@ -281,8 +460,24 @@
             "id": "MDQ6VXNlcjEzODQ2OA==",
             "login": "KonstantinMirin"
           },
+          "authorAssociation": "COLLABORATOR",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 9
+          },
+          "commit": {
+            "oid": "e362a4591a3656a1e81ffa11cdb14a0f3b6edbe9"
+          },
+          "createdAt": "2026-07-27T15:15:11Z",
+          "editor": null,
           "fullDatabaseId": "4788551832",
-          "state": "COMMENTED"
+          "id": "PRR_kwDOPRoOy88AAAABHWuAmA",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-07-27T15:15:11Z",
+          "state": "COMMENTED",
+          "submittedAt": "2026-07-27T15:15:11Z",
+          "updatedAt": "2026-07-27T15:15:12Z"
         },
         {
           "author": {
@@ -291,8 +486,24 @@
             "id": "U_kgDOEOtVug",
             "login": "mkostromin-sigma"
           },
+          "authorAssociation": "COLLABORATOR",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 1
+          },
+          "commit": {
+            "oid": "75d68b97f97b3c608056d7f954d717bd0408b133"
+          },
+          "createdAt": "2026-07-27T21:32:25Z",
+          "editor": null,
           "fullDatabaseId": "4791684064",
-          "state": "COMMENTED"
+          "id": "PRR_kwDOPRoOy88AAAABHZtL4A",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-07-27T21:32:25Z",
+          "state": "COMMENTED",
+          "submittedAt": "2026-07-27T21:32:25Z",
+          "updatedAt": "2026-07-27T21:32:25Z"
         },
         {
           "author": {
@@ -301,8 +512,24 @@
             "id": "U_kgDOEOtVug",
             "login": "mkostromin-sigma"
           },
+          "authorAssociation": "COLLABORATOR",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 1
+          },
+          "commit": {
+            "oid": "75d68b97f97b3c608056d7f954d717bd0408b133"
+          },
+          "createdAt": "2026-07-27T21:32:26Z",
+          "editor": null,
           "fullDatabaseId": "4791684214",
-          "state": "COMMENTED"
+          "id": "PRR_kwDOPRoOy88AAAABHZtMdg",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-07-27T21:32:26Z",
+          "state": "COMMENTED",
+          "submittedAt": "2026-07-27T21:32:26Z",
+          "updatedAt": "2026-07-27T21:32:26Z"
         },
         {
           "author": {
@@ -311,8 +538,24 @@
             "id": "U_kgDOEOtVug",
             "login": "mkostromin-sigma"
           },
+          "authorAssociation": "COLLABORATOR",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 1
+          },
+          "commit": {
+            "oid": "75d68b97f97b3c608056d7f954d717bd0408b133"
+          },
+          "createdAt": "2026-07-27T21:32:28Z",
+          "editor": null,
           "fullDatabaseId": "4791684417",
-          "state": "COMMENTED"
+          "id": "PRR_kwDOPRoOy88AAAABHZtNQQ",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-07-27T21:32:28Z",
+          "state": "COMMENTED",
+          "submittedAt": "2026-07-27T21:32:28Z",
+          "updatedAt": "2026-07-27T21:32:28Z"
         },
         {
           "author": {
@@ -321,8 +564,24 @@
             "id": "U_kgDOEOtVug",
             "login": "mkostromin-sigma"
           },
+          "authorAssociation": "COLLABORATOR",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 1
+          },
+          "commit": {
+            "oid": "75d68b97f97b3c608056d7f954d717bd0408b133"
+          },
+          "createdAt": "2026-07-27T21:32:29Z",
+          "editor": null,
           "fullDatabaseId": "4791684626",
-          "state": "COMMENTED"
+          "id": "PRR_kwDOPRoOy88AAAABHZtOEg",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-07-27T21:32:29Z",
+          "state": "COMMENTED",
+          "submittedAt": "2026-07-27T21:32:29Z",
+          "updatedAt": "2026-07-27T21:32:29Z"
         },
         {
           "author": {
@@ -331,8 +590,24 @@
             "id": "U_kgDOEOtVug",
             "login": "mkostromin-sigma"
           },
+          "authorAssociation": "COLLABORATOR",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 1
+          },
+          "commit": {
+            "oid": "75d68b97f97b3c608056d7f954d717bd0408b133"
+          },
+          "createdAt": "2026-07-27T21:32:30Z",
+          "editor": null,
           "fullDatabaseId": "4791684806",
-          "state": "COMMENTED"
+          "id": "PRR_kwDOPRoOy88AAAABHZtOxg",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-07-27T21:32:30Z",
+          "state": "COMMENTED",
+          "submittedAt": "2026-07-27T21:32:30Z",
+          "updatedAt": "2026-07-27T21:32:30Z"
         },
         {
           "author": {
@@ -341,8 +616,24 @@
             "id": "U_kgDOEOtVug",
             "login": "mkostromin-sigma"
           },
+          "authorAssociation": "COLLABORATOR",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 1
+          },
+          "commit": {
+            "oid": "75d68b97f97b3c608056d7f954d717bd0408b133"
+          },
+          "createdAt": "2026-07-27T21:32:31Z",
+          "editor": null,
           "fullDatabaseId": "4791684944",
-          "state": "COMMENTED"
+          "id": "PRR_kwDOPRoOy88AAAABHZtPUA",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-07-27T21:32:31Z",
+          "state": "COMMENTED",
+          "submittedAt": "2026-07-27T21:32:31Z",
+          "updatedAt": "2026-07-27T21:32:31Z"
         },
         {
           "author": {
@@ -351,8 +642,24 @@
             "id": "U_kgDOEOtVug",
             "login": "mkostromin-sigma"
           },
+          "authorAssociation": "COLLABORATOR",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 1
+          },
+          "commit": {
+            "oid": "75d68b97f97b3c608056d7f954d717bd0408b133"
+          },
+          "createdAt": "2026-07-27T21:32:33Z",
+          "editor": null,
           "fullDatabaseId": "4791685085",
-          "state": "COMMENTED"
+          "id": "PRR_kwDOPRoOy88AAAABHZtP3Q",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-07-27T21:32:33Z",
+          "state": "COMMENTED",
+          "submittedAt": "2026-07-27T21:32:33Z",
+          "updatedAt": "2026-07-27T21:32:33Z"
         },
         {
           "author": {
@@ -361,8 +668,24 @@
             "id": "U_kgDOEOtVug",
             "login": "mkostromin-sigma"
           },
+          "authorAssociation": "COLLABORATOR",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 1
+          },
+          "commit": {
+            "oid": "75d68b97f97b3c608056d7f954d717bd0408b133"
+          },
+          "createdAt": "2026-07-27T21:32:34Z",
+          "editor": null,
           "fullDatabaseId": "4791685206",
-          "state": "COMMENTED"
+          "id": "PRR_kwDOPRoOy88AAAABHZtQVg",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-07-27T21:32:34Z",
+          "state": "COMMENTED",
+          "submittedAt": "2026-07-27T21:32:34Z",
+          "updatedAt": "2026-07-27T21:32:34Z"
         },
         {
           "author": {
@@ -371,8 +694,24 @@
             "id": "U_kgDOEOtVug",
             "login": "mkostromin-sigma"
           },
+          "authorAssociation": "COLLABORATOR",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 1
+          },
+          "commit": {
+            "oid": "75d68b97f97b3c608056d7f954d717bd0408b133"
+          },
+          "createdAt": "2026-07-27T21:32:35Z",
+          "editor": null,
           "fullDatabaseId": "4791685310",
-          "state": "COMMENTED"
+          "id": "PRR_kwDOPRoOy88AAAABHZtQvg",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-07-27T21:32:35Z",
+          "state": "COMMENTED",
+          "submittedAt": "2026-07-27T21:32:35Z",
+          "updatedAt": "2026-07-27T21:32:35Z"
         },
         {
           "author": {
@@ -381,8 +720,24 @@
             "id": "MDQ6VXNlcjEzODQ2OA==",
             "login": "KonstantinMirin"
           },
+          "authorAssociation": "COLLABORATOR",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 13
+          },
+          "commit": {
+            "oid": "75d68b97f97b3c608056d7f954d717bd0408b133"
+          },
+          "createdAt": "2026-07-28T09:29:06Z",
+          "editor": null,
           "fullDatabaseId": "4795811824",
-          "state": "COMMENTED"
+          "id": "PRR_kwDOPRoOy88AAAABHdpH8A",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-07-28T09:29:06Z",
+          "state": "COMMENTED",
+          "submittedAt": "2026-07-28T09:29:06Z",
+          "updatedAt": "2026-07-28T09:29:07Z"
         },
         {
           "author": {
@@ -391,8 +746,24 @@
             "id": "U_kgDOEOtVug",
             "login": "mkostromin-sigma"
           },
+          "authorAssociation": "COLLABORATOR",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 1
+          },
+          "commit": {
+            "oid": "e0087dfd429af8afc4eb23db24d96268f2e06151"
+          },
+          "createdAt": "2026-07-28T19:53:13Z",
+          "editor": null,
           "fullDatabaseId": "4801294576",
-          "state": "COMMENTED"
+          "id": "PRR_kwDOPRoOy88AAAABHi3w8A",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-07-28T19:53:13Z",
+          "state": "COMMENTED",
+          "submittedAt": "2026-07-28T19:53:13Z",
+          "updatedAt": "2026-07-28T19:53:13Z"
         },
         {
           "author": {
@@ -401,8 +772,24 @@
             "id": "U_kgDOEOtVug",
             "login": "mkostromin-sigma"
           },
+          "authorAssociation": "COLLABORATOR",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 1
+          },
+          "commit": {
+            "oid": "e0087dfd429af8afc4eb23db24d96268f2e06151"
+          },
+          "createdAt": "2026-07-28T19:53:14Z",
+          "editor": null,
           "fullDatabaseId": "4801294731",
-          "state": "COMMENTED"
+          "id": "PRR_kwDOPRoOy88AAAABHi3xiw",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-07-28T19:53:14Z",
+          "state": "COMMENTED",
+          "submittedAt": "2026-07-28T19:53:14Z",
+          "updatedAt": "2026-07-28T19:53:14Z"
         },
         {
           "author": {
@@ -411,8 +798,24 @@
             "id": "U_kgDOEOtVug",
             "login": "mkostromin-sigma"
           },
+          "authorAssociation": "COLLABORATOR",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 1
+          },
+          "commit": {
+            "oid": "e0087dfd429af8afc4eb23db24d96268f2e06151"
+          },
+          "createdAt": "2026-07-28T19:53:15Z",
+          "editor": null,
           "fullDatabaseId": "4801294863",
-          "state": "COMMENTED"
+          "id": "PRR_kwDOPRoOy88AAAABHi3yDw",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-07-28T19:53:15Z",
+          "state": "COMMENTED",
+          "submittedAt": "2026-07-28T19:53:15Z",
+          "updatedAt": "2026-07-28T19:53:15Z"
         },
         {
           "author": {
@@ -421,8 +824,24 @@
             "id": "U_kgDOEOtVug",
             "login": "mkostromin-sigma"
           },
+          "authorAssociation": "COLLABORATOR",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 1
+          },
+          "commit": {
+            "oid": "e0087dfd429af8afc4eb23db24d96268f2e06151"
+          },
+          "createdAt": "2026-07-28T19:53:16Z",
+          "editor": null,
           "fullDatabaseId": "4801295008",
-          "state": "COMMENTED"
+          "id": "PRR_kwDOPRoOy88AAAABHi3yoA",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-07-28T19:53:16Z",
+          "state": "COMMENTED",
+          "submittedAt": "2026-07-28T19:53:16Z",
+          "updatedAt": "2026-07-28T19:53:16Z"
         },
         {
           "author": {
@@ -431,8 +850,24 @@
             "id": "U_kgDOEOtVug",
             "login": "mkostromin-sigma"
           },
+          "authorAssociation": "COLLABORATOR",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 1
+          },
+          "commit": {
+            "oid": "e0087dfd429af8afc4eb23db24d96268f2e06151"
+          },
+          "createdAt": "2026-07-28T19:53:18Z",
+          "editor": null,
           "fullDatabaseId": "4801295144",
-          "state": "COMMENTED"
+          "id": "PRR_kwDOPRoOy88AAAABHi3zKA",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-07-28T19:53:18Z",
+          "state": "COMMENTED",
+          "submittedAt": "2026-07-28T19:53:18Z",
+          "updatedAt": "2026-07-28T19:53:18Z"
         },
         {
           "author": {
@@ -441,8 +876,24 @@
             "id": "U_kgDOEOtVug",
             "login": "mkostromin-sigma"
           },
+          "authorAssociation": "COLLABORATOR",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 1
+          },
+          "commit": {
+            "oid": "e0087dfd429af8afc4eb23db24d96268f2e06151"
+          },
+          "createdAt": "2026-07-28T19:53:19Z",
+          "editor": null,
           "fullDatabaseId": "4801295269",
-          "state": "COMMENTED"
+          "id": "PRR_kwDOPRoOy88AAAABHi3zpQ",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-07-28T19:53:19Z",
+          "state": "COMMENTED",
+          "submittedAt": "2026-07-28T19:53:19Z",
+          "updatedAt": "2026-07-28T19:53:19Z"
         },
         {
           "author": {
@@ -451,8 +902,24 @@
             "id": "U_kgDOEOtVug",
             "login": "mkostromin-sigma"
           },
+          "authorAssociation": "COLLABORATOR",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 1
+          },
+          "commit": {
+            "oid": "e0087dfd429af8afc4eb23db24d96268f2e06151"
+          },
+          "createdAt": "2026-07-28T19:53:20Z",
+          "editor": null,
           "fullDatabaseId": "4801295422",
-          "state": "COMMENTED"
+          "id": "PRR_kwDOPRoOy88AAAABHi30Pg",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-07-28T19:53:20Z",
+          "state": "COMMENTED",
+          "submittedAt": "2026-07-28T19:53:20Z",
+          "updatedAt": "2026-07-28T19:53:20Z"
         },
         {
           "author": {
@@ -461,8 +928,24 @@
             "id": "U_kgDOEOtVug",
             "login": "mkostromin-sigma"
           },
+          "authorAssociation": "COLLABORATOR",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 1
+          },
+          "commit": {
+            "oid": "e0087dfd429af8afc4eb23db24d96268f2e06151"
+          },
+          "createdAt": "2026-07-28T19:53:21Z",
+          "editor": null,
           "fullDatabaseId": "4801295550",
-          "state": "COMMENTED"
+          "id": "PRR_kwDOPRoOy88AAAABHi30vg",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-07-28T19:53:21Z",
+          "state": "COMMENTED",
+          "submittedAt": "2026-07-28T19:53:21Z",
+          "updatedAt": "2026-07-28T19:53:21Z"
         },
         {
           "author": {
@@ -471,8 +954,24 @@
             "id": "U_kgDOEOtVug",
             "login": "mkostromin-sigma"
           },
+          "authorAssociation": "COLLABORATOR",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 1
+          },
+          "commit": {
+            "oid": "e0087dfd429af8afc4eb23db24d96268f2e06151"
+          },
+          "createdAt": "2026-07-28T19:53:22Z",
+          "editor": null,
           "fullDatabaseId": "4801295715",
-          "state": "COMMENTED"
+          "id": "PRR_kwDOPRoOy88AAAABHi31Yw",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-07-28T19:53:22Z",
+          "state": "COMMENTED",
+          "submittedAt": "2026-07-28T19:53:22Z",
+          "updatedAt": "2026-07-28T19:53:22Z"
         },
         {
           "author": {
@@ -481,8 +980,24 @@
             "id": "U_kgDOEOtVug",
             "login": "mkostromin-sigma"
           },
+          "authorAssociation": "COLLABORATOR",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 1
+          },
+          "commit": {
+            "oid": "e0087dfd429af8afc4eb23db24d96268f2e06151"
+          },
+          "createdAt": "2026-07-28T19:53:24Z",
+          "editor": null,
           "fullDatabaseId": "4801295928",
-          "state": "COMMENTED"
+          "id": "PRR_kwDOPRoOy88AAAABHi32OA",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-07-28T19:53:24Z",
+          "state": "COMMENTED",
+          "submittedAt": "2026-07-28T19:53:24Z",
+          "updatedAt": "2026-07-28T19:53:24Z"
         },
         {
           "author": {
@@ -491,8 +1006,24 @@
             "id": "U_kgDOEOtVug",
             "login": "mkostromin-sigma"
           },
+          "authorAssociation": "COLLABORATOR",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 1
+          },
+          "commit": {
+            "oid": "e0087dfd429af8afc4eb23db24d96268f2e06151"
+          },
+          "createdAt": "2026-07-28T19:53:25Z",
+          "editor": null,
           "fullDatabaseId": "4801296091",
-          "state": "COMMENTED"
+          "id": "PRR_kwDOPRoOy88AAAABHi322w",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-07-28T19:53:25Z",
+          "state": "COMMENTED",
+          "submittedAt": "2026-07-28T19:53:25Z",
+          "updatedAt": "2026-07-28T19:53:25Z"
         },
         {
           "author": {
@@ -501,8 +1032,24 @@
             "id": "U_kgDOEOtVug",
             "login": "mkostromin-sigma"
           },
+          "authorAssociation": "COLLABORATOR",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 1
+          },
+          "commit": {
+            "oid": "e0087dfd429af8afc4eb23db24d96268f2e06151"
+          },
+          "createdAt": "2026-07-28T19:53:27Z",
+          "editor": null,
           "fullDatabaseId": "4801296234",
-          "state": "COMMENTED"
+          "id": "PRR_kwDOPRoOy88AAAABHi33ag",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-07-28T19:53:27Z",
+          "state": "COMMENTED",
+          "submittedAt": "2026-07-28T19:53:27Z",
+          "updatedAt": "2026-07-28T19:53:27Z"
         },
         {
           "author": {
@@ -511,8 +1058,24 @@
             "id": "U_kgDOEOtVug",
             "login": "mkostromin-sigma"
           },
+          "authorAssociation": "COLLABORATOR",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 1
+          },
+          "commit": {
+            "oid": "e0087dfd429af8afc4eb23db24d96268f2e06151"
+          },
+          "createdAt": "2026-07-28T19:53:28Z",
+          "editor": null,
           "fullDatabaseId": "4801296377",
-          "state": "COMMENTED"
+          "id": "PRR_kwDOPRoOy88AAAABHi33-Q",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-07-28T19:53:28Z",
+          "state": "COMMENTED",
+          "submittedAt": "2026-07-28T19:53:28Z",
+          "updatedAt": "2026-07-28T19:53:28Z"
         },
         {
           "author": {
@@ -521,8 +1084,24 @@
             "id": "MDQ6VXNlcjEzODQ2OA==",
             "login": "KonstantinMirin"
           },
+          "authorAssociation": "COLLABORATOR",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 6
+          },
+          "commit": {
+            "oid": "e0087dfd429af8afc4eb23db24d96268f2e06151"
+          },
+          "createdAt": "2026-07-29T12:18:44Z",
+          "editor": null,
           "fullDatabaseId": "4808021734",
-          "state": "COMMENTED"
+          "id": "PRR_kwDOPRoOy88AAAABHpSW5g",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-07-29T12:18:44Z",
+          "state": "COMMENTED",
+          "submittedAt": "2026-07-29T12:18:44Z",
+          "updatedAt": "2026-07-29T12:18:44Z"
         },
         {
           "author": {
@@ -531,8 +1110,24 @@
             "id": "U_kgDOEOtVug",
             "login": "mkostromin-sigma"
           },
+          "authorAssociation": "COLLABORATOR",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 1
+          },
+          "commit": {
+            "oid": "6f16fe093ebe3a33e023145d770b7c9e18871ee2"
+          },
+          "createdAt": "2026-07-29T21:21:18Z",
+          "editor": null,
           "fullDatabaseId": "4813013670",
-          "state": "COMMENTED"
+          "id": "PRR_kwDOPRoOy88AAAABHuDCpg",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-07-29T21:21:18Z",
+          "state": "COMMENTED",
+          "submittedAt": "2026-07-29T21:21:18Z",
+          "updatedAt": "2026-07-29T21:21:18Z"
         },
         {
           "author": {
@@ -541,8 +1136,24 @@
             "id": "U_kgDOEOtVug",
             "login": "mkostromin-sigma"
           },
+          "authorAssociation": "COLLABORATOR",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 1
+          },
+          "commit": {
+            "oid": "6f16fe093ebe3a33e023145d770b7c9e18871ee2"
+          },
+          "createdAt": "2026-07-29T21:21:20Z",
+          "editor": null,
           "fullDatabaseId": "4813013856",
-          "state": "COMMENTED"
+          "id": "PRR_kwDOPRoOy88AAAABHuDDYA",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-07-29T21:21:20Z",
+          "state": "COMMENTED",
+          "submittedAt": "2026-07-29T21:21:20Z",
+          "updatedAt": "2026-07-29T21:21:20Z"
         },
         {
           "author": {
@@ -551,8 +1162,24 @@
             "id": "U_kgDOEOtVug",
             "login": "mkostromin-sigma"
           },
+          "authorAssociation": "COLLABORATOR",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 1
+          },
+          "commit": {
+            "oid": "6f16fe093ebe3a33e023145d770b7c9e18871ee2"
+          },
+          "createdAt": "2026-07-29T21:21:21Z",
+          "editor": null,
           "fullDatabaseId": "4813013988",
-          "state": "COMMENTED"
+          "id": "PRR_kwDOPRoOy88AAAABHuDD5A",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-07-29T21:21:21Z",
+          "state": "COMMENTED",
+          "submittedAt": "2026-07-29T21:21:21Z",
+          "updatedAt": "2026-07-29T21:21:21Z"
         },
         {
           "author": {
@@ -561,8 +1188,24 @@
             "id": "U_kgDOEOtVug",
             "login": "mkostromin-sigma"
           },
+          "authorAssociation": "COLLABORATOR",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 1
+          },
+          "commit": {
+            "oid": "6f16fe093ebe3a33e023145d770b7c9e18871ee2"
+          },
+          "createdAt": "2026-07-29T21:21:22Z",
+          "editor": null,
           "fullDatabaseId": "4813014119",
-          "state": "COMMENTED"
+          "id": "PRR_kwDOPRoOy88AAAABHuDEZw",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-07-29T21:21:22Z",
+          "state": "COMMENTED",
+          "submittedAt": "2026-07-29T21:21:23Z",
+          "updatedAt": "2026-07-29T21:21:23Z"
         },
         {
           "author": {
@@ -571,8 +1214,24 @@
             "id": "U_kgDOEOtVug",
             "login": "mkostromin-sigma"
           },
+          "authorAssociation": "COLLABORATOR",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 1
+          },
+          "commit": {
+            "oid": "6f16fe093ebe3a33e023145d770b7c9e18871ee2"
+          },
+          "createdAt": "2026-07-29T21:21:24Z",
+          "editor": null,
           "fullDatabaseId": "4813014253",
-          "state": "COMMENTED"
+          "id": "PRR_kwDOPRoOy88AAAABHuDE7Q",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-07-29T21:21:24Z",
+          "state": "COMMENTED",
+          "submittedAt": "2026-07-29T21:21:24Z",
+          "updatedAt": "2026-07-29T21:21:24Z"
         },
         {
           "author": {
@@ -581,8 +1240,24 @@
             "id": "U_kgDOEOtVug",
             "login": "mkostromin-sigma"
           },
+          "authorAssociation": "COLLABORATOR",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 1
+          },
+          "commit": {
+            "oid": "6f16fe093ebe3a33e023145d770b7c9e18871ee2"
+          },
+          "createdAt": "2026-07-29T21:21:25Z",
+          "editor": null,
           "fullDatabaseId": "4813014518",
-          "state": "COMMENTED"
+          "id": "PRR_kwDOPRoOy88AAAABHuDF9g",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-07-29T21:21:25Z",
+          "state": "COMMENTED",
+          "submittedAt": "2026-07-29T21:21:25Z",
+          "updatedAt": "2026-07-29T21:21:25Z"
         },
         {
           "author": {
@@ -591,8 +1266,24 @@
             "id": "MDQ6VXNlcjEzODQ2OA==",
             "login": "KonstantinMirin"
           },
+          "authorAssociation": "COLLABORATOR",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 6
+          },
+          "commit": {
+            "oid": "cb60367478747d2fea66874853c5c651b28529df"
+          },
+          "createdAt": "2026-07-31T19:38:08Z",
+          "editor": null,
           "fullDatabaseId": "4831653563",
-          "state": "COMMENTED"
+          "id": "PRR_kwDOPRoOy88AAAABH_0uuw",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-07-31T19:38:08Z",
+          "state": "COMMENTED",
+          "submittedAt": "2026-07-31T19:38:08Z",
+          "updatedAt": "2026-07-31T19:38:08Z"
         },
         {
           "author": {
@@ -601,8 +1292,24 @@
             "id": "U_kgDOEOtVug",
             "login": "mkostromin-sigma"
           },
+          "authorAssociation": "COLLABORATOR",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 1
+          },
+          "commit": {
+            "oid": "1d7a41481d33f0292bb97940c7c1202e2e8cdef5"
+          },
+          "createdAt": "2026-07-31T22:51:23Z",
+          "editor": null,
           "fullDatabaseId": "4832686865",
-          "state": "COMMENTED"
+          "id": "PRR_kwDOPRoOy88AAAABIAzzEQ",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-07-31T22:51:23Z",
+          "state": "COMMENTED",
+          "submittedAt": "2026-07-31T22:51:23Z",
+          "updatedAt": "2026-07-31T22:51:23Z"
         },
         {
           "author": {
@@ -611,8 +1318,24 @@
             "id": "U_kgDOEOtVug",
             "login": "mkostromin-sigma"
           },
+          "authorAssociation": "COLLABORATOR",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 1
+          },
+          "commit": {
+            "oid": "1d7a41481d33f0292bb97940c7c1202e2e8cdef5"
+          },
+          "createdAt": "2026-07-31T22:51:24Z",
+          "editor": null,
           "fullDatabaseId": "4832686955",
-          "state": "COMMENTED"
+          "id": "PRR_kwDOPRoOy88AAAABIAzzaw",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-07-31T22:51:24Z",
+          "state": "COMMENTED",
+          "submittedAt": "2026-07-31T22:51:24Z",
+          "updatedAt": "2026-07-31T22:51:24Z"
         },
         {
           "author": {
@@ -621,8 +1344,24 @@
             "id": "U_kgDOEOtVug",
             "login": "mkostromin-sigma"
           },
+          "authorAssociation": "COLLABORATOR",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 1
+          },
+          "commit": {
+            "oid": "1d7a41481d33f0292bb97940c7c1202e2e8cdef5"
+          },
+          "createdAt": "2026-07-31T22:51:26Z",
+          "editor": null,
           "fullDatabaseId": "4832687036",
-          "state": "COMMENTED"
+          "id": "PRR_kwDOPRoOy88AAAABIAzzvA",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-07-31T22:51:26Z",
+          "state": "COMMENTED",
+          "submittedAt": "2026-07-31T22:51:26Z",
+          "updatedAt": "2026-07-31T22:51:26Z"
         },
         {
           "author": {
@@ -631,8 +1370,24 @@
             "id": "U_kgDOEOtVug",
             "login": "mkostromin-sigma"
           },
+          "authorAssociation": "COLLABORATOR",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 1
+          },
+          "commit": {
+            "oid": "1d7a41481d33f0292bb97940c7c1202e2e8cdef5"
+          },
+          "createdAt": "2026-07-31T22:51:28Z",
+          "editor": null,
           "fullDatabaseId": "4832687116",
-          "state": "COMMENTED"
+          "id": "PRR_kwDOPRoOy88AAAABIAz0DA",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-07-31T22:51:28Z",
+          "state": "COMMENTED",
+          "submittedAt": "2026-07-31T22:51:28Z",
+          "updatedAt": "2026-07-31T22:51:28Z"
         },
         {
           "author": {
@@ -641,8 +1396,24 @@
             "id": "U_kgDOEOtVug",
             "login": "mkostromin-sigma"
           },
+          "authorAssociation": "COLLABORATOR",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 1
+          },
+          "commit": {
+            "oid": "1d7a41481d33f0292bb97940c7c1202e2e8cdef5"
+          },
+          "createdAt": "2026-07-31T22:51:29Z",
+          "editor": null,
           "fullDatabaseId": "4832687179",
-          "state": "COMMENTED"
+          "id": "PRR_kwDOPRoOy88AAAABIAz0Sw",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-07-31T22:51:29Z",
+          "state": "COMMENTED",
+          "submittedAt": "2026-07-31T22:51:29Z",
+          "updatedAt": "2026-07-31T22:51:29Z"
         },
         {
           "author": {
@@ -651,8 +1422,24 @@
             "id": "U_kgDOEOtVug",
             "login": "mkostromin-sigma"
           },
+          "authorAssociation": "COLLABORATOR",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 1
+          },
+          "commit": {
+            "oid": "1d7a41481d33f0292bb97940c7c1202e2e8cdef5"
+          },
+          "createdAt": "2026-07-31T22:51:31Z",
+          "editor": null,
           "fullDatabaseId": "4832687251",
-          "state": "COMMENTED"
+          "id": "PRR_kwDOPRoOy88AAAABIAz0kw",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-07-31T22:51:31Z",
+          "state": "COMMENTED",
+          "submittedAt": "2026-07-31T22:51:31Z",
+          "updatedAt": "2026-07-31T22:51:31Z"
         },
         {
           "author": {
@@ -661,8 +1448,24 @@
             "id": "MDQ6VXNlcjEzODQ2OA==",
             "login": "KonstantinMirin"
           },
+          "authorAssociation": "COLLABORATOR",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 4
+          },
+          "commit": {
+            "oid": "1d7a41481d33f0292bb97940c7c1202e2e8cdef5"
+          },
+          "createdAt": "2026-08-03T17:44:22Z",
+          "editor": null,
           "fullDatabaseId": "4847059699",
-          "state": "COMMENTED"
+          "id": "PRR_kwDOPRoOy88AAAABIOhC8w",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-08-03T17:44:22Z",
+          "state": "COMMENTED",
+          "submittedAt": "2026-08-03T17:44:22Z",
+          "updatedAt": "2026-08-03T17:44:22Z"
         },
         {
           "author": {
@@ -671,8 +1474,24 @@
             "id": "U_kgDOEOtVug",
             "login": "mkostromin-sigma"
           },
+          "authorAssociation": "COLLABORATOR",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 1
+          },
+          "commit": {
+            "oid": "5976da416ab4f83cf8665afafaea3ce71427b3ff"
+          },
+          "createdAt": "2026-08-03T22:59:51Z",
+          "editor": null,
           "fullDatabaseId": "4849194622",
-          "state": "COMMENTED"
+          "id": "PRR_kwDOPRoOy88AAAABIQjWfg",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-08-03T22:59:51Z",
+          "state": "COMMENTED",
+          "submittedAt": "2026-08-03T22:59:52Z",
+          "updatedAt": "2026-08-03T22:59:52Z"
         },
         {
           "author": {
@@ -681,8 +1500,24 @@
             "id": "U_kgDOEOtVug",
             "login": "mkostromin-sigma"
           },
+          "authorAssociation": "COLLABORATOR",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 1
+          },
+          "commit": {
+            "oid": "5976da416ab4f83cf8665afafaea3ce71427b3ff"
+          },
+          "createdAt": "2026-08-03T22:59:53Z",
+          "editor": null,
           "fullDatabaseId": "4849194735",
-          "state": "COMMENTED"
+          "id": "PRR_kwDOPRoOy88AAAABIQjW7w",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-08-03T22:59:53Z",
+          "state": "COMMENTED",
+          "submittedAt": "2026-08-03T22:59:53Z",
+          "updatedAt": "2026-08-03T22:59:53Z"
         },
         {
           "author": {
@@ -691,8 +1526,24 @@
             "id": "U_kgDOEOtVug",
             "login": "mkostromin-sigma"
           },
+          "authorAssociation": "COLLABORATOR",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 1
+          },
+          "commit": {
+            "oid": "5976da416ab4f83cf8665afafaea3ce71427b3ff"
+          },
+          "createdAt": "2026-08-03T22:59:54Z",
+          "editor": null,
           "fullDatabaseId": "4849194843",
-          "state": "COMMENTED"
+          "id": "PRR_kwDOPRoOy88AAAABIQjXWw",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-08-03T22:59:54Z",
+          "state": "COMMENTED",
+          "submittedAt": "2026-08-03T22:59:55Z",
+          "updatedAt": "2026-08-03T22:59:55Z"
         },
         {
           "author": {
@@ -701,8 +1552,24 @@
             "id": "U_kgDOEOtVug",
             "login": "mkostromin-sigma"
           },
+          "authorAssociation": "COLLABORATOR",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 1
+          },
+          "commit": {
+            "oid": "5976da416ab4f83cf8665afafaea3ce71427b3ff"
+          },
+          "createdAt": "2026-08-03T22:59:56Z",
+          "editor": null,
           "fullDatabaseId": "4849194938",
-          "state": "COMMENTED"
+          "id": "PRR_kwDOPRoOy88AAAABIQjXug",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-08-03T22:59:56Z",
+          "state": "COMMENTED",
+          "submittedAt": "2026-08-03T22:59:56Z",
+          "updatedAt": "2026-08-03T22:59:56Z"
         },
         {
           "author": {
@@ -711,8 +1578,24 @@
             "id": "MDQ6VXNlcjEzODQ2OA==",
             "login": "KonstantinMirin"
           },
+          "authorAssociation": "COLLABORATOR",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 7
+          },
+          "commit": {
+            "oid": "5976da416ab4f83cf8665afafaea3ce71427b3ff"
+          },
+          "createdAt": "2026-08-04T11:48:20Z",
+          "editor": null,
           "fullDatabaseId": "4853894302",
-          "state": "COMMENTED"
+          "id": "PRR_kwDOPRoOy88AAAABIVCMng",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-08-04T11:48:20Z",
+          "state": "COMMENTED",
+          "submittedAt": "2026-08-04T11:48:20Z",
+          "updatedAt": "2026-08-04T11:48:21Z"
         },
         {
           "author": {
@@ -721,8 +1604,24 @@
             "id": "MDQ6VXNlcjEzODQ2OA==",
             "login": "KonstantinMirin"
           },
+          "authorAssociation": "COLLABORATOR",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 2
+          },
+          "commit": {
+            "oid": "a2ae785026663e51cb495f3915e44390c330b760"
+          },
+          "createdAt": "2026-08-05T13:02:37Z",
+          "editor": null,
           "fullDatabaseId": "4864604017",
-          "state": "COMMENTED"
+          "id": "PRR_kwDOPRoOy88AAAABIfP3cQ",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-08-05T13:02:37Z",
+          "state": "COMMENTED",
+          "submittedAt": "2026-08-05T13:02:37Z",
+          "updatedAt": "2026-08-05T13:02:37Z"
         },
         {
           "author": {
@@ -731,8 +1630,24 @@
             "id": "U_kgDOEOtVug",
             "login": "mkostromin-sigma"
           },
+          "authorAssociation": "COLLABORATOR",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 1
+          },
+          "commit": {
+            "oid": "880fcc9ffb6e25e6ab958fa84a3eed5fd5d92c2c"
+          },
+          "createdAt": "2026-08-11T19:57:22Z",
+          "editor": null,
           "fullDatabaseId": "4910214096",
-          "state": "COMMENTED"
+          "id": "PRR_kwDOPRoOy88AAAABJKvr0A",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-08-11T19:57:22Z",
+          "state": "COMMENTED",
+          "submittedAt": "2026-08-11T19:57:22Z",
+          "updatedAt": "2026-08-11T19:57:22Z"
         },
         {
           "author": {
@@ -741,8 +1656,24 @@
             "id": "U_kgDOEOtVug",
             "login": "mkostromin-sigma"
           },
+          "authorAssociation": "COLLABORATOR",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 1
+          },
+          "commit": {
+            "oid": "880fcc9ffb6e25e6ab958fa84a3eed5fd5d92c2c"
+          },
+          "createdAt": "2026-08-11T19:57:24Z",
+          "editor": null,
           "fullDatabaseId": "4910214270",
-          "state": "COMMENTED"
+          "id": "PRR_kwDOPRoOy88AAAABJKvsfg",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-08-11T19:57:24Z",
+          "state": "COMMENTED",
+          "submittedAt": "2026-08-11T19:57:24Z",
+          "updatedAt": "2026-08-11T19:57:24Z"
         },
         {
           "author": {
@@ -751,8 +1682,24 @@
             "id": "U_kgDOEOtVug",
             "login": "mkostromin-sigma"
           },
+          "authorAssociation": "COLLABORATOR",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 1
+          },
+          "commit": {
+            "oid": "880fcc9ffb6e25e6ab958fa84a3eed5fd5d92c2c"
+          },
+          "createdAt": "2026-08-11T19:57:25Z",
+          "editor": null,
           "fullDatabaseId": "4910214448",
-          "state": "COMMENTED"
+          "id": "PRR_kwDOPRoOy88AAAABJKvtMA",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-08-11T19:57:25Z",
+          "state": "COMMENTED",
+          "submittedAt": "2026-08-11T19:57:25Z",
+          "updatedAt": "2026-08-11T19:57:25Z"
         },
         {
           "author": {
@@ -761,8 +1708,24 @@
             "id": "U_kgDOEOtVug",
             "login": "mkostromin-sigma"
           },
+          "authorAssociation": "COLLABORATOR",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 1
+          },
+          "commit": {
+            "oid": "880fcc9ffb6e25e6ab958fa84a3eed5fd5d92c2c"
+          },
+          "createdAt": "2026-08-11T19:57:27Z",
+          "editor": null,
           "fullDatabaseId": "4910214651",
-          "state": "COMMENTED"
+          "id": "PRR_kwDOPRoOy88AAAABJKvt-w",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-08-11T19:57:27Z",
+          "state": "COMMENTED",
+          "submittedAt": "2026-08-11T19:57:27Z",
+          "updatedAt": "2026-08-11T19:57:27Z"
         },
         {
           "author": {
@@ -771,8 +1734,24 @@
             "id": "U_kgDOEOtVug",
             "login": "mkostromin-sigma"
           },
+          "authorAssociation": "COLLABORATOR",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 1
+          },
+          "commit": {
+            "oid": "880fcc9ffb6e25e6ab958fa84a3eed5fd5d92c2c"
+          },
+          "createdAt": "2026-08-11T19:57:29Z",
+          "editor": null,
           "fullDatabaseId": "4910214876",
-          "state": "COMMENTED"
+          "id": "PRR_kwDOPRoOy88AAAABJKvu3A",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-08-11T19:57:29Z",
+          "state": "COMMENTED",
+          "submittedAt": "2026-08-11T19:57:29Z",
+          "updatedAt": "2026-08-11T19:57:29Z"
         },
         {
           "author": {
@@ -781,8 +1760,24 @@
             "id": "U_kgDOEOtVug",
             "login": "mkostromin-sigma"
           },
+          "authorAssociation": "COLLABORATOR",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 1
+          },
+          "commit": {
+            "oid": "880fcc9ffb6e25e6ab958fa84a3eed5fd5d92c2c"
+          },
+          "createdAt": "2026-08-11T19:57:31Z",
+          "editor": null,
           "fullDatabaseId": "4910215113",
-          "state": "COMMENTED"
+          "id": "PRR_kwDOPRoOy88AAAABJKvvyQ",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-08-11T19:57:31Z",
+          "state": "COMMENTED",
+          "submittedAt": "2026-08-11T19:57:31Z",
+          "updatedAt": "2026-08-11T19:57:31Z"
         },
         {
           "author": {
@@ -791,8 +1786,24 @@
             "id": "U_kgDOEOtVug",
             "login": "mkostromin-sigma"
           },
+          "authorAssociation": "COLLABORATOR",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 1
+          },
+          "commit": {
+            "oid": "880fcc9ffb6e25e6ab958fa84a3eed5fd5d92c2c"
+          },
+          "createdAt": "2026-08-11T19:57:33Z",
+          "editor": null,
           "fullDatabaseId": "4910215392",
-          "state": "COMMENTED"
+          "id": "PRR_kwDOPRoOy88AAAABJKvw4A",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-08-11T19:57:33Z",
+          "state": "COMMENTED",
+          "submittedAt": "2026-08-11T19:57:33Z",
+          "updatedAt": "2026-08-11T19:57:33Z"
         },
         {
           "author": {
@@ -801,8 +1812,24 @@
             "id": "U_kgDOEOtVug",
             "login": "mkostromin-sigma"
           },
+          "authorAssociation": "COLLABORATOR",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 1
+          },
+          "commit": {
+            "oid": "880fcc9ffb6e25e6ab958fa84a3eed5fd5d92c2c"
+          },
+          "createdAt": "2026-08-11T19:57:35Z",
+          "editor": null,
           "fullDatabaseId": "4910215598",
-          "state": "COMMENTED"
+          "id": "PRR_kwDOPRoOy88AAAABJKvxrg",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-08-11T19:57:35Z",
+          "state": "COMMENTED",
+          "submittedAt": "2026-08-11T19:57:35Z",
+          "updatedAt": "2026-08-11T19:57:35Z"
         },
         {
           "author": {
@@ -811,8 +1838,24 @@
             "id": "U_kgDOEOtVug",
             "login": "mkostromin-sigma"
           },
+          "authorAssociation": "COLLABORATOR",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 1
+          },
+          "commit": {
+            "oid": "880fcc9ffb6e25e6ab958fa84a3eed5fd5d92c2c"
+          },
+          "createdAt": "2026-08-11T19:57:36Z",
+          "editor": null,
           "fullDatabaseId": "4910215800",
-          "state": "COMMENTED"
+          "id": "PRR_kwDOPRoOy88AAAABJKvyeA",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-08-11T19:57:36Z",
+          "state": "COMMENTED",
+          "submittedAt": "2026-08-11T19:57:36Z",
+          "updatedAt": "2026-08-11T19:57:36Z"
         },
         {
           "author": {
@@ -821,8 +1864,24 @@
             "id": "MDQ6VXNlcjEzODQ2OA==",
             "login": "KonstantinMirin"
           },
+          "authorAssociation": "COLLABORATOR",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 3
+          },
+          "commit": {
+            "oid": "880fcc9ffb6e25e6ab958fa84a3eed5fd5d92c2c"
+          },
+          "createdAt": "2026-08-12T18:02:04Z",
+          "editor": null,
           "fullDatabaseId": "4919621730",
-          "state": "COMMENTED"
+          "id": "PRR_kwDOPRoOy88AAAABJTt4Yg",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-08-12T18:02:04Z",
+          "state": "COMMENTED",
+          "submittedAt": "2026-08-12T18:02:04Z",
+          "updatedAt": "2026-08-12T18:02:05Z"
         },
         {
           "author": {
@@ -831,8 +1890,24 @@
             "id": "U_kgDOEOtVug",
             "login": "mkostromin-sigma"
           },
+          "authorAssociation": "COLLABORATOR",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 1
+          },
+          "commit": {
+            "oid": "efe1b8884c906330b982a83aa5fc98a8d9bfdc10"
+          },
+          "createdAt": "2026-08-12T23:23:34Z",
+          "editor": null,
           "fullDatabaseId": "4921978267",
-          "state": "COMMENTED"
+          "id": "PRR_kwDOPRoOy88AAAABJV9tmw",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-08-12T23:23:34Z",
+          "state": "COMMENTED",
+          "submittedAt": "2026-08-12T23:23:34Z",
+          "updatedAt": "2026-08-12T23:23:34Z"
         },
         {
           "author": {
@@ -841,8 +1916,24 @@
             "id": "U_kgDOEOtVug",
             "login": "mkostromin-sigma"
           },
+          "authorAssociation": "COLLABORATOR",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 1
+          },
+          "commit": {
+            "oid": "efe1b8884c906330b982a83aa5fc98a8d9bfdc10"
+          },
+          "createdAt": "2026-08-12T23:23:35Z",
+          "editor": null,
           "fullDatabaseId": "4921978426",
-          "state": "COMMENTED"
+          "id": "PRR_kwDOPRoOy88AAAABJV9uOg",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-08-12T23:23:35Z",
+          "state": "COMMENTED",
+          "submittedAt": "2026-08-12T23:23:35Z",
+          "updatedAt": "2026-08-12T23:23:35Z"
         },
         {
           "author": {
@@ -851,8 +1942,24 @@
             "id": "U_kgDOEOtVug",
             "login": "mkostromin-sigma"
           },
+          "authorAssociation": "COLLABORATOR",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 1
+          },
+          "commit": {
+            "oid": "efe1b8884c906330b982a83aa5fc98a8d9bfdc10"
+          },
+          "createdAt": "2026-08-12T23:23:36Z",
+          "editor": null,
           "fullDatabaseId": "4921978544",
-          "state": "COMMENTED"
+          "id": "PRR_kwDOPRoOy88AAAABJV9usA",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-08-12T23:23:36Z",
+          "state": "COMMENTED",
+          "submittedAt": "2026-08-12T23:23:36Z",
+          "updatedAt": "2026-08-12T23:23:36Z"
         },
         {
           "author": {
@@ -861,8 +1968,24 @@
             "id": "MDQ6VXNlcjM0NDQ3Mjc=",
             "login": "ChrisHuie"
           },
+          "authorAssociation": "MEMBER",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 18
+          },
+          "commit": {
+            "oid": "efe1b8884c906330b982a83aa5fc98a8d9bfdc10"
+          },
+          "createdAt": "2026-08-14T16:56:29Z",
+          "editor": null,
           "fullDatabaseId": "4939454540",
-          "state": "COMMENTED"
+          "id": "PRR_kwDOPRoOy88AAAABJmoYTA",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-08-14T16:56:29Z",
+          "state": "COMMENTED",
+          "submittedAt": "2026-08-14T16:56:29Z",
+          "updatedAt": "2026-08-14T16:56:31Z"
         },
         {
           "author": {
@@ -871,8 +1994,24 @@
             "id": "MDQ6VXNlcjEzODQ2OA==",
             "login": "KonstantinMirin"
           },
+          "authorAssociation": "COLLABORATOR",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 27
+          },
+          "commit": {
+            "oid": "efe1b8884c906330b982a83aa5fc98a8d9bfdc10"
+          },
+          "createdAt": "2026-08-17T20:02:16Z",
+          "editor": null,
           "fullDatabaseId": "4954124662",
-          "state": "COMMENTED"
+          "id": "PRR_kwDOPRoOy88AAAABJ0nxdg",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-08-17T20:02:16Z",
+          "state": "COMMENTED",
+          "submittedAt": "2026-08-17T20:02:16Z",
+          "updatedAt": "2026-08-17T20:02:18Z"
         },
         {
           "author": {
@@ -881,8 +2020,24 @@
             "id": "U_kgDOEOtVug",
             "login": "mkostromin-sigma"
           },
+          "authorAssociation": "COLLABORATOR",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 1
+          },
+          "commit": {
+            "oid": "edc23e104d81b1e98e9955576fc70fc8a8a18db4"
+          },
+          "createdAt": "2026-08-25T17:21:43Z",
+          "editor": null,
           "fullDatabaseId": "5021868717",
-          "state": "COMMENTED"
+          "id": "PRR_kwDOPRoOy88AAAABK1OirQ",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-08-25T17:21:43Z",
+          "state": "COMMENTED",
+          "submittedAt": "2026-08-25T17:21:44Z",
+          "updatedAt": "2026-08-25T17:21:44Z"
         },
         {
           "author": {
@@ -891,8 +2046,24 @@
             "id": "U_kgDOEOtVug",
             "login": "mkostromin-sigma"
           },
+          "authorAssociation": "COLLABORATOR",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 1
+          },
+          "commit": {
+            "oid": "edc23e104d81b1e98e9955576fc70fc8a8a18db4"
+          },
+          "createdAt": "2026-08-25T17:21:45Z",
+          "editor": null,
           "fullDatabaseId": "5021868992",
-          "state": "COMMENTED"
+          "id": "PRR_kwDOPRoOy88AAAABK1OjwA",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-08-25T17:21:45Z",
+          "state": "COMMENTED",
+          "submittedAt": "2026-08-25T17:21:46Z",
+          "updatedAt": "2026-08-25T17:21:46Z"
         },
         {
           "author": {
@@ -901,8 +2072,24 @@
             "id": "U_kgDOEOtVug",
             "login": "mkostromin-sigma"
           },
+          "authorAssociation": "COLLABORATOR",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 1
+          },
+          "commit": {
+            "oid": "edc23e104d81b1e98e9955576fc70fc8a8a18db4"
+          },
+          "createdAt": "2026-08-25T17:21:47Z",
+          "editor": null,
           "fullDatabaseId": "5021869282",
-          "state": "COMMENTED"
+          "id": "PRR_kwDOPRoOy88AAAABK1Ok4g",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-08-25T17:21:47Z",
+          "state": "COMMENTED",
+          "submittedAt": "2026-08-25T17:21:48Z",
+          "updatedAt": "2026-08-25T17:21:48Z"
         },
         {
           "author": {
@@ -911,8 +2098,24 @@
             "id": "U_kgDOEOtVug",
             "login": "mkostromin-sigma"
           },
+          "authorAssociation": "COLLABORATOR",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 1
+          },
+          "commit": {
+            "oid": "edc23e104d81b1e98e9955576fc70fc8a8a18db4"
+          },
+          "createdAt": "2026-08-25T17:21:49Z",
+          "editor": null,
           "fullDatabaseId": "5021869524",
-          "state": "COMMENTED"
+          "id": "PRR_kwDOPRoOy88AAAABK1Ol1A",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-08-25T17:21:49Z",
+          "state": "COMMENTED",
+          "submittedAt": "2026-08-25T17:21:50Z",
+          "updatedAt": "2026-08-25T17:21:50Z"
         },
         {
           "author": {
@@ -921,8 +2124,24 @@
             "id": "U_kgDOEOtVug",
             "login": "mkostromin-sigma"
           },
+          "authorAssociation": "COLLABORATOR",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 1
+          },
+          "commit": {
+            "oid": "edc23e104d81b1e98e9955576fc70fc8a8a18db4"
+          },
+          "createdAt": "2026-08-25T17:21:51Z",
+          "editor": null,
           "fullDatabaseId": "5021869767",
-          "state": "COMMENTED"
+          "id": "PRR_kwDOPRoOy88AAAABK1Omxw",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-08-25T17:21:51Z",
+          "state": "COMMENTED",
+          "submittedAt": "2026-08-25T17:21:51Z",
+          "updatedAt": "2026-08-25T17:21:51Z"
         },
         {
           "author": {
@@ -931,8 +2150,24 @@
             "id": "U_kgDOEOtVug",
             "login": "mkostromin-sigma"
           },
+          "authorAssociation": "COLLABORATOR",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 1
+          },
+          "commit": {
+            "oid": "edc23e104d81b1e98e9955576fc70fc8a8a18db4"
+          },
+          "createdAt": "2026-08-25T17:21:53Z",
+          "editor": null,
           "fullDatabaseId": "5021870019",
-          "state": "COMMENTED"
+          "id": "PRR_kwDOPRoOy88AAAABK1Onww",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-08-25T17:21:53Z",
+          "state": "COMMENTED",
+          "submittedAt": "2026-08-25T17:21:53Z",
+          "updatedAt": "2026-08-25T17:21:53Z"
         },
         {
           "author": {
@@ -941,8 +2176,24 @@
             "id": "U_kgDOEOtVug",
             "login": "mkostromin-sigma"
           },
+          "authorAssociation": "COLLABORATOR",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 1
+          },
+          "commit": {
+            "oid": "edc23e104d81b1e98e9955576fc70fc8a8a18db4"
+          },
+          "createdAt": "2026-08-25T17:21:55Z",
+          "editor": null,
           "fullDatabaseId": "5021870283",
-          "state": "COMMENTED"
+          "id": "PRR_kwDOPRoOy88AAAABK1Ooyw",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-08-25T17:21:55Z",
+          "state": "COMMENTED",
+          "submittedAt": "2026-08-25T17:21:55Z",
+          "updatedAt": "2026-08-25T17:21:55Z"
         },
         {
           "author": {
@@ -951,8 +2202,24 @@
             "id": "U_kgDOEOtVug",
             "login": "mkostromin-sigma"
           },
+          "authorAssociation": "COLLABORATOR",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 1
+          },
+          "commit": {
+            "oid": "edc23e104d81b1e98e9955576fc70fc8a8a18db4"
+          },
+          "createdAt": "2026-08-25T17:21:57Z",
+          "editor": null,
           "fullDatabaseId": "5021870559",
-          "state": "COMMENTED"
+          "id": "PRR_kwDOPRoOy88AAAABK1Op3w",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-08-25T17:21:57Z",
+          "state": "COMMENTED",
+          "submittedAt": "2026-08-25T17:21:57Z",
+          "updatedAt": "2026-08-25T17:21:57Z"
         },
         {
           "author": {
@@ -961,8 +2228,24 @@
             "id": "U_kgDOEOtVug",
             "login": "mkostromin-sigma"
           },
+          "authorAssociation": "COLLABORATOR",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 1
+          },
+          "commit": {
+            "oid": "edc23e104d81b1e98e9955576fc70fc8a8a18db4"
+          },
+          "createdAt": "2026-08-25T17:21:59Z",
+          "editor": null,
           "fullDatabaseId": "5021870860",
-          "state": "COMMENTED"
+          "id": "PRR_kwDOPRoOy88AAAABK1OrDA",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-08-25T17:21:59Z",
+          "state": "COMMENTED",
+          "submittedAt": "2026-08-25T17:21:59Z",
+          "updatedAt": "2026-08-25T17:21:59Z"
         },
         {
           "author": {
@@ -971,8 +2254,24 @@
             "id": "U_kgDOEOtVug",
             "login": "mkostromin-sigma"
           },
+          "authorAssociation": "COLLABORATOR",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 1
+          },
+          "commit": {
+            "oid": "edc23e104d81b1e98e9955576fc70fc8a8a18db4"
+          },
+          "createdAt": "2026-08-25T17:22:01Z",
+          "editor": null,
           "fullDatabaseId": "5021871159",
-          "state": "COMMENTED"
+          "id": "PRR_kwDOPRoOy88AAAABK1OsNw",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-08-25T17:22:01Z",
+          "state": "COMMENTED",
+          "submittedAt": "2026-08-25T17:22:01Z",
+          "updatedAt": "2026-08-25T17:22:01Z"
         },
         {
           "author": {
@@ -981,8 +2280,24 @@
             "id": "U_kgDOEOtVug",
             "login": "mkostromin-sigma"
           },
+          "authorAssociation": "COLLABORATOR",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 1
+          },
+          "commit": {
+            "oid": "edc23e104d81b1e98e9955576fc70fc8a8a18db4"
+          },
+          "createdAt": "2026-08-25T17:22:03Z",
+          "editor": null,
           "fullDatabaseId": "5021871425",
-          "state": "COMMENTED"
+          "id": "PRR_kwDOPRoOy88AAAABK1OtQQ",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-08-25T17:22:03Z",
+          "state": "COMMENTED",
+          "submittedAt": "2026-08-25T17:22:03Z",
+          "updatedAt": "2026-08-25T17:22:03Z"
         },
         {
           "author": {
@@ -991,8 +2306,24 @@
             "id": "U_kgDOEOtVug",
             "login": "mkostromin-sigma"
           },
+          "authorAssociation": "COLLABORATOR",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 1
+          },
+          "commit": {
+            "oid": "edc23e104d81b1e98e9955576fc70fc8a8a18db4"
+          },
+          "createdAt": "2026-08-25T17:22:05Z",
+          "editor": null,
           "fullDatabaseId": "5021871728",
-          "state": "COMMENTED"
+          "id": "PRR_kwDOPRoOy88AAAABK1OucA",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-08-25T17:22:05Z",
+          "state": "COMMENTED",
+          "submittedAt": "2026-08-25T17:22:05Z",
+          "updatedAt": "2026-08-25T17:22:05Z"
         },
         {
           "author": {
@@ -1001,8 +2332,24 @@
             "id": "U_kgDOEOtVug",
             "login": "mkostromin-sigma"
           },
+          "authorAssociation": "COLLABORATOR",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 1
+          },
+          "commit": {
+            "oid": "edc23e104d81b1e98e9955576fc70fc8a8a18db4"
+          },
+          "createdAt": "2026-08-25T17:22:07Z",
+          "editor": null,
           "fullDatabaseId": "5021872050",
-          "state": "COMMENTED"
+          "id": "PRR_kwDOPRoOy88AAAABK1Ovsg",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-08-25T17:22:07Z",
+          "state": "COMMENTED",
+          "submittedAt": "2026-08-25T17:22:07Z",
+          "updatedAt": "2026-08-25T17:22:07Z"
         },
         {
           "author": {
@@ -1011,8 +2358,24 @@
             "id": "U_kgDOEOtVug",
             "login": "mkostromin-sigma"
           },
+          "authorAssociation": "COLLABORATOR",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 1
+          },
+          "commit": {
+            "oid": "edc23e104d81b1e98e9955576fc70fc8a8a18db4"
+          },
+          "createdAt": "2026-08-25T17:22:09Z",
+          "editor": null,
           "fullDatabaseId": "5021872366",
-          "state": "COMMENTED"
+          "id": "PRR_kwDOPRoOy88AAAABK1Ow7g",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-08-25T17:22:09Z",
+          "state": "COMMENTED",
+          "submittedAt": "2026-08-25T17:22:09Z",
+          "updatedAt": "2026-08-25T17:22:09Z"
         },
         {
           "author": {
@@ -1021,8 +2384,24 @@
             "id": "U_kgDOEOtVug",
             "login": "mkostromin-sigma"
           },
+          "authorAssociation": "COLLABORATOR",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 1
+          },
+          "commit": {
+            "oid": "edc23e104d81b1e98e9955576fc70fc8a8a18db4"
+          },
+          "createdAt": "2026-08-25T17:22:11Z",
+          "editor": null,
           "fullDatabaseId": "5021872619",
-          "state": "COMMENTED"
+          "id": "PRR_kwDOPRoOy88AAAABK1Ox6w",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-08-25T17:22:11Z",
+          "state": "COMMENTED",
+          "submittedAt": "2026-08-25T17:22:11Z",
+          "updatedAt": "2026-08-25T17:22:11Z"
         },
         {
           "author": {
@@ -1031,8 +2410,24 @@
             "id": "U_kgDOEOtVug",
             "login": "mkostromin-sigma"
           },
+          "authorAssociation": "COLLABORATOR",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 1
+          },
+          "commit": {
+            "oid": "edc23e104d81b1e98e9955576fc70fc8a8a18db4"
+          },
+          "createdAt": "2026-08-25T17:22:12Z",
+          "editor": null,
           "fullDatabaseId": "5021872894",
-          "state": "COMMENTED"
+          "id": "PRR_kwDOPRoOy88AAAABK1Oy_g",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-08-25T17:22:12Z",
+          "state": "COMMENTED",
+          "submittedAt": "2026-08-25T17:22:13Z",
+          "updatedAt": "2026-08-25T17:22:13Z"
         },
         {
           "author": {
@@ -1041,8 +2436,24 @@
             "id": "U_kgDOEOtVug",
             "login": "mkostromin-sigma"
           },
+          "authorAssociation": "COLLABORATOR",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 1
+          },
+          "commit": {
+            "oid": "edc23e104d81b1e98e9955576fc70fc8a8a18db4"
+          },
+          "createdAt": "2026-08-25T17:22:14Z",
+          "editor": null,
           "fullDatabaseId": "5021873150",
-          "state": "COMMENTED"
+          "id": "PRR_kwDOPRoOy88AAAABK1Oz_g",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-08-25T17:22:14Z",
+          "state": "COMMENTED",
+          "submittedAt": "2026-08-25T17:22:14Z",
+          "updatedAt": "2026-08-25T17:22:14Z"
         },
         {
           "author": {
@@ -1051,8 +2462,24 @@
             "id": "U_kgDOEOtVug",
             "login": "mkostromin-sigma"
           },
+          "authorAssociation": "COLLABORATOR",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 1
+          },
+          "commit": {
+            "oid": "edc23e104d81b1e98e9955576fc70fc8a8a18db4"
+          },
+          "createdAt": "2026-08-25T17:22:17Z",
+          "editor": null,
           "fullDatabaseId": "5021873473",
-          "state": "COMMENTED"
+          "id": "PRR_kwDOPRoOy88AAAABK1O1QQ",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-08-25T17:22:17Z",
+          "state": "COMMENTED",
+          "submittedAt": "2026-08-25T17:22:17Z",
+          "updatedAt": "2026-08-25T17:22:17Z"
         },
         {
           "author": {
@@ -1061,8 +2488,24 @@
             "id": "U_kgDOEOtVug",
             "login": "mkostromin-sigma"
           },
+          "authorAssociation": "COLLABORATOR",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 1
+          },
+          "commit": {
+            "oid": "edc23e104d81b1e98e9955576fc70fc8a8a18db4"
+          },
+          "createdAt": "2026-08-25T17:22:19Z",
+          "editor": null,
           "fullDatabaseId": "5021873747",
-          "state": "COMMENTED"
+          "id": "PRR_kwDOPRoOy88AAAABK1O2Uw",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-08-25T17:22:19Z",
+          "state": "COMMENTED",
+          "submittedAt": "2026-08-25T17:22:19Z",
+          "updatedAt": "2026-08-25T17:22:19Z"
         },
         {
           "author": {
@@ -1071,8 +2514,24 @@
             "id": "U_kgDOEOtVug",
             "login": "mkostromin-sigma"
           },
+          "authorAssociation": "COLLABORATOR",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 1
+          },
+          "commit": {
+            "oid": "edc23e104d81b1e98e9955576fc70fc8a8a18db4"
+          },
+          "createdAt": "2026-08-25T17:22:20Z",
+          "editor": null,
           "fullDatabaseId": "5021874020",
-          "state": "COMMENTED"
+          "id": "PRR_kwDOPRoOy88AAAABK1O3ZA",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-08-25T17:22:20Z",
+          "state": "COMMENTED",
+          "submittedAt": "2026-08-25T17:22:21Z",
+          "updatedAt": "2026-08-25T17:22:21Z"
         },
         {
           "author": {
@@ -1081,8 +2540,24 @@
             "id": "U_kgDOEOtVug",
             "login": "mkostromin-sigma"
           },
+          "authorAssociation": "COLLABORATOR",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 1
+          },
+          "commit": {
+            "oid": "edc23e104d81b1e98e9955576fc70fc8a8a18db4"
+          },
+          "createdAt": "2026-08-25T17:22:22Z",
+          "editor": null,
           "fullDatabaseId": "5021874262",
-          "state": "COMMENTED"
+          "id": "PRR_kwDOPRoOy88AAAABK1O4Vg",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-08-25T17:22:22Z",
+          "state": "COMMENTED",
+          "submittedAt": "2026-08-25T17:22:23Z",
+          "updatedAt": "2026-08-25T17:22:23Z"
         },
         {
           "author": {
@@ -1091,8 +2566,24 @@
             "id": "U_kgDOEOtVug",
             "login": "mkostromin-sigma"
           },
+          "authorAssociation": "COLLABORATOR",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 1
+          },
+          "commit": {
+            "oid": "edc23e104d81b1e98e9955576fc70fc8a8a18db4"
+          },
+          "createdAt": "2026-08-25T17:22:24Z",
+          "editor": null,
           "fullDatabaseId": "5021874543",
-          "state": "COMMENTED"
+          "id": "PRR_kwDOPRoOy88AAAABK1O5bw",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-08-25T17:22:24Z",
+          "state": "COMMENTED",
+          "submittedAt": "2026-08-25T17:22:24Z",
+          "updatedAt": "2026-08-25T17:22:25Z"
         },
         {
           "author": {
@@ -1101,8 +2592,24 @@
             "id": "U_kgDOEOtVug",
             "login": "mkostromin-sigma"
           },
+          "authorAssociation": "COLLABORATOR",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 1
+          },
+          "commit": {
+            "oid": "edc23e104d81b1e98e9955576fc70fc8a8a18db4"
+          },
+          "createdAt": "2026-08-25T17:22:26Z",
+          "editor": null,
           "fullDatabaseId": "5021874808",
-          "state": "COMMENTED"
+          "id": "PRR_kwDOPRoOy88AAAABK1O6eA",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-08-25T17:22:26Z",
+          "state": "COMMENTED",
+          "submittedAt": "2026-08-25T17:22:26Z",
+          "updatedAt": "2026-08-25T17:22:26Z"
         },
         {
           "author": {
@@ -1111,8 +2618,24 @@
             "id": "U_kgDOEOtVug",
             "login": "mkostromin-sigma"
           },
+          "authorAssociation": "COLLABORATOR",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 1
+          },
+          "commit": {
+            "oid": "edc23e104d81b1e98e9955576fc70fc8a8a18db4"
+          },
+          "createdAt": "2026-08-25T17:22:28Z",
+          "editor": null,
           "fullDatabaseId": "5021875109",
-          "state": "COMMENTED"
+          "id": "PRR_kwDOPRoOy88AAAABK1O7pQ",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-08-25T17:22:28Z",
+          "state": "COMMENTED",
+          "submittedAt": "2026-08-25T17:22:28Z",
+          "updatedAt": "2026-08-25T17:22:28Z"
         },
         {
           "author": {
@@ -1121,8 +2644,24 @@
             "id": "U_kgDOEOtVug",
             "login": "mkostromin-sigma"
           },
+          "authorAssociation": "COLLABORATOR",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 1
+          },
+          "commit": {
+            "oid": "edc23e104d81b1e98e9955576fc70fc8a8a18db4"
+          },
+          "createdAt": "2026-08-25T17:22:30Z",
+          "editor": null,
           "fullDatabaseId": "5021875387",
-          "state": "COMMENTED"
+          "id": "PRR_kwDOPRoOy88AAAABK1O8uw",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-08-25T17:22:30Z",
+          "state": "COMMENTED",
+          "submittedAt": "2026-08-25T17:22:31Z",
+          "updatedAt": "2026-08-25T17:22:31Z"
         },
         {
           "author": {
@@ -1131,8 +2670,24 @@
             "id": "U_kgDOEOtVug",
             "login": "mkostromin-sigma"
           },
+          "authorAssociation": "COLLABORATOR",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 1
+          },
+          "commit": {
+            "oid": "edc23e104d81b1e98e9955576fc70fc8a8a18db4"
+          },
+          "createdAt": "2026-08-25T17:22:32Z",
+          "editor": null,
           "fullDatabaseId": "5021875673",
-          "state": "COMMENTED"
+          "id": "PRR_kwDOPRoOy88AAAABK1O92Q",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-08-25T17:22:32Z",
+          "state": "COMMENTED",
+          "submittedAt": "2026-08-25T17:22:32Z",
+          "updatedAt": "2026-08-25T17:22:32Z"
         },
         {
           "author": {
@@ -1141,8 +2696,24 @@
             "id": "U_kgDOEOtVug",
             "login": "mkostromin-sigma"
           },
+          "authorAssociation": "COLLABORATOR",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 1
+          },
+          "commit": {
+            "oid": "edc23e104d81b1e98e9955576fc70fc8a8a18db4"
+          },
+          "createdAt": "2026-08-25T17:22:34Z",
+          "editor": null,
           "fullDatabaseId": "5021875970",
-          "state": "COMMENTED"
+          "id": "PRR_kwDOPRoOy88AAAABK1O_Ag",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-08-25T17:22:34Z",
+          "state": "COMMENTED",
+          "submittedAt": "2026-08-25T17:22:34Z",
+          "updatedAt": "2026-08-25T17:22:34Z"
         },
         {
           "author": {
@@ -1151,8 +2722,24 @@
             "id": "U_kgDOEOtVug",
             "login": "mkostromin-sigma"
           },
+          "authorAssociation": "COLLABORATOR",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 1
+          },
+          "commit": {
+            "oid": "edc23e104d81b1e98e9955576fc70fc8a8a18db4"
+          },
+          "createdAt": "2026-08-25T17:22:36Z",
+          "editor": null,
           "fullDatabaseId": "5021876203",
-          "state": "COMMENTED"
+          "id": "PRR_kwDOPRoOy88AAAABK1O_6w",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-08-25T17:22:36Z",
+          "state": "COMMENTED",
+          "submittedAt": "2026-08-25T17:22:36Z",
+          "updatedAt": "2026-08-25T17:22:36Z"
         },
         {
           "author": {
@@ -1161,8 +2748,24 @@
             "id": "U_kgDOEOtVug",
             "login": "mkostromin-sigma"
           },
+          "authorAssociation": "COLLABORATOR",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 1
+          },
+          "commit": {
+            "oid": "edc23e104d81b1e98e9955576fc70fc8a8a18db4"
+          },
+          "createdAt": "2026-08-25T17:22:38Z",
+          "editor": null,
           "fullDatabaseId": "5021876509",
-          "state": "COMMENTED"
+          "id": "PRR_kwDOPRoOy88AAAABK1PBHQ",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-08-25T17:22:38Z",
+          "state": "COMMENTED",
+          "submittedAt": "2026-08-25T17:22:38Z",
+          "updatedAt": "2026-08-25T17:22:39Z"
         },
         {
           "author": {
@@ -1171,8 +2774,24 @@
             "id": "U_kgDOEOtVug",
             "login": "mkostromin-sigma"
           },
+          "authorAssociation": "COLLABORATOR",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 1
+          },
+          "commit": {
+            "oid": "edc23e104d81b1e98e9955576fc70fc8a8a18db4"
+          },
+          "createdAt": "2026-08-25T17:22:40Z",
+          "editor": null,
           "fullDatabaseId": "5021876741",
-          "state": "COMMENTED"
+          "id": "PRR_kwDOPRoOy88AAAABK1PCBQ",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-08-25T17:22:40Z",
+          "state": "COMMENTED",
+          "submittedAt": "2026-08-25T17:22:40Z",
+          "updatedAt": "2026-08-25T17:22:40Z"
         },
         {
           "author": {
@@ -1181,8 +2800,24 @@
             "id": "U_kgDOEOtVug",
             "login": "mkostromin-sigma"
           },
+          "authorAssociation": "COLLABORATOR",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 1
+          },
+          "commit": {
+            "oid": "edc23e104d81b1e98e9955576fc70fc8a8a18db4"
+          },
+          "createdAt": "2026-08-25T17:22:42Z",
+          "editor": null,
           "fullDatabaseId": "5021876993",
-          "state": "COMMENTED"
+          "id": "PRR_kwDOPRoOy88AAAABK1PDAQ",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-08-25T17:22:42Z",
+          "state": "COMMENTED",
+          "submittedAt": "2026-08-25T17:22:42Z",
+          "updatedAt": "2026-08-25T17:22:42Z"
         },
         {
           "author": {
@@ -1191,8 +2826,24 @@
             "id": "U_kgDOEOtVug",
             "login": "mkostromin-sigma"
           },
+          "authorAssociation": "COLLABORATOR",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 1
+          },
+          "commit": {
+            "oid": "edc23e104d81b1e98e9955576fc70fc8a8a18db4"
+          },
+          "createdAt": "2026-08-25T17:22:44Z",
+          "editor": null,
           "fullDatabaseId": "5021877292",
-          "state": "COMMENTED"
+          "id": "PRR_kwDOPRoOy88AAAABK1PELA",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-08-25T17:22:44Z",
+          "state": "COMMENTED",
+          "submittedAt": "2026-08-25T17:22:44Z",
+          "updatedAt": "2026-08-25T17:22:44Z"
         },
         {
           "author": {
@@ -1201,8 +2852,24 @@
             "id": "U_kgDOEOtVug",
             "login": "mkostromin-sigma"
           },
+          "authorAssociation": "COLLABORATOR",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 1
+          },
+          "commit": {
+            "oid": "edc23e104d81b1e98e9955576fc70fc8a8a18db4"
+          },
+          "createdAt": "2026-08-25T17:22:46Z",
+          "editor": null,
           "fullDatabaseId": "5021877570",
-          "state": "COMMENTED"
+          "id": "PRR_kwDOPRoOy88AAAABK1PFQg",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-08-25T17:22:46Z",
+          "state": "COMMENTED",
+          "submittedAt": "2026-08-25T17:22:46Z",
+          "updatedAt": "2026-08-25T17:22:46Z"
         },
         {
           "author": {
@@ -1211,8 +2878,24 @@
             "id": "U_kgDOEOtVug",
             "login": "mkostromin-sigma"
           },
+          "authorAssociation": "COLLABORATOR",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 1
+          },
+          "commit": {
+            "oid": "edc23e104d81b1e98e9955576fc70fc8a8a18db4"
+          },
+          "createdAt": "2026-08-25T17:22:48Z",
+          "editor": null,
           "fullDatabaseId": "5021877851",
-          "state": "COMMENTED"
+          "id": "PRR_kwDOPRoOy88AAAABK1PGWw",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-08-25T17:22:48Z",
+          "state": "COMMENTED",
+          "submittedAt": "2026-08-25T17:22:49Z",
+          "updatedAt": "2026-08-25T17:22:49Z"
         },
         {
           "author": {
@@ -1221,8 +2904,24 @@
             "id": "U_kgDOEOtVug",
             "login": "mkostromin-sigma"
           },
+          "authorAssociation": "COLLABORATOR",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 1
+          },
+          "commit": {
+            "oid": "edc23e104d81b1e98e9955576fc70fc8a8a18db4"
+          },
+          "createdAt": "2026-08-25T17:22:50Z",
+          "editor": null,
           "fullDatabaseId": "5021878075",
-          "state": "COMMENTED"
+          "id": "PRR_kwDOPRoOy88AAAABK1PHOw",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-08-25T17:22:50Z",
+          "state": "COMMENTED",
+          "submittedAt": "2026-08-25T17:22:50Z",
+          "updatedAt": "2026-08-25T17:22:50Z"
         },
         {
           "author": {
@@ -1231,8 +2930,24 @@
             "id": "U_kgDOEOtVug",
             "login": "mkostromin-sigma"
           },
+          "authorAssociation": "COLLABORATOR",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 1
+          },
+          "commit": {
+            "oid": "edc23e104d81b1e98e9955576fc70fc8a8a18db4"
+          },
+          "createdAt": "2026-08-25T17:22:52Z",
+          "editor": null,
           "fullDatabaseId": "5021878369",
-          "state": "COMMENTED"
+          "id": "PRR_kwDOPRoOy88AAAABK1PIYQ",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-08-25T17:22:52Z",
+          "state": "COMMENTED",
+          "submittedAt": "2026-08-25T17:22:52Z",
+          "updatedAt": "2026-08-25T17:22:52Z"
         },
         {
           "author": {
@@ -1241,8 +2956,24 @@
             "id": "U_kgDOEOtVug",
             "login": "mkostromin-sigma"
           },
+          "authorAssociation": "COLLABORATOR",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 1
+          },
+          "commit": {
+            "oid": "edc23e104d81b1e98e9955576fc70fc8a8a18db4"
+          },
+          "createdAt": "2026-08-25T17:22:54Z",
+          "editor": null,
           "fullDatabaseId": "5021878641",
-          "state": "COMMENTED"
+          "id": "PRR_kwDOPRoOy88AAAABK1PJcQ",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-08-25T17:22:54Z",
+          "state": "COMMENTED",
+          "submittedAt": "2026-08-25T17:22:54Z",
+          "updatedAt": "2026-08-25T17:22:54Z"
         },
         {
           "author": {
@@ -1251,8 +2982,24 @@
             "id": "U_kgDOEOtVug",
             "login": "mkostromin-sigma"
           },
+          "authorAssociation": "COLLABORATOR",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 1
+          },
+          "commit": {
+            "oid": "edc23e104d81b1e98e9955576fc70fc8a8a18db4"
+          },
+          "createdAt": "2026-08-25T17:22:56Z",
+          "editor": null,
           "fullDatabaseId": "5021878855",
-          "state": "COMMENTED"
+          "id": "PRR_kwDOPRoOy88AAAABK1PKRw",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-08-25T17:22:56Z",
+          "state": "COMMENTED",
+          "submittedAt": "2026-08-25T17:22:56Z",
+          "updatedAt": "2026-08-25T17:22:56Z"
         },
         {
           "author": {
@@ -1261,8 +3008,24 @@
             "id": "U_kgDOEOtVug",
             "login": "mkostromin-sigma"
           },
+          "authorAssociation": "COLLABORATOR",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 1
+          },
+          "commit": {
+            "oid": "edc23e104d81b1e98e9955576fc70fc8a8a18db4"
+          },
+          "createdAt": "2026-08-25T17:22:58Z",
+          "editor": null,
           "fullDatabaseId": "5021879167",
-          "state": "COMMENTED"
+          "id": "PRR_kwDOPRoOy88AAAABK1PLfw",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-08-25T17:22:58Z",
+          "state": "COMMENTED",
+          "submittedAt": "2026-08-25T17:22:58Z",
+          "updatedAt": "2026-08-25T17:22:58Z"
         },
         {
           "author": {
@@ -1271,8 +3034,24 @@
             "id": "U_kgDOEOtVug",
             "login": "mkostromin-sigma"
           },
+          "authorAssociation": "COLLABORATOR",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 1
+          },
+          "commit": {
+            "oid": "edc23e104d81b1e98e9955576fc70fc8a8a18db4"
+          },
+          "createdAt": "2026-08-25T17:23:00Z",
+          "editor": null,
           "fullDatabaseId": "5021879465",
-          "state": "COMMENTED"
+          "id": "PRR_kwDOPRoOy88AAAABK1PMqQ",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-08-25T17:23:00Z",
+          "state": "COMMENTED",
+          "submittedAt": "2026-08-25T17:23:00Z",
+          "updatedAt": "2026-08-25T17:23:00Z"
         }
       ],
       "pageInfo": {
@@ -1281,20 +3060,31 @@
       },
       "totalCount": 106
     },
+    "stack": null,
+    "stackEntry": null,
     "state": "OPEN",
     "title": "fix(e2e): align local docker_services_e2e with shared readiness helper",
-    "updatedAt": "2026-09-03T20:04:19Z"
+    "totalCommentsCount": 214,
+    "updatedAt": "2026-09-03T20:04:19Z",
+    "userLinkedClosingIssues": {
+      "nodes": [],
+      "pageInfo": {
+        "endCursor": null,
+        "hasNextPage": false
+      },
+      "totalCount": 0
+    }
   },
-  "document_sha256": "39fd2b5d7744d57be4fd58ba38b2fcf50319c5bd19e1c3796ae4771203af3ea0",
+  "document_sha256": "d9504d2e5167f4a1a6b2a756e422bebab6c478da2016bd0508171f696e0c5643",
   "errors": [],
   "extra": {},
   "headers": {
-    "date": "Sat, 17 Oct 2026 12:09:29 GMT",
+    "date": "Sun, 18 Oct 2026 20:09:36 GMT",
     "x-ratelimit-limit": "5000",
-    "x-ratelimit-remaining": "4927",
-    "x-ratelimit-reset": "1792241340",
+    "x-ratelimit-remaining": "4748",
+    "x-ratelimit-reset": "1792356065",
     "x-ratelimit-resource": "graphql",
-    "x-ratelimit-used": "73"
+    "x-ratelimit-used": "252"
   },
   "key": {
     "name": "salesagent",
@@ -1302,6 +3092,6 @@
     "owner": "prebid"
   },
   "kind": "pull_request",
-  "recorded_at": "2026-10-17T12:09:19Z",
+  "recorded_at": "2026-10-18T20:09:16Z",
   "source": "live"
 }

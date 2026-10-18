@@ -2,13 +2,23 @@
 
 from __future__ import annotations
 
+import dataclasses
 from datetime import UTC, datetime, timedelta
 from email.utils import format_datetime
 from typing import Any
 
 import pytest
 
-from github_activity_db.source import Account, ClosingIssue, IndexedPullRequest
+from github_activity_db.source import (
+    Account,
+    ClosingIssue,
+    IndexedPullRequest,
+    LookedUpAccount,
+    OrganizationProfile,
+    RepositoryLabel,
+    RepositoryRecord,
+    UserProfile,
+)
 from github_activity_db.source.errors import (
     IndexCountMismatch,
     IndexOrderViolation,
@@ -253,7 +263,9 @@ class TestLabelPages:
         # a page the replay does not have.
         page = label_page(replay)
         labels = page.data["labels"]
-        labels["nodes"].append({"name": "one too many"})
+        labels["nodes"].append(
+            {**labels["nodes"][0], "id": "LA_one_too_many", "name": "one too many"}
+        )
         labels["pageInfo"] = {"hasNextPage": True, "endCursor": "MTQ1"}
         replay.add(page)
         async with open_source() as source:
@@ -262,39 +274,147 @@ class TestLabelPages:
         assert (raised.value.fetched, raised.value.total_count) == (145, 144)
 
 
+def wire_time(value: str | None) -> datetime | None:
+    return datetime.fromisoformat(value) if value is not None else None
+
+
+def wire_label(node: dict[str, Any]) -> RepositoryLabel:
+    return RepositoryLabel(
+        node_id=node["id"],
+        name=node["name"],
+        color=node["color"],
+        description=node["description"],
+        is_default=node["isDefault"],
+        created_at=wire_time(node["createdAt"]),
+        updated_at=wire_time(node["updatedAt"]),
+    )
+
+
 @pytest.mark.parametrize("unit", recorded("resolve"), ids=labelled)
 async def test_resolve_maps_every_field_from_its_wire_name(open_source, unit: Unit) -> None:
     data = unit.data
     async with open_source() as source:
         repository = await source.resolve(unit.key["owner"], unit.key["name"])
-    assert (
-        repository.github_id,
-        repository.node_id,
-        repository.owner,
-        repository.name,
-        repository.full_name,
-        repository.is_private,
-        repository.is_archived,
-        repository.default_branch,
-    ) == (
-        data["databaseId"],
-        data["id"],
-        data["owner"]["login"],
-        data["name"],
-        data["nameWithOwner"],
-        data["isPrivate"],
-        data["isArchived"],
-        data["defaultBranchRef"]["name"],
+    plan = data["planFeatures"]
+    assert dataclasses.replace(repository, labels=()) == RepositoryRecord(
+        github_id=data["databaseId"],
+        node_id=data["id"],
+        owner=data["owner"]["login"],
+        name=data["name"],
+        full_name=data["nameWithOwner"],
+        is_private=data["isPrivate"],
+        is_archived=data["isArchived"],
+        default_branch=data["defaultBranchRef"]["name"],
+        labels=(),
+        labels_total=data["labels"]["totalCount"],
+        is_security_policy_enabled=data["isSecurityPolicyEnabled"],
+        visibility=data["visibility"],
+        description=data["description"],
+        homepage_url=data["homepageUrl"],
+        created_at=datetime.fromisoformat(data["createdAt"]),
+        updated_at=datetime.fromisoformat(data["updatedAt"]),
+        pushed_at=wire_time(data["pushedAt"]),
+        archived_at=wire_time(data["archivedAt"]),
+        stargazer_count=data["stargazerCount"],
+        fork_count=data["forkCount"],
+        disk_usage=data["diskUsage"],
+        forking_allowed=data["forkingAllowed"],
+        allow_update_branch=data["allowUpdateBranch"],
+        web_commit_signoff_required=data["webCommitSignoffRequired"],
+        has_wiki_enabled=data["hasWikiEnabled"],
+        has_discussions_enabled=data["hasDiscussionsEnabled"],
+        has_projects_enabled=data["hasProjectsEnabled"],
+        has_vulnerability_alerts_enabled=data["hasVulnerabilityAlertsEnabled"],
+        uses_custom_open_graph_image=data["usesCustomOpenGraphImage"],
+        merge_commit_allowed=data["mergeCommitAllowed"],
+        squash_merge_allowed=data["squashMergeAllowed"],
+        rebase_merge_allowed=data["rebaseMergeAllowed"],
+        delete_branch_on_merge=data["deleteBranchOnMerge"],
+        merge_commit_title=data["mergeCommitTitle"],
+        merge_commit_message=data["mergeCommitMessage"],
+        squash_merge_commit_title=data["squashMergeCommitTitle"],
+        squash_merge_commit_message=data["squashMergeCommitMessage"],
+        primary_language=(data["primaryLanguage"] or {}).get("name"),
+        license_spdx_id=(data["licenseInfo"] or {}).get("spdxId"),
+        plan_features_codeowners=plan["codeowners"],
+        plan_features_team_review_requests=plan["teamReviewRequests"],
+        plan_features_maximum_manual_review_requests=plan["maximumManualReviewRequests"],
+        resolved_at=parsed_date(unit),
     )
-    names = [node["name"] for node in data["labels"]["nodes"]]
-    names += [
-        node["name"]
+    labels = [wire_label(node) for node in data["labels"]["nodes"]]
+    labels += [
+        wire_label(node)
         for page in recorded("repository_labels")
         if page.key["id"] == data["id"]
         for node in page.data["labels"]["nodes"]
     ]
-    assert repository.label_names == frozenset(names)
-    assert len(names) == data["labels"]["totalCount"]
+    assert list(repository.labels) == labels
+    assert len(labels) == data["labels"]["totalCount"]
+    assert repository.label_names == frozenset(label.name for label in labels)
+
+
+def test_the_resolve_recordings_hold_a_value_for_each_added_field() -> None:
+    """Some recording gives each added field a value that is neither null nor false, so a field
+    mapped to the wrong record field cannot pass the mapping test on nulls alone."""
+    units = [unit.data for unit in recorded("resolve")]
+    labels = [node for data in units for node in data["labels"]["nodes"]]
+    fields = [
+        "isSecurityPolicyEnabled",
+        "description",
+        "homepageUrl",
+        "pushedAt",
+        "diskUsage",
+        "forkingAllowed",
+        "allowUpdateBranch",
+        "hasWikiEnabled",
+        "hasDiscussionsEnabled",
+        "hasProjectsEnabled",
+        "hasVulnerabilityAlertsEnabled",
+        "usesCustomOpenGraphImage",
+        "mergeCommitAllowed",
+        "rebaseMergeAllowed",
+        "deleteBranchOnMerge",
+        "primaryLanguage",
+        "licenseInfo",
+    ]
+    empty = [field for field in fields if not any(data[field] for data in units)]
+    empty += [
+        f"label {field}"
+        for field in ("description", "isDefault", "createdAt", "updatedAt")
+        if not any(node[field] for node in labels)
+    ]
+    assert empty == []
+
+
+async def test_a_label_id_listed_twice_fails_the_repository(open_source, replay: Replay) -> None:
+    unit = replay.unit("resolve", owner="prebid", name="go-gdpr")
+    nodes = unit.data["labels"]["nodes"]
+    nodes[1] = {**nodes[1], "id": nodes[0]["id"]}
+    replay.add(unit)
+    async with open_source() as source:
+        with pytest.raises(RepositoryShapeError, match="listed twice"):
+            await source.resolve("prebid", "go-gdpr")
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("visibility", None),
+        ("forkingAllowed", "true"),
+        ("diskUsage", "1"),
+        ("pushedAt", "1700000000"),
+        ("planFeatures", None),
+    ],
+)
+async def test_a_resolve_field_the_models_reject(
+    open_source, replay: Replay, field: str, value: object
+) -> None:
+    unit = replay.unit("resolve", owner="prebid", name="go-gdpr")
+    unit.data[field] = value
+    replay.add(unit)
+    async with open_source() as source:
+        with pytest.raises(RepositoryShapeError, match="unexpected repository shape"):
+            await source.resolve("prebid", "go-gdpr")
 
 
 @pytest.mark.parametrize(("field", "value"), [("isPrivate", True), ("isArchived", True)])
@@ -578,6 +698,7 @@ async def test_index_maps_every_field_from_its_wire_name(
                 created_at=datetime.fromisoformat(node["createdAt"]),
                 updated_at=datetime.fromisoformat(node["updatedAt"]),
                 merged_at=datetime.fromisoformat(node["mergedAt"]) if node["mergedAt"] else None,
+                closed_at=datetime.fromisoformat(node["closedAt"]) if node["closedAt"] else None,
                 closing_issues=tuple(
                     ClosingIssue(
                         repo_github_id=link["repository"]["databaseId"],
@@ -594,6 +715,138 @@ async def test_index_maps_every_field_from_its_wire_name(
     )
     assert sorted(index.entries, key=lambda entry: entry.number) == expected
     assert index.repository == f"{owner}/{name}"
+
+
+def test_the_index_recordings_hold_a_closed_pull_request() -> None:
+    nodes = [node for unit in recorded("index") for node in unit.data["nodes"]]
+    assert any(node["state"] == "CLOSED" and node["closedAt"] for node in nodes)
+
+
+def wire_looked_up(node: dict[str, Any]) -> LookedUpAccount:
+    """A lookup node as the source layer reads it, by wire name (plan 5.8, D31)."""
+    typename = node["__typename"]
+    profile: UserProfile | OrganizationProfile | None = None
+    if typename == "User":
+        profile = UserProfile(
+            company=node["company"], location=node["location"], website_url=node["websiteUrl"]
+        )
+    elif typename == "Organization":
+        profile = OrganizationProfile(
+            description=node["description"],
+            email=node["email"],
+            location=node["location"],
+            website_url=node["websiteUrl"],
+            twitter_username=node["twitterUsername"],
+            is_verified=node["isVerified"],
+            archived_at=wire_time(node["archivedAt"]),
+            has_sponsors_listing=node["hasSponsorsListing"],
+            pinned_items_remaining=node["pinnedItemsRemaining"],
+        )
+    return LookedUpAccount(
+        account=Account(
+            github_id=node.get("databaseId"),
+            node_id=node["id"],
+            login=node["login"],
+            type=typename,
+            linked_user_github_id=(node.get("user") or {}).get("databaseId"),
+        ),
+        name=node.get("name"),
+        created_at=datetime.fromisoformat(node["createdAt"]),
+        updated_at=datetime.fromisoformat(node["updatedAt"]),
+        claimant_github_id=(node.get("claimant") or {}).get("databaseId"),
+        profile=profile,
+    )
+
+
+@pytest.mark.parametrize("unit", [u for u in recorded("user") if u.data], ids=labelled)
+async def test_a_lookup_maps_every_field_from_its_wire_name(open_source, unit: Unit) -> None:
+    async with open_source() as source:
+        lookups = [lookup async for lookup in source.lookup_users([unit.key["id"]])]
+    ((only,),) = [list(lookup.accounts.values()) for lookup in lookups]
+    assert only == wire_looked_up(unit.data)
+    assert lookups[0].looked_up_at == parsed_date(unit)
+
+
+def test_the_lookup_recordings_hold_each_profile_kind() -> None:
+    nodes = [unit.data for unit in recorded("user") if unit.data]
+    users = [node for node in nodes if node["__typename"] == "User"]
+    assert {node["__typename"] for node in nodes} == {"User", "Bot", "Organization"}
+    assert all(
+        any(node[field] for node in users) for field in ("company", "location", "websiteUrl")
+    )
+    (organization,) = [node for node in nodes if node["__typename"] == "Organization"]
+    assert all(
+        organization[field]
+        for field in ("description", "email", "location", "websiteUrl", "pinnedItemsRemaining")
+    )
+
+
+@pytest.mark.parametrize(
+    "node",
+    [
+        {
+            "__typename": "Mannequin",
+            "id": "MQ_1",
+            "databaseId": 501,
+            "login": "imported-someone",
+            "name": "Someone",
+            "createdAt": "2020-01-01T00:00:00Z",
+            "updatedAt": "2020-01-02T00:00:00Z",
+            "claimant": {"databaseId": 1683175},
+        },
+        {
+            "__typename": "Mannequin",
+            "id": "MQ_1",
+            "databaseId": 501,
+            "login": "imported-someone",
+            "name": None,
+            "createdAt": "2020-01-01T00:00:00Z",
+            "updatedAt": "2020-01-02T00:00:00Z",
+            "claimant": None,
+        },
+        {
+            "__typename": "EnterpriseUserAccount",
+            "id": "MQ_1",
+            "login": "someone_corp",
+            "name": "Someone",
+            "createdAt": "2020-01-01T00:00:00Z",
+            "updatedAt": "2020-01-02T00:00:00Z",
+            "user": {"databaseId": 81847},
+        },
+    ],
+    ids=["claimed-mannequin", "unclaimed-mannequin", "enterprise-user"],
+)
+async def test_a_lookup_of_a_type_without_a_profile(
+    open_source, replay: Replay, node: dict[str, Any]
+) -> None:
+    # Synthetic: no tracked repository refers to a mannequin or an enterprise account.
+    unit = replay.unit("user", id=PATMMCCANN)
+    unit.key = {"id": "MQ_1"}
+    unit.data = node
+    unit.source = "synthetic: a lookup of a type no recording holds"
+    replay.add(unit)
+    async with open_source() as source:
+        lookups = [lookup async for lookup in source.lookup_users(["MQ_1"])]
+    assert lookups[0].accounts == {"MQ_1": wire_looked_up(node)}
+    assert lookups[0].accounts["MQ_1"] is not None
+    assert lookups[0].accounts["MQ_1"].profile is None
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [("company", 7), ("createdAt", None), ("websiteUrl", False), ("__typename", "Team")],
+)
+async def test_a_lookup_field_the_models_reject_fails_that_id(
+    open_source, replay: Replay, field: str, value: object
+) -> None:
+    unit = replay.unit("user", id=PATMMCCANN)
+    unit.data[field] = value
+    replay.add(unit)
+    async with open_source() as source:
+        accounts, failed = await all_lookups(source, [PATMMCCANN, DEPENDABOT])
+    assert list(failed) == [PATMMCCANN]
+    assert isinstance(failed[PATMMCCANN].cause, LookupShapeError)
+    assert accounts[DEPENDABOT] is not None
 
 
 def synthetic_users(replay: Replay, count: int) -> list[str]:

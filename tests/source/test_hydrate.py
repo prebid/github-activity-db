@@ -16,18 +16,26 @@ import pytest
 
 from github_activity_db.source import (
     Account,
-    ClosingIssue,
     Comment,
     CommitRecord,
     ConnectionTotals,
     Failed,
     FileChange,
     Gone,
+    HeadRepository,
+    HeadRepositoryOwner,
     Hydrated,
+    Label,
     LinkedAccount,
+    LinkedClosingIssue,
+    Milestone,
     PullRequestOutcome,
     PullRequestRecord,
+    RequestedTeam,
     Review,
+    ReviewRequest,
+    Stack,
+    StackEntry,
 )
 from github_activity_db.source.documents import (
     COMMITS,
@@ -35,7 +43,6 @@ from github_activity_db.source.documents import (
     overflow_alias,
 )
 from github_activity_db.source.errors import (
-    ActorWithoutId,
     AliasError,
     CompareCountMismatch,
     CompareRefused,
@@ -55,6 +62,7 @@ from github_activity_db.source.errors import (
     ServerError,
     TotalCountChanged,
     UnattributedErrors,
+    UserLinkedIssueNotListed,
 )
 from github_activity_db.source.hydrate import _uses_compare
 from github_activity_db.source.limits import (
@@ -294,12 +302,97 @@ def wire_time(value: str | None) -> datetime | None:
 def wire_account(actor: dict[str, Any] | None) -> Account | None:
     if actor is None:
         return None
+    if actor["__typename"] == "EnterpriseUserAccount":
+        return Account(
+            github_id=None,
+            node_id=actor["id"],
+            login=actor["login"],
+            type="EnterpriseUserAccount",
+            linked_user_github_id=(actor["user"] or {}).get("databaseId"),
+        )
     return Account(
         github_id=actor["databaseId"],
         node_id=actor["id"],
         login=actor["login"],
         type=actor["__typename"],
     )
+
+
+def wire_review(node: dict[str, Any]) -> Review:
+    return Review(
+        github_id=int(node["fullDatabaseId"]),
+        node_id=node["id"],
+        reviewer=wire_account(node["author"]),
+        state=node["state"],
+        created_at=datetime.fromisoformat(node["createdAt"]),
+        submitted_at=wire_time(node["submittedAt"]),
+        published_at=wire_time(node["publishedAt"]),
+        updated_at=datetime.fromisoformat(node["updatedAt"]),
+        last_edited_at=wire_time(node["lastEditedAt"]),
+        editor=wire_account(node["editor"]),
+        includes_created_edit=node["includesCreatedEdit"],
+        commit_oid=(node["commit"] or {}).get("oid"),
+        author_association=node["authorAssociation"],
+        author_can_push_to_repository=node["authorCanPushToRepository"],
+        inline_comments_total=node["comments"]["totalCount"],
+    )
+
+
+def wire_comment(node: dict[str, Any]) -> Comment:
+    return Comment(
+        github_id=int(node["fullDatabaseId"]),
+        node_id=node["id"],
+        author=wire_account(node["author"]),
+        created_at=datetime.fromisoformat(node["createdAt"]),
+        published_at=wire_time(node["publishedAt"]),
+        updated_at=datetime.fromisoformat(node["updatedAt"]),
+        last_edited_at=wire_time(node["lastEditedAt"]),
+        editor=wire_account(node["editor"]),
+        created_via_email=node["createdViaEmail"],
+        includes_created_edit=node["includesCreatedEdit"],
+        author_association=node["authorAssociation"],
+    )
+
+
+def wire_request(node: dict[str, Any]) -> ReviewRequest:
+    requested = node["requestedReviewer"]
+    typename = requested["__typename"] if requested is not None else None
+    return ReviewRequest(
+        github_id=node["databaseId"],
+        node_id=node["id"],
+        as_code_owner=node["asCodeOwner"],
+        requested_type=typename,
+        account=(
+            Account(
+                github_id=requested["databaseId"],
+                node_id=requested["id"],
+                login=requested["login"],
+                type=typename,
+            )
+            if typename in ("User", "Bot", "Mannequin")
+            else None
+        ),
+        team=(
+            RequestedTeam(
+                github_id=requested["databaseId"], node_id=requested["id"], slug=requested["slug"]
+            )
+            if typename == "Team"
+            else None
+        ),
+    )
+
+
+def wire_assignee(node: dict[str, Any]) -> Account:
+    return Account(
+        github_id=node["databaseId"],
+        node_id=node["id"],
+        login=node["login"],
+        type=node["__typename"],
+    )
+
+
+def wire_ref(node: dict[str, Any] | None, field: str) -> Any:
+    return node[field] if node is not None else None
 
 
 @pytest.mark.parametrize(
@@ -311,6 +404,11 @@ async def test_every_field_maps_from_its_wire_name(open_source, unit: Unit) -> N
     """Each record field against the recorded JSON it comes from, read by its wire name."""
     data = unit.data
     record = await hydrate_one(open_source, (unit.key["owner"], unit.key["name"]), data["number"])
+    head_repository = data["headRepository"]
+    owner = data["headRepositoryOwner"]
+    stack = data["stack"]
+    entry = data["stackEntry"]
+    milestone = data["milestone"]
     assert (
         record.repository,
         record.github_id,
@@ -324,12 +422,33 @@ async def test_every_field_maps_from_its_wire_name(open_source, unit: Unit) -> N
         record.author_association,
         record.created_at,
         record.merged_at,
+        record.closed_at,
+        record.published_at,
+        record.last_edited_at,
+        record.editor,
+        record.includes_created_edit,
+        record.maintainer_can_modify,
         record.merged_by,
         record.base_ref,
+        record.base_ref_oid,
+        record.head_ref_name,
+        record.head_ref_oid,
+        record.head_repository,
+        record.head_repository_owner,
+        record.merge_commit_oid,
         record.is_cross_repository,
+        record.milestone,
+        record.review_decision,
+        record.mergeable,
+        record.merge_state_status,
+        record.can_be_rebased,
+        record.potential_merge_commit_oid,
+        record.stack,
+        record.stack_entry,
         record.additions,
         record.deletions,
         record.changed_files,
+        record.total_comments_count,
         record.github_updated_at,
     ) == (
         f"{unit.key['owner']}/{unit.key['name']}",
@@ -344,47 +463,83 @@ async def test_every_field_maps_from_its_wire_name(open_source, unit: Unit) -> N
         data["authorAssociation"],
         wire_time(data["createdAt"]),
         wire_time(data["mergedAt"]),
+        wire_time(data["closedAt"]),
+        wire_time(data["publishedAt"]),
+        wire_time(data["lastEditedAt"]),
+        wire_account(data["editor"]),
+        data["includesCreatedEdit"],
+        data["maintainerCanModify"],
         wire_account(data["mergedBy"]),
         data["baseRefName"],
+        data["baseRefOid"],
+        data["headRefName"],
+        data["headRefOid"],
+        (
+            HeadRepository(
+                github_id=head_repository["databaseId"],
+                full_name=head_repository["nameWithOwner"],
+            )
+            if head_repository is not None
+            else None
+        ),
+        HeadRepositoryOwner(node_id=owner["id"], login=owner["login"]) if owner else None,
+        wire_ref(data["mergeCommit"], "oid"),
         data["isCrossRepository"],
+        Milestone(number=milestone["number"], title=milestone["title"]) if milestone else None,
+        data["reviewDecision"],
+        data["mergeable"],
+        data["mergeStateStatus"],
+        data["canBeRebased"],
+        wire_ref(data["potentialMergeCommit"], "oid"),
+        (
+            Stack(
+                node_id=stack["id"],
+                number=stack["number"],
+                size=stack["size"],
+                base_ref_name=stack["baseRefName"],
+            )
+            if stack is not None
+            else None
+        ),
+        StackEntry(node_id=entry["id"], position=entry["position"]) if entry else None,
         data["additions"],
         data["deletions"],
         data["changedFiles"],
+        data["totalCommentsCount"],
         wire_time(data["updatedAt"]),
     )
     assert record.totals == ConnectionTotals(
         labels=data["labels"]["totalCount"],
         closing_issues=data["closingIssuesReferences"]["totalCount"],
+        user_linked_closing_issues=data["userLinkedClosingIssues"]["totalCount"],
         reviews=data["reviews"]["totalCount"],
         comments=data["comments"]["totalCount"],
         commits=data["commits"]["totalCount"],
         files=data["files"]["totalCount"],
+        review_requests=data["reviewRequests"]["totalCount"],
+        assignees=data["assignedActors"]["totalCount"],
     )
     # The first page of each connection leads the record's entries, in order.
-    labels = [node["name"] for node in data["labels"]["nodes"]]
+    labels = [Label(name=node["name"], node_id=node["id"]) for node in data["labels"]["nodes"]]
     assert list(record.labels[: len(labels)]) == labels
+    user_linked = {
+        (node["repository"]["databaseId"], node["number"])
+        for node in data["userLinkedClosingIssues"]["nodes"]
+    }
     closing = [
-        ClosingIssue(
+        LinkedClosingIssue(
             repo_github_id=node["repository"]["databaseId"],
             repo_full_name=node["repository"]["nameWithOwner"],
             number=node["number"],
+            github_id=int(node["fullDatabaseId"]),
+            user_linked=(node["repository"]["databaseId"], node["number"]) in user_linked,
         )
         for node in data["closingIssuesReferences"]["nodes"]
     ]
     assert list(record.closing_issues[: len(closing)]) == closing
-    reviews = [
-        Review(
-            github_id=int(node["fullDatabaseId"]),
-            reviewer=wire_account(node["author"]),
-            state=node["state"],
-        )
-        for node in data["reviews"]["nodes"]
-    ]
+    reviews = [wire_review(node) for node in data["reviews"]["nodes"]]
     assert list(record.reviews[: len(reviews)]) == reviews
-    comments = [
-        Comment(github_id=int(node["fullDatabaseId"]), author=wire_account(node["author"]))
-        for node in data["comments"]["nodes"]
-    ]
+    comments = [wire_comment(node) for node in data["comments"]["nodes"]]
     assert list(record.comments[: len(comments)]) == comments
     files = [
         FileChange(
@@ -396,15 +551,20 @@ async def test_every_field_maps_from_its_wire_name(open_source, unit: Unit) -> N
         for node in data["files"]["nodes"]
     ]
     assert list(record.files[: len(files)]) == files
+    requests = [wire_request(node) for node in data["reviewRequests"]["nodes"]]
+    assert list(record.review_requests[: len(requests)]) == requests
+    assignees = [wire_assignee(node) for node in data["assignedActors"]["nodes"]]
+    assert list(record.assignees[: len(assignees)]) == assignees
     if not (
         data["reviews"]["pageInfo"]["hasNextPage"] or data["comments"]["pageInfo"]["hasNextPage"]
     ):
-        sightings = [data["author"], data["mergedBy"]]
-        sightings += [node["author"] for node in data["reviews"]["nodes"]]
-        sightings += [node["author"] for node in data["comments"]["nodes"]]
-        assert set(record.accounts()) == {
-            wire_account(actor) for actor in sightings if actor is not None
-        }
+        sightings = [data["author"], data["mergedBy"], data["editor"]]
+        for node in data["reviews"]["nodes"] + data["comments"]["nodes"]:
+            sightings += [node["author"], node["editor"]]
+        expected = {wire_account(actor) for actor in sightings if actor is not None}
+        expected |= {request.account for request in requests if request.account is not None}
+        expected |= set(assignees)
+        assert set(record.accounts()) == expected
     if record.commits_source == "graphql":
         commits = [
             CommitRecord(
@@ -417,6 +577,40 @@ async def test_every_field_maps_from_its_wire_name(open_source, unit: Unit) -> N
             for node in data["commits"]["nodes"]
         ]
         assert list(record.commits[: len(commits)]) == commits
+
+
+def test_the_recordings_hold_a_value_for_each_added_field() -> None:
+    """The mapping test above reads a non-null, non-false value of each Step 3b-1 field from
+    some recording, so a field mapped to the wrong record field cannot pass on nulls alone."""
+    units = [unit.data for unit in recorded_pull_requests()]
+    reviews = [node for data in units for node in data["reviews"]["nodes"]]
+    comments = [node for data in units for node in data["comments"]["nodes"]]
+    filled = {
+        "closedAt": any(data["state"] == "CLOSED" and data["closedAt"] for data in units),
+        "lastEditedAt": any(data["lastEditedAt"] for data in units),
+        "editor": any(data["editor"] for data in units),
+        "headRepository null": any(data["headRepository"] is None for data in units),
+        "milestone": any(data["milestone"] for data in units),
+        "reviewDecision": any(data["reviewDecision"] for data in units),
+        "potentialMergeCommit": any(data["potentialMergeCommit"] for data in units),
+        "mergeCommit": any(data["mergeCommit"] for data in units),
+        "maintainerCanModify": any(data["maintainerCanModify"] for data in units),
+        "user-linked": any(data["userLinkedClosingIssues"]["nodes"] for data in units),
+        "code-owner request": any(
+            node["asCodeOwner"] for data in units for node in data["reviewRequests"]["nodes"]
+        ),
+        "Bot assignee": any(
+            node["__typename"] == "Bot"
+            for data in units
+            for node in data["assignedActors"]["nodes"]
+        ),
+        "inline comments": any(node["comments"]["totalCount"] for node in reviews),
+        "review editor": any(node["editor"] for node in reviews),
+        "review commit": any(node["commit"] for node in reviews),
+        "comment editor": any(node["editor"] for node in comments),
+        "createdViaEmail": any(node["createdViaEmail"] for node in comments),
+    }
+    assert [name for name, present in filled.items() if not present] == []
 
 
 def wire_link(git_actor: dict[str, Any] | None) -> LinkedAccount | None:
@@ -461,8 +655,9 @@ def overflow_unit(
 
 
 SECOND_PAGES: dict[str, dict[str, Any]] = {
-    "labels": {"name": "extra"},
+    "labels": {"id": "LA_extra", "name": "extra"},
     "closingIssuesReferences": {
+        "fullDatabaseId": "1000001",
         "number": 1,
         "repository": {"databaseId": 39321023, "nameWithOwner": "prebid/Prebid.js"},
     },
@@ -487,13 +682,10 @@ def with_second_pages(replay: Replay, unit: Unit, connections: tuple[str, ...]) 
 @pytest.mark.parametrize(
     ("connection", "node", "read"),
     [
-        ("labels", {"name": "extra"}, lambda record: record.labels),
+        ("labels", SECOND_PAGES["labels"], lambda record: record.labels),
         (
             "closingIssuesReferences",
-            {
-                "number": 1,
-                "repository": {"databaseId": 39321023, "nameWithOwner": "prebid/Prebid.js"},
-            },
+            SECOND_PAGES["closingIssuesReferences"],
             lambda record: record.closing_issues,
         ),
     ],
@@ -517,12 +709,261 @@ async def test_a_connection_with_three_pages(open_source, replay: Replay) -> Non
     labels["totalCount"] = 3
     labels["pageInfo"] = {"hasNextPage": True, "endCursor": "page-2"}
     replay.add(unit)
-    replay.add(overflow_unit(unit, "labels", "page-2", [{"name": "b"}], 3, next_cursor="page-3"))
-    replay.add(overflow_unit(unit, "labels", "page-3", [{"name": "c"}], 3))
+    replay.add(
+        overflow_unit(
+            unit, "labels", "page-2", [{"id": "LA_b", "name": "b"}], 3, next_cursor="page-3"
+        )
+    )
+    replay.add(overflow_unit(unit, "labels", "page-3", [{"id": "LA_c", "name": "c"}], 3))
     record = await hydrate_one(open_source, PREBID_JS, 12975)
-    assert record.labels == ("bugfix", "b", "c")
+    assert [label.name for label in record.labels] == ["bugfix", "b", "c"]
     overflow = [seen for seen in replay.seen if is_overflow(seen)]
     assert [seen.variables["after0"] for seen in overflow] == ["page-2", "page-3"]
+
+
+# --------------------------------------------------------------------------------------------
+# The connections and fields Step 3b-1 adds
+# --------------------------------------------------------------------------------------------
+REQUESTED_TEAM = {
+    "id": "RR_team",
+    "databaseId": 77,
+    "asCodeOwner": True,
+    "requestedReviewer": {
+        "__typename": "Team",
+        "id": "T_kwDOAAAAAQ",
+        "databaseId": 5,
+        "slug": "core",
+    },
+}
+EXTRA_ASSIGNEE = {
+    "__typename": "Organization",
+    "databaseId": 13242760,
+    "id": "MDEyOk9yZ2FuaXphdGlvbjEzMjQyNzYw",
+    "login": "prebid",
+}
+
+
+def second_page(replay: Replay, unit: Unit, key: str, node: dict[str, Any]) -> None:
+    """``key`` of ``unit`` grows by ``node`` on a synthetic second page."""
+    page = unit.data[key]
+    page["totalCount"] += 1
+    page["pageInfo"] = {"hasNextPage": True, "endCursor": "page-2"}
+    replay.add(overflow_unit(unit, key, "page-2", [node], page["totalCount"]))
+
+
+@pytest.mark.parametrize(
+    ("key", "node", "read", "expected"),
+    [
+        (
+            "reviewRequests",
+            REQUESTED_TEAM,
+            lambda record: record.review_requests[-1].team,
+            RequestedTeam(github_id=5, node_id="T_kwDOAAAAAQ", slug="core"),
+        ),
+        (
+            "assignedActors",
+            EXTRA_ASSIGNEE,
+            lambda record: record.assignees[-1],
+            Account(
+                github_id=13242760,
+                node_id="MDEyOk9yZ2FuaXphdGlvbjEzMjQyNzYw",
+                login="prebid",
+                type="Organization",
+            ),
+        ),
+    ],
+    ids=["reviewRequests", "assignedActors"],
+)
+async def test_overflow_on_review_requests_and_assignees(
+    open_source, replay: Replay, key: str, node: dict[str, Any], read, expected: object
+) -> None:
+    # Synthetic: recorded #15771 (one request, two assignees) with a second page.
+    unit = pr_unit(replay, 15771)
+    second_page(replay, unit, key, node)
+    replay.add(unit)
+    record = await hydrate_one(open_source, PREBID_JS, 15771)
+    assert read(record) == expected
+    assert (
+        getattr(record.totals, {"reviewRequests": "review_requests"}.get(key, "assignees"))
+        == (unit.data[key]["totalCount"])
+    )
+    assert [seen.operation for seen in replay.seen].count("Overflow") == 1
+
+
+async def test_overflow_on_user_linked_closing_issues(open_source, replay: Replay) -> None:
+    # Synthetic: recorded #15753 (one link, user-linked) with a second link on both lists.
+    unit = pr_unit(replay, 15753)
+    repository = {"databaseId": 39321023, "nameWithOwner": "prebid/Prebid.js"}
+    second_page(
+        replay,
+        unit,
+        "closingIssuesReferences",
+        {"fullDatabaseId": "1000001", "number": 1, "repository": repository},
+    )
+    second_page(
+        replay,
+        unit,
+        "userLinkedClosingIssues",
+        {"number": 1, "repository": {"databaseId": 39321023}},
+    )
+    replay.add(unit)
+    record = await hydrate_one(open_source, PREBID_JS, 15753)
+    assert [(link.number, link.user_linked) for link in record.closing_issues] == [
+        (15750, True),
+        (1, True),
+    ]
+    assert record.totals.user_linked_closing_issues == 2
+
+
+async def test_a_link_not_user_linked(open_source, replay: Replay) -> None:
+    # Synthetic: recorded #15753 with its user-linked list emptied.
+    unit = pr_unit(replay, 15753)
+    unit.data["userLinkedClosingIssues"] = {
+        "totalCount": 0,
+        "pageInfo": {"hasNextPage": False, "endCursor": None},
+        "nodes": [],
+    }
+    replay.add(unit)
+    record = await hydrate_one(open_source, PREBID_JS, 15753)
+    assert [(link.number, link.user_linked) for link in record.closing_issues] == [(15750, False)]
+
+
+async def test_a_user_linked_issue_absent_from_the_full_list(open_source, replay: Replay) -> None:
+    unit = pr_unit(replay, 15753)
+    unit.data["userLinkedClosingIssues"]["nodes"][0]["number"] = 99999
+    replay.add(unit)
+    error = await failure(open_source, PREBID_JS, 15753)
+    assert isinstance(error, UserLinkedIssueNotListed)
+    assert error.key == (39321023, 99999)
+
+
+@pytest.mark.parametrize("key", ["userLinkedClosingIssues", "reviewRequests", "assignedActors"])
+async def test_a_short_page_on_an_added_connection(open_source, replay: Replay, key: str) -> None:
+    # The last page ends with fewer entries than totalCount.
+    unit = pr_unit(replay, 15753 if key == "userLinkedClosingIssues" else 15771)
+    unit.data[key]["totalCount"] += 1
+    replay.add(unit)
+    error = await failure(open_source, PREBID_JS, unit.key["number"])
+    assert isinstance(error, ConnectionCountMismatch)
+    assert error.connection == key
+
+
+async def test_a_duplicate_assignee(open_source, replay: Replay) -> None:
+    unit = pr_unit(replay, 15771)
+    nodes = unit.data["assignedActors"]["nodes"]
+    nodes[1] = dict(nodes[0])
+    replay.add(unit)
+    error = await failure(open_source, PREBID_JS, 15771)
+    assert isinstance(error, DuplicateEntry)
+    assert error.connection == "assignedActors"
+
+
+async def test_a_duplicate_user_linked_issue(open_source, replay: Replay) -> None:
+    unit = pr_unit(replay, 15753)
+    page = unit.data["userLinkedClosingIssues"]
+    page["nodes"].append(dict(page["nodes"][0]))
+    page["totalCount"] = 2
+    replay.add(unit)
+    error = await failure(open_source, PREBID_JS, 15753)
+    assert isinstance(error, DuplicateEntry)
+    assert error.connection == "userLinkedClosingIssues"
+
+
+async def test_review_requests_of_each_kind(open_source, replay: Replay) -> None:
+    # Synthetic: recorded #15771's user request, then a team, an enterprise team (only its type
+    # is selected), and a request GitHub returns with no reviewer.
+    unit = pr_unit(replay, 15771)
+    user_request = unit.data["reviewRequests"]["nodes"][0]
+    unit.data["reviewRequests"]["nodes"] = [
+        user_request,
+        REQUESTED_TEAM,
+        {
+            **REQUESTED_TEAM,
+            "id": "RR_enterprise",
+            "requestedReviewer": {"__typename": "EnterpriseTeam"},
+        },
+        {**REQUESTED_TEAM, "id": "RR_none", "databaseId": None, "requestedReviewer": None},
+    ]
+    unit.data["reviewRequests"]["totalCount"] = 4
+    replay.add(unit)
+    record = await hydrate_one(open_source, PREBID_JS, 15771)
+    assert [
+        (request.requested_type, request.account is not None, request.team, request.github_id)
+        for request in record.review_requests
+    ] == [
+        ("User", True, None, 3843805356),
+        ("Team", False, RequestedTeam(github_id=5, node_id="T_kwDOAAAAAQ", slug="core"), 77),
+        ("EnterpriseTeam", False, None, 77),
+        (None, False, None, None),
+    ]
+    # A requested account is an actor sighting; a team is not an account.
+    assert record.review_requests[0].account in record.accounts()
+
+
+async def test_a_stack_and_its_entry(open_source, replay: Replay) -> None:
+    # Synthetic: no tracked pull request is in a stack (section 7, "Merge state and stacks").
+    unit = pr_unit(replay, 13481)
+    unit.data["stack"] = {"id": "PRS_1", "number": 3, "size": 2, "baseRefName": "master"}
+    unit.data["stackEntry"] = {"id": "PRSE_1", "position": 1}
+    replay.add(unit)
+    record = await hydrate_one(open_source, PREBID_JS, 13481)
+    assert record.stack == Stack(node_id="PRS_1", number=3, size=2, base_ref_name="master")
+    assert record.stack_entry == StackEntry(node_id="PRSE_1", position=1)
+
+
+async def test_a_closed_pull_request_and_its_close_time(open_source, replay: Replay) -> None:
+    record = await hydrate_one(open_source, PREBID_JS, 15771)
+    assert (record.state, record.merged_at) == ("CLOSED", None)
+    assert record.closed_at == datetime(2026, 10, 16, 10, 26, 1, tzinfo=UTC)
+
+
+async def test_an_editor_is_a_sighting(open_source, replay: Replay) -> None:
+    record = await hydrate_one(open_source, PREBID_JS, 15771)
+    assert record.editor is not None and record.editor.type == "Bot"
+    assert record.editor in record.accounts()
+
+
+@pytest.mark.parametrize(
+    ("path", "value"),
+    [
+        (("closedAt",), "yesterday"),
+        (("maintainerCanModify",), "true"),
+        (("totalCommentsCount",), "3"),
+        (("mergeable",), 1),
+        (("headRepositoryOwner", "login"), 7),
+        (("stack",), "PRS_1"),
+        (("assignedActors", "nodes", 0, "__typename"), "Team"),
+        (("assignedActors", "nodes", 0, "databaseId"), "1683175"),
+        (("reviewRequests", "nodes", 0, "requestedReviewer", "__typename"), "Organization"),
+        (("reviewRequests", "nodes", 0, "asCodeOwner"), None),
+        (("labels", "nodes", 0, "id"), None),
+    ],
+    ids=[
+        "date-string",
+        "string-bool",
+        "string-count",
+        "int-enum",
+        "int-login",
+        "string-stack",
+        "team-assignee",
+        "string-assignee-id",
+        "organization-reviewer",
+        "null-code-owner",
+        "null-label-id",
+    ],
+)
+async def test_an_added_field_of_the_wrong_type(
+    open_source, replay: Replay, path: tuple[Any, ...], value: Any
+) -> None:
+    unit = pr_unit(replay, 15771)
+    if path[0] == "labels":
+        unit = pr_unit(replay, 13481)
+    target = unit.data
+    for part in path[:-1]:
+        target = target[part]
+    target[path[-1]] = value
+    replay.add(unit)
+    assert isinstance(await failure(open_source, PREBID_JS, unit.key["number"]), ResponseShapeError)
 
 
 @pytest.mark.parametrize(("total", "compare"), [(250, False), (251, True)])
@@ -544,7 +985,17 @@ class TestInvariants:
 
     @pytest.mark.parametrize(
         "connection",
-        ["labels", "closingIssuesReferences", "reviews", "comments", "commits", "files"],
+        [
+            "labels",
+            "closingIssuesReferences",
+            "userLinkedClosingIssues",
+            "reviews",
+            "comments",
+            "commits",
+            "files",
+            "reviewRequests",
+            "assignedActors",
+        ],
     )
     async def test_every_connection_is_count_checked(
         self, open_source, replay: Replay, connection: str
@@ -599,13 +1050,32 @@ class TestInvariants:
         assert isinstance(error, TotalCountChanged)
         assert (error.first, error.later) == (101, 102)
 
-    async def test_an_enterprise_actor_has_no_id(self, open_source, replay: Replay) -> None:
+    @pytest.mark.parametrize(
+        ("user", "linked"), [({"databaseId": 81847}, 81847), (None, None)], ids=["user", "no-user"]
+    )
+    async def test_an_enterprise_actor_is_kept_as_an_account(
+        self, open_source, replay: Replay, user: dict[str, int] | None, linked: int | None
+    ) -> None:
+        # Synthetic: the recorded author of #13481 replaced by an EnterpriseUserAccount, which
+        # has no databaseId; 6fedb05 failed the item (gap 85).
         unit = pr_unit(replay, 13481)
-        unit.data["author"] = {"__typename": "EnterpriseUserAccount", "login": "someone"}
+        unit.data["author"] = {
+            "__typename": "EnterpriseUserAccount",
+            "login": "someone_corp",
+            "id": "EUA_kgDOAAAAAQ",
+            "user": user,
+        }
         replay.add(unit)
-        error = await failure(open_source, PREBID_JS, 13481)
-        assert isinstance(error, ActorWithoutId)
-        assert error.role == "author"
+        record = await hydrate_one(open_source, PREBID_JS, 13481)
+        expected = Account(
+            github_id=None,
+            node_id="EUA_kgDOAAAAAQ",
+            login="someone_corp",
+            type="EnterpriseUserAccount",
+            linked_user_github_id=linked,
+        )
+        assert record.author == expected
+        assert expected in record.accounts()
 
     @pytest.mark.parametrize(
         ("path", "value"),
@@ -900,21 +1370,22 @@ class TestInvariants:
     async def test_each_comment_keeps_its_id_and_author(self, open_source, replay: Replay) -> None:
         # One account under two logins (a rename between comments) stays two sightings of one id.
         unit = pr_unit(replay, 12975)
-        author = unit.data["comments"]["nodes"][0]["author"]
+        recorded = unit.data["comments"]["nodes"][0]
+        author = recorded["author"]
         renamed = {**author, "login": "dgirardi-renamed"}
         unit.data["comments"]["nodes"] = [
-            {"fullDatabaseId": "11", "author": author},
-            {"fullDatabaseId": "12", "author": None},
-            {"fullDatabaseId": "13", "author": renamed},
+            {**recorded, "id": "IC_11", "fullDatabaseId": "11", "author": author},
+            {**recorded, "id": "IC_12", "fullDatabaseId": "12", "author": None},
+            {**recorded, "id": "IC_13", "fullDatabaseId": "13", "author": renamed},
         ]
         unit.data["comments"]["totalCount"] = 3
         replay.add(unit)
         record = await hydrate_one(open_source, PREBID_JS, 12975)
-        assert record.comments == (
-            Comment(github_id=11, author=wire_account(author)),
-            Comment(github_id=12, author=None),
-            Comment(github_id=13, author=wire_account(renamed)),
-        )
+        assert [(comment.github_id, comment.author) for comment in record.comments] == [
+            (11, wire_account(author)),
+            (12, None),
+            (13, wire_account(renamed)),
+        ]
 
     async def test_a_closing_link_renamed_between_pages_is_still_one_link(
         self, open_source, replay: Replay
@@ -1223,7 +1694,11 @@ class TestSplitAndRetry:
         replay.add(unit)
         replay.add(
             overflow_unit(
-                unit, "labels", "page-2", [{"name": "x"}], unit.data["labels"]["totalCount"]
+                unit,
+                "labels",
+                "page-2",
+                [{"id": "LA_x", "name": "x"}],
+                unit.data["labels"]["totalCount"],
             )
         )
         replay.fault(
@@ -1250,7 +1725,11 @@ class TestSplitAndRetry:
         replay.add(unit)
         replay.add(
             overflow_unit(
-                unit, "labels", "page-2", [{"name": "x"}], unit.data["labels"]["totalCount"]
+                unit,
+                "labels",
+                "page-2",
+                [{"id": "LA_x", "name": "x"}],
+                unit.data["labels"]["totalCount"],
             )
         )
         outcomes = await hydrate(open_source, PREBID_JS, [11155, 12975])

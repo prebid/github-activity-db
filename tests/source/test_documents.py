@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -65,6 +66,9 @@ class TestCost:
             (documents.REPOSITORY_LABELS, 1),
             (documents.USER_LOOKUP, 1),
             (documents.overflow_continuation([documents.FILES] * 25), 1),
+            (documents.overflow_continuation([documents.REVIEW_REQUESTS] * 25), 1),
+            (documents.overflow_continuation([documents.ASSIGNED_ACTORS] * 25), 1),
+            (documents.overflow_continuation([documents.USER_LINKED_CLOSING_ISSUES] * 25), 1),
         ],
     )
     def test_document_cost(self, document: str, points: int) -> None:
@@ -97,9 +101,50 @@ class TestDocuments:
         # PullRequest.databaseId and PullRequestReview.databaseId are deprecated (32-bit).
         assert "fullDatabaseId" in documents.REVIEWS.nodes
         assert "fullDatabaseId" in documents.PULL_REQUEST_INDEX
-        scalars = documents.normalize(documents.PULL_REQUEST_FIELDS).split("author {")[0]
-        assert " fullDatabaseId " in scalars
-        assert " databaseId " not in scalars
+        top = top_level_fields(documents.PULL_REQUEST_FIELDS)
+        assert "fullDatabaseId" in top
+        assert "databaseId" not in top
+        assert top_level_fields("fragment F on X { a b { databaseId } c(first: 1) { d } }") == [
+            "a",
+            "b",
+            "c",
+        ]
+
+    def test_the_documents_select_the_plans_pull_request_fields(self) -> None:
+        """The fields plan 5.8 lists for Step 3b-1, every one at the pull request's top level."""
+        assert (
+            top_level_fields(documents.PULL_REQUEST_FIELDS)
+            == (
+                "id number fullDatabaseId state isDraft title body createdAt updatedAt mergedAt "
+                "closedAt lastEditedAt baseRefName baseRefOid headRefName headRefOid "
+                "isCrossRepository authorAssociation headRepository mergeCommit milestone "
+                "reviewDecision totalCommentsCount publishedAt includesCreatedEdit "
+                "maintainerCanModify headRepositoryOwner mergeable mergeStateStatus canBeRebased "
+                "potentialMergeCommit "
+                "stack stackEntry additions deletions changedFiles author mergedBy editor labels "
+                "closingIssuesReferences userLinkedClosingIssues reviews comments commits files "
+                "reviewRequests assignedActors"
+            ).split()
+        )
+
+
+def top_level_fields(fragment: str) -> list[str]:
+    """Field names (an alias where given) directly inside a fragment's outer braces."""
+    text = documents.normalize(fragment)
+    body = text[text.index("{") + 1 : text.rindex("}")]
+    names: list[str] = []
+    depth = 0
+    for token in re.findall(r"[{}()]|[A-Za-z_][A-Za-z0-9_]*:?", body):
+        if token in "{(":
+            depth += 1
+        elif token in "})":
+            depth -= 1
+        elif depth == 0:
+            if names and names[-1].endswith(":"):
+                names[-1] = names[-1][:-1]  # an alias names the field in the response
+            else:
+                names.append(token)
+    return names
 
 
 @pytest.mark.parametrize(

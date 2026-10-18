@@ -1,0 +1,37 @@
+{
+  "data": {
+    "__typename": "Organization",
+    "archivedAt": null,
+    "createdAt": "2015-07-08T19:01:38Z",
+    "databaseId": 13242760,
+    "description": "Prebid.js makes header bidding implementation easy.",
+    "email": "info@prebid.org",
+    "hasSponsorsListing": false,
+    "id": "MDEyOk9yZ2FuaXphdGlvbjEzMjQyNzYw",
+    "isVerified": false,
+    "location": "Earth",
+    "login": "prebid",
+    "name": "Prebid",
+    "pinnedItemsRemaining": 6,
+    "twitterUsername": null,
+    "updatedAt": "2026-06-09T13:37:59Z",
+    "websiteUrl": "www.prebid.org"
+  },
+  "document_sha256": "8ff584c890202fea5cbc1f0e26a1466c737702d2f6b5be23eeb23343264bce9b",
+  "errors": [],
+  "extra": {},
+  "headers": {
+    "date": "Sun, 18 Oct 2026 20:09:52 GMT",
+    "x-ratelimit-limit": "5000",
+    "x-ratelimit-remaining": "4739",
+    "x-ratelimit-reset": "1792356065",
+    "x-ratelimit-resource": "graphql",
+    "x-ratelimit-used": "261"
+  },
+  "key": {
+    "id": "MDEyOk9yZ2FuaXphdGlvbjEzMjQyNzYw"
+  },
+  "kind": "user",
+  "recorded_at": "2026-10-18T20:09:16Z",
+  "source": "live"
+}

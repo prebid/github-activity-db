@@ -1,0 +1,219 @@
+{
+  "data": {
+    "additions": 58,
+    "assignedActors": {
+      "nodes": [],
+      "pageInfo": {
+        "endCursor": null,
+        "hasNextPage": false
+      },
+      "totalCount": 0
+    },
+    "author": {
+      "__typename": "User",
+      "databaseId": 11062424,
+      "id": "MDQ6VXNlcjExMDYyNDI0",
+      "login": "shristipar"
+    },
+    "authorAssociation": "FIRST_TIME_CONTRIBUTOR",
+    "baseRefName": "main",
+    "baseRefOid": "08e3d8c16f627ce1299bdfb7d0a6bf3976e4448e",
+    "body": "",
+    "canBeRebased": true,
+    "changedFiles": 1,
+    "closedAt": null,
+    "closingIssuesReferences": {
+      "nodes": [],
+      "pageInfo": {
+        "endCursor": null,
+        "hasNextPage": false
+      },
+      "totalCount": 0
+    },
+    "comments": {
+      "nodes": [
+        {
+          "author": {
+            "__typename": "Bot",
+            "databaseId": 41898282,
+            "id": "MDM6Qm90NDE4OTgyODI=",
+            "login": "github-actions"
+          },
+          "authorAssociation": "CONTRIBUTOR",
+          "createdAt": "2026-10-09T19:41:35Z",
+          "createdViaEmail": false,
+          "editor": null,
+          "fullDatabaseId": "6088005471",
+          "id": "IC_kwDOPRoOy88AAAABat-XXw",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-10-09T19:41:35Z",
+          "updatedAt": "2026-10-09T19:41:35Z"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 11062424,
+            "id": "MDQ6VXNlcjExMDYyNDI0",
+            "login": "shristipar"
+          },
+          "authorAssociation": "NONE",
+          "createdAt": "2026-10-09T19:44:19Z",
+          "createdViaEmail": false,
+          "editor": null,
+          "fullDatabaseId": "6088046727",
+          "id": "IC_kwDOPRoOy88AAAABauA4hw",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-10-09T19:44:19Z",
+          "updatedAt": "2026-10-09T19:44:19Z"
+        }
+      ],
+      "pageInfo": {
+        "endCursor": "Y3Vyc29yOnYyOpHPAAAAAWrgOIc=",
+        "hasNextPage": false
+      },
+      "totalCount": 2
+    },
+    "commits": {
+      "nodes": [
+        {
+          "commit": {
+            "author": {
+              "email": "shristiparmanandka@gmail.com",
+              "name": "shristipar",
+              "user": {
+                "databaseId": 11062424,
+                "id": "MDQ6VXNlcjExMDYyNDI0",
+                "login": "shristipar"
+              }
+            },
+            "authoredDate": "2026-10-09T19:29:10Z",
+            "oid": "1df1116a58d4bacfa2d0a28ca0f3f4c706e69bab"
+          }
+        }
+      ],
+      "pageInfo": {
+        "endCursor": "MQ",
+        "hasNextPage": false
+      },
+      "totalCount": 1
+    },
+    "createdAt": "2026-10-09T19:40:30Z",
+    "deletions": 7,
+    "editor": null,
+    "files": {
+      "nodes": [
+        {
+          "additions": 58,
+          "changeType": "MODIFIED",
+          "deletions": 7,
+          "path": "docs/adapters/README.md"
+        }
+      ],
+      "pageInfo": {
+        "endCursor": "MQ",
+        "hasNextPage": false
+      },
+      "totalCount": 1
+    },
+    "fullDatabaseId": "4805063087",
+    "headRefName": "docs/update-adapters-readme",
+    "headRefOid": "1df1116a58d4bacfa2d0a28ca0f3f4c706e69bab",
+    "headRepository": {
+      "databaseId": 1412324529,
+      "nameWithOwner": "shristipar/prebid-salesagent"
+    },
+    "headRepositoryOwner": {
+      "id": "MDQ6VXNlcjExMDYyNDI0",
+      "login": "shristipar"
+    },
+    "id": "PR_kwDOPRoOy88AAAABHmdxrw",
+    "includesCreatedEdit": false,
+    "isCrossRepository": true,
+    "isDraft": false,
+    "labels": {
+      "nodes": [],
+      "pageInfo": {
+        "endCursor": null,
+        "hasNextPage": false
+      },
+      "totalCount": 0
+    },
+    "lastEditedAt": null,
+    "maintainerCanModify": true,
+    "mergeCommit": null,
+    "mergeStateStatus": "BLOCKED",
+    "mergeable": "MERGEABLE",
+    "mergedAt": null,
+    "mergedBy": null,
+    "milestone": null,
+    "number": 2360,
+    "potentialMergeCommit": {
+      "oid": "14b18f8d8882f9b46621b6fcf4debd924554da27"
+    },
+    "publishedAt": "2026-10-09T19:40:30Z",
+    "reviewDecision": "REVIEW_REQUIRED",
+    "reviewRequests": {
+      "nodes": [
+        {
+          "asCodeOwner": true,
+          "databaseId": 3806521799,
+          "id": "RR_kwDOPRoOy87i4unH",
+          "requestedReviewer": {
+            "__typename": "User",
+            "databaseId": 3444727,
+            "id": "MDQ6VXNlcjM0NDQ3Mjc=",
+            "login": "ChrisHuie"
+          }
+        }
+      ],
+      "pageInfo": {
+        "endCursor": "Y3Vyc29yOnYyOpHO4uLpxw==",
+        "hasNextPage": false
+      },
+      "totalCount": 1
+    },
+    "reviews": {
+      "nodes": [],
+      "pageInfo": {
+        "endCursor": null,
+        "hasNextPage": false
+      },
+      "totalCount": 0
+    },
+    "stack": null,
+    "stackEntry": null,
+    "state": "OPEN",
+    "title": "docs: document Broadstreet, Triton, Kevel adapter",
+    "totalCommentsCount": 2,
+    "updatedAt": "2026-10-09T21:21:29Z",
+    "userLinkedClosingIssues": {
+      "nodes": [],
+      "pageInfo": {
+        "endCursor": null,
+        "hasNextPage": false
+      },
+      "totalCount": 0
+    }
+  },
+  "document_sha256": "d9504d2e5167f4a1a6b2a756e422bebab6c478da2016bd0508171f696e0c5643",
+  "errors": [],
+  "extra": {},
+  "headers": {
+    "date": "Sun, 18 Oct 2026 20:09:36 GMT",
+    "x-ratelimit-limit": "5000",
+    "x-ratelimit-remaining": "4748",
+    "x-ratelimit-reset": "1792356065",
+    "x-ratelimit-resource": "graphql",
+    "x-ratelimit-used": "252"
+  },
+  "key": {
+    "name": "salesagent",
+    "number": 2360,
+    "owner": "prebid"
+  },
+  "kind": "pull_request",
+  "recorded_at": "2026-10-18T20:09:16Z",
+  "source": "live"
+}

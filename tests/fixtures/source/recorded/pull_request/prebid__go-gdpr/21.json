@@ -1,0 +1,311 @@
+{
+  "data": {
+    "additions": 18,
+    "assignedActors": {
+      "nodes": [
+        {
+          "__typename": "User",
+          "databaseId": 15863840,
+          "id": "MDQ6VXNlcjE1ODYzODQw",
+          "login": "guscarreon"
+        }
+      ],
+      "pageInfo": {
+        "endCursor": "MQ",
+        "hasNextPage": false
+      },
+      "totalCount": 1
+    },
+    "author": {
+      "__typename": "User",
+      "databaseId": 59438,
+      "id": "MDQ6VXNlcjU5NDM4",
+      "login": "peczenyj"
+    },
+    "authorAssociation": "CONTRIBUTOR",
+    "baseRefName": "master",
+    "baseRefOid": "b8a35771b15a357f0c1afb00a2c77550985d7983",
+    "body": "For some reason, there are a corner case when we want to parse the last 12 bits, the original code does not work.\r\n\r\nI change the logic a little bit to check what is the last byte and then check it is present\r\n\r\nenjoy",
+    "canBeRebased": false,
+    "changedFiles": 3,
+    "closedAt": "2020-05-14T15:17:19Z",
+    "closingIssuesReferences": {
+      "nodes": [],
+      "pageInfo": {
+        "endCursor": null,
+        "hasNextPage": false
+      },
+      "totalCount": 0
+    },
+    "comments": {
+      "nodes": [
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 59438,
+            "id": "MDQ6VXNlcjU5NDM4",
+            "login": "peczenyj"
+          },
+          "authorAssociation": "CONTRIBUTOR",
+          "createdAt": "2020-05-12T15:20:58Z",
+          "createdViaEmail": false,
+          "editor": null,
+          "fullDatabaseId": "627412788",
+          "id": "MDEyOklzc3VlQ29tbWVudDYyNzQxMjc4OA==",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2020-05-12T15:20:58Z",
+          "updatedAt": "2020-05-12T15:20:58Z"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 59438,
+            "id": "MDQ6VXNlcjU5NDM4",
+            "login": "peczenyj"
+          },
+          "authorAssociation": "CONTRIBUTOR",
+          "createdAt": "2020-05-13T16:01:27Z",
+          "createdViaEmail": true,
+          "editor": null,
+          "fullDatabaseId": "628087079",
+          "id": "MDEyOklzc3VlQ29tbWVudDYyODA4NzA3OQ==",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2020-05-13T16:01:27Z",
+          "updatedAt": "2020-05-13T16:01:27Z"
+        }
+      ],
+      "pageInfo": {
+        "endCursor": "Y3Vyc29yOnYyOpHOJW_ZJw==",
+        "hasNextPage": false
+      },
+      "totalCount": 2
+    },
+    "commits": {
+      "nodes": [
+        {
+          "commit": {
+            "author": {
+              "email": "tpeczenyj@weborama.com",
+              "name": "Tiago Peczenyj",
+              "user": {
+                "databaseId": 59438,
+                "id": "MDQ6VXNlcjU5NDM4",
+                "login": "peczenyj"
+              }
+            },
+            "authoredDate": "2020-05-12T15:15:58Z",
+            "oid": "b383560c54d14b51603a17e785edbed0991cba81"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "tpeczenyj@weborama.com",
+              "name": "Tiago Peczenyj",
+              "user": {
+                "databaseId": 59438,
+                "id": "MDQ6VXNlcjU5NDM4",
+                "login": "peczenyj"
+              }
+            },
+            "authoredDate": "2020-05-12T15:16:25Z",
+            "oid": "b3d84fac61e3ab336394ca14150d34a99483e99f"
+          }
+        }
+      ],
+      "pageInfo": {
+        "endCursor": "Mg",
+        "hasNextPage": false
+      },
+      "totalCount": 2
+    },
+    "createdAt": "2020-05-12T15:18:49Z",
+    "deletions": 8,
+    "editor": null,
+    "files": {
+      "nodes": [
+        {
+          "additions": 9,
+          "changeType": "MODIFIED",
+          "deletions": 8,
+          "path": "bitutils/bitutils.go"
+        },
+        {
+          "additions": 4,
+          "changeType": "MODIFIED",
+          "deletions": 0,
+          "path": "bitutils/bitutils_test.go"
+        },
+        {
+          "additions": 5,
+          "changeType": "MODIFIED",
+          "deletions": 0,
+          "path": "vendorconsent/tcf2/pubrestrict_test.go"
+        }
+      ],
+      "pageInfo": {
+        "endCursor": "Mw",
+        "hasNextPage": false
+      },
+      "totalCount": 3
+    },
+    "fullDatabaseId": "416795812",
+    "headRefName": "fix-issue-with-consent-without-pub-restrictions",
+    "headRefOid": "b3d84fac61e3ab336394ca14150d34a99483e99f",
+    "headRepository": {
+      "databaseId": 263343620,
+      "nameWithOwner": "peczenyj/go-gdpr"
+    },
+    "headRepositoryOwner": {
+      "id": "MDQ6VXNlcjU5NDM4",
+      "login": "peczenyj"
+    },
+    "id": "MDExOlB1bGxSZXF1ZXN0NDE2Nzk1ODEy",
+    "includesCreatedEdit": false,
+    "isCrossRepository": true,
+    "isDraft": false,
+    "labels": {
+      "nodes": [],
+      "pageInfo": {
+        "endCursor": null,
+        "hasNextPage": false
+      },
+      "totalCount": 0
+    },
+    "lastEditedAt": null,
+    "maintainerCanModify": false,
+    "mergeCommit": {
+      "oid": "80b4c8f91d96e4996c5a6f24d4801fcd1792dab0"
+    },
+    "mergeStateStatus": "UNKNOWN",
+    "mergeable": "UNKNOWN",
+    "mergedAt": "2020-05-14T15:17:19Z",
+    "mergedBy": {
+      "__typename": "User",
+      "databaseId": 31041505,
+      "id": "MDQ6VXNlcjMxMDQxNTA1",
+      "login": "hhhjort"
+    },
+    "milestone": null,
+    "number": 21,
+    "potentialMergeCommit": null,
+    "publishedAt": "2020-05-12T15:18:49Z",
+    "reviewDecision": "APPROVED",
+    "reviewRequests": {
+      "nodes": [
+        {
+          "asCodeOwner": false,
+          "databaseId": 201729027,
+          "id": "MDEzOlJldmlld1JlcXVlc3QyMDE3MjkwMjc=",
+          "requestedReviewer": {
+            "__typename": "User",
+            "databaseId": 15863840,
+            "id": "MDQ6VXNlcjE1ODYzODQw",
+            "login": "guscarreon"
+          }
+        }
+      ],
+      "pageInfo": {
+        "endCursor": "Y3Vyc29yOnYyOpHODAYkAw==",
+        "hasNextPage": false
+      },
+      "totalCount": 1
+    },
+    "reviews": {
+      "nodes": [
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 31041505,
+            "id": "MDQ6VXNlcjMxMDQxNTA1",
+            "login": "hhhjort"
+          },
+          "authorAssociation": "MEMBER",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 0
+          },
+          "commit": {
+            "oid": "b3d84fac61e3ab336394ca14150d34a99483e99f"
+          },
+          "createdAt": "2020-05-13T15:38:03Z",
+          "editor": null,
+          "fullDatabaseId": "411052479",
+          "id": "MDE3OlB1bGxSZXF1ZXN0UmV2aWV3NDExMDUyNDc5",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2020-05-13T15:38:03Z",
+          "state": "APPROVED",
+          "submittedAt": "2020-05-13T15:38:03Z",
+          "updatedAt": "2020-05-13T15:38:03Z"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 1653437,
+            "id": "MDQ6VXNlcjE2NTM0Mzc=",
+            "login": "SyntaxNode"
+          },
+          "authorAssociation": "MEMBER",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 0
+          },
+          "commit": {
+            "oid": "b3d84fac61e3ab336394ca14150d34a99483e99f"
+          },
+          "createdAt": "2020-05-13T16:21:22Z",
+          "editor": null,
+          "fullDatabaseId": "411091828",
+          "id": "MDE3OlB1bGxSZXF1ZXN0UmV2aWV3NDExMDkxODI4",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2020-05-13T16:21:22Z",
+          "state": "APPROVED",
+          "submittedAt": "2020-05-13T16:21:22Z",
+          "updatedAt": "2020-05-13T16:21:22Z"
+        }
+      ],
+      "pageInfo": {
+        "endCursor": "Y3Vyc29yOnYyOpO0MjAyMC0wNS0xM1QxNjoyMToyMlq0MjAyMC0wNS0xM1QxNjoyMToyMlrOGIDDdA==",
+        "hasNextPage": false
+      },
+      "totalCount": 2
+    },
+    "stack": null,
+    "stackEntry": null,
+    "state": "MERGED",
+    "title": "Fix issue with consent without pub restrictions issue: #20",
+    "totalCommentsCount": 3,
+    "updatedAt": "2020-05-20T09:15:21Z",
+    "userLinkedClosingIssues": {
+      "nodes": [],
+      "pageInfo": {
+        "endCursor": null,
+        "hasNextPage": false
+      },
+      "totalCount": 0
+    }
+  },
+  "document_sha256": "d9504d2e5167f4a1a6b2a756e422bebab6c478da2016bd0508171f696e0c5643",
+  "errors": [],
+  "extra": {},
+  "headers": {
+    "date": "Sun, 18 Oct 2026 20:09:19 GMT",
+    "x-ratelimit-limit": "5000",
+    "x-ratelimit-remaining": "4759",
+    "x-ratelimit-reset": "1792356065",
+    "x-ratelimit-resource": "graphql",
+    "x-ratelimit-used": "241"
+  },
+  "key": {
+    "name": "go-gdpr",
+    "number": 21,
+    "owner": "prebid"
+  },
+  "kind": "pull_request",
+  "recorded_at": "2026-10-18T20:09:16Z",
+  "source": "live"
+}

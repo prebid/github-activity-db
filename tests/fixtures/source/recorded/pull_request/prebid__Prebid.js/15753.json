@@ -1,0 +1,317 @@
+{
+  "data": {
+    "additions": 121,
+    "assignedActors": {
+      "nodes": [],
+      "pageInfo": {
+        "endCursor": null,
+        "hasNextPage": false
+      },
+      "totalCount": 0
+    },
+    "author": {
+      "__typename": "User",
+      "databaseId": 1683175,
+      "id": "MDQ6VXNlcjE2ODMxNzU=",
+      "login": "patmmccann"
+    },
+    "authorAssociation": "MEMBER",
+    "baseRefName": "master",
+    "baseRefOid": "4be828b5df34564d5e67fe3da64df0afdf98156e",
+    "body": "## Summary\n- Add a Prebid best practices skill that audits GPID, consent modules, and floors through Chrome DevTools MCP.\n- Include a default prompt for invoking the skill.\n\n## Type of issue\nAgent tooling documentation.\n\n## Description\nThe skill guides an agent through Prebid's page-provided `summary` and `auctions` tools, then uses bidder network requests when outbound delivery needs confirmation. It reports observed auction state separately from configured state and limits consent-module judgments to applicable privacy regimes.\n\n## Steps to reproduce\n1. Invoke `$prebid-best-practices` on a page with Prebid.js and Chrome DevTools MCP.\n2. Follow the skill's GPID, consent, and floor checks.\n3. Review the evidence and verdict table it produces.\n\n## Test page\nNot applicable; this PR adds an agent skill and no runtime code.\n\n### Expected results\nThe skill provides evidence-based GPID, consent-module, and floor findings, with clear limitations when a bidder payload or auction is unavailable.\n\n### Actual results\nThe skill and prompt files passed local structure and required-check validation. A live browser audit was not run because Chrome DevTools MCP was unavailable in the authoring session.\n\n## Platform details\nPrebid.js repository; Markdown and YAML only. No browser or Node.js version dependency added.\n\n## Other information\nThe skill builds on the existing `prebid-chrome-devtools` skill. No source or test files changed.\n\n## Validation\n- Local skill structure and required-check validation: passed.\n- `npx gulp lint`: not run (Markdown/YAML-only change).\n- `npx gulp test-only`: not run (Markdown/YAML-only change).",
+    "canBeRebased": false,
+    "changedFiles": 2,
+    "closedAt": "2026-10-16T10:10:51Z",
+    "closingIssuesReferences": {
+      "nodes": [
+        {
+          "fullDatabaseId": "5846445299",
+          "number": 15750,
+          "repository": {
+            "databaseId": 39321023,
+            "nameWithOwner": "prebid/Prebid.js"
+          }
+        }
+      ],
+      "pageInfo": {
+        "endCursor": "MQ",
+        "hasNextPage": false
+      },
+      "totalCount": 1
+    },
+    "comments": {
+      "nodes": [
+        {
+          "author": {
+            "__typename": "Bot",
+            "databaseId": 199175422,
+            "id": "BOT_kgDOC98s_g",
+            "login": "chatgpt-codex-connector"
+          },
+          "authorAssociation": "NONE",
+          "createdAt": "2026-10-14T18:11:51Z",
+          "createdViaEmail": false,
+          "editor": {
+            "__typename": "Bot",
+            "databaseId": 199175422,
+            "id": "BOT_kgDOC98s_g",
+            "login": "chatgpt-codex-connector"
+          },
+          "fullDatabaseId": "6175113025",
+          "id": "IC_kwDOAlf9v88AAAABcBC_QQ",
+          "includesCreatedEdit": true,
+          "lastEditedAt": "2026-10-14T18:17:53Z",
+          "publishedAt": "2026-10-14T18:11:51Z",
+          "updatedAt": "2026-10-14T18:17:53Z"
+        },
+        {
+          "author": {
+            "__typename": "Bot",
+            "databaseId": 77057012,
+            "id": "MDM6Qm90NzcwNTcwMTI=",
+            "login": "barecheck"
+          },
+          "authorAssociation": "NONE",
+          "createdAt": "2026-10-14T18:29:31Z",
+          "createdViaEmail": false,
+          "editor": null,
+          "fullDatabaseId": "6175445223",
+          "id": "IC_kwDOAlf9v88AAAABcBXQ5w",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-10-14T18:29:31Z",
+          "updatedAt": "2026-10-14T18:29:31Z"
+        }
+      ],
+      "pageInfo": {
+        "endCursor": "Y3Vyc29yOnYyOpHPAAAAAXAV0Oc=",
+        "hasNextPage": false
+      },
+      "totalCount": 2
+    },
+    "commits": {
+      "nodes": [
+        {
+          "commit": {
+            "author": {
+              "email": "pmccann@cafemedia.com",
+              "name": "Patrick McCann",
+              "user": {
+                "databaseId": 1683175,
+                "id": "MDQ6VXNlcjE2ODMxNzU=",
+                "login": "patmmccann"
+              }
+            },
+            "authoredDate": "2026-10-14T18:10:50Z",
+            "oid": "d9e5bd3dfa0a9e55f1d59b5adbde6f8f0dfb5f5c"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "pmccann@cafemedia.com",
+              "name": "Patrick McCann",
+              "user": {
+                "databaseId": 1683175,
+                "id": "MDQ6VXNlcjE2ODMxNzU=",
+                "login": "patmmccann"
+              }
+            },
+            "authoredDate": "2026-10-14T18:10:52Z",
+            "oid": "bfbfe5cf35c9c76acb29baf103e80fcf251cbd19"
+          }
+        }
+      ],
+      "pageInfo": {
+        "endCursor": "Mg",
+        "hasNextPage": false
+      },
+      "totalCount": 2
+    },
+    "createdAt": "2026-10-14T18:11:33Z",
+    "deletions": 0,
+    "editor": null,
+    "files": {
+      "nodes": [
+        {
+          "additions": 117,
+          "changeType": "ADDED",
+          "deletions": 0,
+          "path": ".agents/skills/prebid-best-practices/SKILL.md"
+        },
+        {
+          "additions": 4,
+          "changeType": "ADDED",
+          "deletions": 0,
+          "path": ".agents/skills/prebid-best-practices/agents/openai.yaml"
+        }
+      ],
+      "pageInfo": {
+        "endCursor": "Mg",
+        "hasNextPage": false
+      },
+      "totalCount": 2
+    },
+    "fullDatabaseId": "4862352665",
+    "headRefName": "codex/prebid-best-practices-skill",
+    "headRefOid": "bfbfe5cf35c9c76acb29baf103e80fcf251cbd19",
+    "headRepository": {
+      "databaseId": 350869712,
+      "nameWithOwner": "patmmccann/Prebid.js"
+    },
+    "headRepositoryOwner": {
+      "id": "MDQ6VXNlcjE2ODMxNzU=",
+      "login": "patmmccann"
+    },
+    "id": "PR_kwDOAlf9v88AAAABIdGdGQ",
+    "includesCreatedEdit": false,
+    "isCrossRepository": true,
+    "isDraft": false,
+    "labels": {
+      "nodes": [
+        {
+          "id": "MDU6TGFiZWwyNTA1NjgzNzc4",
+          "name": "maintenance"
+        },
+        {
+          "id": "MDU6TGFiZWwyNTU0MjQ1ODUx",
+          "name": "minor"
+        },
+        {
+          "id": "LA_kwDOAlf9v88AAAAChQnWYQ",
+          "name": "core"
+        }
+      ],
+      "pageInfo": {
+        "endCursor": "Mw",
+        "hasNextPage": false
+      },
+      "totalCount": 3
+    },
+    "lastEditedAt": null,
+    "maintainerCanModify": false,
+    "mergeCommit": {
+      "oid": "dd09cac153ff8bdb9bf967a9cee6e347b35f4d81"
+    },
+    "mergeStateStatus": "UNKNOWN",
+    "mergeable": "UNKNOWN",
+    "mergedAt": "2026-10-16T10:10:51Z",
+    "mergedBy": {
+      "__typename": "User",
+      "databaseId": 1683175,
+      "id": "MDQ6VXNlcjE2ODMxNzU=",
+      "login": "patmmccann"
+    },
+    "milestone": null,
+    "number": 15753,
+    "potentialMergeCommit": null,
+    "publishedAt": "2026-10-14T18:11:33Z",
+    "reviewDecision": "REVIEW_REQUIRED",
+    "reviewRequests": {
+      "nodes": [
+        {
+          "asCodeOwner": false,
+          "databaseId": 3831398028,
+          "id": "RR_kwDOAlf9v87kXn6M",
+          "requestedReviewer": {
+            "__typename": "User",
+            "databaseId": 10151381,
+            "id": "MDQ6VXNlcjEwMTUxMzgx",
+            "login": "dgirardi"
+          }
+        },
+        {
+          "asCodeOwner": false,
+          "databaseId": 3831398049,
+          "id": "RR_kwDOAlf9v87kXn6h",
+          "requestedReviewer": {
+            "__typename": "User",
+            "databaseId": 13972794,
+            "id": "MDQ6VXNlcjEzOTcyNzk0",
+            "login": "robertrmartinez"
+          }
+        }
+      ],
+      "pageInfo": {
+        "endCursor": "Y3Vyc29yOnYyOpHO5F5-oQ==",
+        "hasNextPage": false
+      },
+      "totalCount": 2
+    },
+    "reviews": {
+      "nodes": [
+        {
+          "author": {
+            "__typename": "Bot",
+            "databaseId": 199175422,
+            "id": "BOT_kgDOC98s_g",
+            "login": "chatgpt-codex-connector"
+          },
+          "authorAssociation": "NONE",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 2
+          },
+          "commit": {
+            "oid": "bfbfe5cf35c9c76acb29baf103e80fcf251cbd19"
+          },
+          "createdAt": "2026-10-14T18:17:48Z",
+          "editor": null,
+          "fullDatabaseId": "5522573528",
+          "id": "PRR_kwDOAlf9v88AAAABSSvI2A",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-10-14T18:17:48Z",
+          "state": "COMMENTED",
+          "submittedAt": "2026-10-14T18:17:48Z",
+          "updatedAt": "2026-10-14T18:17:49Z"
+        }
+      ],
+      "pageInfo": {
+        "endCursor": "Y3Vyc29yOnYyOpO0MjAyNi0xMC0xNFQxODoxNzo0OFq0MjAyNi0xMC0xNFQxODoxNzo0OFrPAAAAAUkryNg=",
+        "hasNextPage": false
+      },
+      "totalCount": 1
+    },
+    "stack": null,
+    "stackEntry": null,
+    "state": "MERGED",
+    "title": "Docs: add Prebid best practices DevTools skill",
+    "totalCommentsCount": 5,
+    "updatedAt": "2026-10-16T10:10:51Z",
+    "userLinkedClosingIssues": {
+      "nodes": [
+        {
+          "number": 15750,
+          "repository": {
+            "databaseId": 39321023
+          }
+        }
+      ],
+      "pageInfo": {
+        "endCursor": "MQ",
+        "hasNextPage": false
+      },
+      "totalCount": 1
+    }
+  },
+  "document_sha256": "d9504d2e5167f4a1a6b2a756e422bebab6c478da2016bd0508171f696e0c5643",
+  "errors": [],
+  "extra": {},
+  "headers": {
+    "date": "Sun, 18 Oct 2026 20:09:24 GMT",
+    "x-ratelimit-limit": "5000",
+    "x-ratelimit-remaining": "4755",
+    "x-ratelimit-reset": "1792356065",
+    "x-ratelimit-resource": "graphql",
+    "x-ratelimit-used": "245"
+  },
+  "key": {
+    "name": "Prebid.js",
+    "number": 15753,
+    "owner": "prebid"
+  },
+  "kind": "pull_request",
+  "recorded_at": "2026-10-18T20:09:16Z",
+  "source": "live"
+}

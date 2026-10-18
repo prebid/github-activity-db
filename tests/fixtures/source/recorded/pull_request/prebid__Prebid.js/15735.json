@@ -1,0 +1,349 @@
+{
+  "data": {
+    "additions": 611,
+    "assignedActors": {
+      "nodes": [],
+      "pageInfo": {
+        "endCursor": null,
+        "hasNextPage": false
+      },
+      "totalCount": 0
+    },
+    "author": {
+      "__typename": "User",
+      "databaseId": 10151381,
+      "id": "MDQ6VXNlcjEwMTUxMzgx",
+      "login": "dgirardi"
+    },
+    "authorAssociation": "MEMBER",
+    "baseRefName": "master",
+    "baseRefOid": "6d258ac3334c0f775281b6f3e83f3a9e9ab0a000",
+    "body": "## Type of change\n<!-- Remove items that don't apply and/or select an item by changing [ ] to [x] -->\n- [x] Feature\n\n## Description of change\n\nAdds a new `auctionOptions.yield` config that, when enabled, causes the auction to yield the main thread after calling each adapter.\n\n## Other information\n\nCloses https://github.com/prebid/Prebid.js/issues/15625\n\n",
+    "canBeRebased": false,
+    "changedFiles": 6,
+    "closedAt": "2026-10-08T18:03:49Z",
+    "closingIssuesReferences": {
+      "nodes": [
+        {
+          "fullDatabaseId": "5462440868",
+          "number": 15625,
+          "repository": {
+            "databaseId": 39321023,
+            "nameWithOwner": "prebid/Prebid.js"
+          }
+        }
+      ],
+      "pageInfo": {
+        "endCursor": "MQ",
+        "hasNextPage": false
+      },
+      "totalCount": 1
+    },
+    "comments": {
+      "nodes": [
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 50167854,
+            "id": "MDQ6VXNlcjUwMTY3ODU0",
+            "login": "marco-prontera"
+          },
+          "authorAssociation": "CONTRIBUTOR",
+          "createdAt": "2026-10-08T08:32:52Z",
+          "createdViaEmail": false,
+          "editor": null,
+          "fullDatabaseId": "6055973272",
+          "id": "IC_kwDOAlf9v88AAAABaPbRmA",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-10-08T08:32:52Z",
+          "updatedAt": "2026-10-08T08:32:52Z"
+        }
+      ],
+      "pageInfo": {
+        "endCursor": "Y3Vyc29yOnYyOpHPAAAAAWj20Zg=",
+        "hasNextPage": false
+      },
+      "totalCount": 1
+    },
+    "commits": {
+      "nodes": [
+        {
+          "commit": {
+            "author": {
+              "email": "dgirardi@prebid.org",
+              "name": "Demetrio Girardi",
+              "user": {
+                "databaseId": 10151381,
+                "id": "MDQ6VXNlcjEwMTUxMzgx",
+                "login": "dgirardi"
+              }
+            },
+            "authoredDate": "2026-10-07T17:56:06Z",
+            "oid": "9efeae2f5a9e451c1a57678e050d927ef7116a97"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "dgirardi@prebid.org",
+              "name": "Demetrio Girardi",
+              "user": {
+                "databaseId": 10151381,
+                "id": "MDQ6VXNlcjEwMTUxMzgx",
+                "login": "dgirardi"
+              }
+            },
+            "authoredDate": "2026-10-07T18:04:30Z",
+            "oid": "803b876dcbd041b3008034f1462e6e81804d1e31"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "dgirardi@prebid.org",
+              "name": "Demetrio Girardi",
+              "user": {
+                "databaseId": 10151381,
+                "id": "MDQ6VXNlcjEwMTUxMzgx",
+                "login": "dgirardi"
+              }
+            },
+            "authoredDate": "2026-10-07T18:09:28Z",
+            "oid": "dc394833740242edd50123f5ab8fa022df701055"
+          }
+        }
+      ],
+      "pageInfo": {
+        "endCursor": "Mw",
+        "hasNextPage": false
+      },
+      "totalCount": 3
+    },
+    "createdAt": "2026-10-07T18:13:02Z",
+    "deletions": 564,
+    "editor": null,
+    "files": {
+      "nodes": [
+        {
+          "additions": 8,
+          "changeType": "MODIFIED",
+          "deletions": 4,
+          "path": "src/adapterManager.ts"
+        },
+        {
+          "additions": 7,
+          "changeType": "MODIFIED",
+          "deletions": 0,
+          "path": "src/auction.ts"
+        },
+        {
+          "additions": 1,
+          "changeType": "MODIFIED",
+          "deletions": 1,
+          "path": "src/config.ts"
+        },
+        {
+          "additions": 6,
+          "changeType": "MODIFIED",
+          "deletions": 3,
+          "path": "src/utils/yield.ts"
+        },
+        {
+          "additions": 11,
+          "changeType": "MODIFIED",
+          "deletions": 0,
+          "path": "test/spec/unit/core/adapterManager_spec.js"
+        },
+        {
+          "additions": 578,
+          "changeType": "MODIFIED",
+          "deletions": 556,
+          "path": "test/spec/unit/pbjs_api_spec.js"
+        }
+      ],
+      "pageInfo": {
+        "endCursor": "Ng",
+        "hasNextPage": false
+      },
+      "totalCount": 6
+    },
+    "fullDatabaseId": "4776622827",
+    "headRefName": "auctionYield",
+    "headRefOid": "dc394833740242edd50123f5ab8fa022df701055",
+    "headRepository": {
+      "databaseId": 426321544,
+      "nameWithOwner": "dgirardi/Prebid.js"
+    },
+    "headRepositoryOwner": {
+      "id": "MDQ6VXNlcjEwMTUxMzgx",
+      "login": "dgirardi"
+    },
+    "id": "PR_kwDOAlf9v88AAAABHLV66w",
+    "includesCreatedEdit": false,
+    "isCrossRepository": true,
+    "isDraft": false,
+    "labels": {
+      "nodes": [
+        {
+          "id": "LA_kwDOAlf9v88AAAAChQnWYQ",
+          "name": "core"
+        }
+      ],
+      "pageInfo": {
+        "endCursor": "MQ",
+        "hasNextPage": false
+      },
+      "totalCount": 1
+    },
+    "lastEditedAt": null,
+    "maintainerCanModify": false,
+    "mergeCommit": {
+      "oid": "0e52a558d22c76c74e049f2008af9222d8138bad"
+    },
+    "mergeStateStatus": "UNKNOWN",
+    "mergeable": "UNKNOWN",
+    "mergedAt": "2026-10-08T18:03:49Z",
+    "mergedBy": {
+      "__typename": "User",
+      "databaseId": 1683175,
+      "id": "MDQ6VXNlcjE2ODMxNzU=",
+      "login": "patmmccann"
+    },
+    "milestone": null,
+    "number": 15735,
+    "potentialMergeCommit": null,
+    "publishedAt": "2026-10-07T18:13:02Z",
+    "reviewDecision": "APPROVED",
+    "reviewRequests": {
+      "nodes": [
+        {
+          "asCodeOwner": false,
+          "databaseId": 3790476239,
+          "id": "RR_kwDOAlf9v87h7hPP",
+          "requestedReviewer": {
+            "__typename": "User",
+            "databaseId": 34142758,
+            "id": "MDQ6VXNlcjM0MTQyNzU4",
+            "login": "ncolletti"
+          }
+        },
+        {
+          "asCodeOwner": false,
+          "databaseId": 3790476248,
+          "id": "RR_kwDOAlf9v87h7hPY",
+          "requestedReviewer": {
+            "__typename": "User",
+            "databaseId": 13972794,
+            "id": "MDQ6VXNlcjEzOTcyNzk0",
+            "login": "robertrmartinez"
+          }
+        }
+      ],
+      "pageInfo": {
+        "endCursor": "Y3Vyc29yOnYyOpHO4e4T2A==",
+        "hasNextPage": false
+      },
+      "totalCount": 2
+    },
+    "reviews": {
+      "nodes": [
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 50167854,
+            "id": "MDQ6VXNlcjUwMTY3ODU0",
+            "login": "marco-prontera"
+          },
+          "authorAssociation": "CONTRIBUTOR",
+          "authorCanPushToRepository": false,
+          "comments": {
+            "totalCount": 0
+          },
+          "commit": {
+            "oid": "dc394833740242edd50123f5ab8fa022df701055"
+          },
+          "createdAt": "2026-10-08T07:11:26Z",
+          "editor": {
+            "__typename": "User",
+            "databaseId": 50167854,
+            "id": "MDQ6VXNlcjUwMTY3ODU0",
+            "login": "marco-prontera"
+          },
+          "fullDatabaseId": "5452994564",
+          "id": "PRR_kwDOAlf9v88AAAABRQYYBA",
+          "includesCreatedEdit": true,
+          "lastEditedAt": "2026-10-08T07:38:50Z",
+          "publishedAt": "2026-10-08T07:11:26Z",
+          "state": "COMMENTED",
+          "submittedAt": "2026-10-08T07:11:26Z",
+          "updatedAt": "2026-10-08T07:38:50Z"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 1683175,
+            "id": "MDQ6VXNlcjE2ODMxNzU=",
+            "login": "patmmccann"
+          },
+          "authorAssociation": "MEMBER",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 0
+          },
+          "commit": {
+            "oid": "dc394833740242edd50123f5ab8fa022df701055"
+          },
+          "createdAt": "2026-10-08T18:03:38Z",
+          "editor": null,
+          "fullDatabaseId": "5460891300",
+          "id": "PRR_kwDOAlf9v88AAAABRX6WpA",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-10-08T18:03:38Z",
+          "state": "APPROVED",
+          "submittedAt": "2026-10-08T18:03:38Z",
+          "updatedAt": "2026-10-08T18:03:38Z"
+        }
+      ],
+      "pageInfo": {
+        "endCursor": "Y3Vyc29yOnYyOpO0MjAyNi0xMC0wOFQxODowMzozOFq0MjAyNi0xMC0wOFQxODowMzozOFrPAAAAAUV-lqQ=",
+        "hasNextPage": false
+      },
+      "totalCount": 2
+    },
+    "stack": null,
+    "stackEntry": null,
+    "state": "MERGED",
+    "title": "Core: add `auctionOptions.yield` to yield between each adapter during auctions",
+    "totalCommentsCount": 2,
+    "updatedAt": "2026-10-08T18:03:50Z",
+    "userLinkedClosingIssues": {
+      "nodes": [],
+      "pageInfo": {
+        "endCursor": null,
+        "hasNextPage": false
+      },
+      "totalCount": 0
+    }
+  },
+  "document_sha256": "d9504d2e5167f4a1a6b2a756e422bebab6c478da2016bd0508171f696e0c5643",
+  "errors": [],
+  "extra": {},
+  "headers": {
+    "date": "Sun, 18 Oct 2026 20:09:24 GMT",
+    "x-ratelimit-limit": "5000",
+    "x-ratelimit-remaining": "4755",
+    "x-ratelimit-reset": "1792356065",
+    "x-ratelimit-resource": "graphql",
+    "x-ratelimit-used": "245"
+  },
+  "key": {
+    "name": "Prebid.js",
+    "number": 15735,
+    "owner": "prebid"
+  },
+  "kind": "pull_request",
+  "recorded_at": "2026-10-18T20:09:16Z",
+  "source": "live"
+}

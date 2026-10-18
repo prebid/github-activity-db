@@ -10,8 +10,24 @@
             "id": "U_kgDOEOtVug",
             "login": "mkostromin-sigma"
           },
+          "authorAssociation": "COLLABORATOR",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 1
+          },
+          "commit": {
+            "oid": "edc23e104d81b1e98e9955576fc70fc8a8a18db4"
+          },
+          "createdAt": "2026-08-25T17:23:02Z",
+          "editor": null,
           "fullDatabaseId": "5021879694",
-          "state": "COMMENTED"
+          "id": "PRR_kwDOPRoOy88AAAABK1PNjg",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-08-25T17:23:02Z",
+          "state": "COMMENTED",
+          "submittedAt": "2026-08-25T17:23:02Z",
+          "updatedAt": "2026-08-25T17:23:02Z"
         },
         {
           "author": {
@@ -20,8 +36,24 @@
             "id": "U_kgDOEOtVug",
             "login": "mkostromin-sigma"
           },
+          "authorAssociation": "COLLABORATOR",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 1
+          },
+          "commit": {
+            "oid": "edc23e104d81b1e98e9955576fc70fc8a8a18db4"
+          },
+          "createdAt": "2026-08-25T17:23:04Z",
+          "editor": null,
           "fullDatabaseId": "5021879936",
-          "state": "COMMENTED"
+          "id": "PRR_kwDOPRoOy88AAAABK1POgA",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-08-25T17:23:04Z",
+          "state": "COMMENTED",
+          "submittedAt": "2026-08-25T17:23:04Z",
+          "updatedAt": "2026-08-25T17:23:04Z"
         },
         {
           "author": {
@@ -30,8 +62,24 @@
             "id": "U_kgDOEOtVug",
             "login": "mkostromin-sigma"
           },
+          "authorAssociation": "COLLABORATOR",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 1
+          },
+          "commit": {
+            "oid": "edc23e104d81b1e98e9955576fc70fc8a8a18db4"
+          },
+          "createdAt": "2026-08-25T17:23:06Z",
+          "editor": null,
           "fullDatabaseId": "5021880275",
-          "state": "COMMENTED"
+          "id": "PRR_kwDOPRoOy88AAAABK1PP0w",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-08-25T17:23:06Z",
+          "state": "COMMENTED",
+          "submittedAt": "2026-08-25T17:23:06Z",
+          "updatedAt": "2026-08-25T17:23:06Z"
         },
         {
           "author": {
@@ -40,8 +88,24 @@
             "id": "U_kgDOEOtVug",
             "login": "mkostromin-sigma"
           },
+          "authorAssociation": "COLLABORATOR",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 1
+          },
+          "commit": {
+            "oid": "edc23e104d81b1e98e9955576fc70fc8a8a18db4"
+          },
+          "createdAt": "2026-08-25T17:23:08Z",
+          "editor": null,
           "fullDatabaseId": "5021880568",
-          "state": "COMMENTED"
+          "id": "PRR_kwDOPRoOy88AAAABK1PQ-A",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-08-25T17:23:08Z",
+          "state": "COMMENTED",
+          "submittedAt": "2026-08-25T17:23:08Z",
+          "updatedAt": "2026-08-25T17:23:08Z"
         },
         {
           "author": {
@@ -50,8 +114,24 @@
             "id": "U_kgDOEOtVug",
             "login": "mkostromin-sigma"
           },
+          "authorAssociation": "COLLABORATOR",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 1
+          },
+          "commit": {
+            "oid": "edc23e104d81b1e98e9955576fc70fc8a8a18db4"
+          },
+          "createdAt": "2026-08-25T17:23:10Z",
+          "editor": null,
           "fullDatabaseId": "5021880836",
-          "state": "COMMENTED"
+          "id": "PRR_kwDOPRoOy88AAAABK1PSBA",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-08-25T17:23:10Z",
+          "state": "COMMENTED",
+          "submittedAt": "2026-08-25T17:23:10Z",
+          "updatedAt": "2026-08-25T17:23:10Z"
         },
         {
           "author": {
@@ -60,8 +140,24 @@
             "id": "MDM6Qm90NjIzMTA4MTU=",
             "login": "github-advanced-security"
           },
+          "authorAssociation": "NONE",
+          "authorCanPushToRepository": false,
+          "comments": {
+            "totalCount": 2
+          },
+          "commit": {
+            "oid": "16c3fce459b900be9aad67a9bc5e3de48a9ba7a6"
+          },
+          "createdAt": "2026-08-31T20:20:13Z",
+          "editor": null,
           "fullDatabaseId": "5070804245",
-          "state": "COMMENTED"
+          "id": "PRR_kwDOPRoOy88AAAABLj5VFQ",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-08-31T20:20:13Z",
+          "state": "COMMENTED",
+          "submittedAt": "2026-08-31T20:20:13Z",
+          "updatedAt": "2026-08-31T20:20:13Z"
         }
       ],
       "pageInfo": {
@@ -72,16 +168,16 @@
     },
     "updatedAt": "2026-09-03T20:04:19Z"
   },
-  "document_sha256": "ecb31f511b3f9695be966a37d07dfcb8d48cef566b393b5f55f34888de9874b1",
+  "document_sha256": "d838884e24236e213cb677815ee529ce2e2cf7dfc87bb17bf9a435d8fb7e075d",
   "errors": [],
   "extra": {},
   "headers": {
-    "date": "Sat, 17 Oct 2026 12:09:30 GMT",
+    "date": "Sun, 18 Oct 2026 20:09:41 GMT",
     "x-ratelimit-limit": "5000",
-    "x-ratelimit-remaining": "4986",
-    "x-ratelimit-reset": "1792242556",
+    "x-ratelimit-remaining": "4747",
+    "x-ratelimit-reset": "1792356065",
     "x-ratelimit-resource": "graphql",
-    "x-ratelimit-used": "14"
+    "x-ratelimit-used": "253"
   },
   "key": {
     "after": "Y3Vyc29yOnYyOpO0MjAyNi0wOC0yNVQxNzoyMzowMFq0MjAyNi0wOC0yNVQxNzoyMzowMFrPAAAAAStTzKk=",
@@ -89,6 +185,6 @@
     "id": "PR_kwDOPRoOy8707Gr4"
   },
   "kind": "overflow",
-  "recorded_at": "2026-10-17T12:09:19Z",
+  "recorded_at": "2026-10-18T20:09:16Z",
   "source": "live"
 }

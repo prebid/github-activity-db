@@ -1,6 +1,6 @@
 {
   "data": null,
-  "document_sha256": "39fd2b5d7744d57be4fd58ba38b2fcf50319c5bd19e1c3796ae4771203af3ea0",
+  "document_sha256": "d9504d2e5167f4a1a6b2a756e422bebab6c478da2016bd0508171f696e0c5643",
   "errors": [
     {
       "message": "Could not resolve to a PullRequest with the number of 999999.",
@@ -10,12 +10,12 @@
   ],
   "extra": {},
   "headers": {
-    "date": "Sat, 17 Oct 2026 12:09:24 GMT",
+    "date": "Sun, 18 Oct 2026 20:09:24 GMT",
     "x-ratelimit-limit": "5000",
-    "x-ratelimit-remaining": "4929",
-    "x-ratelimit-reset": "1792241340",
+    "x-ratelimit-remaining": "4755",
+    "x-ratelimit-reset": "1792356065",
     "x-ratelimit-resource": "graphql",
-    "x-ratelimit-used": "71"
+    "x-ratelimit-used": "245"
   },
   "key": {
     "name": "Prebid.js",
@@ -23,6 +23,6 @@
     "owner": "prebid"
   },
   "kind": "pull_request",
-  "recorded_at": "2026-10-17T12:09:19Z",
+  "recorded_at": "2026-10-18T20:09:16Z",
   "source": "live"
 }

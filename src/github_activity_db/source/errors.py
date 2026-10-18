@@ -321,11 +321,13 @@ class IdentityMismatch(InvariantError):
         self.actual = actual
 
 
-class ActorWithoutId(InvariantError):
-    """A non-null actor has no ``databaseId`` (``EnterpriseUserAccount``)."""
+class UserLinkedIssueNotListed(InvariantError):
+    """A link GitHub lists under ``userLinkedOnly: true`` is missing from the full list."""
 
-    def __init__(self, number: int, role: str, typename: str, login: str) -> None:
-        super().__init__(number, f"{role} {login} is a {typename}, which has no databaseId")
-        self.role = role
-        self.typename = typename
-        self.login = login
+    def __init__(self, number: int, key: tuple[int, int]) -> None:
+        super().__init__(
+            number,
+            f"user-linked closing issue {key[1]} of repository {key[0]} is not in "
+            "closingIssuesReferences",
+        )
+        self.key = key
