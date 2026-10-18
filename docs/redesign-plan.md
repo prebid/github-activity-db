@@ -11,7 +11,7 @@ Step 3 was planned against `main` at `c1f474b`, and the library behaviours it re
 with the installed versions (section 7); Step 3a's review probes ran on the PR #11 branch (merged as
 `6fedb05`). On 2026-10-18 the plan and `main` at `6fedb05` were audited against D29, and the
 collection D29 calls for was measured against live GitHub (section 7). Counts that drift (PR and
-issue totals) are dated; regenerate them with `ghactivity verify` once Step 3b lands.
+issue totals) are dated; regenerate them with `ghactivity verify` once Step 3b-2 lands.
 
 ## Contents
 
@@ -56,20 +56,20 @@ Within scope the database collects and distinguishes data and never interprets i
 | D3 | Pull requests closed without merge are stored as GitHub reports them, with state `CLOSED` and `closed_at`, under the coverage rule (section 3); a reopened PR's row is updated in place. Until 2026-10-18 this decision deleted them. |
 | D4 | Review requests are stored, one row per requested reviewer as GitHub currently lists it: an account (`User`, `Bot`, `Mannequin`) or a `Team`, and whether it was requested as code owner. A reviewer is an account that submitted at least one review in a state the reviews query requests (APPROVED, CHANGES_REQUESTED, COMMENTED, DISMISSED; never PENDING, so `totalCount` counts exactly the stored reviews). Whether a reviewer is the PR's author, its GitHub type, and its `[automation]` entry are columns, never filters (D29). |
 | D5 | Conversation comments (the PR `comments` connection) are stored one row per comment with its author, times, author association, and minimized state, never its text (D24). Inline review comments belong to reviews and are not stored as rows: each review stores GitHub's count of its comments (`PullRequestReview.comments.totalCount`). Whether a commenter also reviewed the PR is a column, never a filter (D29). |
-| D6 | Stored dates: PR created, merged, closed, and last edited; issue created and closed; review created and submitted; comment created, updated, and last edited; commit authored (the git author date, set by the committer's client). A review's id follows its creation, not its submission (section 7, "Review order"), so submission order comes from `submitted_at`. |
-| D7 | No timeline history. The database mirrors GitHub's current state: a value GitHub changes is overwritten, and an item GitHub no longer lists is removed (5.3 step 7). History the database could keep instead is later work (section 9). |
+| D6 | Stored dates: PR created, merged, closed, published, and last edited; issue created and closed; review created, submitted, published, updated, and last edited; comment created, published, updated, last edited, and pinned; commit authored (the git author date, set by the committer's client), and a default-branch commit also committed (D30); repository created, updated, pushed, and archived; label created and updated; account created and updated; activity event time (D30). Review ids do not follow submission order (section 7, "Review order"), so submission order comes from `submitted_at`. |
+| D7 | No timeline history. The database mirrors GitHub's current state: a value GitHub changes is overwritten, except that a null actor never replaces a reference D28 keeps (the row's `*_reported` column records it); a child row a re-hydration no longer returns is replaced (5.3 step 6); an item GitHub no longer lists is removed (5.3 step 7). History the database could keep instead is later work (section 9). |
 | D8 | Labels are stored as currently applied, with no history, by name and GitHub's label id; each repository's current label set is stored with its color, description, and default flag. |
 | D9 | The database file is published as a GitHub release asset. Data from the private tracked repository (`prebid-agent-skills`) is included. The release is in the public repository `prebid/github-activity-db`, so every asset is world-readable, private-repository rows included; that is accepted (the data is not proprietary, and the private repositories are expected to become public). |
 | D10 | The scheduled sync authenticates as a GitHub App installed on the `prebid` organization. |
 | D11 | The scheduled sync runs every 6 hours. |
-| D12 | `classify_tags` and `ai_summary` are removed. AI enrichment returns later as a separate table with provenance. |
+| D12 | `classify_tags` and `ai_summary` are removed. AI enrichment is out of scope (section 1); where its output would live is decided when it is planned, apart from GitHub's facts (D29). |
 | D13 | No repositories are added. CI check status and releases are out of scope. |
 | D14 | Assignees are stored, one row per assigned account as GitHub currently lists it; requested teams are stored as review requests (D4). Assignment events can land after `updatedAt` (2 of 268 observed, each within a minute), a lag the unsettled rule in 5.3 absorbs. |
 | D15 | Commit co-authors are not stored. Requesting them inside the commit list raises GraphQL cost from 2 to 27 points for the same 25 PRs. |
-| D16 | The request-pacing stack (`github/pacing/*`) is retired at cutover. The new sync makes about 400 index calls per run (about 800 with the online verify) plus hydration, and reads its budget from each response. |
+| D16 | The request-pacing stack (`github/pacing/*`) is retired at cutover. The new sync makes about 400 index calls per run (about 800 with the online verify) plus hydration, and reads its budget from each response; from Step 4b each run also reads every default-branch history (1 point per 100 commits; Prebid.js has 4,560 since the floor) and every activity log (REST). |
 | D17 | `user_tags` and `pr_user_tags` stay (empty), re-pointed at the new `pull_requests` table. The `search` and `tags` CLI stubs are removed. Until a tag producer exists, a rebuild, or a PR GitHub no longer lists, removes a PR's tags; a producer must first meet the identity rule in section 9. |
-| D18 | The database is rebuilt from GitHub, not migrated row by row. The current file holds nothing that cannot be re-fetched (0 user tags, 0 sync failures, 0 AI values). |
-| D19 | PR and issue titles and bodies are stored. Commit messages are not: a commit is stored like a comment, one row per commit with its author (D24). |
+| D18 | The database is rebuilt from GitHub, not migrated row by row, and the rebuild holds GitHub's current state (D7). The first file's past snapshots of pending review requests (`reviewers`) and assignees are not migrated (section 7, "First-schema requests and assignees"); otherwise it holds nothing that cannot be re-fetched (0 user tags, 0 sync failures, 0 AI values). |
+| D19 | PR and issue titles and bodies are stored; GitHub's HTML and plain-text renderings of them are not. A commit is stored like a comment: on a pull request, one row per commit with its sha, author link, git author name and email, and authored date, and nothing else GitHub reports on it (message, committer, committed date, parents, per-commit counts), by the maintainer's choice that the commit list is the weakest measure. A default-branch commit adds its committed date and GitHub's counts, its only time and size outside a pull request (D30). |
 | D20 | SQLite stays in rollback-journal mode while `github_activity.db` is tracked in git. WAL mode persists in a file once set, so `scripts/check_db_journal.py` checks the tracked file's header as a pre-commit hook and a test. The connection listener does not set the journal mode: that statement needs a lock, so every connection would fail with "database is locked" while another process has a WAL database open. In WAL mode committed transactions can sit in a git-ignored `*-wal` file until a checkpoint, and SQLite documents separating a database from its journal as a corruption path. WAL is reconsidered in Step 6, after the database leaves git. |
 | D21 | `tracking.toml` ships inside the package (`src/github_activity_db/tracking.toml`) and is read through `importlib.resources`, so an installed wheel and a checkout read the same list. `TRACKING_CONFIG_PATH` names a different file. |
 | D22 | The CI test gate allows no skipped tests (`scripts/check_junit.py --max-skipped 0`). A test that must skip in CI needs the allowance raised in the workflow, in the same change. pytest reports `xfail` as skipped, so the same applies to an `xfail`. |
@@ -77,10 +77,10 @@ Within scope the database collects and distinguishes data and never interprets i
 | D24 | Conversation comments are stored one row per comment, its `github_id`, author, and times and never its text, so a comment by an account the database never stored is a row with a null author, never dropped (D28). Review bodies, inline review comment text, and commit messages are not stored either. |
 | D25 | A run, scheduled or manual, publishes when its starting database is valid (the downloaded snapshot passed `verify --db-only`, or `bootstrap` started from an empty database), sync exited 0 or 2, and verify exited 0 (no error, 5.4). The manifest records the sync exit code and verify's counts per class. A final job that runs whatever the others did then marks the workflow failed if sync exited 2, verify failed, or nothing was published, so a failure is visible after the data is saved. |
 | D26 | The Step 5 database is not committed; it becomes the first snapshot of release `db` (Step 6b). From Step 3 until 6c removes it, the tracked `github_activity.db` keeps its pre-Step-3 content: the default `DATABASE_URL` moves to a git-ignored file, and `scripts/check_frozen_db.py` fails when the file's SHA-256 differs from the digest it pins, as a pre-commit hook on the file (so CI's `--all-files` run checks it) and as a test; the tests also fail when git stores the file other than as one regular file, and the `tracked-db-no-sidecar` hook refuses a committed `-journal` or `-wal` file beside it, which SQLite would apply on the next open, and the `-shm` index that goes with a `-wal`. |
-| D27 | A stored repository no longer listed in `tracking.toml` is reported on every run (exit 2), and its rows stay until `ghactivity sync --prune-untracked` deletes them; the prune is recorded in `sync_runs.deletions_approved` (5.1). |
-| D28 | The database keeps a person attached to everything it attributed to them. A stored account stays stored after a lookup returns `NOT_FOUND` for it, with its last known login and type, and every reference to it stays: when GitHub later returns that actor as null, as a re-hydration after a deletion does, the writer keeps the stored reference of the same object (the PR's author and merger, the issue's author, the review or comment with the same `github_id`, and this PR's commit with the same SHA), and the row's `*_reported` column records that GitHub returned no actor in that hydration (5.1). `deleted_at` records when a lookup returned `NOT_FOUND`; it changes no reference, the 24-hour refresh skips the account, and a later sighting of the account clears it. GitHub does not say why it returns a null actor (`Prebid.js#13769` is merged, with a null `mergedBy` and an existing author), so a null reference means only that GitHub returned no actor and the object had none stored, and an account never stored has no `github_users` row. A non-null actor GitHub returns replaces the stored one. On a commit, `linked_github_id` holds the account id GitHub linked in the latest hydration whether or not a lookup found the account, so a link whose lookup returned null is told apart from an email linked to no account. The attribution lives in the stored rows and cascades with them, so anything that re-creates a row from GitHub drops it for accounts GitHub no longer returns: a bootstrap (it starts from an empty file), a transferred issue (new `github_id`), and a repository pruned and re-added (D27). |
-| D29 | The database collects and distinguishes data; it does not interpret it. Within scope (section 1) it stores what GitHub reports about the items it holds, under GitHub's names and values, and classifies rows with columns that tell them apart: an account's GitHub type, the `[automation]` entry that lists an account or a commit email, whether a reviewer or commenter is the PR's author. No consumer surface leaves rows out, merges several facts into one verdict or flag, reports a total GitHub did not report, attaches a value GitHub did not give, or describes a value with a meaning GitHub does not state. Counts GitHub reports (`totalCount`) are stored; the views are row-level, so aggregation, counting included, is the consumer's. A fact GitHub reports on an object the database already requests is collected unless a decision excludes it (D15, D19, D24); a fact that needs further requests is collected once its cost is measured (section 7). D7's mirror is not interpretation: an overwrite with GitHub's current value, and a removal GitHub made, are GitHub's changes. |
-| D30 | Each tracked repository's default-branch activity is stored as GitHub reports it (Step 4b): every event in GitHub's repository activity log for the default branch, with its id, type, time, actor, ref, and before and after commits; GitHub's compare of each event's before and after commits, as compare returns it; and the default branch's commit history since the floor, one row per commit with its author like `pr_commits`, its committed date, and GitHub's line and file counts for it. Nothing classifies an event or a commit as a direct push or as reviewed: a consumer joins a `pr_merge` event to its PR through the PR's `merge_commit_oid`. GitHub's log starts on 2023-03-07 for the repositories measured, and GitHub removed the commit's `pushedDate` on 2023-07-01, so for changes before the log starts the commit history is the only record, with the committed date in place of a push time (section 7, "Repository activity"). |
+| D27 | A stored repository no longer listed in `tracking.toml` is reported on every run (exit 2), and its rows stay until `ghactivity sync --prune-untracked` deletes them; the prune, on the operator's explicit flag, removes rows section 1 puts out of scope (repositories not in the tracked list) and is recorded in `sync_runs.deletions_approved` (5.1). |
+| D28 | The database keeps a person attached to everything it attributed to them. A stored account stays stored after a lookup returns `NOT_FOUND` for it, with its last known login and type, and every reference to it stays: when GitHub later returns that actor as null, as a re-hydration does once GitHub stops returning the account, the writer keeps the stored reference of the same object (the PR's author and merger, the issue's author, the review's reviewer or the comment's author with the same `github_id`, and this PR's commit with the same SHA), and the row's `*_reported` column records that GitHub returned no actor in that hydration (5.1). Other actor references (editors, a comment's pinner, requested reviewers, assignees, event actors) take GitHub's current value, null included. `not_found_at` (named `deleted_at` until Step 3b-1) records when a lookup returned `NOT_FOUND`; it changes no reference, the 24-hour refresh skips the account, and a later sighting of the account clears it. GitHub does not say why it returns a null actor (`Prebid.js#13769` is merged, with a null `mergedBy` and an existing author), so a null reference means only that GitHub returned no actor and the object had none stored, and an account never stored has no `github_users` row. A non-null actor GitHub returns replaces the stored one. On a commit, `linked_github_id` holds the account id GitHub linked in the latest hydration whether or not a lookup found the account, so a link whose lookup returned null is told apart from an email linked to no account. The attribution lives in the stored rows and cascades with them, so anything that re-creates a row from GitHub drops it for accounts GitHub no longer returns: a bootstrap (it starts from an empty file), a transferred issue (new `github_id`), and a repository pruned and re-added (D27). |
+| D29 | The database collects and distinguishes data; it does not interpret it. Within scope (section 1) it stores what GitHub reports about the items it holds, under GitHub's names and values. No consumer surface leaves rows out, merges several facts into one verdict or flag, reports a total GitHub did not report, attaches a value GitHub did not give, chooses, orders, or reduces rows to one value, or describes a value with a meaning GitHub does not state. Counts GitHub reports (`totalCount`) are stored; the views are row-level, so aggregation, counting included, is the consumer's. A column the database computes is allowed only as a classification: a deterministic function of stored columns in the same file (equality, existence, or membership in a `tracking.toml` list) whose rule the data dictionary states. These are `targets_default_branch` (against the repository's current default branch), `is_pr_author`, `author_also_reviewed`, `automation_reason`, and `email_automation_reason`. A fact GitHub reports on an object the database already requests is collected when it adds no cost, unless a decision or the field rules (section 7, "Field dispositions") exclude it (D5, D15, D19, D24). A fact that needs further requests or connections is collected only when a decision admits it at its measured cost: D4, D5, and D14 admit review requests, assignees, and each review's inline-comment count, which add none; section 9 lists the rest. D7's mirror is not interpretation: an overwrite with GitHub's current value, and a removal GitHub made, are GitHub's changes, and D28's kept reference, the one exception, is marked by its `*_reported` column. |
+| D30 | Each tracked repository's default-branch activity is stored as GitHub reports it (Step 4b): every event in GitHub's repository activity log for the default branch, with its id, type, time, actor, ref, and before and after commits; GitHub's compare of each event's before and after commits, as compare returns it (its status, counts, merge base, commits, and files); and the default branch's commit history since the floor, one row per commit with its author like `pr_commits`, its committed date, and GitHub's line and file counts for it, a default-branch commit's only time and size outside a pull request (D19). Nothing classifies an event or a commit as a direct push or as reviewed: a consumer joins a `pr_merge` event to its PR through the PR's `merge_commit_oid` (each of the 11 measured events' `after` equalled its PR's merge commit, 6 merge-commit and 5 squash merges; no rebase merge was measured), and a commit to the event that brought it through the stored compare commits. GitHub's log starts on 2023-03-07 for Prebid.js and prebid-server, and `Commit.pushedDate` is deprecated as no longer supported and returned null on the history commits read, so for changes before the log starts the commit history is the only record, with the committed date in place of a push time (section 7, "Repository activity"). |
 
 ## 3. Coverage rule
 
@@ -111,14 +111,14 @@ Every gap found in the audit, and where it is resolved.
 | # | Gap | Resolution |
 |---|-----|------------|
 | 1 | No issues table or issue sync | Step 4 |
-| 2 | No GitHub user id or account type; bots indistinguishable | Step 3: `github_users` keyed by GitHub id; type and login from GraphQL actor sightings and node lookups (5.2); automation from account type plus the `[automation]` list. `prebidjs-release` (99054218) and `claude` (81847) are type `User`. Logins change: `blueseasx` became `blueseasx-prebid`. |
+| 2 | No GitHub user id or account type; bots indistinguishable | Step 3: `github_users` keyed by GitHub id; type and login from GraphQL actor sightings and node lookups (5.2); the account's type, and the `[automation]` entry beside it, never merged (gap 83). `prebidjs-release` (99054218) and `claude` (81847) are type `User`. Logins change: `blueseasx` became `blueseasx-prebid`. |
 | 3 | Review order lost; final reviewer state unknown | Step 3: one row per review keyed by review id; Step 3b-1: each review's created and submitted times (D6); no view derives a verdict (D29, gap 82) |
-| 4 | Validation silently drops commits (`author: {}`), reviews (`user: null`), files (`sha: null`) | Steps 2, 3: no silent skips; failures are recorded. GraphQL file objects carry no `sha`; unlinked commit authors keep git name and email; deleted-account comments are stored with a null author unless their author was already stored (D24, D28) |
+| 4 | Validation silently drops commits (`author: {}`), reviews (`user: null`), files (`sha: null`) | Steps 2, 3: no silent skips; failures are recorded. GraphQL file objects carry no `sha`; unlinked commit authors keep git name and email; comments GitHub returns with a null author are stored with a null author unless their author was already stored (D24, D28) |
 | 5 | 10,895 PRs with file status `unknown` and zero per-file line counts | Step 5: rebuild from GitHub |
-| 6 | Closed-unmerged PRs partially stored | D3: stored with state `CLOSED` (Step 3b-1) |
-| 7 | `reviewers` holds pending review requests | D4: review requests stored as GitHub lists them (Step 3b-1) |
+| 6 | Closed-unmerged PRs partially stored | D3: stored with state `CLOSED` (Step 3b-1 collects them; 3b-2 writes them) |
+| 7 | `reviewers` holds pending review requests | D4: review requests stored as GitHub lists them (Step 3b-1 collects them; 3b-2 writes them) |
 | 8 | Commenters not captured | Inline review comments already belong to reviews (168 of 168 sampled); each review stores their count (D5). Conversation commenters: D5, D24 |
-| 9 | No review timestamps | D6: review created and submitted times, comment times (Step 3b-1) |
+| 9 | No review timestamps | D6: review and comment times (Step 3b-1 collects them; 3b-2 writes them) |
 | 10 | Commit lists truncated at 250 | Step 2: compare endpoint, paged, count asserted |
 | 11 | Coverage floor undefined; partial history | Section 3; `verify` |
 | 12 | AI fields empty and erased by re-sync | D12 |
@@ -148,7 +148,7 @@ Every gap found in the audit, and where it is resolved.
 | 36 | `gh release upload --clobber` deletes before uploading | Step 6 |
 | 37 | Public-repo schedules disable after 60 days without activity; start-of-hour runs delayed or dropped | Step 6 |
 | 38 | The same path can appear twice in one PR's file list | Step 3: file rows keyed by ordinal; `files_total`, not `changed_files`, counts them |
-| 39 | Null PR author, reviewer, commenter, issue author, and merger occur | Step 3: nullable references, kept for stored accounts (D28); deleted-account comments stored with a null author (D24) unless their author was already stored (D28) |
+| 39 | Null PR author, reviewer, commenter, issue author, and merger occur | Step 3: nullable references, kept for stored accounts (D28); comments GitHub returns with a null author stored with a null author (D24) unless their author was already stored (D28) |
 | 40 | A review can be submitted seconds after the PR `updatedAt` | Step 3: unsettled re-hydration |
 | 41 | Issue transfers between repositories | Step 4: a transferred issue arrives with a new id; deletions recomputed at delete time |
 | 42 | `uv sync --frozen` without `--extra dev` uninstalls dev tools | Step 1 |
@@ -191,15 +191,15 @@ Every gap found in the audit, and where it is resolved.
 | 79 | Hydration raises `RepositoryNotFound` or `RepositoryShapeError` when a batch's `repository` is null; 5.3 assigned repository failures only to resolve and index | Step 3b-2: a row of the 5.3 step 4 table |
 | 80 | Gap 44's rule (new code uses `{}` placeholders) has no gate, and ruff cannot be one: PLE1205 flags a correct `logger.warning("brace {}", value)` and passes `logger.warning("percent %s", value)` | Step 3a: an AST check over `src/`, run as a pre-commit hook (so CI's `--all-files` run checks it) and tested with planted calls and a string decoy |
 | 81 | At `6fedb05`, `v_pr_reviewers` and `v_pr_commenters` leave out the PR author's own reviews and comments, accounts of type `Bot`, accounts listed in `[automation]`, and reviews and comments with a null author, and `v_pr_commenters` also leaves out commenters who reviewed the PR | Step 3b-1: row-level views that keep every row and carry each condition as a column (5.1, D29) |
-| 82 | `v_pr_reviewers.final_verdict` reduces a reviewer's reviews to one state by a rule the database chose, ordered by review id, which follows creation, not submission (section 7, "Review order") | Step 3b-1: removed; GitHub's own `reviewDecision` is stored on the PR (D29) |
+| 82 | `v_pr_reviewers.final_verdict` reduces a reviewer's reviews to one state by a rule the database chose, ordered by review id, which does not follow submission order (section 7, "Review order") | Step 3b-1: removed; GitHub's own `reviewDecision` is stored on the PR (D29) |
 | 83 | `is_automation` merges GitHub's type `Bot` with the maintainer's lists into one flag, computed from the latest run's copy of `tracking.toml` | Step 3b-1: the account's type and the matching `[automation]` entry's reason as separate columns, and the run that copied the lists (5.2) |
-| 84 | Facts fetched and then dropped: each PR's `baseRefOid` and `headRefOid` (used only for the compare request and the page check), the account id GitHub links a commit to when the lookup returns null, and the repository's node id and label set | Step 3b-1: stored (5.1) |
-| 85 | A PR with an `EnterpriseUserAccount` actor is an item failure and is not stored (5.2 at `6fedb05`) | Step 3b-1: stored, the account keyed by its node id (5.2) |
+| 84 | Facts fetched and then dropped: each PR's `baseRefOid` and `headRefOid` (used only for the compare request and the page check), the account id GitHub links a commit to when the lookup returns null, and the repository's node id and label set | Step 3b-1 collects them; 3b-2 writes them (5.1) |
+| 85 | A PR with an `EnterpriseUserAccount` actor is an item failure and is not stored (5.2 at `6fedb05`) | Step 3b-1 collects such an actor and 3b-2 writes it, the account keyed by its node id (5.2) |
 | 86 | When a value was read is internal: `hydrated_at`, `hydration_version`, `refreshed_at`, `repo_sync_state`, `sync_failures`; a consumer cannot tell how current a row is or that an item failed | Step 3b-1: consumer columns (5.1) |
 | 87 | The schema-version rule and its lock name only columns, so a change to which rows a view returns ships under the same `user_version` | Step 3b-1: a change to a view's rows or derivation bumps the version, and the lock entry records each consumer view's frozen-SQL SHA-256 (5.1) |
 | 88 | Nothing records which `tracking.toml` produced `repo_group`, `is_tracked`, and the automation tables when `TRACKING_CONFIG_PATH` overrides the packaged file or the checkout is changed | Step 3b-2: `sync_runs.config_source` and `config_sha256`, and the manifest (5.1, 5.6) |
-| 89 | Wording that gives data a meaning GitHub does not state: a null actor called a deleted account (the data dictionary, `cli/github.py`), "final verdict", a dismissal called a withdrawal, "reviewer metrics", "review activity", closing links said to close an issue (GitHub: "List of issues that may be closed by this pull request") | This plan (2026-10-18); Step 3b-1 (data dictionary, CLI) |
-| 90 | An account marked deleted that GitHub links again only through commits is never looked up again, so its `deleted_at` and login stay as they were | Step 3b-2: a commit link to a stored account with `deleted_at` set queues it for a lookup (5.2) |
+| 89 | Wording that gives data a meaning GitHub does not state: a null actor called a deleted account (the data dictionary, `cli/github.py`), "final verdict", a dismissal called a withdrawal, "reviewer metrics", "review activity", closing links said to close an issue (GitHub: "List of issues that may be closed by this pull request"), the `source/` docstrings that call a null actor or `NOT_FOUND` deleted, `github_users.deleted_at` itself, and `tracking.toml` groups described as "for reporting" | This plan (2026-10-18); Step 3b-1 (the data dictionary, `cli/github.py`, the docstrings in `source/convert.py`, `source/users.py`, and `source/records.py`, and `deleted_at` renamed `not_found_at`); Step 3b-2 (the `tracking.toml` comment) |
+| 90 | An account a lookup returned `NOT_FOUND` for, which GitHub links again only through commits, is never looked up again, so its `not_found_at` and login stay as they were | Step 3b-2: a commit link to a stored account with `not_found_at` set queues it for a lookup (5.2) |
 
 ## 5. Design
 
@@ -277,29 +277,31 @@ and `color`, `pr_user_tags.created_at`).
 
 | Table | Columns | Keys and constraints |
 |-------|---------|----------------------|
-| `repositories` | `github_id`, `node_id`, `owner`, `name`, `full_name`, `repo_group`, `is_private`, `is_archived`, `is_fork`, `created_at`, `archived_at`, `default_branch`, `is_tracked` | `github_id` unique; `node_id` unique; names take GitHub's spelling; `full_name` indexed, not unique (the consumer key (`full_name`, `number`) is unique among `is_tracked` rows); `is_tracked` set by 5.3 step 1 (D27); `repo_group` as `tracking.toml` assigned it at the last resolve |
-| `repo_labels` | `repository_id`, `node_id`, `name`, `color`, `description`, `is_default` | PK (`repository_id`, `node_id`); the repository's labels as the latest resolve read them (D8); `description` nullable as GitHub's is |
-| `github_users` | `github_id`, `node_id`, `login`, `type`, `name`, `created_at`, `linked_user_github_id`, `refreshed_at`, `deleted_at` | `github_id` unique, null only for type `EnterpriseUserAccount`, which has no `databaseId` (5.2); `node_id` unique; `type` and `login` not null, from GraphQL only (5.2); `type` in (`User`, `Bot`, `Organization`, `Mannequin`, `EnterpriseUserAccount`); `name` and `created_at` as GitHub reports them, null until the account's first lookup (`Bot` has no `name`); `linked_user_github_id` is an `EnterpriseUserAccount`'s `user.databaseId`, null otherwise; `refreshed_at` is the GitHub `Date` header of the response that last set login and type (5.2); `deleted_at` is when a lookup returned `NOT_FOUND`, null otherwise, and no reference reads it (D28) |
-| `pull_requests` | `repository_id`, `number`, `github_id`, `node_id`, `state`, `is_draft`, `title`, `body`, `author_id`, `author_reported`, `author_association`, `created_at`, `merged_at`, `closed_at`, `last_edited_at`, `merged_by_id`, `merged_by_reported`, `base_ref`, `base_ref_oid`, `head_ref_name`, `head_ref_oid`, `head_repo_github_id`, `head_repo_full_name`, `merge_commit_oid`, `targets_default_branch`, `is_cross_repository`, `milestone_number`, `milestone_title`, `review_decision`, `locked`, `active_lock_reason`, `additions`, `deletions`, `changed_files`, `total_comments_count`, `commits_total`, `files_total`, `reviews_total`, `comments_total`, `labels_total`, `closing_issues_total`, `user_linked_closing_issues_total`, `review_requests_total`, `assignees_total`, `github_updated_at`, `hydrated_at`, `hydration_version` | unique (`repository_id`, `number`); `github_id` unique; `state` in (`OPEN`, `CLOSED`, `MERGED`), GitHub's `PullRequestState`; `merged_at` set iff `MERGED`; author and merger nullable; `closed_at`, `last_edited_at`, `merge_commit_oid`, the head repository, the milestone, `review_decision`, and `active_lock_reason` nullable as GitHub's are (the head repository is null when GitHub returns none, as for a deleted fork) |
+| `repositories` | `github_id`, `node_id`, `owner`, `name`, `full_name`, `repo_group`, `is_private`, `is_archived`, `is_fork`, `is_mirror`, `is_template`, `is_locked`, `lock_reason`, `is_disabled`, `is_empty`, `visibility`, `description`, `created_at`, `updated_at`, `pushed_at`, `archived_at`, `merge_commit_allowed`, `squash_merge_allowed`, `rebase_merge_allowed`, `auto_merge_allowed`, `delete_branch_on_merge`, `default_branch`, `labels_total`, `is_tracked` | `github_id` unique; `node_id` unique; the GitHub fields as the latest resolve read them (5.8), nullable as GitHub's are; names take GitHub's spelling; `full_name` indexed, not unique (the consumer key (`full_name`, `number`) is unique among `is_tracked` rows); `is_tracked` set by 5.3 step 1 (D27); `repo_group` as `tracking.toml` assigned it at the last resolve |
+| `repo_labels` | `repository_id`, `node_id`, `name`, `color`, `description`, `is_default`, `created_at`, `updated_at` | PK (`repository_id`, `node_id`); the repository's labels as the latest resolve read them (D8); `description` nullable as GitHub's is |
+| `github_users` | `github_id`, `node_id`, `login`, `type`, `name`, `created_at`, `updated_at`, `linked_user_github_id`, `claimant_github_id`, `refreshed_at`, `not_found_at` | `github_id` unique, null only for type `EnterpriseUserAccount`, which has no `databaseId` (5.2); `node_id` unique; `type` and `login` not null, from GraphQL only (5.2); `type` in (`User`, `Bot`, `Organization`, `Mannequin`, `EnterpriseUserAccount`); `name`, `created_at`, and `updated_at` as GitHub reports them, null until the account's first lookup (`Bot` has no `name`); `linked_user_github_id` is an `EnterpriseUserAccount`'s `user.databaseId` and `claimant_github_id` a `Mannequin`'s `claimant.databaseId`, null otherwise; `refreshed_at` is the GitHub `Date` header of the response that last set login and type (5.2); `not_found_at` (named `deleted_at` at `6fedb05`) is when a lookup returned `NOT_FOUND`, null otherwise, and no reference reads it (D28); profile fields (company, location, biography, email, and the like) are not collected (section 7, "Field dispositions") |
+| `pull_requests` | `repository_id`, `number`, `github_id`, `node_id`, `state`, `is_draft`, `title`, `body`, `author_id`, `author_reported`, `author_association`, `created_at`, `merged_at`, `closed_at`, `published_at`, `last_edited_at`, `editor_id`, `created_via_email`, `includes_created_edit`, `maintainer_can_modify`, `merged_by_id`, `merged_by_reported`, `base_ref`, `base_ref_oid`, `head_ref_name`, `head_ref_oid`, `head_repo_github_id`, `head_repo_full_name`, `head_repo_owner_node_id`, `head_repo_owner_login`, `merge_commit_oid`, `targets_default_branch`, `is_cross_repository`, `milestone_number`, `milestone_title`, `review_decision`, `locked`, `active_lock_reason`, `additions`, `deletions`, `changed_files`, `total_comments_count`, `commits_total`, `files_total`, `reviews_total`, `comments_total`, `labels_total`, `closing_issues_total`, `user_linked_closing_issues_total`, `review_requests_total`, `assignees_total`, `github_updated_at`, `hydrated_at`, `hydration_version` | unique (`repository_id`, `number`); `github_id` unique; `state` in (`OPEN`, `CLOSED`, `MERGED`), GitHub's `PullRequestState`; `merged_at` set iff `MERGED`; author, merger, and editor nullable; `closed_at`, `published_at`, `last_edited_at`, `merge_commit_oid`, the head repository and its owner, the milestone, `review_decision`, and `active_lock_reason` nullable as GitHub's are (the head repository is null when GitHub returns none, as for a deleted fork); the milestone is GitHub's reference to it (number and title), not a stored milestone |
 | `pr_labels` | `pr_id`, `name`, `label_node_id` | PK (`pr_id`, `name`) |
-| `pr_reviews` | `github_id`, `pr_id`, `reviewer_id`, `reviewer_reported`, `state`, `created_at`, `submitted_at`, `commit_oid`, `author_association`, `author_can_push_to_repository`, `is_minimized`, `minimized_reason`, `inline_comments_total` | `github_id` unique; reviewer nullable; `state` in (`APPROVED`, `CHANGES_REQUESTED`, `COMMENTED`, `DISMISSED`); `submitted_at`, `commit_oid`, and `minimized_reason` nullable as GitHub's are; `inline_comments_total` is GitHub's `comments.totalCount` for the review (D5); no review text (D24) |
-| `pr_comments` | `github_id`, `pr_id`, `author_id`, `author_reported`, `created_at`, `updated_at`, `last_edited_at`, `author_association`, `is_minimized`, `minimized_reason` | `github_id` unique; author nullable; `last_edited_at` and `minimized_reason` nullable as GitHub's are; no comment text (D24, D28) |
+| `pr_reviews` | `github_id`, `pr_id`, `reviewer_id`, `reviewer_reported`, `state`, `created_at`, `submitted_at`, `published_at`, `updated_at`, `last_edited_at`, `editor_id`, `created_via_email`, `includes_created_edit`, `commit_oid`, `author_association`, `author_can_push_to_repository`, `is_minimized`, `minimized_reason`, `inline_comments_total` | `github_id` unique; reviewer and editor nullable; `state` in (`APPROVED`, `CHANGES_REQUESTED`, `COMMENTED`, `DISMISSED`); `submitted_at`, `published_at`, `last_edited_at`, `commit_oid`, and `minimized_reason` nullable as GitHub's are; `inline_comments_total` is GitHub's `comments.totalCount` for the review (D5); no review text (D24) |
+| `pr_comments` | `github_id`, `pr_id`, `author_id`, `author_reported`, `created_at`, `published_at`, `updated_at`, `last_edited_at`, `editor_id`, `created_via_email`, `includes_created_edit`, `is_pinned`, `pinned_at`, `pinned_by_id`, `author_association`, `is_minimized`, `minimized_reason` | `github_id` unique; author, editor, and pinner nullable; `published_at`, `last_edited_at`, `pinned_at`, and `minimized_reason` nullable as GitHub's are; no comment text (D24, D28) |
 | `pr_commits` | `pr_id`, `sha`, `author_id`, `linked_github_id`, `author_name`, `author_email`, `authored_at` | PK (`pr_id`, `sha`); author nullable; `linked_github_id` is the account id GitHub linked the commit to in the latest hydration (GraphQL `GitActor.user.databaseId`, REST compare `author.id`), null when it linked none (D28); no message (D19) |
 | `pr_files` | `pr_id`, `ordinal`, `path`, `change_type`, `additions`, `deletions` | PK (`pr_id`, `ordinal`) |
-| `pr_closing_issues` | `pr_id`, `issue_repo_github_id`, `issue_repo_full_name`, `issue_number`, `issue_github_id`, `user_linked` | PK (`pr_id`, `issue_repo_github_id`, `issue_number`); `issue_github_id` is the issue's `fullDatabaseId`; `user_linked` is whether GitHub also lists the link under `userLinkedOnly: true` (linked by hand rather than by a closing keyword); `issue_repo_full_name` is the name GitHub reported when the link was last written |
-| `pr_review_requests` | `pr_id`, `ordinal`, `requested_type`, `requested_github_id`, `requested_node_id`, `account_id`, `team_slug`, `as_code_owner` | PK (`pr_id`, `ordinal`); one row per entry of GitHub's `reviewRequests` (D4); `requested_type` is GitHub's `__typename` (`User`, `Bot`, `Mannequin`, `Team`), null with the other requested columns when GitHub returns no requested reviewer; `account_id` references `github_users` for an account and is null for a team, which is not an account and is identified by `requested_github_id` and `team_slug` |
+| `pr_closing_issues` | `pr_id`, `issue_repo_github_id`, `issue_repo_full_name`, `issue_number`, `issue_github_id`, `user_linked` | PK (`pr_id`, `issue_repo_github_id`, `issue_number`); `issue_github_id` is the issue's `fullDatabaseId`; `user_linked` is whether GitHub also lists the link under `userLinkedOnly: true`, which GitHub describes as "Return only manually linked Issues"; `issue_repo_full_name` is the name GitHub reported when the link was last written |
+| `pr_review_requests` | `pr_id`, `ordinal`, `request_github_id`, `requested_type`, `requested_github_id`, `requested_node_id`, `account_id`, `team_slug`, `as_code_owner` | PK (`pr_id`, `ordinal`); one row per entry of GitHub's `reviewRequests` (D4), `request_github_id` being the request's own `databaseId`; `requested_type` is GitHub's `__typename` (`User`, `Bot`, `Mannequin`, `Team`), null with the other requested columns when GitHub returns no requested reviewer; `account_id` references `github_users` for an account and is null for a team, which is not an account and is identified by `requested_github_id` and `team_slug` |
 | `pr_assignees` | `pr_id`, `account_id` | PK (`pr_id`, `account_id`); one row per account GitHub lists in `assignees` (D14) |
 | `issues` | `repository_id`, `number`, `github_id`, `node_id`, `state`, `state_reason`, `title`, `body`, `author_id`, `created_at`, `closed_at`, `labels_total`, `github_updated_at`, `hydrated_at`, `hydration_version` | unique (`repository_id`, `number`); `github_id` unique; `state` in (`OPEN`, `CLOSED`); author nullable |
 | `issue_labels` | `issue_id`, `name` | PK (`issue_id`, `name`) |
+| (Step 4a) | | The two issue rows above are the Step 3 plan. Step 4a completes them under D29 the way Step 3b-1 completes the PR rows: `issues.author_reported` (D28), the label id on `issue_labels` (D8), the issue's other free fields (`author_association`, `last_edited_at`, `published_at`, milestone, issue type, the parent and the `duplicateOf` issue by repository id and number), `issue_comments` and `issue_assignees` tables shaped like `pr_comments` and `pr_assignees` with their totals, and their 5.4 child-count checks |
 | `repository_activities` | `repository_id`, `github_id`, `node_id`, `activity_type`, `ref`, `before_sha`, `after_sha`, `occurred_at`, `actor_github_id`, `actor_id` | Step 4b (D30); `github_id` unique (GitHub's event `id`); `activity_type` is GitHub's value as text (`push`, `force_push`, `branch_creation`, `branch_deletion`, `pr_merge`, `merge_queue_merge` in githubkit 0.14.2's model); `occurred_at` is GitHub's `timestamp`; `actor_github_id` is the REST actor's `id` and `actor_id` its `github_users` row once a lookup resolves it (5.2), both null when GitHub returns no actor |
-| `repository_activity_compares` | `activity_id`, `http_status`, `status`, `ahead_by`, `behind_by`, `total_commits`, `merge_base_sha` | Step 4b; PK `activity_id`; GitHub's REST compare of `before_sha...after_sha` as it returns them, so the files and counts run from the merge base, not from `before_sha`, when the push diverged (section 7, "Compare"); no row when either SHA is all zeros (a branch creation or deletion); `http_status` records the response, so a refused compare (for example a commit a force push removed) is a row with the other columns null |
+| `repository_activity_compares` | `activity_id`, `http_status`, `status`, `ahead_by`, `behind_by`, `total_commits`, `merge_base_sha` | Step 4b; PK `activity_id`; GitHub's REST compare of `before_sha...after_sha` as it returns them, so the files and counts run from the merge base, not from `before_sha`, when the push diverged (section 7, "Compare"); no row when either SHA is all zeros (a branch creation or deletion); `http_status` records the response, so a refused compare is a row with the other columns null (a compare across a force push, `5110f3d...fccb1f5`, returned 200, section 7) |
 | `repository_activity_compare_files` | `activity_id`, `ordinal`, `filename`, `previous_filename`, `status`, `additions`, `deletions` | Step 4b; PK (`activity_id`, `ordinal`); compare's `files` entries as returned |
+| `repository_activity_compare_commits` | `activity_id`, `ordinal`, `sha`, `author_id`, `linked_github_id`, `author_name`, `author_email`, `authored_at` | Step 4b; PK (`activity_id`, `ordinal`); compare's `commits` list in full, each commit stored like a `pr_commits` row (D19), so a commit an event brought joins to its event |
 | `default_branch_commits` | `repository_id`, `sha`, `author_id`, `linked_github_id`, `author_name`, `author_email`, `authored_at`, `committed_at`, `parent_count`, `additions`, `deletions`, `changed_files` | Step 4b; PK (`repository_id`, `sha`); the default branch's history since the floor as GitHub lists it (D30); the author link as in `pr_commits`; `parent_count` is GitHub's `parents.totalCount`; `changed_files` is GitHub's `changedFilesIfAvailable`, null when GitHub returns none; no message (D19) |
 | `automation_accounts` | `github_id`, `login`, `reason`, `run_id` | integer primary key; `github_id` unique; replaced from `tracking.toml` at the start of every run, `run_id` naming that run |
 | `automation_emails` | `email`, `reason`, `run_id` | integer primary key; `email` unique, stored lowercase ASCII (SQLite's `lower()`, which the views apply to commit emails, folds only ASCII letters); replaced the same way |
-| `sync_runs` | `started_at`, `deadline_at`, `finished_at`, `status`, `exit_code`, `trigger`, `code_version`, `config_source`, `config_sha256`, `graphql_points`, `rest_calls`, `items_planned`, `items_hydrated`, `items_deleted`, `failures`, `deletions_approved` | `status` in (`running`, `complete`, `time_limited`, `failed`, `aborted`), set as 5.3 step 8 says; `deadline_at` is `started_at` plus `--max-minutes`, null without it; `trigger` is `schedule` or `workflow_dispatch` from `GITHUB_EVENT_NAME`, else `manual`; `code_version` is `GITHUB_SHA`, else the commit of the checkout the package runs from (marked when its tree has changes), else the package version; `config_source` is `packaged` or the `TRACKING_CONFIG_PATH` path, and `config_sha256` the digest of the `tracking.toml` bytes the run read (gap 88); `items_planned` counts the distinct items planned for hydration (in-place updates excluded), `items_hydrated` the hydrated items written, and `items_deleted` the item rows step 7 and the prune deleted; `failures` counts this run's item failures, accepted ones included; `deletions_approved` is null or JSON with `allow_deletions` (the repository, the approved N, the candidate count, and whether the deletion ran) and `prune_untracked` (each pruned repository's `github_id`, `full_name`, and items deleted) |
-| `repo_sync_state` | `repository_id`, `last_index_started_at`, `index_pr_total`, `index_issue_total`, `last_success_at`, `last_run_id`, `last_outcome`, `halt_reason` | PK `repository_id`; `last_run_id` is the latest run that attempted the repository, or found it untracked, and `last_outcome` its result, in (`complete`, `time_limited`, `failed`, `incomplete_index`, `halted`, `untracked`), both written by step 8, or by the close of a fatal or interrupted run (5.3 step 8); `last_index_started_at` is written only when that index completed and the repository did not fail later in the run, a time-limited repository included (its unreached items are in `sync_pending`), and never by the close of a fatal or interrupted run; `last_success_at` is the run's `finished_at` when `last_outcome` is `complete` and no item failed outside `[sync].accepted_failures`; `halt_reason` is cleared by a run that did not halt |
-| `sync_pending` | `repository_id`, `item_kind`, `number`, `run_id` | PK (`repository_id`, `item_kind`, `number`); `item_kind` in (`pull_request`, `issue`); items a time-limited run planned but did not reach; step 8 replaces the rows of each completely indexed repository that did not fail later in the run (a repository gone during hydration keeps its rows, 5.3 step 4) with this run's unreached items, so a run that reached them all leaves none |
+| `sync_runs` | `started_at`, `deadline_at`, `finished_at`, `status`, `exit_code`, `trigger`, `code_version`, `config_source`, `config_sha256`, `graphql_points`, `rest_calls`, `items_planned`, `items_hydrated`, `items_deleted`, `failures`, `deletions_approved` | `status` in (`running`, `complete`, `time_limited`, `failed`, `aborted`), set as 5.3 step 8 says; `deadline_at` is `started_at` plus `--max-minutes`, null without it; `trigger` is `schedule` or `workflow_dispatch` from `GITHUB_EVENT_NAME`, else `manual`; `code_version` is `GITHUB_SHA`, else the commit of the checkout the package runs from (marked when its tree has changes), else the package version; `config_source` is `packaged` or the `TRACKING_CONFIG_PATH` path, and `config_sha256` the digest of the `tracking.toml` bytes the run read (gap 88); `items_planned` counts the distinct items planned for hydration (in-place updates excluded), `items_hydrated` the hydrated items written, and `items_deleted` the item rows step 7 and the prune deleted; `failures` counts this run's item failures, accepted ones included; `deletions_approved` is null or JSON with `allow_deletions` (the repository, the approved N, the candidate count, and whether the deletion ran) and `prune_untracked` (each pruned repository's `github_id`, `full_name`, and items deleted); every column is consumer except the run counters (5.1, consumer interface) |
+| `repo_sync_state` | `repository_id`, `last_index_started_at`, `index_pr_total`, `index_issue_total`, `default_branch_commits_total`, `last_success_at`, `last_run_id`, `last_outcome`, `halt_reason` | PK `repository_id`; `default_branch_commits_total` is the history's `totalCount` at the latest read (Step 4b); `last_run_id` is the latest run that attempted the repository, or found it untracked, and `last_outcome` its result, in (`complete`, `time_limited`, `failed`, `incomplete_index`, `halted`, `untracked`), both written by step 8, or by the close of a fatal or interrupted run (5.3 step 8); `last_index_started_at` is written only when that index completed and the repository did not fail later in the run, a time-limited repository included (its unreached items are in `sync_pending`), and never by the close of a fatal or interrupted run; `last_success_at` is the run's `finished_at` when `last_outcome` is `complete` and no item failed outside `[sync].accepted_failures`; `halt_reason` is cleared by a run that did not halt |
+| `sync_pending` | `repository_id`, `item_kind`, `number`, `run_id` | PK (`repository_id`, `item_kind`, `number`); `item_kind` in (`pull_request`, `issue`); items a time-limited run planned but did not reach; step 8 replaces the rows of each completely indexed repository that did not fail later in the run (a repository gone during hydration keeps its rows, 5.3 step 4) with this run's unreached items, so a run that reached them all leaves none; consumer, so an in-coverage item not yet hydrated is told apart from one outside coverage |
 | `sync_failures` | `repository_id`, `item_kind`, `number`, `attempts`, `last_error`, `first_failed_at`, `last_failed_at` | unique (`repository_id`, `item_kind`, `number`); `item_kind` in (`pull_request`, `issue`); `attempts` counts the runs in which the item failed; `last_error` is the error's class and message; row deleted on success, or by step 7 when its repository's in-coverage set no longer lists the item |
 | `user_tags`, `pr_user_tags` | unchanged except `created_at`, which uses the 5.1 timestamp type with a `datetime.now(UTC)` default | FK to new `pull_requests` |
 
@@ -312,8 +314,11 @@ Column rules:
 - `author_reported`, `merged_by_reported`, and `reviewer_reported` are true when GitHub returned a
   non-null actor for that reference in the row's latest hydration, so a reference D28 kept is told
   apart from one GitHub returns today; `pr_commits.linked_github_id` does the same for commits.
-- `author_association`, `author_can_push_to_repository`, `review_decision`, and the minimized state
-  are GitHub's values when the row was hydrated (`hydrated_at`); GitHub computes them when read.
+  The other actor references (`editor_id`, `pinned_by_id`, requests, assignees, event actors)
+  take GitHub's current value, null included (D28).
+- The `author_association` and `author_can_push_to_repository` of reviews and comments,
+  `review_decision`, and the minimized and pinned state are GitHub's values when the PR was
+  hydrated (`hydrated_at`); GitHub computes them when read.
 - `targets_default_branch` is `base_ref = repositories.default_branch` for the repository's current
   default branch. It is written with each PR and recomputed for the repository's PRs when step 1 of
   5.3 sees the default branch change.
@@ -323,8 +328,10 @@ Column rules:
   re-hydrates what the reverted code wrote. A change to a kind's query documents (its alias fields
   and overflow continuations) or a migration that adds or redefines a GitHub-derived column of a
   table that may hold rows bumps that kind's version in the same pull request. Step 3b-1 changes
-  the pull request documents, so the pull-request version becomes 2; its migration runs while no
-  sync has written a row. A column a later migration adds is null on rows hydrated at an older
+  the pull request documents, so the pull-request version becomes 2. No sync has written the new
+  schema before 3b-2, so Step 3b-1's migration refuses a database holding rows in the hydrated
+  tables, as Step 3a's refuses tag rows, and its added columns need no value for existing rows. A
+  column a later migration adds to tables that hold rows is null on rows hydrated at an older
   version until they re-hydrate, and `hydration_version` is a consumer column, so a reader can tell.
 - `state_reason` is GitHub's value including `DUPLICATE` (5.8). Descriptive enums (`change_type`,
   `author_association`, `state_reason`) are text without a CHECK, so a new GitHub value is stored,
@@ -339,43 +346,49 @@ PR; `pull_requests (repository_id, state)`,
 `(repository_id, merged_at)`, `(author_id)`, `(merged_by_id)`, `(merge_commit_oid)`;
 `issues (repository_id, state)`, `(author_id)`; `pr_closing_issues (issue_repo_github_id,
 issue_number)`; `repository_activities (repository_id, occurred_at)` and `(after_sha)`, for the D30
-join with `merge_commit_oid`. A test checks that every
+join with `merge_commit_oid`; and every foreign-key column Steps 3b-1 and 4b add (`editor_id`,
+`pinned_by_id`, `pr_review_requests.account_id`, `pr_assignees.account_id`,
+`repository_activities.actor_id`, and the commit tables' `author_id`). A test checks that every
 foreign-key column leads an index (a composite primary key counts), except
 `pr_user_tags.user_tag_id`, which this section keeps unchanged.
 
 Views join stored rows with their consumer keys, one view row per stored row: no view leaves a row
-out, aggregates rows, or derives a judgment (D29). Where a reference is null, the account columns
-are null and the row stays. The account columns carry GitHub's `type` and the reason of the
-`automation_accounts` entry for the account's `github_id` (null when none lists it) side by side,
-never merged into one flag. Step 3b-1 replaces `v_pr_reviewers` and `v_pr_commenters`, which left
+out, aggregates rows, or computes a column outside D29's list. Where a reference is null, the
+account columns are null and the row stays. Every PR-level view carries the PR keys: the
+repository's `github_id`, `full_name`, and `is_tracked`, and the PR's `number` and `github_id`.
+Every account in a view carries its `github_id`, `node_id` (the key of an account with a null `github_id`), `login`,
+`type`, and `automation_reason` (the reason of the `automation_accounts` entry for its `github_id`,
+null when none lists it), side by side, never merged into one flag. Step 3b-1 replaces `v_pr_reviewers` and `v_pr_commenters`, which left
 rows out and derived a verdict (gaps 81 and 82), with `v_pr_reviews`, `v_pr_comments`, and
 `v_pr_relationships`, and bumps `schema_version` to 2:
 
 - `v_github_users`: every `github_users` column except `id`, plus `automation_reason`.
-- `v_pr_reviews`: one row per `pr_reviews` row, with the PR's repository `full_name`, `number`, and
-  `github_id`, every review column except the row ids, and the reviewer's `github_id`, `login`,
-  `type`, and `automation_reason`, and `is_pr_author` (the review's reviewer is the PR's author;
-  null when either reference is null).
-- `v_pr_comments`: one row per `pr_comments` row, with the same keys, every comment column except
-  the row ids, the author's `github_id`, `login`, `type`, and `automation_reason`, `is_pr_author`,
-  and `author_also_reviewed` (the author has a `pr_reviews` row on the same PR; null when the author
-  is null).
-- `v_commit_authors`: `pr_commits` rows with the PR's repository `full_name` and `number` in place
-  of `pr_id`, the linked account's `github_id`, `type`, and `automation_reason` in place of
-  `author_id`, `linked_github_id`, and `email_automation_reason` (the reason of the
-  `automation_emails` entry equal to `lower(author_email)`, null when none).
-- `v_pr_relationships`: one row per relationship between an account and a PR, from the stored rows:
-  `author` and `merged_by` (one row per PR, also when the reference is null), `review` (one per
+- `v_pr_reviews`: one row per `pr_reviews` row, with the PR keys, every review column except the
+  row ids, the reviewer and the editor as accounts, and `is_pr_author` (the reviewer is the PR's
+  author; null when either reference is null).
+- `v_pr_comments`: one row per `pr_comments` row, with the PR keys, every comment column except the
+  row ids, the author, the editor, and the pinner as accounts, `is_pr_author`, and
+  `author_also_reviewed` (the author has a `pr_reviews` row on the same PR; null when the author is
+  null).
+- `v_commit_authors`: one row per `pr_commits` row, with the PR keys, every `pr_commits` column
+  except `pr_id` and `author_id`, the linked account, and `email_automation_reason` (the reason of
+  the `automation_emails` entry equal to `lower(author_email)`, null when none).
+- `v_pr_relationships`: one row per relationship between an account and a PR, from the stored rows,
+  with a `relationship` column naming its source: `author` (one per PR, also when the reference is
+  null), `merged_by` (one per merged PR, also when GitHub returned no merger), `review` (one per
   review), `comment` (one per comment), `review_request` (one per request), `assignee` (one per
-  assignee), and `commit_author` (one per commit). Each row carries its source row's key (review or
-  comment `github_id`, request `ordinal`, commit `sha`), the review's `state` and `submitted_at` for
-  a review, the account's `github_id`, `login`, `type`, `automation_reason`, and `deleted_at`, and
-  the PR's `state`, `created_at`, `merged_at`, `closed_at`, `base_ref`, `targets_default_branch`,
-  `merge_commit_oid`, `additions`, `deletions`, `changed_files`, and `commits_total`.
+  assignee), and `commit_author` (one per commit). Each row carries the PR keys, its source row's key
+  (review or comment `github_id`, request `ordinal`, commit `sha`), the source row's `*_reported`
+  value where it has one, the account with its `not_found_at`, the review's `state` and
+  `submitted_at` on a review row, `requested_type`, `requested_github_id`, `team_slug`, and
+  `as_code_owner` on a request row, `linked_github_id`, `author_name`, `author_email`, and
+  `email_automation_reason` on a commit row (null on other rows), and the PR's `state`,
+  `created_at`, `merged_at`, `closed_at`, `base_ref`, `targets_default_branch`, `merge_commit_oid`,
+  `additions`, `deletions`, and `changed_files`.
 
 Each view lists its columns explicitly and identifies rows only by consumer keys (repository
-`full_name`, PR `number` and `github_id`, review and comment `github_id`, account `github_id` and
-`login`, commit `sha`), never by row ids. The views compare `lower(author_email)` with
+`github_id` and `full_name`, PR `number` and `github_id`, review and comment `github_id`, account
+`github_id`, or `node_id` when `github_id` is null, and `login`, commit `sha`), never by row ids. The views compare `lower(author_email)` with
 `automation_emails`.
 
 Reviews and comments by accounts the database never stored stay in `pr_reviews` and `pr_comments`
@@ -403,13 +416,14 @@ excluded, each marked consumer or internal. The columns that say how current a r
 (gap 86): `github_updated_at`, `hydrated_at`, and `hydration_version` on items,
 `github_users.refreshed_at`, every `repo_sync_state` column (`last_index_started_at` is the as-of
 time of everything the index wrote), `sync_failures`' repository, kind, number, error, and failure
-times, and `sync_runs.started_at`, `finished_at`, `status`, `exit_code`, `code_version`,
-`config_source`, and `config_sha256`. The rest of the sync bookkeeping (`sync_pending`, the run
-counters) and the tag tables are internal. Integer row ids change on a rebuild, but a pull request's labels,
+times, `sync_pending` (an in-coverage item a time-limited run did not reach), and every
+`sync_runs` column except the run counters (`graphql_points`, `rest_calls`, `items_*`,
+`failures`), which with the tag tables are internal. Integer row ids change on a rebuild, but a pull request's labels,
 reviews, comments, commits, files, and closing links, and its author and merger, are reachable
 only through them, so the foreign-key columns of consumer tables and the row ids they reference
 are consumer, valid within one file; other row ids are internal. Consumers never store a row id
-or compare one across files, where a row is identified by its `github_id`, and a child row
+or compare one across files, where a row is identified by its `github_id` (an account with a null
+`github_id` by its `node_id`), and a child row
 without one (a label, commit, file, or closing link) by its pull request's `github_id` and its own
 key; (`full_name`, `number`) identifies a pull request among tracked repositories within one file
 and changes with a rename. Views carry no row ids. `PRAGMA user_version` holds `schema_version`, set by
@@ -434,39 +448,41 @@ entry. A change of meaning in a column is left to review. The manifest (5.6) car
   (GitHub returned none, and does not say why; D28) stores a null reference, unless the object
   already has a stored reference, which it keeps (D28). The fifth type, `EnterpriseUserAccount`,
   has no `databaseId`: it is stored with a null `github_id`, keyed by its node `id`, with its
-  `user.databaseId` in `linked_user_github_id`, and never substituted by that user (gap 85).
+  `user.databaseId` in `linked_user_github_id`, and never substituted by that user (gap 85). It
+  cannot be listed in `[automation].accounts`, which keys by `github_id`.
 - One account comes back in more than one shape. dependabot (49699333) is `Bot`/`dependabot` as a PR
   author and `dependabot[bot]` as a commit's `GitActor.user`, whose declared type is `User`; REST uses
   `dependabot[bot]`. `copilot-pull-request-reviewer[bot]` and `Copilot` share id 175728472. Identity
   never joins on login.
 - Type and login come only from GraphQL: actor sightings (PR author, merger, review author, comment
-  author, requested reviewer, assignee), which carry `__typename` (an assignee is always a `User`),
+  author, editor, comment pinner, requested reviewer, assignee), which carry `__typename` (an
+  assignee and a pinner are always a `User`),
   and `nodes(ids:)` lookups. A commit-linked account (GraphQL `GitActor.user` or the REST compare
   `author`) and an activity event's REST actor never set them. An item whose commit-linked account
   is not yet stored is written only after `nodes(ids:)` (100 ids per request) resolves that account
-  in the same run; a failed lookup is an item error, and a null result for an account with no stored
-  values means it was deleted before the database knew it, so the commit is stored without a linked
-  account (D28). Lookups run after each hydration batch, for the commit-linked accounts that are
+  in the same run; a failed lookup is an item error, and a `NOT_FOUND` result for an account with no
+  stored values stores the commit without a linked account, `linked_github_id` keeping the id GitHub
+  linked (D28). Lookups run after each hydration batch, for the commit-linked accounts that are
   neither stored, nor written or looked up earlier in the run, nor sighted in the same batch; each
   record reaches the writer with the accounts its links need, so its own transaction inserts any
   account row it needs. An item whose lookup failed gets one more lookup holding only its own ids,
   unless the failed request held only those (5.3 step 4). A looked-up account whose `databaseId`
   differs from the commit link's fails the items waiting on it (gap 78). Each run also refreshes
-  users last refreshed more than 24 hours ago and not marked
-  deleted, so renamed logins converge, and looks up every stored account with `deleted_at` set that
-  a hydrated commit links to (gap 90). A lookup that returns `NOT_FOUND` for a stored account keeps
-  its row, its last known values, and every reference to it, and sets `deleted_at`; an
-  account seen again, in an actor sighting or a lookup, has `deleted_at` cleared (D28).
-- Only lookups change a stored account's login and type, and they also set `name` and
-  `created_at`. An actor sighting inserts an account not
-  yet stored and clears `deleted_at`, but leaves login and type to the refresh, so an account seen
+  users last refreshed more than 24 hours ago and without `not_found_at`, so renamed logins
+  converge, and looks up every stored account with `not_found_at` set that a hydrated commit links
+  to (gap 90). A lookup that returns `NOT_FOUND` for a stored account keeps its row, its last known
+  values, and every reference to it, and sets `not_found_at`; an account seen again, in an actor
+  sighting or a lookup, has `not_found_at` cleared (D28).
+- Only lookups change a stored account's login and type, and they also set `name`, `created_at`,
+  `updated_at`, and a mannequin's `claimant_github_id`. An actor sighting inserts an account not
+  yet stored and clears `not_found_at`, but leaves login and type to the refresh, so an account seen
   in two shapes (175728472) does not change login with the order items are written. `refreshed_at`
   is the GitHub `Date` header of the response that inserted the row or of its latest lookup, the
   same clock as `hydrated_at`. The refresh runs after the last hydration
   write and before step 7, oldest `refreshed_at` first, and stops at the deadline; in it, a
   `databaseId` that differs from the stored `github_id` is a failed refresh. Accounts that no stored
-  row references any more stay stored and refreshed: `github_users` holds every account the
-  database ever stored.
+  row references any more stay stored and refreshed: within one file, `github_users` holds every
+  account it ever stored (a bootstrap starts without them, section 9).
 - Automation lists: `[automation].accounts` and `[automation].emails` name accounts and commit
   emails the maintainer lists, each with a reason. Each run copies both lists into
   `automation_accounts` and `automation_emails` with its run id, and the views show the matching
@@ -499,8 +515,9 @@ engine, never through alembic, whose commands take the write lock; it exits 1 ot
 
 1. Resolve each configured repository, in `tracking.toml` order, with the resolve query (5.8). `followRenames` is on by
    default, so a renamed repository resolves under its configured name. Match the stored row by
-   `github_id` and update owner, name, full name, default branch, `is_private`, `is_archived`,
-   `archived_at`, and `node_id`, and replace its `repo_labels` rows with the labels the resolve read;
+   `github_id` and update owner, name, full name, default branch, `node_id`, and every other
+   repository field the resolve reads (5.8), and replace its `repo_labels` rows with the labels the
+   resolve read, after checking their count against `labels_total` and their node ids distinct;
    when the default branch changed, recompute `targets_default_branch` for its PRs. A repository that
    cannot be resolved, has no default branch, or resolves to a different `github_id` than its stored
    row (the `is_tracked` row whose `full_name` equals the configured name, ignoring case) fails for
@@ -518,7 +535,8 @@ engine, never through alembic, whose commands take the write lock; it exits 1 ot
    deleting a label changes no item's `updatedAt`.
 2. Index, in the same order: enumerate every pull request and issue with
    `pullRequests|issues(first: 100, orderBy: {field: CREATED_AT, direction: ASC})` (5.8). The index
-   carries each item's `fullDatabaseId`, state, and dates, and for PRs `isDraft`,
+   carries each item's `fullDatabaseId`, state, and dates (`createdAt`, `updatedAt`, `mergedAt`,
+   and `closedAt`, which the coverage rule reads for a closed PR), and for PRs `isDraft`,
    `authorAssociation`, and the first 10 closing-issue links. The repository's
    `last_index_started_at` is the GitHub `Date` header of the first request of its completed scan
    (the PR connection's when both are indexed) minus 60 s, because the header has one-second
@@ -561,8 +579,10 @@ engine, never through alembic, whose commands take the write lock; it exits 1 ot
    function over snapshots of the stored rows, which `--dry-run` reuses.
 4. Hydrate: GraphQL batches of 25 PRs or 100 issues of one repository via aliased
    `pullRequest(number:)` and `issue(number:)` fields (5.8). Read each alias separately. Overflow
-   beyond 100 entries on any connection (reviews, comments, commits, files, labels, closing issues)
-   pages through `node(id:)`; continuations from several items share one request, and each also reads
+   beyond 100 entries on any connection (reviews, comments, commits, files, labels, closing issues,
+   user-linked closing issues, review requests, assignees) pages through `node(id:)` with the same
+   node selection as the connection's first page; continuations from several items share one
+   request, and each also reads
    `headRefOid` and `updatedAt`. An item fails when any continuation's `headRefOid` or `updatedAt`
    differs from its alias response's, so a push or a new comment between pages never mixes two
    states. GraphQL stops at 250 commits, so above 250 the full list comes from REST
@@ -609,13 +629,14 @@ engine, never through alembic, whose commands take the write lock; it exits 1 ot
    reset, subject to the deadline rule above. `sync_runs.graphql_points` is the sum of
    `rateLimit.cost`; `rest_calls` counts REST requests.
 5. Validate before writing: the fetched count equals `totalCount` for reviews (requested without
-   `PENDING`, so the counts agree by construction), comments, commits, files, labels, and closing
-   issues; every overflow page reports the first page's `totalCount`; a null connection or null node
+   `PENDING`, so the counts agree by construction), comments, commits, files, labels, closing
+   issues, user-linked closing issues, review requests, and assignees; every user-linked closing
+   issue is also in the full closing list; every overflow page reports the first page's `totalCount`; a null connection or null node
    is a failure, never a count of zero; the compare `total_commits` equals the PR's commit
    `totalCount`, and the fetched compare commits equal `total_commits`; the returned number equals
    the request (the batch names the resolved repository); `state` is `MERGED` exactly when
    `mergedAt` is set; the entries the database keys (labels, closing issues, reviews, comments,
-   commits) are distinct; every page with a next page has entries and a new cursor; and an error
+   commits, assignees) are distinct; every page with a next page has entries and a new cursor; and an error
    outside every item fails the request, which then splits, and an item it fails alone gets its
    solo retry, since no retry of the transport preceded it. The hydrated PR's `github_id` equals the
    one the index listed for its number, and a review or comment whose `github_id` is stored under
@@ -697,7 +718,8 @@ and every stored untracked repository, which it reports as not synced without a 
 `user_version` equals `schema_version` (gap 74), and it uses no server-side cursor (gap 77); it
 also exits 1 while a sync run holds the lock (5.3). It re-indexes and applies the coverage rule, then
 compares by `github_id` the stored set with the result (missing and extra items) and, for items in
-both, the stored `github_updated_at`, `state`, `is_draft`, and closing links with the fresh values
+both, the stored `github_updated_at`, `state`, `is_draft`, `author_association`, and closing links
+with the fresh values
 (stale items). For a PR whose link `totalCount` exceeds the 10 links the index carries, closing
 links compare as in 5.3 step 3: equal totals, and every indexed link stored. Each difference takes
 the first class that matches, in this order:
@@ -938,9 +960,12 @@ Step 3b-1 fields, `rateLimit(dryRun: true)`, 2026-10-18):
 ```graphql
 query($owner: String!, $name: String!) {
   repository(owner: $owner, name: $name) {
-    id databaseId nameWithOwner name owner { login } isPrivate isArchived isFork createdAt archivedAt
-    defaultBranchRef { name }
-    labels(first: 100) { totalCount pageInfo { hasNextPage endCursor } nodes { id name color description isDefault } }
+    id databaseId nameWithOwner name owner { login } isPrivate isArchived isFork isMirror isTemplate
+    isLocked lockReason isDisabled isEmpty visibility description createdAt updatedAt pushedAt
+    archivedAt mergeCommitAllowed squashMergeAllowed rebaseMergeAllowed autoMergeAllowed
+    deleteBranchOnMerge defaultBranchRef { name }
+    labels(first: 100) { totalCount pageInfo { hasNextPage endCursor }
+      nodes { id name color description isDefault createdAt updatedAt } }
   }
   rateLimit { cost remaining resetAt }
 }
@@ -951,13 +976,14 @@ Repository labels after the first page (cost 1):
 ```graphql
 query RepositoryLabels($id: ID!, $after: String!) {
   node(id: $id) {
-    ... on Repository { id labels(first: 100, after: $after) { totalCount pageInfo { hasNextPage endCursor } nodes { id name color description isDefault } } }
+    ... on Repository { id labels(first: 100, after: $after) { totalCount pageInfo { hasNextPage endCursor } nodes { id name color description isDefault createdAt updatedAt } } }
   }
   rateLimit { cost remaining resetAt }
 }
 ```
 
-PR index (cost 1 point per 100 items, measured with and without the closing-link selection):
+PR index (cost 1 point per 100 items, measured with and without the closing-link selection, and
+with `closedAt` by `rateLimit(dryRun: true)`, 2026-10-18; `closedAt` is new in Step 3b-1):
 
 ```graphql
 query($owner: String!, $name: String!, $after: String) {
@@ -966,7 +992,7 @@ query($owner: String!, $name: String!, $after: String) {
       totalCount
       pageInfo { hasNextPage endCursor }
       nodes {
-        number fullDatabaseId state isDraft authorAssociation createdAt updatedAt mergedAt
+        number fullDatabaseId state isDraft authorAssociation createdAt updatedAt mergedAt closedAt
         closingIssuesReferences(first: 10) { totalCount nodes { number repository { databaseId nameWithOwner } } }
       }
     }
@@ -982,16 +1008,17 @@ Pull request fields per alias, from Step 3b-1 (25 aliases cost 2 points, the cos
 document: `rateLimit(dryRun: true)` and the repository's formula agree, 2026-10-18; cost depends
 only on the query shape). The added connections are three unnested ones (`userLinkedClosingIssues`,
 `reviewRequests`, `assignees`); `comments { totalCount }` inside a review selects no nodes and takes
-no `first`, so it adds no requests. A fourth unnested connection would make the batch 3 points
-(section 7, "Collected fields"):
+no `first`, so it adds no requests. By the formula, a fourth added connection would make the batch
+3 points (section 7, "Collected fields"):
 
 ```graphql
 id number fullDatabaseId state isDraft title body createdAt updatedAt mergedAt closedAt lastEditedAt
 baseRefName baseRefOid headRefName headRefOid isCrossRepository authorAssociation
 headRepository { databaseId nameWithOwner } mergeCommit { oid } milestone { number title }
-reviewDecision totalCommentsCount locked activeLockReason
+reviewDecision totalCommentsCount locked activeLockReason publishedAt createdViaEmail
+includesCreatedEdit maintainerCanModify headRepositoryOwner { id login }
 additions deletions changedFiles
-author { ...Actor } mergedBy { ...Actor }
+author { ...Actor } mergedBy { ...Actor } editor { ...Actor }
 labels(first: 100) { totalCount pageInfo { hasNextPage endCursor } nodes { id name } }
 closingIssuesReferences(first: 100) { totalCount pageInfo { hasNextPage endCursor }
   nodes { fullDatabaseId number repository { databaseId nameWithOwner } } }
@@ -999,20 +1026,25 @@ userLinkedClosingIssues: closingIssuesReferences(first: 100, userLinkedOnly: tru
   pageInfo { hasNextPage endCursor } nodes { number repository { databaseId } } }
 reviews(first: 100, states: [APPROVED, CHANGES_REQUESTED, COMMENTED, DISMISSED]) { totalCount
   pageInfo { hasNextPage endCursor } nodes { fullDatabaseId state createdAt submittedAt
-    authorAssociation authorCanPushToRepository isMinimized minimizedReason commit { oid }
-    comments { totalCount } author { ...Actor } } }
+    authorAssociation authorCanPushToRepository isMinimized minimizedReason updatedAt lastEditedAt
+    publishedAt createdViaEmail includesCreatedEdit commit { oid } comments { totalCount }
+    author { ...Actor } editor { ...Actor } } }
 comments(first: 100) { totalCount pageInfo { hasNextPage endCursor } nodes { fullDatabaseId
-  createdAt updatedAt lastEditedAt authorAssociation isMinimized minimizedReason author { ...Actor } } }
+  createdAt updatedAt lastEditedAt authorAssociation isMinimized minimizedReason publishedAt
+  createdViaEmail includesCreatedEdit isPinned pinnedAt pinnedBy { id databaseId login }
+  author { ...Actor } editor { ...Actor } } }
 commits(first: 100) { totalCount pageInfo { hasNextPage endCursor }
   nodes { commit { oid authoredDate author { name email user { id databaseId login } } } } }
 files(first: 100) { totalCount pageInfo { hasNextPage endCursor } nodes { path changeType additions deletions } }
-reviewRequests(first: 100) { totalCount pageInfo { hasNextPage endCursor } nodes { asCodeOwner
+reviewRequests(first: 100) { totalCount pageInfo { hasNextPage endCursor } nodes { databaseId asCodeOwner
   requestedReviewer { __typename ... on User { id databaseId login } ... on Bot { id databaseId login }
     ... on Mannequin { id databaseId login } ... on Team { id databaseId slug } } } }
 assignees(first: 100) { totalCount pageInfo { hasNextPage endCursor } nodes { id databaseId login } }
 ```
 
-Issue fields per alias (Step 4; 100 aliases cost 1 point):
+Issue fields per alias as Step 3 planned them (100 aliases cost 1 point with labels the only
+connection); Step 4a completes this document under D29 and measures it, since more connections
+raise the cost (5.1, Step 4a):
 
 ```graphql
 id number fullDatabaseId state stateReason(enableDuplicate: true) title body createdAt updatedAt closedAt
@@ -1020,7 +1052,9 @@ author { ...Actor }
 labels(first: 100) { totalCount pageInfo { hasNextPage endCursor } nodes { name } }
 ```
 
-Overflow continuation, one alias per (item, connection), several per request:
+Overflow continuation, one alias per (item, connection), several per request; each continuation
+selects the same nodes as its connection's first page above (the example shows the Step 2 review
+nodes):
 
 ```graphql
 o0: node(id: $id0) { ... on PullRequest { headRefOid updatedAt
@@ -1032,9 +1066,10 @@ User lookup (5.2; 100 ids per request; cost 1 with the Step 3b-1 fields, dry run
 
 ```graphql
 nodes(ids: $ids) { __typename id
-  ... on User { databaseId login name createdAt } ... on Bot { databaseId login createdAt }
-  ... on Organization { databaseId login name createdAt } ... on Mannequin { databaseId login createdAt }
-  ... on EnterpriseUserAccount { login name createdAt user { databaseId } } }
+  ... on User { databaseId login name createdAt updatedAt } ... on Bot { databaseId login createdAt updatedAt }
+  ... on Organization { databaseId login name createdAt updatedAt }
+  ... on Mannequin { databaseId login name createdAt updatedAt claimant { databaseId } }
+  ... on EnterpriseUserAccount { login name createdAt updatedAt user { databaseId } } }
 ```
 
 Rate-limit reading for `ghactivity github rate-limit` (Step 3a; REST `/rate_limit` supplies each
@@ -1065,7 +1100,9 @@ compare (5.3 step 4). Their REST cost is measured in Step 4b.
 
 `Actor` selects `__typename login` plus `id databaseId` on `User`, `Bot`, `Organization`, and
 `Mannequin`, and from Step 3b-1 `id user { databaseId }` on `EnterpriseUserAccount`, which has no
-`databaseId` (5.2). A continuation
+`databaseId` (5.2). `Actor` is spread only in fields GitHub types as `Actor`: spread in `pinnedBy`,
+typed `User`, it made GitHub demand the `read:enterprise` scope for `EnterpriseUserAccount.id`, so
+`pinnedBy` selects the user's own fields (dry run, 2026-10-18). A continuation
 includes the `Actor` fragment only when its connection uses it: GitHub rejects a document that
 defines a fragment it does not use. Do not nest a
 connection inside `commits` (for example `authors(first: N)`); GraphQL charges for every possible
@@ -1159,7 +1196,7 @@ repository) and runs on the exact PR head; CI passes on the exact PR head.
 
 Three pull requests. 3a lands the schema and removes the old pipeline, which imports the old models
 and so cannot outlive them; 3b-1 adds what the sync collects under D29 (the query documents, typed
-records, schema, and row-level views of D3-D6, D14, and D28); 3b-2 adds the sync engine and verify
+records, schema, and row-level views of D3-D6, D8, D14, and D28); 3b-2 adds the sync engine and verify
 on that schema, so the writer is built against the final tables. Until 3b-2 `main` has no `sync`
 command and the tracked database stays frozen (D26). No sync has written the new schema before
 3b-2, so 3b-1's changes touch no stored data: the tracked `github_activity.db` holds the first
@@ -1240,37 +1277,48 @@ tracked file and is refused on the file itself; CI passes on the exact PR head.
 
 #### Step 3b-1: Collection schema
 
-Scope: the 5.8 pull request, resolve, and user-lookup documents with the fields and connections
-Step 3b-1 adds; their typed response models and the typed records out (a closed PR with
+Scope: the 5.8 pull request, PR index, resolve, and user-lookup documents with the fields and
+connections Step 3b-1 adds (the index gains `closedAt`, which the coverage rule reads for a closed
+PR); their typed response models and the typed records out (a closed PR with
 `closed_at`, the head and merge commits, milestone, review decision, lock state, review requests,
 assignees, label ids, user-linked closing links, each review's and comment's added fields, the
 inline-comment count, the commit link's account id, and an `EnterpriseUserAccount` actor with its
-node id); the pull-request `hydration_version` 2 and its query-lock entry; the recordings of the
-changed documents re-recorded from public repositories, leaving the other units unchanged. A
-migration for the 5.1 changes: the added columns and the `repo_labels`, `pr_review_requests`, and
+node id, editors, pinners, and the repository's added fields); the pull-request `hydration_version`
+2 and its query-lock entry; the recordings of the changed documents (index units included)
+re-recorded from public repositories, leaving the other units unchanged. A migration for the 5.1
+changes, which refuses a database holding rows in the hydrated tables (5.1): the added columns and the `repo_labels`, `pr_review_requests`, and
 `pr_assignees` tables; `state` admitting `CLOSED`; `github_users` admitting `EnterpriseUserAccount`
 with a null `github_id`; `sync_runs.halt_reason`, which nothing defined, dropped and
-`config_source` and `config_sha256` added; `run_id` on the automation tables; the row-level views
+`config_source` and `config_sha256` added; `run_id` on the automation tables; `deleted_at` renamed
+`not_found_at` (gap 89); the row-level views
 in place of `v_pr_reviewers` and `v_pr_commenters` (gaps 81-83) and `schema_version` 2, with its
 lock entry and view digests (gap 87). The data dictionary for every new and changed table, view,
 and column, with gap 86's consumer columns and gap 89's wording; `cli/github.py` printing that GitHub
-returned no author instead of "(deleted account)"; `docs/database.md`'s query example rewritten
-for the new views. No sync code: nothing writes the new columns until 3b-2.
+returned no author instead of "(deleted account)", and the `source/` docstrings in `convert.py`,
+`users.py`, and `records.py` describing a null actor or `NOT_FOUND` as GitHub reports it;
+`docs/database.md`'s query example rewritten for the new views. No sync code: nothing writes the
+new columns until 3b-2.
 
 Tests: each document's formula cost pinned (2 for the batch) and each changed document's recordings
 round-tripping through the replay; every added field parsed from a recording, and a value of the
 wrong type rejected by the typed models; an `EnterpriseUserAccount` actor kept as an account, where
-`6fedb05` failed the item; a `CLOSED` PR returned with its `closed_at`; the migration keeping the
-rows of a seeded database at `33f8570f6540`; the 5.1 schema comparison, CHECK names included; each
+`6fedb05` failed the item; a `CLOSED` PR returned with its `closed_at`, and the index returning
+`closedAt`; overflow and a short page on each of the three added connections, a duplicate assignee,
+and a user-linked closing issue absent from the full list, each failing the item; the migration
+refusing a database at `33f8570f6540` with a `pull_requests` row and upgrading one without; the 5.1
+schema comparison, CHECK names included; each
 view on seeded rows that include a PR author's own review, a `Bot` reviewer, an account listed in
 `[automation]`, a null reviewer and a null commenter, and a commenter who reviewed, every one present
-with its columns; `v_pr_relationships` holding one row per source row; the lock failing on a changed
+with its columns, and an `EnterpriseUserAccount` identified by its `node_id`; `v_pr_relationships`
+holding one row per source row, a team review request and a request with no reviewer told apart,
+and a commit linked to no account told apart from one whose lookup returned `NOT_FOUND`; the lock
+failing on a changed
 view digest and on a removed view (against a real git repository); the dictionary in both directions.
 
 Acceptance: an adversarial review of the change, by reviewers who did not write it, finds no
-invariant check without a test that targets it and no consumer surface that leaves out, merges, or
-derives data (D29); the batch's `rateLimit(dryRun: true)` cost is 2 on the exact head; CI passes on
-the exact PR head.
+invariant check without a test that targets it, no consumer surface that does what D29 forbids,
+and no computed column outside D29's list; the batch's `rateLimit(dryRun: true)` cost is 2 on the
+exact head; CI passes on the exact PR head.
 
 #### Step 3b-2: PR sync engine and verify
 
@@ -1279,15 +1327,19 @@ guards, and their overrides; untracked repositories (D27); accepted failures; th
 the automation tables; user lookup and refresh; unsettled re-hydration; `hydration_version`
 compared by inequality; run records, the run lock, and the head check (gap 74); `ghactivity sync`
 and `ghactivity verify` (5.4; `--db-only` is Step 6a). `tracking.toml` gains `[coverage]`,
-`[automation]`, and `[sync]` (5.5), and its "Order is the sync order" comment changes to the
-resolve and index order (5.3 steps 1-2). Verify's timeline lookup in `source/` with its recordings
+`[automation]`, and `[sync]` (5.5), its "Order is the sync order" comment changes to the resolve
+and index order (5.3 steps 1-2), and its group comment calls a group a maintainer-assigned name
+stored as `repositories.repo_group` (gap 89). Verify's timeline lookup in `source/` with its recordings
 (5.8). The REST sampler the acceptance uses, laid out like the recorder: comparison logic in a
 module under `tests/source/`, tested offline on recorded or synthetic REST bodies with one planted
 mismatch per compared field, REST's `ghost` matching a null reference or a stored reference to an
 account a lookup now returns `NOT_FOUND` for (the sampler looks it up), REST's 250 commits of a PR
 above 250 compared as a subset of the stored commits with equal attribution, a PR whose REST
 `updated_at` differs from the stored `github_updated_at` reported as changed and not compared, and
-the per-file sum rule; REST bodies recorded as their own unit kind by an additive recorder mode; run
+the per-file sum rule; the fields it compares listed in the module, the Step 3b-1 fields REST
+returns among them (`closed_at`, the head and base commits, the merge commit, the milestone, review
+times and commits, comment times, review requests, assignees) and those REST does not return named;
+REST bodies recorded as their own unit kind by an additive recorder mode; run
 from `scripts/`, reaching GitHub through `GitHubSource.transport`; Steps 4 and 5 reuse it. The
 busy-timeout comment in `db/engine.py` (gap 77). Writing what 3b-1 collects: closed PRs, review
 requests, assignees, repository labels, the `*_reported` columns and `linked_github_id` (D28),
@@ -1333,14 +1385,15 @@ stored under another PR, a PR number stored under another `github_id`), a reposi
 hydration, a database error in the writer exiting 1, a `--dry-run` started during a sync and a
 verify started before the sync's claim, each reading beside the sync's item commits without
 blocking them (gap 77),
-an account deleted after it was stored (`deleted_at` set; its PR author, merger, review, comment,
+an account the scenario deletes after it was stored (`not_found_at` set by a lookup; its PR author, merger, review, comment,
 and commit references kept through a re-hydration that returns it as null, each with its
 `*_reported` false and the commit's `linked_github_id` null) and then seen again, an
-account deleted before it was stored (null references everywhere, and a commit whose lookup returns
+account the scenario deletes before it was stored (null references everywhere, and a commit whose lookup returns
 null stored without a linked account and with `linked_github_id` set), an object first written
 after its author's deletion stored with a null author, a different non-null commit link replacing a
-stored one, the 24-hour refresh skipping an account marked deleted, a commit link to an account
-marked deleted queuing its lookup (gap 90), `refreshed_at` taken from the lookup's `Date` header
+stored one, the 24-hour refresh skipping an account with `not_found_at` set, a commit link to such
+an account queuing its lookup (gap 90), a `CLOSED` PR whose `closedAt` falls on each side of the
+floor in the planner, step 7, and verify, `refreshed_at` taken from the lookup's `Date` header
 on both sides of the 24-hour boundary, `config_sha256` equal to the read file's digest with and
 without `TRACKING_CONFIG_PATH`, the delete guard counted on the pre-run snapshot, a `--repo` run
 writing no `repo_sync_state` for another repository,
@@ -1388,11 +1441,13 @@ Two pull requests: 4a for issues and closing-issue links, 4b for default-branch 
 
 #### Step 4a: Issues and closing-issue links
 
-Scope: a migration for the issue tables; issue index and hydration (5.8) with `stateReason`
-including `DUPLICATE`, collected under D29 the way Step 3b-1 collects pull requests: issue comments
-one row per comment with their author and times (no text, D24), assignees, milestone, issue type,
-and the parent issue's repository id and number, each confirmed by `rateLimit(dryRun: true)` before
-the document is fixed; transfers (a transferred issue arrives with a new `github_id` and number,
+Scope: a migration for the issue tables, completing the 5.1 issue rows as their Step 4a row lists;
+issue index and hydration (5.8) with `stateReason` including `DUPLICATE`, collected under D29 the
+way Step 3b-1 collects pull requests: issue comments one row per comment with their author and
+times (no text, D24), assignees, milestone, issue type, the parent and `duplicateOf` issues by
+repository id and number, and the free fields section 7's field rules admit, the document's cost
+confirmed by `rateLimit(dryRun: true)` before it is fixed (by the formula, comments and assignees
+raise a 100-issue batch from 1 point to 3, which may change the batch size); transfers (a transferred issue arrives with a new `github_id` and number,
 step 7 removes the source row, and the old number returns `NOT_FOUND`); a view joining closing
 references to stored issues, one row per link, a link to an issue the database does not hold
 included; the data dictionary for issues.
@@ -1409,20 +1464,29 @@ field by field.
 
 Scope (D30): the repository activity reader, its compares, and the default-branch history reader
 (5.8); the `repository_activities`, `repository_activity_compares`,
-`repository_activity_compare_files`, and `default_branch_commits` tables (5.1) in a migration; the
-planner and writer steps. Each run reads the activity log newest first until it reaches an event
-already stored (the whole log on a first sync), compares each new event whose `before` and `after`
-are both non-zero, and reads the default branch's history since the floor in full, replacing that
-repository's `default_branch_commits` rows, so a commit a force push removed leaves as GitHub no
-longer lists it (D7). Event actors and commit authors are linked like commit links (5.2). verify
-checks the stored event ids against the log since the floor and the stored commits against the
-history's `totalCount`, each mismatch an error. The data dictionary for the new tables; recordings
-from public repositories.
+`repository_activity_compare_files`, `repository_activity_compare_commits`, and
+`default_branch_commits` tables (5.1) in a migration, with a stored `totalCount` for the history
+(`repo_sync_state.default_branch_commits_total`); the planner and writer steps. Each run reads the
+activity log since the floor in full and replaces the repository's events with it (D7: an event
+GitHub stops listing leaves), compares each event not yet compared whose `before` and `after` are
+both non-zero, storing compare's commits in full (counted against `total_commits`) and its files,
+and reads the default branch's history since the floor in full, replacing that repository's
+`default_branch_commits` rows only when the read count equals `totalCount`, so a commit a force push
+removed leaves as GitHub no longer lists it. The readers use 5.3 step 4's failure classes; a log,
+compare, or history page that still fails fails that repository's activity for the run, which then
+writes none of it and exits 2, and the deadline stops them as it stops hydration. A history read that
+would remove more than max(25, 2%) of the repository's stored default-branch commits halts that
+replacement as step 7 halts deletions. Event actors and commit authors are linked like commit links
+(5.2). verify checks the stored event ids against the log since the floor and the stored commits
+against the history's `totalCount`, each mismatch an error. The data dictionary for the new tables;
+recordings from public repositories.
 
 Tests: an event of each `activity_type` the recordings hold; an event with an all-zero SHA and no
 compare row; a refused compare stored with its status; a diverged push whose compare runs from the
-merge base; a force push removing commits from `default_branch_commits`; a null actor; an
-incremental run reading only new events; each verify check, by a planted row deletion.
+merge base; a push of several commits whose compare commits join each commit to its event; a force
+push removing commits from `default_branch_commits`; a short history read leaving the stored rows
+unchanged; a history read past the guard halting; a null actor; an event GitHub stops listing
+removed on the next run; each verify check, by a planted row deletion.
 
 Acceptance: on the Step 3b-2 acceptance repositories and on `prebid/github-activity-db`, the stored
 events equal the log and the stored commits equal the history; each repository's first logged event
@@ -1521,7 +1585,7 @@ Measured 2026-10-16 unless noted. "Index" means the created-order enumeration in
 | Actor types | `Actor` has five implementers: `Bot`, `EnterpriseUserAccount`, `Mannequin`, `Organization`, `User`; `EnterpriseUserAccount` has no `databaseId` (it has `user`) | live introspection |
 | One account, two shapes | dependabot (49699333) is `Bot`/`dependabot` as the author of `Prebid.js#15724` and `dependabot[bot]` as its commit's `GitActor.user` (declared type `User`); REST `pulls/15724/commits` gives `dependabot[bot]`, type `Bot`; `nodes(ids:)` on the commit user's node id returns `Bot`/`dependabot` | live GraphQL and REST |
 | Duplicate paths | `Prebid.js#13481`: `changedFiles` 2, `files.totalCount` 3 (`CLAUDE.md` deleted, `CLAUDE.md` added, `package-lock.json` modified), so `changedFiles` is not the file-list length | live query |
-| Deleted-account comments | `Prebid.js#12975`: PR author null; 1 of its 2 conversation comments has a null author | live query |
+| Null-author comments | `Prebid.js#12975`: PR author null; 1 of its 2 conversation comments has a null author | live query |
 | Dismissed verdicts | `prebid-server-java#4637`: Lightwood13 submitted CHANGES_REQUESTED (5276426920), then a review now DISMISSED (5289072517); `latestOpinionatedReviews` lists only the two APPROVED reviewers. A rule taking the latest APPROVED or CHANGES_REQUESTED review would report CHANGES_REQUESTED | live query |
 | Late closing links | `prebid-server-java#4380`, `#4350`, `#4397`: a `ConnectedEvent` on 2026-08-14 linked an issue months after merge, and the PR's `updatedAt` did not change. Adding `fullDatabaseId`, `authorAssociation`, and `closingIssuesReferences(first: 10)` with `nameWithOwner` keeps an index page at 1 point | timeline scan; live index page and `rateLimit(dryRun: true)` |
 | Label renames | The prebid-mobile-ios label "4.0 In-App Platfrom" became "4.0 In-App Platform"; issue #1030, which carries it, kept its `updatedAt` | REST events; live query |
@@ -1587,11 +1651,12 @@ Measured 2026-10-16 unless noted. "Index" means the created-order enumeration in
 | Quality gates | At `43fcf06`, before Step 1: no CI; pre-commit hooks not installed; ruff 0.14.11 (lock) 10 findings plus 4 format diffs vs ruff 0.8.6 (pre-commit pin) 0 findings plus 1 format diff; mypy clean on 91 files; 608 tests, 0 failures | local |
 | Private data | `prebid-agent-skills` is private; the committed file contains its PRs since commit `bf40280` | `gh repo view`; history |
 | PR states | GitHub's `PullRequestState` is `OPEN`, `CLOSED`, `MERGED` | live introspection, 2026-10-18 |
-| Review order | On `prebid-server#4710`, review 3886287882 was created at 01:54:50Z and submitted at 15:59:52Z, after review 3889751813, created and submitted at 14:23:49Z: review ids follow creation, not submission | live GraphQL, 2026-10-18 |
-| Collected fields | The 25-PR batch costs 2 points with the Step 2 document and still 2 with every field and connection 5.8 adds in Step 3b-1; `rateLimit(dryRun: true)`, which also validates every field name, and `tests/source/graphql_cost.py` agree on each variant. Three more unnested connections (`latestReviews`, `latestOpinionatedReviews`, `participants`) make it 3, and by the formula a fourth added connection alone does. Inline review comments selected as nodes inside reviews make it 27; each review's `comments { totalCount }` alone adds nothing. The resolve with the added repository and label fields, and the user lookup with `name` and `createdAt`, cost 1 | dry runs on prebid/Prebid.js, 2026-10-18 |
+| Review order | On `prebid-server#4710`, review 3886287882 was created at 01:54:50Z and submitted at 15:59:52Z, after review 3889751813, created and submitted at 14:23:49Z: review ids do not follow submission order | live GraphQL, 2026-10-18 |
+| Collected fields | The 25-PR batch costs 2 points with the Step 2 document and still 2 with every field and connection 5.8 adds in Step 3b-1; `rateLimit(dryRun: true)`, which also validates every field name, and `tests/source/graphql_cost.py` agree on each variant. A variant that also added `latestReviews`, `latestOpinionatedReviews`, and `participants`, together with commit fields D19 excludes, cost 3; by the formula the three connections make the difference, and a fourth added connection alone makes it 3. Inline review comments selected as nodes inside reviews make it 27; each review's `comments { totalCount }` alone adds nothing. Spreading the `Actor` fragment inside `pinnedBy` (typed `User`) made the dry run fail with GitHub demanding the `read:enterprise` scope for `EnterpriseUserAccount.id`; selecting the user's own fields there passes. The resolve with the added repository and label fields, the user lookup with `name`, `createdAt`, `updatedAt`, and `claimant`, and the PR index with `closedAt` each cost 1 | dry runs on prebid/Prebid.js, 2026-10-18 |
 | Inline review comments | Of the 50 most recently updated merged PRs: Prebid.js has 140 reviews, 90 with inline comments, 130 inline comments; prebid-server 445 reviews, 290 with inline comments, 393 inline comments | live GraphQL, each review's `comments { totalCount }`, 8 points, 2026-10-18 |
 | First-schema requests and assignees | Of the tracked file's 14,669 PRs, `reviewers` (pending review requests, gap 7) is non-empty on 2,752 and `assignees` on 6,444; the Step 3a schema stores neither | `sqlite3` on a copy of `github_activity.db`, 2026-10-18 |
-| Repository activity | `GET /repos/{owner}/{repo}/activity?ref=refs/heads/<branch>` returns events with `id`, `node_id`, `activity_type`, `ref`, `before`, `after`, `timestamp`, and `actor`; githubkit 0.14.2's `Activity` model types `activity_type` as `push`, `force_push`, `branch_deletion`, `branch_creation`, `pr_merge`, or `merge_queue_merge`, and `actor` as nullable. `prebid/github-activity-db` `main`: 40 events since the branch was created on 2026-01-15 (11 `pr_merge`, PRs #1-#11; 27 `push`; 1 `force_push`; 1 `branch_creation`). The oldest event on the default branches of `prebid/Prebid.js` and `prebid/prebid-server` is from 2023-03-07; Prebid.js's newest 100 `push` events span 2025-04-03 to 2026-10-16, and prebid-server has none. `Commit.pushedDate`: "`pushedDate` is no longer supported. Removal on 2023-07-01 UTC." | live REST and introspection; installed githubkit `versions/v2022_11_28/models/group_0267.py`, 2026-10-18 |
+| Repository activity | `GET /repos/{owner}/{repo}/activity?ref=refs/heads/<branch>` returns events with `id`, `node_id`, `activity_type`, `ref`, `before`, `after`, `timestamp`, and `actor`; githubkit 0.14.2's `Activity` model types `activity_type` as `push`, `force_push`, `branch_deletion`, `branch_creation`, `pr_merge`, or `merge_queue_merge`, and `actor` as nullable. `prebid/github-activity-db` `main`: 40 events since the branch was created on 2026-01-15 (11 `pr_merge`, PRs #1-#11; 27 `push`; 1 `force_push`; 1 `branch_creation`). The oldest event on the default branches of `prebid/Prebid.js` and `prebid/prebid-server` is from 2023-03-07; Prebid.js's newest 100 `push` events span 2025-04-03 to 2026-10-16, and prebid-server has none. `Commit.pushedDate` is deprecated ("`pushedDate` is no longer supported. Removal on 2023-07-01 UTC.") and returned null on the three newest Prebid.js `master` commits. Each of the 11 `pr_merge` events' `after` equals its PR's `mergeCommit.oid`: PRs #1-#6 merged with a merge commit (2 parents), #7-#11 squashed (1 parent); no rebase merge exists to measure | live REST and GraphQL, introspection; installed githubkit `versions/v2022_11_28/models/group_0267.py`, 2026-10-18 |
+| Field dispositions | Every field of the types the documents request was listed by introspection (`PullRequest`, `PullRequestReview`, `IssueComment`, `Repository`, `Label`, `User`, `Bot`, `Organization`, `Mannequin`, `EnterpriseUserAccount`, `Team`, `Milestone`, `ReviewRequest`, `PullRequestChangedFile`, `Commit`, `GitActor`). 5.8 collects every free field except: connections, collected only as D29 admits them (section 9 lists the rest); viewer-relative fields (`viewer*`, `isReadByViewer`), which describe the token, not the item; links and images (`url`, `resourcePath`, `permalink`, `*Url`, `*ResourcePath`, `avatarUrl`), built from stored keys; GitHub's renderings of stored text (`bodyHTML`, `bodyText`, `titleHTML`) and text D19 and D24 exclude (comment and review bodies, commit messages); fields that restate a stored one (`closed`, `merged`, `abbreviatedOid`); a PR's live merge machinery (`mergeable`, `mergeStateStatus`, `canBeRebased`, the merge queue, `autoMergeRequest`, `potentialMergeCommit`), CI status (`statusCheckRollup`, D13), projects and stacks, suggested reviewers, and hovercards; account profile fields (`bio`, `company`, `location`, `email`, `websiteUrl`, `twitterUsername`, `pronouns`, `status`, sponsorship and membership fields), outside an activity database and, for `company`, section 1's company affiliation; the other fields of objects the database references but does not store (a milestone, a team, an organization), which keep GitHub's reference only; and every `Commit` field D19 leaves off a pull request's commits | live introspection, 2026-10-18 |
 | Compare | REST compare reports no total additions or deletions (its keys: `status`, `ahead_by`, `behind_by`, `total_commits`, `base_commit`, `merge_base_commit`, `commits`, `files`, and URLs), and its files run from the merge base: for `5110f3d...fccb1f5` on `prebid/github-activity-db`, a diverged push, it returned status `diverged`, merge base `e0cbb98`, and 22 files summing to +458/-36, which is `git diff` from the merge base; from `5110f3d` itself the diff is 21 files, +455/-36 | live REST; local `git diff --shortstat`, 2026-10-18 |
 | Default-branch history | `prebid/Prebid.js` `master` has 4,560 commits since 2023-01-01 (`history(since:)` `totalCount`); a page of 100 with the 5.8 fields costs 1 point | live GraphQL and dry run, 2026-10-18 |
 
@@ -1613,33 +1678,41 @@ Measured 2026-10-16 unless noted. "Index" means the created-order enumeration in
 | Whether Prebid.js, salesagent, or prebid-server holds an in-coverage dismissed review (the plan's example, `prebid-server-java#4637`, is in none of them) | Step 3b-2's acceptance queries its database; without one, prebid-server-java joins the acceptance run |
 | Whether REST compare and GraphQL give one account's node id in the same form (the recordings use the `MDQ6...` form in both); a lookup checks the returned id against the requested one | A mismatch fails the waiting item, which exit 2 makes visible; Step 3b-2's acceptance reports any |
 | The cost of one commit per item in rollback-journal mode, and of a live Step 3b-2 acceptance run (not measured) | Step 3b-2's acceptance records its points, REST calls, and time; Step 5 measures the full run |
-| Whether the activity log's 2023-03-07 start is fixed or a rolling window (seen on two repositories) | Step 4b records each repository's first logged event; if events age out, D7's mirror would drop them, and that is decided then |
+| Whether the activity log's 2023-03-07 start is fixed or a rolling window (seen on two repositories) | Step 4b records each repository's first logged event; it reads the whole log every run, so an event that ages out leaves the database as GitHub stops listing it (D7) |
 | Whether `history(since:)` filters on the committed or the authored date (only its `totalCount` was read) | Step 4b's recordings settle it before the coverage rule's wording for commits is final |
 | Whether REST compare caps the `files` it returns for a large push (not measured) | Step 4b measures it on its largest recorded push and stores a count only where GitHub reports one |
-| The REST cost of comparing every activity event on a first sync (about one call per event; Prebid.js holds over 4,000 `pr_merge` events alone) | Step 4b records it; Step 5 measures the full run |
+| The REST cost of comparing every activity event on a first sync, and of reading every log in full each run (about one call per event compared, and one per 100 events read; Prebid.js's default branch has 4,560 commits since the floor) | Step 4b records it; Step 5 measures the full run |
+| How a rebase merge appears in the activity log: whether its `pr_merge` event's `after` is the PR's `mergeCommit.oid` and its other commits come through the compare (the measured repositories hold merge-commit and squash merges only) | Step 4b records one on a tracked repository that allows rebase merges, before D30's join wording is final |
+| Whether GitHub returns `EnterpriseUserAccount.id` to a token without the `read:enterprise` scope (the dry run validated the document; no tracked repository has such an actor yet) | Step 3b-1 tests it on the synthetic actor; a live occurrence that errors is an item failure, which exit 2 makes visible |
 | Which connected or disconnected timeline event matches a closing-link difference, and whether a link made by a closing keyword produces one (verify, 5.4) | A live timeline probe before verify's document is written in Step 3b-2 |
 | `--help` anywhere on a command line, or `--version` before the subcommand, exits 0 without doing any work (click's eager options), the code D25 publishes on, so a workflow input that expands to either would publish the unchanged database | Step 6's workflow passes inputs as validated option values, never as raw arguments |
 
 ## 9. Later work
 
-Dashboard integration and replacement of its data layer, a query API, AI enrichment with provenance,
+Dashboard integration and replacement of its data layer, a query API, AI enrichment (D12),
 company affiliation, CI check status, releases, additional repositories, and a consumer-side
-check that the latest manifest is recent (a disabled schedule fails no run). Classifying files or
-excluding paths from line counts is the consumer's: `pr_files` keeps every path with its counts
-(D29).
+check that the latest manifest is recent (a disabled schedule fails no run). File classification
+and dependency tagging are not planned; excluding paths from line counts is the consumer's:
+`pr_files` keeps every path with its counts (D29).
 
 Data the mirror does not keep (D7), each a further cost or table: earlier values GitHub overwrote
-(logins, repository names, titles, the state a review held before a dismissal), items GitHub no
-longer lists, timeline events, and, across a bootstrap, the rows of untracked repositories and
-D28's kept attribution. Data not collected yet because it needs further requests or connections
-(D29): GitHub's `latestReviews`, `latestOpinionatedReviews`, and `participants` (one more
-connection makes the batch 3 points, section 7), reactions, inline review comment rows, commit
-co-authors (D15), and commit committers, parents, and per-commit counts on pull requests.
+(logins, repository names, titles, edits, the state a review held before a dismissal), child rows
+a re-hydration no longer returns (5.3 step 6), items GitHub no longer lists, a `NOT_FOUND` that a
+later sighting clears, timeline events, and, across a bootstrap, the rows of untracked repositories,
+accounts no stored row references, and D28's kept attribution.
+
+Not collected by decision: inline review comment rows (D5: a count per review), commit co-authors
+(D15), commit messages, committers, parents, and per-commit counts on pull requests (D19), and CI
+status (D13). Not collected because they add cost no decision admits (D29): GitHub's
+`latestReviews`, `latestOpinionatedReviews`, and `participants` (with them the batch costs 3
+points, section 7), a review's `onBehalfOf` teams (by the formula, about 25 more points per
+batch, nested in reviews), and reactions.
 
 Data that cannot be re-fetched from GitHub (user tags, AI enrichment) must be keyed by GitHub
 identity (PR or issue `github_id`, user `github_id`), must not cascade from mirror rows, must be
 produced where the published file is built, and must be copied from the last good snapshot across a
-bootstrap. D28's attribution of deleted accounts cannot be re-fetched either, but it is kept in the
-mirror rows and accepted as lost when a row is re-created (D28), so these rules do not cover it.
-Nor do they cover the rows of untracked repositories (D27), which a bootstrap does not resolve and
-so drops; besides these, D18's "nothing that cannot be re-fetched" holds.
+bootstrap. D28's attribution to accounts GitHub no longer returns cannot be re-fetched either, but
+it is kept in the mirror rows and accepted as lost when a row is re-created (D28), so these rules do
+not cover it. Nor do they cover the rows of untracked repositories (D27), which a bootstrap does not
+resolve, or accounts no stored row references, which it never sights; a bootstrap drops both, and
+besides these, D18's "nothing that cannot be re-fetched" holds.
