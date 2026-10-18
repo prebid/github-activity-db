@@ -174,7 +174,8 @@ Migrations are never downgraded (`downgrade()` raises), and `alembic upgrade` re
 tracked `github_activity.db` ([database.md](database.md)). Every `alembic` command that connects,
 `current` and `check` included, takes the database's write lock, so it waits up to 5 seconds
 while another connection, such as a running sync, holds the file, and then fails with "database
-is locked".
+is locked". Each one also checks the file's foreign keys before it commits, so a file holding a
+violation fails every command until it is repaired or rebuilt.
 
 ## Pre-commit Hooks
 

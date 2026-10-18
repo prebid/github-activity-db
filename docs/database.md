@@ -50,10 +50,13 @@ converted to UTC, and returns aware UTC values. Defaults are `utc_now()`, never 
   the pragma does not take effect or a transaction is already open.
 - `BEGIN IMMEDIATE` opens the transaction and `PRAGMA foreign_key_check` runs after the last
   revision, before the commit. A failed revision, or a violation, leaves the file at the
-  revision the upgrade started from. A command that runs no revision and changes no row
-  (`current`, `check`, or `stamp` to the file's own revision) is not checked, but it opens the
-  same transaction, so like an upgrade it waits up to 5 seconds for the write lock and fails if
-  another connection holds the file that long.
+  revision the upgrade started from. The check runs before every command commits, one that
+  runs no revision (`current`, `check`, `stamp`) included, because alembic loads each revision
+  module inside the transaction and a module's top-level code can change rows or the schema;
+  a file that already holds a violation therefore fails every command that connects until it
+  is repaired or rebuilt. Each of those commands opens the same transaction, so like an upgrade
+  it waits up to 5 seconds for the write lock and fails if another connection holds the file
+  that long.
 - An SQLite authorizer allows only the actions `ALLOWED_ACTIONS` in `env.py` lists: the main
   database's DDL and DML, and the reads alembic and SQLAlchemy's reflection make. No statement
   a revision runs commits part of the upgrade: the authorizer refuses any `BEGIN`, `COMMIT`, `END`, or

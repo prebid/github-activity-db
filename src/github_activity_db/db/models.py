@@ -153,7 +153,8 @@ class PullRequestReview(Base):
             _one_of("state", ("APPROVED", "CHANGES_REQUESTED", "COMMENTED", "DISMISSED")),
             name="state",
         ),
-        Index(None, "pr_id"),
+        # The views look up one reviewer's reviews of one PR, the latest first.
+        Index(None, "pr_id", "reviewer_id", "github_id"),
         Index(None, "reviewer_id"),
     )
 
@@ -172,7 +173,8 @@ class PullRequestComment(Base):
     __tablename__ = "pr_comments"
     __table_args__ = (
         UniqueConstraint("github_id", name="uq_pr_comments_github_id"),
-        Index(None, "pr_id"),
+        # The views count one account's comments on one PR.
+        Index(None, "pr_id", "author_id"),
         Index(None, "author_id"),
     )
 

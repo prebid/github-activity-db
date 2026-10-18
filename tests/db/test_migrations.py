@@ -43,6 +43,7 @@ from tests.test_import_boundaries import imported_modules
 
 TRACKED = REPO_ROOT / "github_activity.db"
 TEST_REVISION = "f1e57000a001"
+ORPHAN = "op.execute(\"INSERT INTO pr_labels (pr_id, name) VALUES (999, 'orphan')\")"
 VIEWS_READING_PULL_REQUESTS = ("v_pr_reviewers", "v_pr_commenters", "v_commit_authors")
 PULL_REQUEST_INDEXES = (
     "SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'pull_requests' "
@@ -158,30 +159,46 @@ class TestChain:
             pytest.param(lambda config: command.upgrade(config, "head"), id="upgrade at head"),
         ],
     )
-    def test_a_command_that_runs_no_revision_reads_the_file_as_it_is(
+    def test_every_command_refuses_a_file_holding_a_foreign_key_violation(
         self, migrated_database: Path, run: Any
     ) -> None:
-        """The foreign-key check covers what a command's revisions changed; a command that ran
-        none and changed no row leaves a violation already in the file to the file."""
+        """No command commits a file that fails the check, whether it ran a revision or not."""
         with closing(sqlite3.connect(migrated_database)) as connection, connection:
             connection.execute("INSERT INTO pr_labels (pr_id, name) VALUES (999, 'orphan')")
         before = snapshot(migrated_database)
-        run(alembic_config(migrated_database))
+        with pytest.raises(RuntimeError) as error:
+            run(alembic_config(migrated_database))
+        assert "1 foreign-key violations in the file before the commit" in refusal(error)
         assert snapshot(migrated_database) == before
 
     @pytest.mark.parametrize(
-        "run",
+        ("run", "statement"),
         [
-            pytest.param(command.current, id="current"),
-            pytest.param(command.check, id="check"),
-            pytest.param(lambda config: command.stamp(config, "head"), id="stamp head"),
+            *(
+                pytest.param(run, statement, id=f"{change}, {name}")
+                for change, statement in (
+                    ("a row", ORPHAN),
+                    # The seeded pull request's author row goes with the table.
+                    ("the schema", 'op.execute("DROP TABLE github_users")'),
+                )
+                for name, run in (
+                    ("current", command.current),
+                    ("stamp head", lambda config: command.stamp(config, "head")),
+                    ("upgrade at head", lambda config: command.upgrade(config, "head")),
+                )
+            ),
+            # With the table gone, check's own comparison fails before the commit instead.
+            pytest.param(command.check, ORPHAN, id="a row, check"),
         ],
     )
-    def test_a_command_that_runs_no_revision_but_changes_a_row_is_checked(
-        self, migrated_database: Path, tmp_path: Path, run: Any
+    def test_revision_module_code_that_breaks_a_reference_is_refused(
+        self, migrated_database: Path, tmp_path: Path, run: Any, statement: str
     ) -> None:
         """alembic loads each revision module inside the transaction, so code at a module's top
         level runs even when no upgrade() does."""
+        with connect(migrated_database) as seeded:
+            seed = Seed(seeded)
+            seed.pull_request(seed.repository(), 1, seed.user("author"))
         versions = tmp_path / "versions"
         versions.mkdir()
         (versions / f"{TEST_REVISION}_module_level.py").write_text(
@@ -190,7 +207,7 @@ class TestChain:
             f"down_revision = {HEAD_REVISION!r}\n"
             "branch_labels = None\n"
             "depends_on = None\n\n"
-            f"{ORPHAN}\n\n\n"
+            f"{statement}\n\n\n"
             "def upgrade() -> None:\n"
             "    pass\n\n\n"
             "def downgrade() -> None:\n"
@@ -307,7 +324,7 @@ class TestOneTransaction:
         before = snapshot(migrated_database)
         with pytest.raises(RuntimeError) as error:
             upgrade(migrated_database, test_versions=versions)
-        assert "1 foreign-key violations after the migration" in refusal(error)
+        assert "1 foreign-key violations in the file before the commit" in refusal(error)
         assert "('pr_labels', 1, 'pull_requests', 0)" in refusal(error)
         assert snapshot(migrated_database) == before
 
@@ -373,7 +390,6 @@ class TestOneTransaction:
         assert snapshot(first_schema) == before
 
 
-ORPHAN = "op.execute(\"INSERT INTO pr_labels (pr_id, name) VALUES (999, 'orphan')\")"
 # SQLite rolls back by itself; the revision swallows the error and goes on.
 SWALLOWED_ROLLBACK = (
     "try:\n"

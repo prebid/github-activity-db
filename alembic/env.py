@@ -18,11 +18,12 @@
   connection.
 - An upgrade is one transaction (gap 70): a ``begin`` listener emits ``BEGIN IMMEDIATE`` and
   ``transactional_ddl=True``, so a failed revision leaves the file at the revision the upgrade
-  started from. ``PRAGMA foreign_key_check`` runs after the last revision, before the commit; a
-  command that ran no revision and changed no row (``current``, ``check``, or ``stamp`` to the
-  file's own revision) is not checked. Every command that connects opens that ``BEGIN
-  IMMEDIATE`` transaction, so each one waits for the write lock, up to the driver's default 5
-  seconds.
+  started from. ``PRAGMA foreign_key_check`` runs before every command commits, after the last
+  revision of an upgrade: alembic loads each revision module inside the transaction, so a
+  module's top-level code can change rows or the schema in a command that runs no revision
+  (``current``, ``check``, ``stamp``), and a file that already holds a violation fails every
+  command that connects. Each of those commands opens that ``BEGIN IMMEDIATE`` transaction, so
+  it waits for the write lock, up to the driver's default 5 seconds.
 - An SQLite authorizer allows only the actions in ``ALLOWED_ACTIONS``: the main database's DDL
   and DML, and the reads alembic and SQLAlchemy's reflection make. It gives the transaction to
   env.py alone: ``BEGIN`` only to open it, ``COMMIT`` only after the check passed, ``ROLLBACK``
@@ -51,12 +52,11 @@ from __future__ import annotations
 
 import os
 import sqlite3
-from collections.abc import Callable, Collection, Mapping, MutableMapping
+from collections.abc import Callable, MutableMapping
 from logging.config import fileConfig
 from pathlib import Path
 
 from alembic import context
-from alembic.runtime.migration import MigrationContext, MigrationInfo
 from sqlalchemy import create_engine, event, pool
 from sqlalchemy.engine import URL, Connection, Engine, make_url
 from sqlalchemy.pool import ConnectionPoolEntry
@@ -237,19 +237,16 @@ def begin_immediate(connection: Connection) -> None:
     connection.info[TRANSACTION_STATE] = "open"
 
 
-def check_foreign_keys(connection: Connection, revisions_ran: bool) -> None:
-    """After the last revision, before the commit, unless the command ran no revision and changed
-    no row. alembic loads each revision module inside the transaction, so a module's top-level
-    code can change rows when no ``upgrade()`` runs."""
-    driver = connection.connection.driver_connection
-    if revisions_ran or (driver is not None and driver.total_changes):
-        violations = connection.exec_driver_sql("PRAGMA foreign_key_check").fetchall()
-        if violations:
-            shown = ", ".join(str(tuple(row)) for row in violations[:5])
-            raise MigrationRefused(
-                f"{len(violations)} foreign-key violations after the migration (table, rowid, "
-                f"parent, fkid): {shown}; nothing was applied"
-            )
+def check_foreign_keys(connection: Connection) -> None:
+    """Before every commit, whatever the command ran."""
+    violations = connection.exec_driver_sql("PRAGMA foreign_key_check").fetchall()
+    if violations:
+        shown = ", ".join(str(tuple(row)) for row in violations[:5])
+        raise MigrationRefused(
+            f"{len(violations)} foreign-key violations in the file before the commit (table, "
+            f"rowid, parent, fkid): {shown}; nothing was committed. A violation the file held "
+            "before the command fails it too: repair or rebuild the file"
+        )
     connection.info[TRANSACTION_STATE] = "checked"
 
 
@@ -260,17 +257,6 @@ def run_migrations_online() -> None:
     engine = create_engine(
         database_url(), poolclass=pool.NullPool, connect_args={"cached_statements": 0}
     )
-    revisions: list[MigrationInfo] = []
-
-    def record_revision(
-        ctx: MigrationContext,
-        step: MigrationInfo,
-        heads: Collection[str],
-        run_args: Mapping[str, object],
-    ) -> None:
-        if step.is_migration:
-            revisions.append(step)
-
     try:
         refuse_creating_a_tracked_file(engine)
         # Ahead of SQLAlchemy's own first-connect handling, which rolls the connection back:
@@ -284,12 +270,11 @@ def run_migrations_online() -> None:
                 target_metadata=Base.metadata,
                 transactional_ddl=True,
                 render_as_batch=True,  # autogenerate: SQLite alters tables through batch mode
-                on_version_apply=record_revision,
             )
             with context.begin_transaction():
                 try:
                     context.run_migrations()
-                    check_foreign_keys(connection, revisions_ran=bool(revisions))
+                    check_foreign_keys(connection)
                 except BaseException:
                     connection.info[TRANSACTION_STATE] = "failed"
                     raise

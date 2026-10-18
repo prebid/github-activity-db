@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import shutil
+import sqlite3
 from collections.abc import Iterator
+from contextlib import closing
 from pathlib import Path
 
 import pytest
@@ -326,3 +329,91 @@ class TestScoping:
         assert rows(
             seed, "SELECT repository_full_name, pr_number, sha FROM v_commit_authors ORDER BY sha"
         ) == [("prebid/a", 1, "1" * 40), ("prebid/b", 2, "2" * 40)]
+
+
+def _one_account_on_every_pull_request(database: Path, prs: int) -> None:
+    """A maintainer who reviews and comments on every PR, as on a repository with few
+    maintainers, and one other commenter per PR."""
+    with connect(database) as connection:
+        seed = Seed(connection)
+        repository = seed.repository(REPO)
+        maintainer, other = seed.user("maintainer"), seed.user("other")
+        for number in range(1, prs + 1):
+            pr = seed.pull_request(repository, number)
+            seed.review(pr, seed.next_id(), maintainer, "APPROVED")
+            seed.comment(pr, maintainer)
+            seed.comment(pr, other)
+
+
+def vm_steps(database: Path, sql: str) -> int:
+    """SQLite virtual-machine instructions the query runs, in hundreds: its work, which unlike
+    its time does not depend on the machine."""
+    steps = 0
+
+    def count() -> int:
+        nonlocal steps
+        steps += 1
+        return 0
+
+    with closing(sqlite3.connect(database)) as connection:
+        connection.set_progress_handler(count, 100)
+        connection.execute(sql).fetchall()
+    return steps
+
+
+# One index per foreign-key column instead, created in the order the migration once created
+# them. With two single-column candidates the planner took the one created last, the account's,
+# and read every row of the account for each PR (observed on SQLite 3.45.3 and 3.47.1).
+SINGLE_COLUMN_INDEXES = (
+    "DROP INDEX ix_pr_reviews_pr_id_reviewer_id_github_id",
+    "DROP INDEX ix_pr_reviews_reviewer_id",
+    "DROP INDEX ix_pr_comments_pr_id_author_id",
+    "DROP INDEX ix_pr_comments_author_id",
+    "CREATE INDEX ix_pr_reviews_pr_id ON pr_reviews (pr_id)",
+    "CREATE INDEX ix_pr_reviews_reviewer_id ON pr_reviews (reviewer_id)",
+    "CREATE INDEX ix_pr_comments_pr_id ON pr_comments (pr_id)",
+    "CREATE INDEX ix_pr_comments_author_id ON pr_comments (author_id)",
+)
+
+
+class TestConcentratedParticipation:
+    """Four times the PRs costs a view about four times the work, not sixteen times: each PR's
+    verdict, comment count, and reviewer check is an index lookup on (PR, account)."""
+
+    SIZES = (100, 400)
+
+    @pytest.fixture(scope="class")
+    def databases(
+        self, head_template: Path, tmp_path_factory: pytest.TempPathFactory
+    ) -> dict[int, Path]:
+        folder = tmp_path_factory.mktemp("concentrated")
+        built = {}
+        for prs in self.SIZES:
+            built[prs] = folder / f"{prs}.db"
+            shutil.copyfile(head_template, built[prs])
+            _one_account_on_every_pull_request(built[prs], prs)
+        return built
+
+    def growth(self, databases: dict[int, Path], tmp_path: Path, view: str, *alter: str) -> float:
+        work = []
+        for prs in self.SIZES:
+            database = tmp_path / f"{prs}.db"
+            shutil.copyfile(databases[prs], database)
+            with closing(sqlite3.connect(database)) as connection, connection:
+                for statement in alter:
+                    connection.execute(statement)
+            work.append(vm_steps(database, f"SELECT * FROM {view}"))
+        return work[1] / work[0]
+
+    @pytest.mark.parametrize("view", ["v_pr_reviewers", "v_pr_commenters"])
+    def test_work_grows_with_the_pull_requests(
+        self, databases: dict[int, Path], tmp_path: Path, view: str
+    ) -> None:
+        assert self.growth(databases, tmp_path, view) < 6
+
+    @pytest.mark.parametrize("view", ["v_pr_reviewers", "v_pr_commenters"])
+    def test_a_lookup_by_the_account_alone_is_reported(
+        self, databases: dict[int, Path], tmp_path: Path, view: str
+    ) -> None:
+        """Positive control: with single-column indexes the same measure grows with the square."""
+        assert self.growth(databases, tmp_path, view, *SINGLE_COLUMN_INDEXES) > 10

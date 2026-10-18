@@ -149,7 +149,7 @@ class TestModelsComparison:
         self, head_template: Path, models_database: Path, tmp_path: Path
     ) -> None:
         tampered = _tampered(
-            head_template, tmp_path / "tampered.db", "DROP INDEX ix_pr_reviews_pr_id"
+            head_template, tmp_path / "tampered.db", "DROP INDEX ix_pr_reviews_reviewer_id"
         )
         assert schema_of(tampered)["pr_reviews"] != schema_of(models_database)["pr_reviews"]
 

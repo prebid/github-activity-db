@@ -291,7 +291,11 @@ def upgrade() -> None:
             name=op.f("ck_pr_reviews_state"),
         ),
     )
-    op.create_index(op.f("ix_pr_reviews_pr_id"), "pr_reviews", ["pr_id"])
+    op.create_index(
+        op.f("ix_pr_reviews_pr_id_reviewer_id_github_id"),
+        "pr_reviews",
+        ["pr_id", "reviewer_id", "github_id"],
+    )
     op.create_index(op.f("ix_pr_reviews_reviewer_id"), "pr_reviews", ["reviewer_id"])
 
     op.create_table(
@@ -305,7 +309,7 @@ def upgrade() -> None:
         _references("author_id", "pr_comments", "github_users", "SET NULL"),
         sa.UniqueConstraint("github_id", name="uq_pr_comments_github_id"),
     )
-    op.create_index(op.f("ix_pr_comments_pr_id"), "pr_comments", ["pr_id"])
+    op.create_index(op.f("ix_pr_comments_pr_id_author_id"), "pr_comments", ["pr_id", "author_id"])
     op.create_index(op.f("ix_pr_comments_author_id"), "pr_comments", ["author_id"])
 
     op.create_table(
