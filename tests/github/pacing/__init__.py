@@ -1,1 +1,0 @@
-"""Pacing module tests."""

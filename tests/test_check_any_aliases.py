@@ -13,7 +13,9 @@ def _run(tmp_path: Path, source: str, name: str = "module.py") -> subprocess.Com
     root = tmp_path / "pkg"
     root.mkdir()
     (root / name).write_text(source)
-    return subprocess.run([sys.executable, str(SCRIPT), str(root)], capture_output=True, text=True)
+    return subprocess.run(
+        [sys.executable, str(SCRIPT), str(root)], capture_output=True, text=True, timeout=60
+    )
 
 
 ALIASES = [
@@ -168,7 +170,10 @@ def test_scans_stub_files(tmp_path: Path) -> None:
 def test_no_python_files_is_an_error(tmp_path: Path) -> None:
     (tmp_path / "empty").mkdir()
     result = subprocess.run(
-        [sys.executable, str(SCRIPT), str(tmp_path / "empty")], capture_output=True, text=True
+        [sys.executable, str(SCRIPT), str(tmp_path / "empty")],
+        capture_output=True,
+        text=True,
+        timeout=60,
     )
     assert result.returncode == 1
     assert "no Python files" in result.stderr

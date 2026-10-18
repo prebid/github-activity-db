@@ -1,5 +1,10 @@
 # Rate Limit Handling
 
+> **History.** This document describes `github/pacing/` and `github/rate_limit/`, which
+> Step 3a of the [redesign plan](redesign-plan.md) removed (D16). It stays until Step 7
+> rewrites the documentation; `source/transport.py` now sends every request, with the
+> failure classes and waits of plan 5.3 step 4.
+
 This document describes the rate limiting strategy, pacing algorithm, and retry handling used in GitHub Activity DB.
 
 ---

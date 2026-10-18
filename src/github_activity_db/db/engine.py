@@ -14,7 +14,6 @@ from sqlalchemy.ext.asyncio import (
 )
 
 from github_activity_db.config import get_settings
-from github_activity_db.db.models import Base
 
 # Module-level engine instance (initialized lazily)
 _engine: AsyncEngine | None = None
@@ -98,20 +97,12 @@ async def get_session(auto_commit: bool = True) -> AsyncGenerator[AsyncSession, 
     """Get an async database session with automatic cleanup.
 
     Args:
-        auto_commit: If True (default), commits on successful exit.
-                     Set to False when using CommitManager for manual commits.
-                     When False, uncommitted changes are rolled back on exit.
+        auto_commit: If True (default), commits on successful exit. When False, the caller
+                     commits; changes it has not committed are rolled back on exit.
 
     Usage:
-        # Standard usage - auto-commits on exit
         async with get_session() as session:
             result = await session.execute(select(PullRequest))
-
-        # With CommitManager - manual commits
-        async with get_session(auto_commit=False) as session:
-            commit_manager = CommitManager(session, batch_size=25)
-            # ... operations with commit_manager.record_success() ...
-            await commit_manager.finalize()
     """
     session_factory = get_session_factory()
     async with session_factory() as session:
@@ -122,26 +113,6 @@ async def get_session(auto_commit: bool = True) -> AsyncGenerator[AsyncSession, 
         except Exception:
             await session.rollback()
             raise
-
-
-async def create_tables() -> None:
-    """Create all database tables.
-
-    Use this for testing or initial setup. In production, use Alembic migrations.
-    """
-    engine = get_engine()
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-
-
-async def drop_tables() -> None:
-    """Drop all database tables.
-
-    WARNING: This will delete all data. Use only for testing.
-    """
-    engine = get_engine()
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.drop_all)
 
 
 async def dispose_engine() -> None:

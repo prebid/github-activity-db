@@ -14,6 +14,7 @@ from tests.source import recordings
 from tests.source.recordings import (
     COMPARE_STAMP,
     RECORDED,
+    REST_RATE_LIMIT_STAMP,
     Unit,
     canonical_batch,
     compare_key,
@@ -32,6 +33,7 @@ WHOLE_DOCUMENTS = {
     "repository_labels": documents.REPOSITORY_LABELS,
     "index": documents.PULL_REQUEST_INDEX,
     "user": documents.USER_LOOKUP,
+    "rate_limit": documents.RATE_LIMIT_QUERY,
 }
 
 
@@ -47,6 +49,8 @@ def test_fixtures_were_recorded() -> None:
         "overflow",
         "compare",
         "user",
+        "rate_limit",
+        "rest_rate_limit",
     }
 
 
@@ -60,6 +64,8 @@ def test_unit_stamp_matches_current_documents(path: Path) -> None:
             expected = expected_overflow_stamp(unit.key["connection"])
         case "compare":
             expected = whole_stamp(COMPARE_STAMP)
+        case "rest_rate_limit":
+            expected = whole_stamp(REST_RATE_LIMIT_STAMP)
         case kind:
             expected = whole_stamp(WHOLE_DOCUMENTS[kind])
     assert unit.document_sha256 == expected, f"re-record {path}: scripts/record_fixtures.py"

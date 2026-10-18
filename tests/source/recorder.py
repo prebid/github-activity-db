@@ -5,10 +5,14 @@ Runs the real source layer through a recording transport and writes one file per
 repository before writing anything. A failed item or user lookup stops the recording, so the
 fixtures are replaced only by a complete set. Response bodies and the headers the source layer
 reads are kept; request headers, which carry the token, never are.
+
+``--only rate-limits`` records the rate-limit readings alone and adds them to the existing
+recordings, leaving every other unit unchanged.
 """
 
 from __future__ import annotations
 
+import argparse
 import asyncio
 import json
 import os
@@ -119,9 +123,11 @@ async def record(
     inner: httpx.AsyncBaseTransport | None = None,
     scenarios: tuple[Scenario, ...] = SCENARIOS,
     users: tuple[str, ...] = USERS,
+    rate_limits: bool = True,
     clock: Clock | None = None,
 ) -> list[Unit]:
-    """Record ``scenarios`` and ``users``; refuse a private repository before reading more of it.
+    """Record ``scenarios``, ``users``, and the rate-limit readings; refuse a private repository
+    before reading more of it.
 
     The resolve response is the first one for a repository, so a private one raises after that
     one request and before ``main`` writes anything.
@@ -147,11 +153,20 @@ async def record(
             async for lookup in source.lookup_users(users):
                 if lookup.failed:
                     raise RecordingFailed(f"user lookup: {lookup.failed}")
+        if rate_limits:
+            await source.rate_limits()
         print(f"usage: {source.usage}", file=sys.stderr)
     return recording.units
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description="Record the source-layer test fixtures.")
+    parser.add_argument(
+        "--only",
+        choices=("rate-limits",),
+        help="record only these units and add them to the existing recordings",
+    )
+    args = parser.parse_args(argv)
     token = os.environ.get("GITHUB_TOKEN")
     if not token:
         print(
@@ -159,9 +174,14 @@ def main() -> int:
             file=sys.stderr,
         )
         return 2
-    units = asyncio.run(record(token))
+    if args.only == "rate-limits":
+        units = asyncio.run(record(token, scenarios=(), users=()))
+    else:
+        units = asyncio.run(record(token))
     staging = RECORDED.with_name("recorded.new")
     shutil.rmtree(staging, ignore_errors=True)
+    if args.only is not None:
+        shutil.copytree(RECORDED, staging)
     for unit in units:
         path = staging / unit.path()
         path.parent.mkdir(parents=True, exist_ok=True)

@@ -15,11 +15,12 @@ SCRIPT = Path(__file__).resolve().parent.parent / "scripts" / "check_query_lock.
 GIT = shutil.which("git")
 BASH = shutil.which("bash")
 LOCK = "tests/query_versions.json"
+SCHEMA_LOCK = "tests/schema_versions.json"
 
 
 def git(repo: Path, *args: str) -> None:
     assert GIT is not None
-    subprocess.run([GIT, *args], cwd=repo, check=True, capture_output=True)
+    subprocess.run([GIT, *args], cwd=repo, check=True, capture_output=True, timeout=60)
 
 
 @pytest.fixture
@@ -44,7 +45,11 @@ def commit(repo: Path) -> None:
 
 def check(repo: Path, base: str = "main") -> subprocess.CompletedProcess[str]:
     return subprocess.run(
-        [sys.executable, str(SCRIPT), "--base", base], cwd=repo, capture_output=True, text=True
+        [sys.executable, str(SCRIPT), "--base", base],
+        cwd=repo,
+        capture_output=True,
+        text=True,
+        timeout=60,
     )
 
 
@@ -114,9 +119,10 @@ def test_an_absolute_lock_path_is_an_error_not_a_pass(repo: Path) -> None:
         cwd=repo,
         capture_output=True,
         text=True,
+        timeout=60,
     )
     assert result.returncode == 2
-    assert "relative" in result.stderr
+    assert "is not one of tests/query_versions.json" in result.stderr
 
 
 def test_the_checker_runs_isolated_from_site_packages(repo: Path) -> None:
@@ -129,6 +135,7 @@ def test_the_checker_runs_isolated_from_site_packages(repo: Path) -> None:
         cwd=repo,
         capture_output=True,
         text=True,
+        timeout=60,
     )
     assert result.returncode == 1
     assert "pull_request:1 changed" in result.stderr
@@ -164,6 +171,7 @@ def test_the_verdict_does_not_depend_on_the_working_directory(repo: Path) -> Non
         cwd=repo / "tests",
         capture_output=True,
         text=True,
+        timeout=60,
     )
     assert result.returncode == 1, result.stdout + result.stderr
     assert "pull_request:1 changed" in result.stderr
@@ -187,9 +195,10 @@ def test_a_lock_path_outside_the_repository_is_an_error_not_a_pass(repo: Path) -
         cwd=repo,
         capture_output=True,
         text=True,
+        timeout=60,
     )
     assert result.returncode == 2
-    assert "relative" in result.stderr
+    assert "is not one of tests/query_versions.json" in result.stderr
 
 
 def test_without_git_the_check_is_an_error_not_a_pass(repo: Path) -> None:
@@ -201,16 +210,159 @@ def test_without_git_the_check_is_an_error_not_a_pass(repo: Path) -> None:
         capture_output=True,
         text=True,
         env={"PATH": str(repo / "no-such-bin")},
+        timeout=60,
     )
     assert result.returncode == 2
     assert "git is not on PATH" in result.stderr
+
+
+def write_schema_lock(repo: Path, entries: dict[str, list[list[str]]]) -> None:
+    path = repo / SCHEMA_LOCK
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(entries))
+
+
+V1 = {"1": [["pull_requests", "number"], ["v_pr_reviewers", "final_verdict"]]}
+
+
+class TestSchemaLock:
+    """tests/schema_versions.json: entries and their pairs are kept; only the newest entry may
+    gain pairs."""
+
+    def test_a_pair_added_to_the_newest_entry_passes(self, repo: Path) -> None:
+        write_schema_lock(repo, V1)
+        commit(repo)
+        write_schema_lock(repo, {"1": [*V1["1"], ["pull_requests", "title"]]})
+        result = check(repo)
+        assert result.returncode == 0, result.stderr
+        assert "tests/schema_versions.json: 1 entries at main kept; 1 entries now" in result.stdout
+
+    def test_an_added_version_passes(self, repo: Path) -> None:
+        write_schema_lock(repo, V1)
+        commit(repo)
+        write_schema_lock(repo, {**V1, "2": [["pull_requests", "number"]]})
+        result = check(repo)
+        assert result.returncode == 0, result.stderr
+        assert "tests/schema_versions.json: 1 entries at main kept; 2 entries now" in result.stdout
+
+    def test_a_pair_added_to_a_superseded_entry_fails(self, repo: Path) -> None:
+        """Version 1 describes databases that never had a column version 2 added."""
+        write_schema_lock(repo, V1)
+        commit(repo)
+        write_schema_lock(
+            repo,
+            {"1": [*V1["1"], ["pull_requests", "title"]], "2": [["pull_requests", "number"]]},
+        )
+        result = check(repo)
+        assert result.returncode == 1
+        assert (
+            "schema version 1 gained pull_requests.title; only the newest version, 2, gains "
+            "columns" in result.stderr
+        )
+
+    def test_a_pair_removed_from_a_base_entry_fails(self, repo: Path) -> None:
+        write_schema_lock(repo, V1)
+        commit(repo)
+        write_schema_lock(repo, {"1": [["pull_requests", "number"]]})
+        result = check(repo)
+        assert result.returncode == 1
+        assert "schema version 1 lost v_pr_reviewers.final_verdict" in result.stderr
+
+    def test_a_renamed_pair_fails(self, repo: Path) -> None:
+        write_schema_lock(repo, V1)
+        commit(repo)
+        write_schema_lock(repo, {"1": [["pull_requests", "pr_number"], V1["1"][1]]})
+        result = check(repo)
+        assert result.returncode == 1
+        assert "schema version 1 lost pull_requests.number" in result.stderr
+
+    def test_a_removed_entry_fails(self, repo: Path) -> None:
+        write_schema_lock(repo, {**V1, "2": V1["1"]})
+        commit(repo)
+        write_schema_lock(repo, {"2": V1["1"]})
+        result = check(repo)
+        assert result.returncode == 1
+        assert "schema version 1 was removed" in result.stderr
+
+    def test_a_deleted_lock_removes_every_entry(self, repo: Path) -> None:
+        write_schema_lock(repo, V1)
+        commit(repo)
+        (repo / SCHEMA_LOCK).unlink()
+        result = check(repo)
+        assert result.returncode == 1
+        assert "schema version 1 was removed" in result.stderr
+
+    @pytest.mark.parametrize(
+        "text",
+        [
+            '{"1": "pull_requests.number"}',
+            '{"1": [["pull_requests"]]}',
+            '{"1": [[1, 2]]}',
+            "[]",
+            '{"1": [], "v2": []}',
+            '{"1": [], "02": []}',
+        ],
+        ids=[
+            "string entry",
+            "short pair",
+            "non-string pair",
+            "not an object",
+            "version not a number",
+            "version with a leading zero",
+        ],
+    )
+    def test_a_malformed_lock_is_an_error_not_a_pass(self, repo: Path, text: str) -> None:
+        write_schema_lock(repo, V1)
+        commit(repo)
+        (repo / SCHEMA_LOCK).write_text(text)
+        result = check(repo)
+        assert result.returncode == 2, result.stderr
+
+    def test_both_locks_are_checked_by_default(self, repo: Path) -> None:
+        write_lock(repo, {"pull_request:1": "a" * 64})
+        write_schema_lock(repo, V1)
+        commit(repo)
+        write_lock(repo, {"pull_request:1": "c" * 64})
+        write_schema_lock(repo, {"1": []})
+        result = check(repo)
+        assert result.returncode == 1
+        assert "pull_request:1 changed" in result.stderr
+        assert "schema version 1 lost pull_requests.number" in result.stderr
+
+    def test_lock_selects_one(self, repo: Path) -> None:
+        write_lock(repo, {"pull_request:1": "a" * 64})
+        write_schema_lock(repo, V1)
+        commit(repo)
+        write_lock(repo, {"pull_request:1": "c" * 64})
+        result = subprocess.run(
+            [sys.executable, str(SCRIPT), "--base", "main", "--lock", SCHEMA_LOCK],
+            cwd=repo,
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        assert result.returncode == 0, result.stderr
+        assert "query_versions" not in result.stdout + result.stderr
+
+    def test_the_repository_locks_are_read_by_their_rules(self, repo: Path) -> None:
+        """The real lock files parse under the rule the checker gives each, in a scratch
+        repository whose base commit holds them."""
+        root = SCRIPT.parent.parent
+        for lock in (LOCK, SCHEMA_LOCK):
+            (repo / lock).parent.mkdir(parents=True, exist_ok=True)
+            (repo / lock).write_text((root / lock).read_text())
+        commit(repo)
+        result = check(repo)
+        assert result.returncode == 0, result.stderr
+        assert "tests/schema_versions.json: 1 entries at main kept; 1 entries now" in result.stdout
+        assert "tests/query_versions.json: 1 entries at main kept; 1 entries now" in result.stdout
 
 
 # --------------------------------------------------------------------------------------------
 # The CI step itself, run against shallow merge checkouts like the one actions/checkout makes
 # --------------------------------------------------------------------------------------------
 WORKFLOW = Path(__file__).resolve().parent.parent / ".github" / "workflows" / "check.yml"
-STEP = "Hydration-version lock entries are append-only"
+STEP = "Hydration and schema version lock entries are kept"
 
 
 def lock_step_script() -> str:
@@ -290,6 +442,7 @@ def run_step(checkout: Path, runner_temp: Path) -> subprocess.CompletedProcess[s
         capture_output=True,
         text=True,
         env={**os.environ, "RUNNER_TEMP": str(runner_temp)},
+        timeout=60,
     )
 
 
@@ -346,6 +499,19 @@ def test_the_step_uses_the_pull_requests_checker_where_the_base_has_none(
     assert result.returncode == 0, result.stdout + result.stderr
     assert "running scripts/check_query_lock.py" in result.stdout
     assert "does not exist at" in result.stdout
+
+
+def test_the_step_fails_a_pair_removed_from_a_schema_entry(tmp_path: Path, origin: Path) -> None:
+    work = work_clone(tmp_path, origin, "work")
+    write_schema_lock(work, V1)
+    push_main(work, checker=True, entries={"pull_request:1": "a" * 64})
+
+    def remove_pair(target: Path) -> None:
+        write_schema_lock(target, {"1": V1["1"][:1]})
+
+    result = run_step_on_merge(tmp_path, origin, work, remove_pair)
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert "schema version 1 lost v_pr_reviewers.final_verdict" in result.stderr
 
 
 def test_the_step_fails_without_a_merge_commit(tmp_path: Path, origin: Path) -> None:

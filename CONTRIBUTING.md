@@ -90,7 +90,6 @@ We believe in:
 |----------|---------|-------------|
 | JSON/dict serialization | `dict[str, Any]` | N/A (legitimate use) |
 | Pydantic validators | `v: Any` | N/A (Pydantic pattern) |
-| ORM factories | `from_orm(obj: Any)` | N/A (accepts any ORM) |
 | Log context binding | `**context: Any` | N/A (dynamic logging) |
 | **Lazy initialization** | **Forbidden** | Use `T \| None` with `TYPE_CHECKING` |
 | **Avoiding generics** | **Forbidden** | Use `TYPE_CHECKING` block |
@@ -139,16 +138,16 @@ result = something()  # type: ignore
 
 ```python
 # Modules: lowercase_with_underscores
-github_client.py
-rate_limit_monitor.py
+rate_limits.py
+check_frozen_db.py
 
 # Classes: PascalCase
-class PullRequestRepository:
-class GitHubClient:
+class GitHubSource:
+class PullRequestHydrator:
 
 # Functions/methods: lowercase_with_underscores
-def get_pull_request():
-async def sync_repository():
+def link_key():
+async def read_rate_limits():
 
 # Constants: UPPERCASE_WITH_UNDERSCORES
 MAX_RETRIES = 3
@@ -174,10 +173,10 @@ import typer
 from pydantic import BaseModel
 
 from github_activity_db.db.models import PullRequest
-from github_activity_db.schemas import PRCreate
+from github_activity_db.source import GitHubSource
 
 if TYPE_CHECKING:
-    from githubkit import GitHub
+    from github_activity_db.source.records import PullRequestRecord
 ```
 
 ### Async Patterns
@@ -186,12 +185,12 @@ Use `async`/`await` consistently:
 
 ```python
 # Good: async context manager
-async with GitHubClient() as client:
-    result = await client.get_pull_request(owner, repo, number)
+async with GitHubSource(token) as source:
+    repository = await source.resolve(owner, name)
 
-# Good: async iteration
-async for pr in client.iter_pull_requests(owner, repo):
-    await process_pr(pr)
+    # Good: async iteration
+    async for outcomes in source.hydrate_pull_requests(repository, numbers):
+        await write(outcomes)
 ```
 
 ### CLI Commands
@@ -199,17 +198,20 @@ async for pr in client.iter_pull_requests(owner, repo):
 All CLI commands should use `run_async_command()` for unified error handling:
 
 ```python
-from github_activity_db.cli.common import console, run_async_command
+from github_activity_db.cli import common
+from github_activity_db.source import RateLimits
 
 @app.command()
 def my_command() -> None:
     """Command description."""
-    async def _impl() -> dict[str, Any]:
-        async with GitHubClient() as client:
-            return await client.some_method()
+    token = common.github_token()
 
-    result = run_async_command(_impl())
-    console.print(f"Result: {result}")
+    async def _impl() -> RateLimits:
+        async with common.open_source(token) as source:
+            return await source.rate_limits()
+
+    result = common.run_async_command(_impl())
+    common.console.print(f"GraphQL remaining: {result.graphql_remaining}")
 ```
 
 ---
@@ -227,35 +229,25 @@ def my_command() -> None:
 
 ### Test Patterns
 
-**1. Use `model_validate()` for Pydantic models:**
+**1. Assert on optional values before access:**
 
 ```python
-# Good
-pr = GitHubPullRequest.model_validate(GITHUB_PR_RESPONSE)
-
-# Bad - loses type information
-pr = GitHubPullRequest(**GITHUB_PR_RESPONSE)
+stored = await session.get(UserTag, tag_id)
+assert stored is not None  # Narrows type
+assert stored.name == "committed"
 ```
 
-**2. Assert on optional values before access:**
+**2. Build databases with migrations, and seed them through the models:**
 
 ```python
-result = await repo.get_by_number(...)
-assert result is not None  # Narrows type
-assert result.state == PRState.MERGED
+def test_reviewers(migrated_database: Path) -> None:  # a copy of the alembic-built template
+    with connect(migrated_database) as connection:     # tests/db/seed.py
+        seed = Seed(connection)
+        pr = seed.pull_request(seed.repository("prebid/Prebid.js"), 13481, seed.user("author"))
 ```
 
-**3. Use factory functions with explicit parameters:**
-
-```python
-pr = make_pull_request(
-    db_session,
-    repo,
-    number=1234,
-    state=PRState.OPEN,
-    title="Test PR",
-)
-```
+**3. Prove a check with planted inputs on both sides of its boundary**, and a fix with a test
+that fails against the parent commit's code ([Testing Guide](docs/testing.md#principles)).
 
 ### Running Tests
 
@@ -267,7 +259,7 @@ uv run pytest
 uv run pytest --cov=src/github_activity_db --cov-report=term-missing
 
 # Run specific test file
-uv run pytest tests/test_db_models.py -v
+uv run pytest tests/db/test_schema.py -v
 ```
 
 See [Testing Guide](docs/testing.md) for comprehensive testing documentation.

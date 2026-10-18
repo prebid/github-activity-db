@@ -4,100 +4,49 @@ import sqlite3
 from pathlib import Path
 
 import pytest
-from sqlalchemy import text
+from sqlalchemy import select, text
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from github_activity_db.db.engine import (
     SQLITE_BUSY_TIMEOUT_MS,
     _apply_sqlite_pragmas,
     build_engine,
 )
-from github_activity_db.db.models import Base, Repository
+from github_activity_db.db.models import UserTag
 
 
 class TestDatabaseEngine:
-    """Tests for async SQLAlchemy engine operations."""
-
-    async def test_create_tables(self, test_engine):
-        """Test that all tables are created successfully."""
-        async with test_engine.connect() as conn:
-            # Query SQLite to list tables
-            result = await conn.execute(text("SELECT name FROM sqlite_master WHERE type='table'"))
-            tables = {row[0] for row in result.fetchall()}
-
-        # Verify expected tables exist
-        assert "repositories" in tables
-        assert "pull_requests" in tables
-        assert "user_tags" in tables
-        assert "pr_user_tags" in tables
+    """Sessions over the application engine, on a database migrated to head."""
 
     async def test_session_commits_on_success(self, test_engine):
-        """Test that session commits changes on successful operations."""
         session_factory = async_sessionmaker(
-            test_engine,
-            class_=AsyncSession,
-            expire_on_commit=False,
+            test_engine, class_=AsyncSession, expire_on_commit=False
         )
-
-        # Create and commit a repository
         async with session_factory() as session:
-            repo = Repository(
-                owner="prebid",
-                name="test-repo",
-                full_name="prebid/test-repo",
-            )
-            session.add(repo)
+            tag = UserTag(name="committed")
+            session.add(tag)
             await session.commit()
-            repo_id = repo.id
+            tag_id = tag.id
 
-        # Verify in a new session
         async with session_factory() as session:
-            result = await session.get(Repository, repo_id)
-            assert result is not None
-            assert result.full_name == "prebid/test-repo"
+            stored = await session.get(UserTag, tag_id)
+            assert stored is not None
+            assert stored.name == "committed"
 
     async def test_session_rollbacks_on_error(self, test_engine):
-        """Test that session rolls back on exception."""
         session_factory = async_sessionmaker(
-            test_engine,
-            class_=AsyncSession,
-            expire_on_commit=False,
+            test_engine, class_=AsyncSession, expire_on_commit=False
         )
-
-        # Attempt to create a repo but roll back
         with pytest.raises(ValueError, match="Simulated error"):
             async with session_factory() as session:
-                repo = Repository(
-                    owner="prebid",
-                    name="rollback-test",
-                    full_name="prebid/rollback-test",
-                )
-                session.add(repo)
-                await session.flush()  # Write to DB but don't commit
+                session.add(UserTag(name="rolled back"))
+                await session.flush()  # written to the database, not committed
                 raise ValueError("Simulated error")
 
-        # Verify repo was not persisted
         async with session_factory() as session:
-            result = await session.execute(
-                text("SELECT COUNT(*) FROM repositories WHERE full_name = 'prebid/rollback-test'")
-            )
-            count = result.scalar()
-            assert count == 0
-
-    async def test_dispose_engine(self):
-        """Test that engine can be disposed cleanly."""
-        engine = create_async_engine("sqlite+aiosqlite:///:memory:")
-        async with engine.begin() as conn:
-            await conn.run_sync(Base.metadata.create_all)
-
-        # Dispose should not raise
-        await engine.dispose()
-
-        # Engine should be disposed (pool closed)
-        # Creating a new connection after dispose should fail or create new pool
-        # Just verify dispose completed without error
-        assert True
+            names = (await session.execute(select(UserTag.name))).scalars().all()
+            assert names == []
 
 
 class TestSqliteConnectionSettings:
@@ -181,19 +130,53 @@ class TestSqliteConnectionSettings:
         async with test_engine.begin() as conn:
             await conn.execute(
                 text(
-                    "INSERT INTO repositories (id, owner, name, full_name, is_active, created_at) "
-                    "VALUES (1, 'prebid', 'cascade', 'prebid/cascade', 1, CURRENT_TIMESTAMP)"
+                    "INSERT INTO repositories (id, github_id, owner, name, full_name, repo_group, "
+                    "is_private, is_archived, default_branch, is_tracked) "
+                    "VALUES (1, 10, 'prebid', 'c', 'prebid/c', 'Tools', 0, 0, 'main', 1)"
                 )
             )
             await conn.execute(
                 text(
-                    "INSERT INTO sync_failures (repository_id, pr_number, error_message, "
-                    "error_type, retry_count, status, failed_at, created_at) "
-                    "VALUES (1, 7, 'e', 'ValueError', 0, 'PENDING', CURRENT_TIMESTAMP, "
-                    "CURRENT_TIMESTAMP)"
+                    "INSERT INTO sync_failures (repository_id, item_kind, number, attempts, "
+                    "last_error, first_failed_at, last_failed_at) VALUES (1, 'pull_request', 7, 1, "
+                    "'e', '2026-01-01 00:00:00.000000', '2026-01-01 00:00:00.000000')"
                 )
             )
             await conn.execute(text("DELETE FROM repositories WHERE id = 1"))
             remaining = (await conn.execute(text("SELECT COUNT(*) FROM sync_failures"))).scalar()
 
         assert remaining == 0
+
+    async def test_on_delete_set_null_keeps_what_an_account_authored(self, test_engine) -> None:
+        async with test_engine.begin() as conn:
+            await conn.execute(
+                text(
+                    "INSERT INTO github_users (id, github_id, node_id, login, type, refreshed_at) "
+                    "VALUES (1, 20, 'U_20', 'someone', 'User', '2026-01-01 00:00:00.000000')"
+                )
+            )
+            await conn.execute(
+                text(
+                    "INSERT INTO repositories (id, github_id, owner, name, full_name, repo_group, "
+                    "is_private, is_archived, default_branch, is_tracked) "
+                    "VALUES (1, 10, 'prebid', 'r', 'prebid/r', 'Tools', 0, 0, 'main', 1)"
+                )
+            )
+            await conn.execute(
+                text(
+                    "INSERT INTO pull_requests (id, repository_id, number, github_id, node_id, "
+                    "state, is_draft, title, body, author_id, author_association, created_at, "
+                    "base_ref, targets_default_branch, is_cross_repository, additions, deletions, "
+                    "changed_files, commits_total, files_total, reviews_total, comments_total, "
+                    "labels_total, closing_issues_total, github_updated_at, hydrated_at, "
+                    "hydration_version) VALUES (1, 1, 5, 30, 'PR_30', 'OPEN', 0, 't', '', 1, "
+                    "'MEMBER', '2026-01-01 00:00:00.000000', 'main', 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, "
+                    "0, '2026-01-01 00:00:00.000000', '2026-01-01 00:00:00.000000', 1)"
+                )
+            )
+            await conn.execute(text("DELETE FROM github_users WHERE id = 1"))
+            pull_requests = (
+                await conn.execute(text("SELECT number, author_id FROM pull_requests"))
+            ).all()
+
+        assert [tuple(row) for row in pull_requests] == [(5, None)]

@@ -23,6 +23,9 @@ PULL_REQUEST_HYDRATION_VERSION: Final = 1
 
 RATE_LIMIT: Final = "rateLimit { cost remaining resetAt }"
 
+# `ghactivity github rate-limit` (plan 5.8); REST /rate_limit supplies each pool's limit and use.
+RATE_LIMIT_QUERY: Final = f"query RateLimit {{ {RATE_LIMIT} }}"
+
 ACTOR_FRAGMENT: Final = """
 fragment Actor on Actor {
   __typename

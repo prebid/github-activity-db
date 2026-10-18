@@ -1,7 +1,7 @@
 """GitHub source layer: GraphQL and REST reads, typed records out (redesign plan Step 2).
 
 The sync engine uses ``GitHubSource``, the records, and the errors exported here; the response
-models stay private. Only this package will import githubkit once Step 3 removes ``github/``.
+models stay private. Only this package imports githubkit (``tests/test_import_boundaries.py``).
 """
 
 from .budget import Usage
@@ -32,7 +32,9 @@ from .records import (
     PullRequestIndex,
     PullRequestOutcome,
     PullRequestRecord,
+    RateLimits,
     RepositoryRecord,
+    RestRateLimit,
     Review,
     UserLookup,
 )
@@ -59,9 +61,11 @@ __all__ = [
     "PullRequestIndex",
     "PullRequestOutcome",
     "PullRequestRecord",
+    "RateLimits",
     "RepositoryError",
     "RepositoryRecord",
     "RequestFailedError",
+    "RestRateLimit",
     "Review",
     "SourceError",
     "SystemClock",

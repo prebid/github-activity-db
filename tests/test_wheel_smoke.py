@@ -33,6 +33,7 @@ def _run(
         capture_output=True,
         text=True,
         env=env,
+        timeout=60,
     )
 
 

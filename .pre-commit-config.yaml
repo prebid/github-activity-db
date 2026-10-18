@@ -68,9 +68,33 @@ repos:
         language: system
         files: ^github_activity\.db$
 
+      - id: tracked-db-frozen
+        name: github_activity.db keeps its pinned pre-Step-3 content (D26)
+        entry: uv run --no-sync python scripts/check_frozen_db.py
+        language: system
+        files: ^github_activity\.db$
+
+      # A journal or WAL file beside the database changes what SQLite reads from it, past the
+      # pinned digest, the next time the database is opened, and a shared-memory file is the
+      # WAL's index; a case-insensitive file system finds each under any letter case. `types: []` drops the
+      # default `[file]`, which a symlink does not have, so the name alone decides.
+      - id: tracked-db-no-sidecar
+        name: no journal, WAL, or shared-memory file of github_activity.db in git (D20, D26)
+        entry: remove it from git; SQLite would apply it to github_activity.db on the next open
+        language: fail
+        files: (?i)^github_activity\.db-(journal|wal|shm)$
+        types: []
+
       - id: prevent-any-aliases
         name: Prevent new Any type aliases
         entry: uv run --no-sync python scripts/check_any_aliases.py src
+        language: system
+        pass_filenames: false
+        always_run: true
+
+      - id: log-placeholders
+        name: loguru messages use {} placeholders, not %
+        entry: uv run --no-sync python scripts/check_log_placeholders.py src
         language: system
         pass_filenames: false
         always_run: true

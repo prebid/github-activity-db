@@ -38,7 +38,7 @@ Create a `.env` file (copy from `.env.example`):
 GITHUB_TOKEN=ghp_your_token_here
 
 # Optional (defaults shown)
-DATABASE_URL=sqlite+aiosqlite:///./github_activity.db
+DATABASE_URL=sqlite+aiosqlite:///./github_activity.local.db
 LOG_LEVEL=INFO
 ENVIRONMENT=development
 ```
@@ -85,30 +85,16 @@ uv run ghactivity --help
 # Show version
 uv run ghactivity --version
 
-# GitHub commands
-uv run ghactivity github rate-limit           # Check core rate limit
-uv run ghactivity github rate-limit --all     # Show all pools
-uv run ghactivity github rate-limit --all -v  # Verbose with reset times
-
-# Sync commands - single PR
-uv run ghactivity sync pr owner/repo 1234              # Sync single PR
-uv run ghactivity sync pr owner/repo 1234 --verbose    # Detailed output
-uv run ghactivity sync pr owner/repo 1234 --quiet      # Silent (errors only)
-uv run ghactivity sync pr owner/repo 1234 --dry-run    # Preview without writing
-uv run ghactivity sync pr owner/repo 1234 --format json # JSON output
-
-# Sync commands - bulk repository
-uv run ghactivity sync repo owner/repo                    # Sync all PRs
-uv run ghactivity sync repo owner/repo --since 2024-10-01 # Since date
-uv run ghactivity sync repo owner/repo --state open       # Only open PRs
-uv run ghactivity sync repo owner/repo --max 10           # Limit count
-uv run ghactivity sync repo owner/repo --dry-run          # Preview mode
-uv run ghactivity sync repo owner/repo --format json      # JSON output
-
-# Not yet implemented
-uv run ghactivity search --help
-uv run ghactivity user-tags --help
+# GitHub commands (they need GITHUB_TOKEN, for example GITHUB_TOKEN="$(gh auth token)")
+uv run ghactivity github rate-limit           # GraphQL reading and the core and graphql pools
+uv run ghactivity github rate-limit --all     # Every REST pool
+uv run ghactivity github test --pr 13481 --repo prebid/Prebid.js  # Resolve and hydrate one PR
+uv run ghactivity github test --pr 4343       # The first repository in tracking.toml
 ```
+
+There is no `sync` command until Step 3b of the [redesign plan](redesign-plan.md). A command
+line that never starts its work (a usage error, an invalid `tracking.toml` or setting, a log
+file that cannot be opened, a missing token) exits 1; an interrupt (Ctrl-C) exits 130.
 
 ### Code Quality
 
@@ -162,7 +148,7 @@ uv run pytest
 uv run pytest --cov=src/github_activity_db --cov-report=term-missing
 
 # Run specific test file
-uv run pytest tests/test_db_models.py -v
+uv run pytest tests/db/test_schema.py -v
 
 # Run tests matching a pattern
 uv run pytest -k "test_pr"
@@ -177,15 +163,19 @@ uv run alembic current
 # Apply all migrations
 uv run alembic upgrade head
 
-# Generate new migration
+# Generate a migration to start from; then follow "Writing a migration" in docs/database.md
 uv run alembic revision --autogenerate -m "description"
-
-# Rollback one migration
-uv run alembic downgrade -1
 
 # View migration history
 uv run alembic history
 ```
+
+Migrations are never downgraded (`downgrade()` raises), and `alembic upgrade` refuses the
+tracked `github_activity.db` ([database.md](database.md)). Every `alembic` command that connects,
+`current` and `check` included, takes the database's write lock, so it waits up to 5 seconds
+while another connection, such as a running sync, holds the file, and then fails with "database
+is locked". Each one also checks the file's foreign keys before it commits, so a file holding a
+violation fails every command until it is repaired or rebuilt.
 
 ## Pre-commit Hooks
 
@@ -216,7 +206,11 @@ uv run pre-commit run mypy --all-files
 | `ruff-format` | Code formatting (ruff from `uv.lock`) |
 | `mypy` | Type checking of src/, tests/, and scripts/ (mypy from `uv.lock`) |
 | `suppression-caps` | Fail above 5 `type: ignore` or 3 `noqa` comments in src/ (`scripts/count_suppressions.py`) |
+| `tracked-db-rollback-journal` | `github_activity.db` stays in rollback-journal mode (`scripts/check_db_journal.py`, D20) |
+| `tracked-db-frozen` | `github_activity.db` keeps its pinned pre-Step-3 content (`scripts/check_frozen_db.py`, D26) |
+| `tracked-db-no-sidecar` | No journal, WAL, or shared-memory file of `github_activity.db` is committed |
 | `prevent-any-aliases` | Block `TypeName = Any` patterns |
+| `log-placeholders` | loguru messages use `{}` placeholders, not `%` (`scripts/check_log_placeholders.py`) |
 
 ruff and mypy run through `uv run --no-sync`, so hooks never change the environment; run
 `uv sync --frozen --extra dev` first.
@@ -228,7 +222,7 @@ ruff and mypy run through `uv run --no-sync`, so hooks never change the environm
 - `uv lock --locked` (uv.lock matches pyproject.toml), then pre-commit over all files;
 - on pull requests, the base commit's `scripts/check_query_lock.py` (the pull request's own copy
   where the base has none), which fails when an entry of `tests/query_versions.json` was edited
-  or removed;
+  or removed, or an entry of `tests/schema_versions.json`, or a pair of one, was removed;
 - pytest on Python 3.12 and 3.13, then `scripts/check_junit.py --max-skipped 0`, which fails
   unless at least one test ran and none failed, errored, or was skipped (pytest reports `xfail`
   as skipped);
@@ -276,95 +270,78 @@ asyncio_mode = "auto"
 src/github_activity_db/
 ├── __init__.py          # Package version
 ├── config.py            # Settings (pydantic-settings)
-├── cli/                 # CLI commands
-│   ├── __init__.py
-│   ├── app.py           # Typer application
-│   ├── common.py        # Shared option factories
-│   ├── github.py        # GitHub commands (rate-limit)
-│   └── sync.py          # Sync commands (sync pr)
-├── db/                  # Database layer
-│   ├── __init__.py      # Public exports
-│   ├── models.py        # SQLAlchemy models
-│   ├── engine.py        # Async engine/sessions
-│   └── repositories/    # Repository pattern
-│       ├── base.py      # BaseRepository ABC
-│       ├── repository.py # RepositoryRepository
-│       └── pull_request.py # PullRequestRepository
-├── schemas/             # Pydantic validation models
-│   ├── __init__.py      # Re-exports all schemas
-│   ├── base.py          # SchemaBase with factory pattern
-│   ├── pr.py            # PRCreate, PRSync, PRMerge, PRRead
-│   ├── repository.py    # RepositoryCreate, RepositoryRead, parse_repo_string()
-│   ├── tag.py           # UserTagCreate, UserTagRead
-│   ├── nested.py        # CommitBreakdown, ParticipantEntry
-│   └── github_api.py    # GitHub API response schemas
-├── github/              # GitHub integration
-│   ├── client.py        # githubkit wrapper
-│   ├── exceptions.py    # Custom exceptions
-│   ├── rate_limit/      # Rate limit monitoring
-│   ├── pacing/          # Request pacing
-│   └── sync/            # PR ingestion service
-└── search/              # Search logic [TODO]
+├── logging.py           # loguru setup
+├── tracking.py          # tracking.toml loading and validation
+├── tracking.toml        # Tracked repositories, shipped in the package (D21)
+├── cli/
+│   ├── app.py           # Typer application, global flags, exit codes
+│   ├── common.py        # Shared helpers (consoles, token, repository argument)
+│   └── github.py        # `github rate-limit` and `github test`
+├── db/
+│   ├── engine.py        # Async engine and sessions
+│   ├── models.py        # SQLAlchemy models of the head schema
+│   ├── schema.py        # SCHEMA_VERSION and the migration revision ids
+│   └── types.py         # UtcDateTime
+└── source/              # GitHub source layer: the only package that imports githubkit
+
+alembic/
+├── env.py               # One transaction per upgrade; refusals (docs/database.md)
+└── versions/            # The migration chain
 
 tests/
-├── conftest.py          # Shared fixtures (db_session, sample data)
-├── factories.py         # Factory functions for test data
-├── fixtures/            # Mock data and real GitHub fixtures
-├── db/repositories/     # Repository tests
-├── github/              # GitHub module tests
-│   ├── rate_limit/      # Rate limit tests
-│   ├── pacing/          # Pacing tests
-│   └── sync/            # Ingestion tests
-├── test_config.py       # Settings tests
-├── test_db_*.py         # Database tests
-├── test_schemas_*.py    # Schema validation tests
-├── test_pr_ingestion_e2e.py # E2E integration tests
-└── test_cli_sync.py     # CLI sync command tests
+├── conftest.py          # Session template database built by `alembic upgrade head`
+├── db/                  # Migrations, schema comparison, views, timestamp type, tracked file
+├── source/              # Source layer against recorded GitHub responses
+├── fixtures/source/     # Recorded and synthetic GitHub responses
+├── data_dictionary.py   # Reader for docs/data-dictionary.md
+├── query_versions.json  # Hydration-version lock
+├── schema_versions.json # Schema-version lock
+└── test_*.py            # CLI, settings, logging, scripts, and quality gates
 ```
 
 ## Adding New Features
 
 ### 1. New Database Model
 
-1. Add model class to `src/github_activity_db/db/models.py`
-2. Export from `src/github_activity_db/db/__init__.py`
-3. Generate migration: `uv run alembic revision --autogenerate -m "add model"`
-4. Apply migration: `uv run alembic upgrade head`
+1. Add the model to `src/github_activity_db/db/models.py` and export it from
+   `src/github_activity_db/db/__init__.py`
+2. Write the migration as "Writing a migration" in [database.md](database.md) describes, and
+   add its revision id to `MIGRATION_REVISIONS` in `db/schema.py`
+3. Add the table to [data-dictionary.md](data-dictionary.md), and its consumer columns to
+   `tests/schema_versions.json`
 
 ### 2. New CLI Command
 
 1. Create command file in `src/github_activity_db/cli/`
 2. Register in `src/github_activity_db/cli/app.py`
-3. Add tests in `tests/test_cli/`
+3. Add tests in `tests/test_cli_<group>.py`; commands that call GitHub get their client from
+   `common.open_source`, which tests replace with one over the recorded-response replay
 
 **CLI Async Pattern:**
 
 All CLI commands use `run_async_command()` from `cli/common.py` for unified async execution:
 
 ```python
-from github_activity_db.cli.common import console, run_async_command
+from github_activity_db.cli import common
+from github_activity_db.source import RateLimits
 
 @app.command()
 def my_command() -> None:
     """Command description."""
-    async def _impl() -> dict[str, Any]:
-        async with GitHubClient() as client:
-            return await client.some_method()
+    token = common.github_token()
 
-    result = run_async_command(_impl())
-    console.print(f"Result: {result}")
+    async def _impl() -> RateLimits:
+        async with common.open_source(token) as source:
+            return await source.rate_limits()
+
+    result = common.run_async_command(_impl())
+    common.console.print(f"GraphQL remaining: {result.graphql_remaining}")
 ```
 
 This pattern provides:
 - Clean event loop management via `asyncio.run()`
 - Unified error handling with user-friendly messages
 - Automatic `typer.Exit(1)` on exceptions
-
-### 3. New Pydantic Schema
-
-1. Add schema to `src/github_activity_db/schemas/`
-2. Export from `src/github_activity_db/schemas/__init__.py`
-3. Add validation tests
 
 ## Troubleshooting
 
@@ -376,11 +353,9 @@ uv add greenlet
 
 ### Alembic can't find models
 
-Ensure `alembic/env.py` imports the models:
-```python
-from github_activity_db.db.models import Base
-target_metadata = Base.metadata
-```
+`alembic/env.py` imports `Base` from `github_activity_db.db.models` and passes `Base.metadata`
+to `context.configure()` as `target_metadata`, so `alembic check` and autogenerate compare the
+tables `db/models.py` defines.
 
 ### SQLite "database is locked"
 
@@ -390,11 +365,4 @@ on every connection. It does not set the journal mode (redesign plan D20); `scri
 checks the tracked file:
 ```python
 engine = build_engine(url)
-```
-
-### Type errors with JSON columns
-
-JSON columns return `Any` type. Cast explicitly:
-```python
-labels: list[str] = pr.github_labels  # type: ignore[assignment]
 ```

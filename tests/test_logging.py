@@ -96,6 +96,28 @@ class TestSetupLogging:
         content = log_file.read_text()
         assert "Test file message" in content
 
+    @pytest.mark.parametrize("bound", [True, False], ids=["named logger", "stdlib or unnamed"])
+    def test_a_logged_traceback_shows_no_local_values(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str], bound: bool
+    ) -> None:
+        """No handler prints a frame's local variables (loguru ``diagnose``; gap 75)."""
+        log_file = tmp_path / "app.log"
+        setup_logging(level="INFO", log_file=log_file)
+        target = get_logger("test") if bound else logger
+        credential = "sentinel-credential-9c1d"
+        try:
+            raise RuntimeError(f"failed with a {len(credential)}-character value")
+        except RuntimeError:
+            target.exception("operation failed")
+        logger.complete()
+        stderr = capsys.readouterr().err
+        written = log_file.read_text() if log_file.exists() else ""
+        assert "failed with a 24-character value" in stderr
+        if bound:  # the file handler takes only named loggers
+            assert "failed with a 24-character value" in written
+        assert credential not in stderr
+        assert credential not in written
+
     def test_setup_logging_sets_configured_flag(self) -> None:
         """Test that setup_logging sets the configured flag."""
         assert not is_configured()

@@ -7,7 +7,8 @@ response describes: the item in a hydration batch, the repository on a resolve, 
 page, the node id in a user lookup (redesign plan 5.3 step 4). Descriptive enums stay ``str`` so a
 new GitHub value is stored.
 
-The REST compare models ignore unknown fields: REST returns far more than is read.
+The REST models ignore unknown fields: a REST response carries what GitHub adds over time, not
+what a document selected, so an added field is not a disagreement.
 """
 
 from __future__ import annotations
@@ -275,8 +276,28 @@ class LookedUpUser(GraphQLModel):
 
 
 # --------------------------------------------------------------------------------------------
-# REST compare
+# REST rate limits and compare
 # --------------------------------------------------------------------------------------------
+class RestRateLimitPool(BaseModel):
+    """One pool of REST ``/rate_limit``."""
+
+    model_config = ConfigDict(extra="ignore", frozen=True)
+
+    limit: StrictInt
+    used: StrictInt
+    remaining: StrictInt
+    reset: StrictInt
+
+
+class RestRateLimits(BaseModel):
+    """``/rate_limit``: the pools are read from ``resources``; the top-level ``rate`` (equal to
+    ``resources.core`` in the recorded response) is ignored like any other field."""
+
+    model_config = ConfigDict(extra="ignore", frozen=True)
+
+    resources: dict[StrictStr, RestRateLimitPool]
+
+
 class CompareGitAuthor(RestModel):
     name: StrictStr | None = None
     email: StrictStr | None = None

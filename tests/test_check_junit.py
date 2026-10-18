@@ -21,7 +21,10 @@ def _report(tmp_path: Path, *suites: tuple[int, int, int, int]) -> Path:
 
 def _gate(report: Path, *extra: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
-        [sys.executable, str(SCRIPT), str(report), *extra], capture_output=True, text=True
+        [sys.executable, str(SCRIPT), str(report), *extra],
+        capture_output=True,
+        text=True,
+        timeout=60,
     )
 
 
@@ -89,6 +92,7 @@ def test_report_written_by_pytest(tmp_path: Path, test_body: str, gate_exit: int
         cwd=tmp_path,
         capture_output=True,
         text=True,
+        timeout=60,
     )
     # pytest exits 0 in both cases, including when every test was skipped.
     assert run.returncode == 0, run.stdout

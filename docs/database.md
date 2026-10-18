@@ -1,352 +1,139 @@
-# Database Schema
+# Database
 
-## Overview
+SQLite, read and written through SQLAlchemy 2.0 with aiosqlite, and migrated by alembic. The
+schema is [redesign plan 5.1](redesign-plan.md#51-schema); every table, view, and column is
+listed in the [data dictionary](data-dictionary.md), which also says what consumers may rely on.
 
-The database uses SQLite with async access via aiosqlite. Schema migrations are managed by Alembic.
+## Files
 
-**Connection String:** `sqlite+aiosqlite:///./github_activity.db`
+| File | Use |
+|------|-----|
+| `github_activity.local.db` | The default `DATABASE_URL` (`sqlite+aiosqlite:///./github_activity.local.db`); git-ignored |
+| `github_activity.db` | Tracked in git and frozen at its pre-Step-3 content until Step 6c (D26): `scripts/check_frozen_db.py` pins its SHA-256 as a pre-commit hook, and `alembic/env.py` refuses to migrate it. It holds the first schema (revision `b3c4d5e6f7g8`), which the current code does not read |
 
-**Connection settings:** `build_engine()` in `db/engine.py` sets these on every SQLite connection:
+Build or upgrade a database with:
+
+```bash
+uv run alembic upgrade head      # the file DATABASE_URL names
+uv run alembic current           # its revision
+```
+
+Databases are built only by migrations; there is no `create_all` path. Tests copy one template
+database per session, built by `alembic upgrade head` (`tests/conftest.py`).
+
+## Connection settings
+
+`build_engine()` in `db/engine.py` sets these on every application connection:
 
 | Pragma | Value | Why |
 |--------|-------|-----|
-| `foreign_keys` | `ON` | SQLite disables it per connection by default; declared `ON DELETE CASCADE` constraints only hold with it on |
+| `foreign_keys` | `ON` | SQLite disables it per connection by default; declared `ON DELETE` actions only hold with it on |
 | `busy_timeout` | `30000` ms | Wait for a lock before raising "database is locked". Python's `sqlite3` default is 5000 ms; in rollback-journal mode a reader's lock blocks a writer's commit, and the longer wait lets the sync outlast a concurrent read |
 
-The tracked database stays in SQLite's default rollback-journal mode (redesign plan D20).
-The listener does not set the journal mode: that statement needs a lock, so every connection
-would fail while another process has a WAL database open. Instead `scripts/check_db_journal.py`
-checks the tracked file's header as a pre-commit hook and in the test suite. In WAL mode
-committed transactions can sit in a git-ignored `*-wal` file until a checkpoint, and
-`github_activity.db` is tracked in git, so a commit, checkout, or stash could separate the database
-from its WAL. Step 6 of [the redesign plan](redesign-plan.md) moves the database out of git.
+The tracked database stays in SQLite's default rollback-journal mode (D20). The listener does
+not set the journal mode: that statement needs a lock, so every connection would fail while
+another process has a WAL database open. `scripts/check_db_journal.py` checks the tracked file's
+header as a pre-commit hook and in the test suite. In WAL mode committed transactions can sit in
+a git-ignored `*-wal` file until a checkpoint, so a commit, checkout, or stash could separate the
+database from its WAL. Step 6 of the redesign plan moves the database out of git.
 
-## Entity Relationship Diagram
-
-```
-┌─────────────────┐       ┌─────────────────────┐
-│  repositories   │       │     user_tags       │
-├─────────────────┤       ├─────────────────────┤
-│ id (PK)         │       │ id (PK)             │
-│ owner           │       │ name (unique)       │
-│ name            │       │ description         │
-│ full_name (UQ)  │       │ color               │
-│ is_active       │       │ created_at          │
-│ last_synced_at  │       └──────────┬──────────┘
-│ created_at      │                  │
-└────────┬────────┘                  │
-         │                           │
-         │ 1:N                       │ N:M
-         │                           │
-         ▼                           ▼
-┌─────────────────────────────────────────────────┐
-│                  pull_requests                   │
-├─────────────────────────────────────────────────┤
-│ id (PK)                                         │
-│ repository_id (FK) ──────────────────────────┐  │
-│ number                                       │  │
-│ [... 21 data fields ...]                     │  │
-│ created_at, updated_at                       │  │
-├─────────────────────────────────────────────────┤
-│ UNIQUE(repository_id, number)                   │
-└─────────────────────────────────────────────────┘
-         │
-         │ N:M
-         ▼
-┌─────────────────────┐
-│   pr_user_tags      │
-├─────────────────────┤
-│ pr_id (FK, PK)      │
-│ user_tag_id (FK,PK) │
-│ created_at          │
-└─────────────────────┘
-```
-
-## Tables
-
-### 1. repositories
-
-Tracks which GitHub repositories are being monitored.
-
-| Column | Type | Constraints | Description |
-|--------|------|-------------|-------------|
-| id | INTEGER | PRIMARY KEY | Auto-increment ID |
-| owner | VARCHAR(100) | NOT NULL | GitHub org/user (e.g., "prebid") |
-| name | VARCHAR(100) | NOT NULL | Repo name (e.g., "prebid-server") |
-| full_name | VARCHAR(200) | UNIQUE, NOT NULL | Full path (e.g., "prebid/prebid-server") |
-| is_active | BOOLEAN | DEFAULT TRUE | Whether to sync this repo |
-| last_synced_at | DATETIME | NULLABLE | Last successful sync timestamp |
-| created_at | DATETIME | DEFAULT NOW | Record creation time |
-
-**Indexes:** `full_name` (unique)
-
-### 2. pull_requests
-
-Stores all PR data with 26 columns total.
-
-| Column | Type | Constraints | Sync Behavior |
-|--------|------|-------------|---------------|
-| id | INTEGER | PRIMARY KEY | - |
-| repository_id | INTEGER | FK(repositories.id) | - |
-| **Immutable Fields** |
-| number | INTEGER | NOT NULL | Set once |
-| link | VARCHAR(500) | NOT NULL | Set once |
-| open_date | DATETIME | NOT NULL | Set once |
-| submitter | VARCHAR(100) | NOT NULL | Set once |
-| **Synced Fields** |
-| title | VARCHAR(500) | NOT NULL | Until merged |
-| description | TEXT | NULLABLE | Until merged |
-| last_update_date | DATETIME | NOT NULL | Until merged |
-| state | VARCHAR(6) | NOT NULL | Until merged |
-| files_changed | INTEGER | DEFAULT 0 | Until merged |
-| lines_added | INTEGER | DEFAULT 0 | Until merged |
-| lines_deleted | INTEGER | DEFAULT 0 | Until merged |
-| commits_count | INTEGER | DEFAULT 0 | Until merged |
-| github_labels | JSON | DEFAULT [] | Until merged |
-| file_changes | JSON | DEFAULT [] | Until merged |
-| commits_breakdown | JSON | DEFAULT [] | Until merged |
-| reviewers | JSON | DEFAULT [] | Until merged |
-| assignees | JSON | DEFAULT [] | Until merged |
-| participants | JSON | DEFAULT {} | Until merged |
-| **Agent Fields** |
-| classify_tags | VARCHAR(500) | NULLABLE | Until merged |
-| **Merge-Only Fields** |
-| close_date | DATETIME | NULLABLE | Set on merge |
-| merged_by | VARCHAR(100) | NULLABLE | Set on merge |
-| ai_summary | TEXT | NULLABLE | Set on merge |
-| **Metadata** |
-| created_at | DATETIME | DEFAULT NOW | - |
-| updated_at | DATETIME | ON UPDATE NOW | - |
-
-**Indexes:**
-- `repository_id` (foreign key)
-- `(repository_id, number)` (unique constraint)
-
-### 3. user_tags
-
-User-created tags applied via CLI.
-
-| Column | Type | Constraints | Description |
-|--------|------|-------------|-------------|
-| id | INTEGER | PRIMARY KEY | Auto-increment ID |
-| name | VARCHAR(100) | UNIQUE, NOT NULL | Tag name (e.g., "needs-review") |
-| description | VARCHAR(500) | NULLABLE | Optional description |
-| color | VARCHAR(7) | NULLABLE | Hex color (e.g., "#ff0000") |
-| created_at | DATETIME | DEFAULT NOW | Record creation time |
-
-### 4. pr_user_tags (Junction Table)
-
-Many-to-many relationship between PRs and user tags.
-
-| Column | Type | Constraints |
-|--------|------|-------------|
-| pr_id | INTEGER | PK, FK(pull_requests.id) ON DELETE CASCADE |
-| user_tag_id | INTEGER | PK, FK(user_tags.id) ON DELETE CASCADE |
-| created_at | DATETIME | DEFAULT NOW |
-
-## JSON Column Schemas
-
-### commits_breakdown
-
-Array of commit metadata:
-
-```json
-[
-    {
-        "date": "2024-01-15T10:30:00Z",
-        "author": "username1"
-    },
-    {
-        "date": "2024-01-16T14:20:00Z",
-        "author": "username2"
-    }
-]
-```
-
-### participants
-
-Dictionary mapping usernames to their actions:
-
-```json
-{
-    "username1": ["comment", "approval"],
-    "username2": ["comment", "changes_requested", "comment"],
-    "username3": ["review"]
-}
-```
-
-**Possible actions:**
-- `comment` - Left a comment
-- `approval` - Approved the PR
-- `changes_requested` - Requested changes
-- `review` - Left a review (without approval/rejection)
-- `commit` - Pushed commits
-
-### file_changes
-
-Array of per-file change statistics:
-
-```json
-[
-    {
-        "filename": "adapters/newbidder.go",
-        "status": "added",
-        "additions": 200,
-        "deletions": 0,
-        "changes": 200
-    },
-    {
-        "filename": "exchange/adapter_builders.go",
-        "status": "modified",
-        "additions": 5,
-        "deletions": 0,
-        "changes": 5
-    }
-]
-```
-
-**Possible statuses:** `added`, `modified`, `removed`, `renamed`, `copied`, `changed`, `unchanged`, `unknown`
-
-> **Note:** Legacy data (migrated from the old `filenames` column) uses `status: "unknown"` with zero line counts.
-
-### github_labels, reviewers, assignees
-
-Simple string arrays:
-
-```json
-["label1", "label2", "label3"]
-```
+Timestamps use `UtcDateTime` (`db/types.py`): it rejects a naive datetime, stores an aware one
+converted to UTC, and returns aware UTC values. Defaults are `utc_now()`, never SQL's
+`CURRENT_TIMESTAMP`, whose shorter text would not order with the stored values.
 
 ## Migrations
 
-Migrations are managed by Alembic with async support.
+`alembic/env.py` runs each upgrade as one transaction (gap 70):
 
-### Commands
+- The connection has foreign keys off, because batch mode drops and recreates tables and an
+  enforced drop cascades into child rows. The connect listener refuses a connection on which
+  the pragma does not take effect or a transaction is already open.
+- `BEGIN IMMEDIATE` opens the transaction and `PRAGMA foreign_key_check` runs after the last
+  revision, before the commit. A failed revision, or a violation, leaves the file at the
+  revision the upgrade started from. The check runs before every command commits, one that
+  runs no revision (`current`, `check`, `stamp`) included, because alembic loads each revision
+  module inside the transaction and a module's top-level code can change rows or the schema;
+  a file that already holds a violation therefore fails every command that connects until it
+  is repaired or rebuilt. Each of those commands opens the same transaction, so like an upgrade
+  it waits up to 5 seconds for the write lock and fails if another connection holds the file
+  that long.
+- An SQLite authorizer allows only the actions `ALLOWED_ACTIONS` in `env.py` lists: the main
+  database's DDL and DML, and the reads alembic and SQLAlchemy's reflection make. No statement
+  a revision runs commits part of the upgrade: the authorizer refuses any `BEGIN`, `COMMIT`, `END`, or
+  `ROLLBACK` but the upgrade's own, `SAVEPOINT`, and every statement once SQLite has ended the
+  transaction by itself (`INSERT OR ROLLBACK`, `RAISE(ROLLBACK)`); the connection keeps no
+  prepared statements, so a repeated statement is checked again. It refuses `ATTACH`, temporary
+  objects (`TEMP` or a `temp.` name), virtual tables, and a pragma value other than
+  `user_version` and the pragmas reflection reads with an argument (`table_info`, `table_xinfo`, `index_list`, `index_info`, `foreign_key_list`),
+  so `journal_mode`, `legacy_alter_table`, and
+  `ignore_check_constraints` keep the values the connection opened with.
+- Refused: offline `--sql` mode, databases other than SQLite, SQLite URI filenames
+  (`?uri=true`), a caller-supplied connection or `sqlalchemy.url`, and the tracked
+  `github_activity.db`. The connect listener asks SQLite which file it opened, so the tracked
+  file is refused through any path, symlink, or hard link, and so is any file named
+  `github_activity.db`, such as another checkout's copy; a missing path of that name, or a
+  missing file the driver's path resolves to under that name, is refused before SQLite would
+  create it.
+- `downgrade()` raises: migrations are never downgraded, and a database the code cannot upgrade
+  is rebuilt (redesign plan 5.4).
 
-```bash
-# Check current migration
-uv run alembic current
+### Writing a migration
 
-# Generate new migration
-uv run alembic revision --autogenerate -m "description"
+A migration changes the models (`db/models.py`), the chain, and the documents together:
 
-# Apply all pending migrations
-uv run alembic upgrade head
+- Raise in `downgrade()`, as `alembic/script.py.mako` generates it.
+- Import only alembic, SQLAlchemy, and the standard library. Name every index, CHECK constraint, and foreign key
+  through `op.f()` with the name `NAMING_CONVENTION` in `db/models.py` gives it, and every unique
+  constraint explicitly (`uq_<table>_<columns>`): batch mode keeps named CHECKs and drops
+  unnamed ones (gap 72).
+- Before batch-altering a table a view reads, drop the view, and recreate it afterwards from
+  the migration's own frozen `VIEWS` constant; a view left in place fails the migration
+  (gap 71). A migration that creates or replaces a view embeds its SQL in `VIEWS`.
+- Add the revision id to `MIGRATION_REVISIONS` in `db/schema.py`: code that must refuse a
+  database not at head reads the chain from there (Step 3b's head check, gap 74).
+- Update `docs/data-dictionary.md` and, for a consumer column, `tests/schema_versions.json`. A
+  removed, renamed, or redefined consumer column needs a new `SCHEMA_VERSION`, set by the
+  migration as `PRAGMA user_version`.
+- A migration that adds or redefines a GitHub-derived column of a table that may hold rows
+  bumps that kind's hydration version (plan 5.1).
 
-# Rollback one migration
-uv run alembic downgrade -1
+The tests that hold these: `tests/db/test_schema.py` compares a migrated database with the
+models (CHECK names and text, index SQL, and triggers on tables included) and each view with its
+frozen SQL, refuses any schema object neither comparison reads (a trigger on a view, an index on
+`alembic_version`, an `ANALYZE` table), and holds both to plan 5.1's nullable columns, unique
+column sets, and delete actions; `tests/db/test_migrations.py` covers the chain, `env.py`, and
+each revision's imports and `VIEWS` constant; `tests/test_data_dictionary.py` covers the
+dictionary and the schema-version lock. CI also runs `alembic check`.
 
-# View migration history
-uv run alembic history
+| Revision | Description |
+|----------|-------------|
+| `01421d8dfaeb` | First schema: `repositories`, `pull_requests`, `user_tags`, `pr_user_tags` |
+| `a2b3c4d5e6f7` | Adds `sync_failures` |
+| `b3c4d5e6f7g8` | Renames `pull_requests.filenames` to `file_changes` |
+| `33f8570f6540` | Step 3 schema: drops the first schema's tables except `user_tags`, creates the 5.1 tables and views, sets `user_version` 1 |
+
+## Querying
+
+Consumers read the views and the columns the dictionary marks consumer. For example, the
+reviewers of one repository's pull requests, with their final verdicts:
+
+```sql
+SELECT pr_number, reviewer_login, final_verdict, comment_count
+FROM v_pr_reviewers
+WHERE repository_full_name = 'prebid/Prebid.js'
+ORDER BY pr_number;
 ```
 
-### Migration Files
-
-Located in `alembic/versions/`:
-
-| Migration | Description |
-|-----------|-------------|
-| `01421d8dfaeb_initial_pr_schema.py` | Creates all 4 tables |
-| `b3c4d5e6f7g8_rename_filenames_to_file_changes.py` | Renames `filenames` → `file_changes` with per-file stats migration |
-
-## Usage Examples
-
-### Async Session Context Manager
+Application code uses `get_session()`, which commits on a clean exit and rolls back on an
+exception:
 
 ```python
-from github_activity_db.db import get_session, PullRequest
 from sqlalchemy import select
 
-async with get_session() as session:
-    # Query all open PRs
-    result = await session.execute(
-        select(PullRequest).where(PullRequest.state == "open")
-    )
-    prs = result.scalars().all()
-```
-
-### Creating Records
-
-```python
-from github_activity_db.db import get_session, Repository
+from github_activity_db.db import PullRequest, get_session
 
 async with get_session() as session:
-    repo = Repository(
-        owner="prebid",
-        name="prebid-server",
-        full_name="prebid/prebid-server"
-    )
-    session.add(repo)
-    # Commits automatically on context exit
+    open_numbers = (
+        await session.execute(select(PullRequest.number).where(PullRequest.state == "OPEN"))
+    ).scalars().all()
 ```
-
-### Querying with Relationships
-
-```python
-from github_activity_db.db import get_session, PullRequest
-from sqlalchemy.orm import selectinload
-
-async with get_session() as session:
-    result = await session.execute(
-        select(PullRequest)
-        .options(selectinload(PullRequest.repository))
-        .options(selectinload(PullRequest.user_tags))
-        .where(PullRequest.number == 123)
-    )
-    pr = result.scalar_one()
-    print(pr.repository.full_name)
-    print([tag.name for tag in pr.user_tags])
-```
-
-## Transaction Management
-
-### Default Behavior
-
-By default, `get_session()` auto-commits on successful exit and rolls back on exception:
-
-```python
-async with get_session() as session:
-    # All operations here...
-    pass
-# Auto-commits on exit
-```
-
-### Batch Commits with CommitManager
-
-For bulk operations, use `CommitManager` to commit in batches and prevent data loss on failure:
-
-```python
-import asyncio
-from github_activity_db.db import get_session
-from github_activity_db.github.sync import CommitManager
-
-async with get_session(auto_commit=False) as session:
-    write_lock = asyncio.Lock()
-    commit_manager = CommitManager(session, write_lock, batch_size=25)
-
-    for pr in prs_to_process:
-        # Process PR...
-        await session.flush()
-        await commit_manager.record_success()  # Auto-commits at batch_size
-
-    await commit_manager.finalize()  # Commit any remaining
-```
-
-**Key parameters:**
-- `auto_commit=False`: Disables auto-commit on session exit (CommitManager handles it)
-- `write_lock`: Serializes commits with concurrent flush operations
-- `batch_size`: Number of items per commit batch (default: 25)
-
-### Configuration
-
-The batch size is `SyncConfig.commit_batch_size` (default 25). The `SYNC__COMMIT_BATCH_SIZE`
-environment variable has no effect: `Settings` sets no `env_nested_delimiter` (redesign plan,
-gap 64).
-
-### Failure Recovery
-
-`CommitManager` commits at a batch boundary each time `record_success()` reaches `batch_size`.
-`BulkPRIngestionService` calls `record_success()` only after every PR in a repository has been
-processed, so during a bulk sync nothing is committed until the repository finishes, and a
-failure part-way through loses that repository's uncommitted writes. Step 3 of
-[the redesign plan](redesign-plan.md) replaces this with one transaction per item.
