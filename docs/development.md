@@ -222,7 +222,10 @@ ruff and mypy run through `uv run --no-sync`, so hooks never change the environm
 - `uv lock --locked` (uv.lock matches pyproject.toml), then pre-commit over all files;
 - on pull requests, the base commit's `scripts/check_query_lock.py` (the pull request's own copy
   where the base has none), which fails when an entry of `tests/query_versions.json` was edited
-  or removed, or an entry of `tests/schema_versions.json`, or a pair of one, was removed;
+  or removed, or an entry of `tests/schema_versions.json`, a pair of one, or a view digest of
+  one, was removed or the digest changed, or pairs or views were added to an entry that is not
+  the newest; a lock it cannot read as its rule expects (a malformed entry or digest, or a key
+  listed twice) also fails the step;
 - pytest on Python 3.12 and 3.13, then `scripts/check_junit.py --max-skipped 0`, which fails
   unless at least one test ran and none failed, errored, or was skipped (pytest reports `xfail`
   as skipped);

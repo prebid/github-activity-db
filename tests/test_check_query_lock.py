@@ -1,4 +1,4 @@
-"""The append-only check on tests/query_versions.json."""
+"""The append-only check on tests/query_versions.json and tests/schema_versions.json."""
 
 from __future__ import annotations
 
@@ -8,6 +8,7 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -216,18 +217,31 @@ def test_without_git_the_check_is_an_error_not_a_pass(repo: Path) -> None:
     assert "git is not on PATH" in result.stderr
 
 
-def write_schema_lock(repo: Path, entries: dict[str, list[list[str]]]) -> None:
+def write_schema_lock(repo: Path, entries: dict[str, Any]) -> None:
     path = repo / SCHEMA_LOCK
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(entries))
 
 
-V1 = {"1": [["pull_requests", "number"], ["v_pr_reviewers", "final_verdict"]]}
+V1: dict[str, Any] = {"1": [["pull_requests", "number"], ["v_pr_reviewers", "final_verdict"]]}
+V2: dict[str, Any] = {
+    **V1,
+    "2": {
+        "columns": [["pull_requests", "number"], ["v_pr_reviews", "state"]],
+        "views": {"v_pr_reviews": "a" * 64, "v_github_users": "b" * 64},
+    },
+}
+
+
+def with_views(views: dict[str, str], *, key: str = "2") -> dict[str, Any]:
+    """V2 with entry ``key``'s views replaced."""
+    entry = {**V2[key], "views": views} if key == "2" else V2[key]
+    return {**V2, key: entry}
 
 
 class TestSchemaLock:
-    """tests/schema_versions.json: entries and their pairs are kept; only the newest entry may
-    gain pairs."""
+    """tests/schema_versions.json: entries, their pairs, and their view digests are kept; only
+    the newest entry may gain pairs or views."""
 
     def test_a_pair_added_to_the_newest_entry_passes(self, repo: Path) -> None:
         write_schema_lock(repo, V1)
@@ -292,6 +306,126 @@ class TestSchemaLock:
         assert result.returncode == 1
         assert "schema version 1 was removed" in result.stderr
 
+    def test_a_pair_removed_from_an_object_entry_fails(self, repo: Path) -> None:
+        write_schema_lock(repo, V2)
+        commit(repo)
+        write_schema_lock(repo, {**V2, "2": {**V2["2"], "columns": [["pull_requests", "number"]]}})
+        result = check(repo)
+        assert result.returncode == 1
+        assert "schema version 2 lost v_pr_reviews.state" in result.stderr
+
+    def test_a_pair_added_to_the_newest_object_entry_passes(self, repo: Path) -> None:
+        write_schema_lock(repo, V2)
+        commit(repo)
+        columns = [*V2["2"]["columns"], ["pull_requests", "title"]]
+        write_schema_lock(repo, {**V2, "2": {**V2["2"], "columns": columns}})
+        result = check(repo)
+        assert result.returncode == 0, result.stderr
+
+    def test_a_pair_added_to_a_superseded_object_entry_fails(self, repo: Path) -> None:
+        write_schema_lock(repo, V2)
+        commit(repo)
+        columns = [*V2["2"]["columns"], ["pull_requests", "title"]]
+        write_schema_lock(repo, {**V2, "2": {**V2["2"], "columns": columns}, "3": V2["2"]})
+        result = check(repo)
+        assert result.returncode == 1
+        assert (
+            "schema version 2 gained pull_requests.title; only the newest version, 3, gains "
+            "columns" in result.stderr
+        )
+
+    @pytest.mark.parametrize(
+        ("current", "message"),
+        [
+            pytest.param(
+                {**with_views({**V2["2"]["views"], "v_pr_reviews": "c" * 64}), "3": V2["2"]},
+                "schema version 2 changed view v_pr_reviews",
+                id="changed digest",
+            ),
+            pytest.param(
+                {**with_views({"v_pr_reviews": "a" * 64}), "3": V2["2"]},
+                "schema version 2 lost view v_github_users",
+                id="removed view",
+            ),
+            pytest.param(
+                {**V2, "1": [["pull_requests", "number"]], "3": V2["2"]},
+                "schema version 1 lost v_pr_reviewers.final_verdict",
+                id="removed pair",
+            ),
+        ],
+    )
+    def test_an_edit_to_a_superseded_entry_fails(
+        self, repo: Path, current: dict[str, Any], message: str
+    ) -> None:
+        """The rule holds for every base entry, not only the newest one."""
+        write_schema_lock(repo, V2)
+        commit(repo)
+        write_schema_lock(repo, current)
+        result = check(repo)
+        assert result.returncode == 1
+        assert message in result.stderr
+
+    def test_a_view_added_to_the_newest_entry_passes(self, repo: Path) -> None:
+        write_schema_lock(repo, V2)
+        commit(repo)
+        write_schema_lock(repo, with_views({**V2["2"]["views"], "v_new": "c" * 64}))
+        result = check(repo)
+        assert result.returncode == 0, result.stderr
+
+    def test_a_changed_view_digest_fails(self, repo: Path) -> None:
+        write_schema_lock(repo, V2)
+        commit(repo)
+        write_schema_lock(repo, with_views({**V2["2"]["views"], "v_pr_reviews": "c" * 64}))
+        result = check(repo)
+        assert result.returncode == 1
+        assert "schema version 2 changed view v_pr_reviews" in result.stderr
+
+    def test_a_removed_view_fails(self, repo: Path) -> None:
+        write_schema_lock(repo, V2)
+        commit(repo)
+        write_schema_lock(repo, with_views({"v_pr_reviews": "a" * 64}))
+        result = check(repo)
+        assert result.returncode == 1
+        assert "schema version 2 lost view v_github_users" in result.stderr
+
+    def test_an_entry_rewritten_as_a_list_loses_its_views(self, repo: Path) -> None:
+        write_schema_lock(repo, V2)
+        commit(repo)
+        write_schema_lock(repo, {**V2, "2": V2["2"]["columns"]})
+        result = check(repo)
+        assert result.returncode == 1
+        assert "schema version 2 lost view v_github_users" in result.stderr
+        assert "schema version 2 lost view v_pr_reviews" in result.stderr
+
+    def test_a_view_added_to_a_superseded_entry_fails(self, repo: Path) -> None:
+        write_schema_lock(repo, V2)
+        commit(repo)
+        superseded = {"columns": V1["1"], "views": {"v_late": "d" * 64}}
+        write_schema_lock(repo, {**V2, "1": superseded, "3": V2["2"]})
+        result = check(repo)
+        assert result.returncode == 1
+        assert "schema version 1 gained view v_late; only the newest version, 3" in result.stderr
+
+    @pytest.mark.parametrize(
+        "entry",
+        [
+            {"columns": [], "views": {"v": "not-a-digest"}},
+            {"columns": [], "views": {"v": "A" * 64}},
+            {"columns": [], "views": []},
+            {"columns": [], "views": {}, "extra": 1},
+            {"views": {}},
+        ],
+        ids=["short digest", "upper-case digest", "views a list", "extra key", "no columns"],
+    )
+    def test_a_malformed_view_entry_is_an_error_not_a_pass(
+        self, repo: Path, entry: dict[str, Any]
+    ) -> None:
+        write_schema_lock(repo, V2)
+        commit(repo)
+        write_schema_lock(repo, {**V2, "2": entry})
+        result = check(repo)
+        assert result.returncode == 2, result.stderr
+
     @pytest.mark.parametrize(
         "text",
         [
@@ -301,6 +435,7 @@ class TestSchemaLock:
             "[]",
             '{"1": [], "v2": []}',
             '{"1": [], "02": []}',
+            '{"1": [], "1000000000": []}',
         ],
         ids=[
             "string entry",
@@ -309,6 +444,7 @@ class TestSchemaLock:
             "not an object",
             "version not a number",
             "version with a leading zero",
+            "version of ten digits",
         ],
     )
     def test_a_malformed_lock_is_an_error_not_a_pass(self, repo: Path, text: str) -> None:
@@ -317,6 +453,51 @@ class TestSchemaLock:
         (repo / SCHEMA_LOCK).write_text(text)
         result = check(repo)
         assert result.returncode == 2, result.stderr
+
+    @pytest.mark.parametrize(
+        ("lock", "text"),
+        [
+            pytest.param(
+                SCHEMA_LOCK,
+                '{"1": [["pull_requests", "number"], ["v_pr_reviewers", "final_verdict"]], '
+                '"2": {"columns": [], "views": {"v": "' + "c" * 64 + '"}}, '
+                '"2": {"columns": [["pull_requests", "number"]], "views": {"v_pr_reviews": "'
+                + "a" * 64
+                + '", "v_github_users": "'
+                + "b" * 64
+                + '"}}}',
+                id="schema version twice",
+            ),
+            pytest.param(
+                SCHEMA_LOCK,
+                '{"1": [["pull_requests", "number"], ["v_pr_reviewers", "final_verdict"]], '
+                '"2": {"columns": [], "views": {"v_pr_reviews": "'
+                + "c" * 64
+                + '", "v_pr_reviews": "'
+                + "a" * 64
+                + '", "v_github_users": "'
+                + "b" * 64
+                + '"}}}',
+                id="view twice",
+            ),
+            pytest.param(
+                LOCK,
+                '{"pull_request:1": "' + "c" * 64 + '", "pull_request:1": "' + "a" * 64 + '"}',
+                id="query version twice",
+            ),
+        ],
+    )
+    def test_a_key_listed_twice_is_an_error_not_a_pass(
+        self, repo: Path, lock: str, text: str
+    ) -> None:
+        """json.loads keeps the last of two equal keys, which would hide a changed first one."""
+        write_lock(repo, {"pull_request:1": "a" * 64})
+        write_schema_lock(repo, V2)
+        commit(repo)
+        (repo / lock).write_text(text)
+        result = check(repo)
+        assert result.returncode == 2, result.stderr
+        assert "listed twice" in result.stderr
 
     def test_both_locks_are_checked_by_default(self, repo: Path) -> None:
         write_lock(repo, {"pull_request:1": "a" * 64})
@@ -354,8 +535,9 @@ class TestSchemaLock:
         commit(repo)
         result = check(repo)
         assert result.returncode == 0, result.stderr
-        assert "tests/schema_versions.json: 1 entries at main kept; 1 entries now" in result.stdout
-        assert "tests/query_versions.json: 1 entries at main kept; 1 entries now" in result.stdout
+        for lock in (LOCK, SCHEMA_LOCK):
+            entries = len(json.loads((root / lock).read_text()))
+            assert f"{lock}: {entries} entries at main kept; {entries} entries now" in result.stdout
 
 
 # --------------------------------------------------------------------------------------------

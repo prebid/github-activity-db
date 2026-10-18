@@ -7,10 +7,13 @@ Two locks, each with its own rule:
   entry; this check keeps every entry at the base fixed, so a document change cannot reuse a
   version by editing its hash.
 - tests/schema_versions.json maps each schema version to its consumer (table or view, column)
-  pairs (plan 5.1). A test ties the current entry to the data dictionary; this check keeps every
-  entry at the base and every pair in it, so removing or renaming a consumer column needs a new
-  schema version. Pairs may be added to the newest entry only: an older version describes
-  databases that never had the added column.
+  pairs, and from version 2 to the SHA-256 of each consumer view's frozen SQL (plan 5.1): an
+  entry is a list of pairs, or an object with ``columns`` (that list) and ``views`` (view name to
+  digest, 64 lowercase hex characters). A test ties the current entry to the data dictionary,
+  and from Step 3b-1 to the views at head; this check keeps every entry at the base, every pair
+  in it, and every view digest in it, so removing or renaming a consumer column, or changing or
+  removing a view, needs a new schema version. Pairs and views may be added to the newest entry
+  only: an older version describes databases that never had them.
 
 Usage: check_query_lock.py --base <git ref> [--lock <one of the locks above>]
 
@@ -21,8 +24,8 @@ Exit 0 when every entry at <ref> is kept (new entries are fine, and so is a lock
 not exist at <ref>); 1 when an entry was changed or removed (deleting the lock removes them all);
 2 when the check cannot run: <ref> is not a commit, git is not on PATH, --lock is not one of the
 locks, git fails, or a lock file cannot be read as the JSON its rule expects (a schema version is
-a positive integer without leading zeros). A checkout without the base therefore never passes by
-default.
+a positive integer of at most nine digits without leading zeros, and no object lists a key
+twice). A checkout without the base therefore never passes by default.
 """
 
 from __future__ import annotations
@@ -45,10 +48,18 @@ class CannotCheck(Exception):
     """The check cannot run (exit 2)."""
 
 
+def _unique_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    """A JSON object whose keys are distinct: ``json.loads`` would keep the last of two."""
+    keys = [key for key, _ in pairs]
+    if repeated := sorted({key for key in keys if keys.count(key) > 1}):
+        raise ValueError(f"key listed twice: {', '.join(repeated)}")
+    return dict(pairs)
+
+
 def _object(text: str, where: str) -> dict[str, Any]:
     try:
-        entries = json.loads(text)
-    except ValueError as e:  # JSONDecodeError, and an integer past Python's digit limit
+        entries = json.loads(text, object_pairs_hook=_unique_keys)
+    except ValueError as e:  # JSONDecodeError, a repeated key, and an integer past the digit limit
         raise CannotCheck(f"{where} is not JSON: {e}") from e
     if not isinstance(entries, dict):
         raise CannotCheck(f"{where} is not a JSON object")
@@ -62,18 +73,40 @@ def digests(text: str, where: str) -> dict[str, str]:
     return entries
 
 
-def pairs(text: str, where: str) -> dict[str, set[tuple[str, str]]]:
+SchemaEntry = tuple[set[tuple[str, str]], dict[str, str]]
+
+
+def _pairs(value: object, key: str, where: str) -> set[tuple[str, str]]:
+    if not isinstance(value, list) or not all(
+        isinstance(pair, list) and len(pair) == 2 and all(isinstance(p, str) for p in pair)
+        for pair in value
+    ):
+        raise CannotCheck(f"{where}: {key} is not a list of [table, column] pairs")
+    return {(table, column) for table, column in value}
+
+
+def _views(value: object, key: str, where: str) -> dict[str, str]:
+    if not isinstance(value, dict) or not all(
+        isinstance(name, str) and isinstance(digest, str) and re.fullmatch(r"[0-9a-f]{64}", digest)
+        for name, digest in value.items()
+    ):
+        raise CannotCheck(f"{where}: {key} views is not an object of SHA-256 digests")
+    return dict(value)
+
+
+def schema_entries(text: str, where: str) -> dict[str, SchemaEntry]:
+    """Each version's consumer pairs and view digests; a list entry has no views."""
     entries = _object(text, where)
-    read: dict[str, set[tuple[str, str]]] = {}
+    read: dict[str, SchemaEntry] = {}
     for key, value in entries.items():
-        if re.fullmatch(r"[1-9][0-9]*", key) is None:
+        if re.fullmatch(r"[1-9][0-9]{0,8}", key) is None:
             raise CannotCheck(f"{where}: schema version {key!r} is not a positive integer")
-        if not isinstance(value, list) or not all(
-            isinstance(pair, list) and len(pair) == 2 and all(isinstance(p, str) for p in pair)
-            for pair in value
-        ):
-            raise CannotCheck(f"{where}: {key} is not a list of [table, column] pairs")
-        read[key] = {(table, column) for table, column in value}
+        if isinstance(value, dict):
+            if set(value) != {"columns", "views"}:
+                raise CannotCheck(f"{where}: {key} must have exactly columns and views")
+            read[key] = (_pairs(value["columns"], key, where), _views(value["views"], key, where))
+        else:
+            read[key] = (_pairs(value, key, where), {})
     return read
 
 
@@ -88,27 +121,42 @@ def digest_problems(base: dict[str, str], current: dict[str, str]) -> list[str]:
     return found
 
 
-def pair_problems(
-    base: dict[str, set[tuple[str, str]]], current: dict[str, set[tuple[str, str]]]
-) -> list[str]:
-    """Entries of ``base`` that ``current`` removed, pairs it removed from one, and pairs it
-    added to one that is not its newest."""
+def schema_problems(base: dict[str, SchemaEntry], current: dict[str, SchemaEntry]) -> list[str]:
+    """Entries of ``base`` that ``current`` removed; pairs and views it removed from one, and
+    view digests it changed; and pairs and views it added to one that is not its newest."""
     found = []
     newest = max(current, key=int, default=None)
-    for key, listed in sorted(base.items(), key=lambda entry: int(entry[0])):
+    for key, (listed, views) in sorted(base.items(), key=lambda entry: int(entry[0])):
         if key not in current:
             found.append(f"schema version {key} was removed; lock entries are append-only")
             continue
-        for table, column in sorted(listed - current[key]):
+        now_listed, now_views = current[key]
+        for table, column in sorted(listed - now_listed):
             found.append(
                 f"schema version {key} lost {table}.{column}; removing or renaming a consumer "
                 "column needs a new schema version"
             )
+        for name, digest in sorted(views.items()):
+            if name not in now_views:
+                found.append(
+                    f"schema version {key} lost view {name}; removing a view needs a new "
+                    "schema version"
+                )
+            elif now_views[name] != digest:
+                found.append(
+                    f"schema version {key} changed view {name}; a change to a view's rows or "
+                    "derivation needs a new schema version"
+                )
         if key != newest:
-            for table, column in sorted(current[key] - listed):
+            for table, column in sorted(now_listed - listed):
                 found.append(
                     f"schema version {key} gained {table}.{column}; only the newest version, "
                     f"{newest}, gains columns"
+                )
+            for name in sorted(now_views.keys() - views.keys()):
+                found.append(
+                    f"schema version {key} gained view {name}; only the newest version, "
+                    f"{newest}, gains views"
                 )
     return found
 
@@ -117,7 +165,7 @@ Reader = Callable[[str, str], dict[str, Any]]
 Rule = Callable[[dict[str, Any], dict[str, Any]], list[str]]
 LOCKS: dict[str, tuple[Reader, Rule]] = {
     QUERY_LOCK: (digests, digest_problems),
-    SCHEMA_LOCK: (pairs, pair_problems),
+    SCHEMA_LOCK: (schema_entries, schema_problems),
 }
 
 
