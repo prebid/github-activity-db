@@ -29,7 +29,7 @@ regenerate them with `ghactivity verify` once Step 3 lands.
 |------|-------|--------|
 | 1 | Guardrails | done (PR #5) |
 | 2 | GitHub source layer | done (PR #7) |
-| 3 | New schema, PR sync engine, cutover (pull requests 3a and 3b) | in progress: 3a done, 3b not started |
+| 3 | New schema, PR sync engine, cutover (pull requests 3a and 3b) | in progress: 3a done (PR #11), 3b not started |
 | 4 | Issues and closing-issue links | not started |
 | 5 | Full bootstrap and verification | not started |
 | 6 | Scheduled sync and publication | not started |
