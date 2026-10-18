@@ -43,13 +43,15 @@ uv run pytest                      # CI also runs Python 3.12, `alembic check`, 
 **Implemented:**
 - The tracked repositories listed in `src/github_activity_db/tracking.toml`
 - GitHub source layer (`src/github_activity_db/source/`, redesign plan Step 2): resolve, PR index,
-  batch hydration, user lookup, and rate-limit readings, with typed records
-- The Step 3 schema (plan 5.1, without issues): migration `33f8570f6540`, the `v_*` consumer
-  views, the data dictionary, and the schema-version lock
+  batch hydration, user lookup, and rate-limit readings, with typed records of every field
+  Step 3b-1 collects (`hydration_version` 2)
+- The Step 3 schema (plan 5.1, without issues): migrations `33f8570f6540` and `94a52e4f1d57`
+  (Step 3b-1, `schema_version` 2), the row-level `v_*` consumer views, the data dictionary, and
+  the schema-version lock with view digests
 - CLI commands: `ghactivity github rate-limit` and `ghactivity github test`
 
 **Not implemented yet:** nothing writes the new tables until the `sync` and `verify` commands
-(Step 3b). The tracked `github_activity.db` stays frozen at the first schema (D26).
+(Step 3b-2). The tracked `github_activity.db` stays frozen at the first schema (D26).
 
 **Planned in the redesign plan:** the sync engine and verify (Step 3b); GitHub Issues and
 closing-issue links (Step 4); scheduled sync and release publication (Step 6).
