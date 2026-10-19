@@ -167,7 +167,7 @@ def overflow_stamp(query: str, index: int, connection: str) -> str:
 def expected_overflow_stamp(connection: str) -> str:
     """What a current continuation of ``connection`` hashes to."""
     return documents.document_hash(
-        documents.overflow_continuation([documents.CONNECTIONS_BY_FIELD[connection]])
+        documents.overflow_continuation([documents.CONNECTIONS_BY_KEY[connection]])
     )
 
 

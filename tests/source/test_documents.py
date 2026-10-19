@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
-import json
+import re
 from pathlib import Path
 
 import pytest
 
 from github_activity_db.source import documents
+from github_activity_db.source.limits import OVERFLOW_ALIASES_PER_REQUEST
+from tests.data_dictionary import lock_checker
 from tests.source.graphql_cost import cost
 
 LOCK = Path(__file__).resolve().parent.parent / "query_versions.json"
@@ -29,7 +31,7 @@ class TestHydrationVersionLock:
     """``tests/query_versions.json`` ties each kind's version to its documents (plan Step 2)."""
 
     def test_current_documents_match_the_locked_hash(self) -> None:
-        lock = json.loads(LOCK.read_text())
+        lock = lock_checker().digests(LOCK.read_text(), str(LOCK))
         key = f"{documents.PULL_REQUEST_KIND}:{documents.PULL_REQUEST_HYDRATION_VERSION}"
         current = documents.document_hash(*documents.pull_request_documents())
         assert key in lock, f"add {key!r} to {LOCK.name}"
@@ -39,7 +41,7 @@ class TestHydrationVersionLock:
         )
 
     def test_lock_keys_name_a_kind_and_a_version(self) -> None:
-        for key, digest in json.loads(LOCK.read_text()).items():
+        for key, digest in lock_checker().digests(LOCK.read_text(), str(LOCK)).items():
             kind, version = key.split(":")
             assert kind == documents.PULL_REQUEST_KIND
             assert int(version) >= 1
@@ -64,7 +66,17 @@ class TestCost:
             (documents.RESOLVE, 1),
             (documents.REPOSITORY_LABELS, 1),
             (documents.USER_LOOKUP, 1),
-            (documents.overflow_continuation([documents.FILES] * 25), 1),
+            *(
+                (documents.overflow_continuation([connection] * 25), 1)
+                for connection in documents.PULL_REQUEST_CONNECTIONS
+            ),
+            # 25 aliases across every connection: still 1 point.
+            (
+                documents.overflow_continuation(
+                    ([*documents.PULL_REQUEST_CONNECTIONS] * 3)[:OVERFLOW_ALIASES_PER_REQUEST]
+                ),
+                1,
+            ),
         ],
     )
     def test_document_cost(self, document: str, points: int) -> None:
@@ -97,9 +109,64 @@ class TestDocuments:
         # PullRequest.databaseId and PullRequestReview.databaseId are deprecated (32-bit).
         assert "fullDatabaseId" in documents.REVIEWS.nodes
         assert "fullDatabaseId" in documents.PULL_REQUEST_INDEX
-        scalars = documents.normalize(documents.PULL_REQUEST_FIELDS).split("author {")[0]
-        assert " fullDatabaseId " in scalars
-        assert " databaseId " not in scalars
+        top = top_level_fields(documents.PULL_REQUEST_FIELDS)
+        assert "fullDatabaseId" in top
+        assert "databaseId" not in top
+        assert top_level_fields("fragment F on X { a b { databaseId } c(first: 1) { d } }") == [
+            "a",
+            "b",
+            "c",
+        ]
+
+    def test_the_user_linked_continuation_keeps_its_filter(self) -> None:
+        """The aliased connection continues with userLinkedOnly; the full list never has it."""
+        user_linked = documents.normalize(
+            documents.overflow_continuation([documents.USER_LINKED_CLOSING_ISSUES])
+        )
+        assert (
+            "userLinkedClosingIssues: closingIssuesReferences(first: 100, after: $after0, "
+            "userLinkedOnly: true)" in user_linked
+        )
+        full = documents.normalize(documents.overflow_continuation([documents.CLOSING_ISSUES]))
+        assert "closingIssuesReferences(first: 100, after: $after0)" in full
+        assert "userLinkedOnly" not in full
+        assert documents.normalize(documents.PULL_REQUEST_FIELDS).count("userLinkedOnly") == 1
+
+    def test_the_documents_select_the_plans_pull_request_fields(self) -> None:
+        """The fields plan 5.8 lists for Step 3b-1, every one at the pull request's top level."""
+        assert (
+            top_level_fields(documents.PULL_REQUEST_FIELDS)
+            == (
+                "id number fullDatabaseId state isDraft title body createdAt updatedAt mergedAt "
+                "closedAt lastEditedAt baseRefName baseRefOid headRefName headRefOid "
+                "isCrossRepository authorAssociation headRepository mergeCommit milestone "
+                "reviewDecision totalCommentsCount publishedAt includesCreatedEdit "
+                "maintainerCanModify headRepositoryOwner mergeable mergeStateStatus canBeRebased "
+                "potentialMergeCommit "
+                "stack stackEntry additions deletions changedFiles author mergedBy editor labels "
+                "closingIssuesReferences userLinkedClosingIssues reviews comments commits files "
+                "reviewRequests assignedActors"
+            ).split()
+        )
+
+
+def top_level_fields(fragment: str) -> list[str]:
+    """Field names (an alias where given) directly inside a fragment's outer braces."""
+    text = documents.normalize(fragment)
+    body = text[text.index("{") + 1 : text.rindex("}")]
+    names: list[str] = []
+    depth = 0
+    for token in re.findall(r"[{}()]|[A-Za-z_][A-Za-z0-9_]*:?", body):
+        if token in "{(":
+            depth += 1
+        elif token in "})":
+            depth -= 1
+        elif depth == 0:
+            if names and names[-1].endswith(":"):
+                names[-1] = names[-1][:-1]  # an alias names the field in the response
+            else:
+                names.append(token)
+    return names
 
 
 @pytest.mark.parametrize(

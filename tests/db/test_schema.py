@@ -24,7 +24,6 @@ from github_activity_db.db.models import (
     RepoSyncState,
     SyncFailure,
     SyncPending,
-    SyncRun,
 )
 from github_activity_db.source.records import AccountType, ReviewState
 from tests.db.alembic_support import alembic_config, query
@@ -86,7 +85,7 @@ class TestModelsComparison:
             for name, item in named_constraints(models_database, table).items()
             if " CHECK " in f" {item} "
         }
-        assert checks == set(CHECKS) | {"ck_pull_requests_merged_at_iff_merged"}
+        assert checks == set(CHECKS) | PAIRED_CHECKS
 
     @pytest.mark.parametrize(
         ("table", "old", "new"),
@@ -201,9 +200,11 @@ class TestViews:
         frozen = frozen_views(alembic_config(head_template))
         assert set(frozen) == {
             "v_github_users",
-            "v_pr_reviewers",
-            "v_pr_commenters",
+            "v_account_profiles",
+            "v_pr_reviews",
+            "v_pr_comments",
             "v_commit_authors",
+            "v_pr_relationships",
         }
         assert view_differences(head_template, frozen) == []
 
@@ -221,6 +222,22 @@ class TestViews:
             "not frozen v_extra",
             "differs v_github_users",
         ]
+
+    def test_whitespace_inside_a_literal_is_a_difference(
+        self, head_template: Path, tmp_path: Path
+    ) -> None:
+        tampered = _tampered(
+            head_template,
+            tmp_path / "tampered.db",
+            "CREATE VIEW v_literal AS SELECT 'a  b' AS value",
+            "CREATE VIEW v_kept AS SELECT 'a b' AS value",
+        )
+        frozen = {
+            **frozen_views(alembic_config(head_template)),
+            "v_literal": "\nCREATE VIEW v_literal AS SELECT 'a b' AS value\n",
+            "v_kept": "\nCREATE VIEW v_kept AS SELECT 'a b' AS value\n",
+        }
+        assert view_differences(tampered, frozen) == ["differs v_literal"]
 
 
 class TestObjectsOutsideTheComparison:
@@ -253,21 +270,85 @@ class TestObjectsOutsideTheComparison:
 # and these hold both to the plan.
 NULLABLE = frozenset(
     {
-        ("github_users", "deleted_at"),
+        ("repositories", "is_security_policy_enabled"),
+        ("repositories", "description"),
+        ("repositories", "homepage_url"),
+        ("repositories", "pushed_at"),
+        ("repositories", "archived_at"),
+        ("repositories", "disk_usage"),
+        ("repositories", "primary_language"),
+        ("repositories", "license_spdx_id"),
+        ("repo_labels", "description"),
+        ("repo_labels", "created_at"),
+        ("repo_labels", "updated_at"),
+        # Null only for an EnterpriseUserAccount, which has no databaseId (5.2).
+        ("github_users", "github_id"),
+        # Null until the account's first lookup.
+        ("github_users", "name"),
+        ("github_users", "created_at"),
+        ("github_users", "updated_at"),
+        ("github_users", "linked_user_github_id"),
+        ("github_users", "claimant_github_id"),
+        ("github_users", "not_found_at"),
+        # Every profile field, as GitHub's are, and the organization fields for a user.
+        ("account_profiles", "company"),
+        ("account_profiles", "location"),
+        ("account_profiles", "website_url"),
+        ("account_profiles", "description"),
+        ("account_profiles", "email"),
+        ("account_profiles", "twitter_username"),
+        ("account_profiles", "is_verified"),
+        ("account_profiles", "archived_at"),
+        ("account_profiles", "has_sponsors_listing"),
+        ("account_profiles", "pinned_items_remaining"),
         ("pull_requests", "author_id"),
         ("pull_requests", "merged_at"),
+        ("pull_requests", "closed_at"),
+        ("pull_requests", "published_at"),
+        ("pull_requests", "last_edited_at"),
+        ("pull_requests", "editor_id"),
         ("pull_requests", "merged_by_id"),
+        ("pull_requests", "head_repo_github_id"),
+        ("pull_requests", "head_repo_full_name"),
+        ("pull_requests", "head_repo_owner_node_id"),
+        ("pull_requests", "head_repo_owner_login"),
+        ("pull_requests", "merge_commit_oid"),
+        ("pull_requests", "milestone_number"),
+        ("pull_requests", "milestone_title"),
+        ("pull_requests", "review_decision"),
+        ("pull_requests", "potential_merge_commit_oid"),
+        ("pull_requests", "stack_node_id"),
+        ("pull_requests", "stack_number"),
+        ("pull_requests", "stack_size"),
+        ("pull_requests", "stack_base_ref_name"),
+        ("pull_requests", "stack_entry_node_id"),
+        ("pull_requests", "stack_position"),
+        ("pull_requests", "total_comments_count"),
         ("pr_reviews", "reviewer_id"),
+        ("pr_reviews", "submitted_at"),
+        ("pr_reviews", "published_at"),
+        ("pr_reviews", "last_edited_at"),
+        ("pr_reviews", "editor_id"),
+        ("pr_reviews", "commit_oid"),
         ("pr_comments", "author_id"),
+        ("pr_comments", "published_at"),
+        ("pr_comments", "last_edited_at"),
+        ("pr_comments", "editor_id"),
         ("pr_commits", "author_id"),
+        ("pr_commits", "linked_github_id"),
         # Optional in the source record (CommitRecord).
         ("pr_commits", "author_name"),
         ("pr_commits", "author_email"),
+        ("pr_review_requests", "request_github_id"),
+        ("pr_review_requests", "requested_type"),
+        ("pr_review_requests", "requested_github_id"),
+        ("pr_review_requests", "requested_node_id"),
+        ("pr_review_requests", "account_id"),
+        ("pr_review_requests", "team_slug"),
         ("sync_runs", "deadline_at"),
         ("sync_runs", "finished_at"),
         ("sync_runs", "exit_code"),
         ("sync_runs", "deletions_approved"),
-        ("sync_runs", "halt_reason"),
         ("repo_sync_state", "last_index_started_at"),
         ("repo_sync_state", "index_pr_total"),
         ("repo_sync_state", "index_issue_total"),
@@ -279,8 +360,10 @@ NULLABLE = frozenset(
     }
 )
 UNIQUE: dict[str, set[tuple[str, tuple[str, ...]]]] = {
-    "repositories": {("u", ("github_id",))},
+    "repositories": {("u", ("github_id",)), ("u", ("node_id",))},
+    "repo_labels": {("pk", ("repository_id", "node_id"))},
     "github_users": {("u", ("github_id",)), ("u", ("node_id",))},
+    "account_profiles": set(),  # its primary key, account_id, is the rowid
     "pull_requests": {("u", ("repository_id", "number")), ("u", ("github_id",))},
     "pr_labels": {("pk", ("pr_id", "name"))},
     "pr_reviews": {("u", ("github_id",))},
@@ -288,6 +371,8 @@ UNIQUE: dict[str, set[tuple[str, tuple[str, ...]]]] = {
     "pr_commits": {("pk", ("pr_id", "sha"))},
     "pr_files": {("pk", ("pr_id", "ordinal"))},
     "pr_closing_issues": {("pk", ("pr_id", "issue_repo_github_id", "issue_number"))},
+    "pr_review_requests": {("pk", ("pr_id", "ordinal"))},
+    "pr_assignees": {("pk", ("pr_id", "account_id"))},
     "automation_accounts": {("u", ("github_id",))},
     "automation_emails": {("u", ("email",))},
     "sync_runs": set(),
@@ -299,18 +384,23 @@ UNIQUE: dict[str, set[tuple[str, tuple[str, ...]]]] = {
     "pr_user_tags": {("pk", ("pr_id", "user_tag_id"))},
 }
 # References to repositories, pull_requests, and issues cascade; references to github_users are
-# set null (D3, D28).
+# set null, except those in a primary key, which cascade (5.1, D3, D28).
 DELETE_ACTIONS = {
     "repositories": "CASCADE",
     "pull_requests": "CASCADE",
     "issues": "CASCADE",
     "github_users": "SET NULL",
 }
-# References to other tables, which the rule does not cover.
+GITHUB_USERS_IN_A_PRIMARY_KEY = frozenset(
+    {("pr_assignees", "account_id"), ("account_profiles", "account_id")}
+)
+# References to other tables, which the rule does not cover: sync_runs takes the default.
 OUTSIDE_THE_DELETE_RULE = frozenset(
     {
         ("repo_sync_state", "last_run_id"),
         ("sync_pending", "run_id"),
+        ("automation_accounts", "run_id"),
+        ("automation_emails", "run_id"),
         ("pr_user_tags", "user_tag_id"),
     }
 )
@@ -321,10 +411,16 @@ def delete_rule_problems(
 ) -> tuple[set[tuple[str, str, str]], frozenset[tuple[str, str]]]:
     """References whose action breaks the rule, and the references the rule does not cover."""
     actions = delete_actions(database)
+
+    def expected(table: str, column: str, referenced: str) -> str:
+        if (table, column) in GITHUB_USERS_IN_A_PRIMARY_KEY:
+            return "CASCADE"
+        return DELETE_ACTIONS[referenced]
+
     wrong = {
         (table, column, action)
         for table, column, referenced, action in actions
-        if referenced in DELETE_ACTIONS and action != DELETE_ACTIONS[referenced]
+        if referenced in DELETE_ACTIONS and action != expected(table, column, referenced)
     }
     return wrong, frozenset(
         (table, column)
@@ -359,7 +455,42 @@ class TestPlanRules:
         assert nullable_columns(tampered) - NULLABLE == {("pr_files", "path")}
         assert unique_sets(tampered)["pr_reviews"] == set()
         assert delete_rule_problems(tampered) == (
-            {("pr_reviews", "reviewer_id", "CASCADE")},
+            {("pr_reviews", "editor_id", "CASCADE")},
+            OUTSIDE_THE_DELETE_RULE,
+        )
+
+    def test_the_cascade_exceptions_are_the_primary_key_references(
+        self, head_template: Path
+    ) -> None:
+        in_a_primary_key = {
+            (table, str(row[3]))
+            for table in schema_tables(head_template)
+            for row in query(head_template, f"PRAGMA foreign_key_list({table})")
+            if row[2] == "github_users"
+            and any(
+                column[1] == row[3] and column[5]
+                for column in query(head_template, f"PRAGMA table_info({table})")
+            )
+        }
+        assert in_a_primary_key == GITHUB_USERS_IN_A_PRIMARY_KEY
+
+    def test_a_primary_key_reference_set_null_is_reported(
+        self, head_template: Path, tmp_path: Path
+    ) -> None:
+        """The cascade exception is read per column: SET NULL on pr_assignees.account_id breaks
+        it."""
+        tampered = _tampered(
+            head_template,
+            tmp_path / "tampered.db",
+            *_redefined(
+                head_template,
+                "pr_assignees",
+                "REFERENCES github_users (id) ON DELETE CASCADE",
+                "REFERENCES github_users (id) ON DELETE SET NULL",
+            ),
+        )
+        assert delete_rule_problems(tampered) == (
+            {("pr_assignees", "account_id", "SET NULL")},
             OUTSIDE_THE_DELETE_RULE,
         )
 
@@ -417,21 +548,7 @@ class TestForeignKeyIndexes:
 
 
 def _sync_run(seed: Seed, **values: object) -> int:
-    row = {
-        "started_at": T0,
-        "status": "running",
-        "trigger": "manual",
-        "code_version": "test",
-        "graphql_points": 0,
-        "rest_calls": 0,
-        "items_planned": 0,
-        "items_hydrated": 0,
-        "items_deleted": 0,
-        "failures": 0,
-    }
-    result = seed.connection.execute(insert(SyncRun).values(**{**row, **values}))
-    assert result.inserted_primary_key is not None
-    return int(result.inserted_primary_key[0])
+    return seed.sync_run(**values)
 
 
 def _repo_sync_state(seed: Seed, outcome: str) -> None:
@@ -472,6 +589,13 @@ def _review(seed: Seed, state: str) -> None:
 
 
 Write = Callable[[Seed, str], object]
+# CHECKs tying two columns together, each with its own test below.
+PAIRED_CHECKS = frozenset(
+    {
+        "ck_pull_requests_merged_at_iff_merged",
+        "ck_github_users_github_id_null_iff_enterprise_account",
+    }
+)
 SYNC_STATUSES = ("running", "complete", "time_limited", "failed", "aborted")
 TRIGGERS = ("schedule", "workflow_dispatch", "manual")
 OUTCOMES = ("complete", "time_limited", "failed", "incomplete_index", "halted", "untracked")
@@ -482,12 +606,12 @@ CHECKS: dict[str, tuple[Write, tuple[str, ...], str]] = {
     "ck_github_users_type": (
         lambda seed, value: seed.user("u", type=value),
         get_args(AccountType),
-        "EnterpriseUserAccount",
+        "Ghost",
     ),
     "ck_pull_requests_state": (
         lambda seed, value: seed.pull_request(seed.repository(), 1, state=value),
-        ("OPEN",),
-        "CLOSED",
+        ("OPEN", "CLOSED"),
+        "QUEUED",
     ),
     "ck_pr_reviews_state": (_review, get_args(ReviewState), "PENDING"),
     "ck_automation_emails_email_lowercase": (
@@ -520,7 +644,7 @@ class TestCheckConstraints:
             for name, item in named_constraints(head_template, table).items()
             if name.startswith("ck_")
         }
-        assert at_head == set(CHECKS) | {"ck_pull_requests_merged_at_iff_merged"}
+        assert at_head == set(CHECKS) | PAIRED_CHECKS
 
     @pytest.mark.parametrize("name", sorted(CHECKS))
     def test_accepts_its_values_and_rejects_another(
@@ -557,6 +681,35 @@ class TestCheckConstraints:
             with pytest.raises(
                 IntegrityError,
                 match="CHECK constraint failed: ck_pull_requests_merged_at_iff_merged",
+            ):
+                write()
+
+
+class TestEnterpriseAccountId:
+    @pytest.mark.parametrize(
+        ("type_", "github_id", "accepted"),
+        [
+            ("EnterpriseUserAccount", None, True),
+            ("User", 4242, True),
+            ("EnterpriseUserAccount", 4242, False),
+            ("User", None, False),
+        ],
+        ids=["enterprise-without-id", "user-with-id", "enterprise-with-id", "user-without-id"],
+    )
+    def test_github_id_is_null_exactly_for_an_enterprise_account(
+        self, migrated_database: Path, type_: str, github_id: int | None, accepted: bool
+    ) -> None:
+        def write() -> None:
+            with connect(migrated_database) as connection:
+                Seed(connection).user("u", type=type_, github_id=github_id, node_id="EUA_x")
+
+        if accepted:
+            write()
+        else:
+            with pytest.raises(
+                IntegrityError,
+                match="CHECK constraint failed: "
+                "ck_github_users_github_id_null_iff_enterprise_account",
             ):
                 write()
 

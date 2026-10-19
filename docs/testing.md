@@ -48,7 +48,7 @@ tests/
 │   └── synthetic/           # Error responses: documented, observed, or constructed; each names which
 ├── data_dictionary.py       # Reader for docs/data-dictionary.md
 ├── query_versions.json      # hydration_version -> hash of the query documents
-├── schema_versions.json     # schema version -> consumer (table or view, column) pairs
+├── schema_versions.json     # schema version -> consumer (table or view, column) pairs, view digests
 ├── test_cli_app.py, test_cli_github.py   # The CLI, in process and through the installed script
 ├── test_data_dictionary.py  # The dictionary and the schema-version lock
 └── test_*.py                # Settings, logging, scripts, import boundaries, build inputs
@@ -78,11 +78,11 @@ tests/
   `docs/data-dictionary.md` with a migrated database in both directions.
   `tests/schema_versions.json` maps each schema version (`PRAGMA user_version`) to its consumer
   (table or view, column) pairs and, from version 2, to the SHA-256 of each view's frozen SQL;
-  a test fails when the current entry differs from the columns the dictionary marks consumer,
-  and on pull requests the CI step that checks the hydration-version lock rejects a removed
-  entry, a pair removed from one, and a view digest removed or changed in one, so removing or
-  renaming a consumer column, or changing a view, needs a new schema version. Pairs and views
-  may be added to the newest entry only.
+  a test fails when the current entry differs from the columns the dictionary marks consumer or
+  from the views at head, and on pull requests the CI step that checks the hydration-version
+  lock rejects a removed entry, a pair removed from one, and a view digest removed or changed in
+  one, so removing or renaming a consumer column, or changing a view, needs a new schema
+  version. Pairs and views may be added to the newest entry only.
 
 ## GitHub Source Layer: Recorded Responses
 
@@ -114,7 +114,10 @@ repository has more than 100.
   item or user lookup. It refuses a private repository and keeps response bodies plus the
   `date`, `retry-after`, and `x-ratelimit-*` headers, never request headers.
   `tests/source/recorder.py` lists the scenarios and why each was chosen. `--only rate-limits`
-  records the two rate-limit units alone and keeps every other unit. Readings differ between
+  records the two rate-limit units alone and keeps every other unit. `--only documents`, for a
+  change of the GraphQL documents, records every scenario and user again and replaces those
+  units, keeping the existing compare pages and rate-limit readings and adding a compare page
+  the recordings lack. Readings differ between
   recordings, so re-recording the rate limits (a full run does too) means updating the readings
   `tests/test_cli_github.py` asserts.
 - **Synthetic responses** (`tests/fixtures/source/synthetic/`) are error responses. Each file's
@@ -155,7 +158,7 @@ subprocess, for exit codes and tracebacks outside `CliRunner`.
 ```bash
 uv run pytest                                  # everything
 uv run pytest tests/db -v                      # one directory
-uv run pytest tests/db/test_views.py -k final_verdict
+uv run pytest tests/db/test_views.py -k relationships
 uv run pytest --junitxml="${TMPDIR:-/tmp}/junit.xml" \
   && uv run python scripts/check_junit.py "${TMPDIR:-/tmp}/junit.xml" --max-skipped 0
 ```

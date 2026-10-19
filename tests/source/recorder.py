@@ -7,7 +7,10 @@ fixtures are replaced only by a complete set. Response bodies and the headers th
 reads are kept; request headers, which carry the token, never are.
 
 ``--only rate-limits`` records the rate-limit readings alone and adds them to the existing
-recordings, leaving every other unit unchanged.
+recordings, leaving every other unit unchanged. ``--only documents`` records every scenario and
+user again for a change of the GraphQL documents and replaces those units, keeping the existing
+REST compare pages and rate-limit readings, whose requests did not change; a compare page the
+existing recordings lack is added.
 """
 
 from __future__ import annotations
@@ -41,7 +44,8 @@ class Scenario:
 # Each case names why it is recorded; tests refer to these numbers.
 SCENARIOS = (
     # Index: one page, and two pages (157 PRs).
-    Scenario("prebid", "go-gdpr", index=True),
+    # 21: comments created by email (createdViaEmail true), a review request, an assignee.
+    Scenario("prebid", "go-gdpr", index=True, numbers=(21,)),
     Scenario("prebid", "prebid-cache-java", index=True),
     Scenario(
         "prebid",
@@ -49,17 +53,29 @@ SCENARIOS = (
         numbers=(
             15724,  # dependabot as PR author (Bot) and as commit user (declared User)
             13481,  # changedFiles 2, files 3: one path listed twice
-            12975,  # null PR author; one of two comments from a deleted account
+            12975,  # null PR author; one of two comments with a null author
             13769,  # merged with null mergedBy
             11155,  # 101 commits: commit overflow through node(id:)
             8858,  # 254 commits: compare fallback, 3 pages
+            15771,  # closed without merge; a Bot and a User assigned; an editor
+            15753,  # a user-linked closing issue; reviews with inline comments
+            15735,  # an edited review
             999999,  # no such PR: NOT_FOUND alias
         ),
     ),
     Scenario("prebid", "prebid-server-java", numbers=(4637,)),  # a dismissed verdict
     Scenario("prebid", "prebid-mobile-ios", numbers=(851,)),  # 101 files: file overflow
-    Scenario("prebid", "salesagent", numbers=(1699,)),  # 106 reviews: review overflow
+    Scenario(
+        "prebid",
+        "salesagent",
+        numbers=(
+            1699,  # 106 reviews: review overflow
+            1649,  # in a milestone
+            2360,  # open, a review requested as code owner
+        ),
+    ),
     Scenario("prebid", "prebid-server", numbers=(4343,)),  # 109 comments: comment overflow
+    Scenario("prebid", "prebid-cache", numbers=(129,)),  # GitHub returns no head repository
     # 144 labels: a second label page. No tracked repository has more than 100 labels.
     Scenario("golang", "go"),
 )
@@ -67,8 +83,13 @@ SCENARIOS = (
 USERS = (
     "MDM6Qm90NDk2OTkzMzM=",  # dependabot, as GitActor.user returns it
     "MDQ6VXNlcjE2ODMxNzU=",  # patmmccann
+    "MDQ6VXNlcjY0NzcyNw==",  # muuki88: a profile with company, location, and website
+    "MDEyOk9yZ2FuaXphdGlvbjEzMjQyNzYw",  # prebid: an Organization profile
     "MDQ6VXNlcjk5OTk5OTk5OTk=",  # no such account: NOT_FOUND
 )
+
+# Units --only documents keeps: their REST and RateLimit requests did not change.
+KEPT_BY_DOCUMENTS = frozenset({"compare", "rate_limit", "rest_rate_limit"})
 
 
 class PrivateRepository(Exception):
@@ -163,8 +184,9 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Record the source-layer test fixtures.")
     parser.add_argument(
         "--only",
-        choices=("rate-limits",),
-        help="record only these units and add them to the existing recordings",
+        choices=("rate-limits", "documents"),
+        help="rate-limits: record the readings alone; documents: record every GraphQL unit "
+        "again, keeping the compare pages and rate-limit readings",
     )
     args = parser.parse_args(argv)
     token = os.environ.get("GITHUB_TOKEN")
@@ -176,12 +198,26 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     if args.only == "rate-limits":
         units = asyncio.run(record(token, scenarios=(), users=()))
+    elif args.only == "documents":
+        units = asyncio.run(record(token, rate_limits=False))
     else:
         units = asyncio.run(record(token))
     staging = RECORDED.with_name("recorded.new")
     shutil.rmtree(staging, ignore_errors=True)
     if args.only is not None:
         shutil.copytree(RECORDED, staging)
+    if args.only == "documents":
+        for path in list(staging.rglob("*.json")):
+            if Unit.load(path).kind not in KEPT_BY_DOCUMENTS:
+                path.unlink()
+        for directory in sorted(staging.rglob("*"), reverse=True):
+            if directory.is_dir() and not any(directory.iterdir()):
+                directory.rmdir()
+        units = [
+            unit
+            for unit in units
+            if unit.kind not in KEPT_BY_DOCUMENTS or not (staging / unit.path()).exists()
+        ]
     for unit in units:
         path = staging / unit.path()
         path.parent.mkdir(parents=True, exist_ok=True)

@@ -1,6 +1,21 @@
 {
   "data": {
     "additions": 141,
+    "assignedActors": {
+      "nodes": [
+        {
+          "__typename": "User",
+          "databaseId": 1683175,
+          "id": "MDQ6VXNlcjE2ODMxNzU=",
+          "login": "patmmccann"
+        }
+      ],
+      "pageInfo": {
+        "endCursor": "MQ",
+        "hasNextPage": false
+      },
+      "totalCount": 1
+    },
     "author": {
       "__typename": "User",
       "databaseId": 10151381,
@@ -11,7 +26,9 @@
     "baseRefName": "master",
     "baseRefOid": "55cbaa384a204334a72c264dc3344593dd13de2e",
     "body": "- **bump coveralls**\n- **make symlink**\n- **Fix symlink**\n\n<!--\nThank you for your pull request! \n\nPlease title your pull request like this: 'Module: Change', eg 'Fraggles Bid Adapter: support fragglerock'\n\nPlease make sure this PR is scoped to one change or you may be asked to resubmit. \n \nPlease make sure any added or changed code includes tests with greater than 80% code coverage. \n\nSee https://github.com/prebid/Prebid.js/blob/master/CONTRIBUTING.md#testing-prebidjs for documentation on testing Prebid.js.\n\nFor any user facing change, submit a link to a PR on the docs repo at https://github.com/prebid/prebid.github.io/\n-->\n\n## Type of change\n<!-- Remove items that don't apply and/or select an item by changing [ ] to [x] -->\n- [ ] Bugfix\n- [ ] Feature\n- [ ] New bidder adapter  <!--  IMPORTANT: also submit your bidder parameter documentation as noted in https://docs.prebid.org/dev-docs/bidder-adaptor.html#submitting-your-adapter -->\n- [ ] Updated bidder adapter  <!--  IMPORTANT: (1) consider whether you need to upgrade your bidder parameter documentation in https://github.com/prebid/prebid.github.io/tree/master/dev-docs/bidders and (2) if you have a Prebid Server adapter, please consider whether that should be updated as well. --> \n- [ ] Code style update (formatting, local variables)\n- [ ] Refactoring (no functional changes, no api changes)\n- [ ] Build related changes\n- [ ] CI related changes\n\n- [ ] Does this change affect user-facing APIs or examples documented on http://prebid.org?\n- [ ] Other\n\n## Description of change\n<!-- Describe the change proposed in this pull request -->\n\n<!-- For new bidder adapters, please provide the following\n- contact email of the adapter’s maintainer\n- test parameters for validating bids:\n```\n{\n  bidder: '<bidder name>',\n  params: {\n    // ...\n  }\n}\n```\n\nBe sure to test the integration with your adserver using the [Hello World](https://github.com/prebid/Prebid.js/blob/master/integrationExamples/gpt/hello_world.html) sample page. -->\n\n\n## Other information\n<!-- References to related PR or issue #s, @mentions of the person or team responsible for reviewing changes, etc. -->\n",
+    "canBeRebased": false,
     "changedFiles": 2,
+    "closedAt": "2025-07-01T14:55:24Z",
     "closingIssuesReferences": {
       "nodes": [],
       "pageInfo": {
@@ -99,6 +116,7 @@
     },
     "createdAt": "2025-07-01T14:51:49Z",
     "deletions": 381,
+    "editor": null,
     "files": {
       "nodes": [
         {
@@ -127,13 +145,24 @@
       "totalCount": 3
     },
     "fullDatabaseId": "2632763795",
+    "headRefName": "claudesymlink",
     "headRefOid": "cfa0b27d26e3f4bdd0cce3750ec0290b7ecfaf12",
+    "headRepository": {
+      "databaseId": 39321023,
+      "nameWithOwner": "prebid/Prebid.js"
+    },
+    "headRepositoryOwner": {
+      "id": "MDEyOk9yZ2FuaXphdGlvbjEzMjQyNzYw",
+      "login": "prebid"
+    },
     "id": "PR_kwDOAlf9v86c7MmT",
+    "includesCreatedEdit": false,
     "isCrossRepository": false,
     "isDraft": false,
     "labels": {
       "nodes": [
         {
+          "id": "MDU6TGFiZWwyNTA1NjgzNzc4",
           "name": "maintenance"
         }
       ],
@@ -143,6 +172,13 @@
       },
       "totalCount": 1
     },
+    "lastEditedAt": null,
+    "maintainerCanModify": false,
+    "mergeCommit": {
+      "oid": "db92ad4bdc15199e7e10f33bb89898555f37b6e3"
+    },
+    "mergeStateStatus": "UNKNOWN",
+    "mergeable": "UNKNOWN",
     "mergedAt": "2025-07-01T14:55:24Z",
     "mergedBy": {
       "__typename": "User",
@@ -150,7 +186,19 @@
       "id": "MDQ6VXNlcjE2ODMxNzU=",
       "login": "patmmccann"
     },
+    "milestone": null,
     "number": 13481,
+    "potentialMergeCommit": null,
+    "publishedAt": "2025-07-01T14:51:49Z",
+    "reviewDecision": "APPROVED",
+    "reviewRequests": {
+      "nodes": [],
+      "pageInfo": {
+        "endCursor": null,
+        "hasNextPage": false
+      },
+      "totalCount": 0
+    },
     "reviews": {
       "nodes": [
         {
@@ -160,8 +208,24 @@
             "id": "MDQ6VXNlcjE2ODMxNzU=",
             "login": "patmmccann"
           },
+          "authorAssociation": "MEMBER",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 0
+          },
+          "commit": {
+            "oid": "cfa0b27d26e3f4bdd0cce3750ec0290b7ecfaf12"
+          },
+          "createdAt": "2025-07-01T14:54:47Z",
+          "editor": null,
           "fullDatabaseId": "2975840076",
-          "state": "APPROVED"
+          "id": "PRR_kwDOAlf9v86xX7dM",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2025-07-01T14:54:47Z",
+          "state": "APPROVED",
+          "submittedAt": "2025-07-01T14:54:47Z",
+          "updatedAt": "2025-07-01T14:54:47Z"
         }
       ],
       "pageInfo": {
@@ -170,20 +234,31 @@
       },
       "totalCount": 1
     },
+    "stack": null,
+    "stackEntry": null,
     "state": "MERGED",
     "title": "link CLAUDE.md to AGENTS.md",
-    "updatedAt": "2025-07-01T14:55:26Z"
+    "totalCommentsCount": 0,
+    "updatedAt": "2025-07-01T14:55:26Z",
+    "userLinkedClosingIssues": {
+      "nodes": [],
+      "pageInfo": {
+        "endCursor": null,
+        "hasNextPage": false
+      },
+      "totalCount": 0
+    }
   },
-  "document_sha256": "39fd2b5d7744d57be4fd58ba38b2fcf50319c5bd19e1c3796ae4771203af3ea0",
+  "document_sha256": "3527b3fa77b23d4166d3a8a063506be04f20c8bec7cee75e2bf801d0d608c26c",
   "errors": [],
   "extra": {},
   "headers": {
-    "date": "Sat, 17 Oct 2026 12:09:24 GMT",
+    "date": "Sun, 18 Oct 2026 21:11:51 GMT",
     "x-ratelimit-limit": "5000",
-    "x-ratelimit-remaining": "4929",
-    "x-ratelimit-reset": "1792241340",
+    "x-ratelimit-remaining": "4971",
+    "x-ratelimit-reset": "1792360091",
     "x-ratelimit-resource": "graphql",
-    "x-ratelimit-used": "71"
+    "x-ratelimit-used": "29"
   },
   "key": {
     "name": "Prebid.js",
@@ -191,6 +266,6 @@
     "owner": "prebid"
   },
   "kind": "pull_request",
-  "recorded_at": "2026-10-17T12:09:19Z",
+  "recorded_at": "2026-10-18T21:11:43Z",
   "source": "live"
 }

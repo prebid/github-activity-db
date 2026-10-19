@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import sqlite3
 from contextlib import closing
 from pathlib import Path
@@ -13,13 +15,21 @@ from github_activity_db.db.schema import SCHEMA_VERSION
 from tests.data_dictionary import (
     DICTIONARY,
     DictionaryError,
+    LockEntry,
     consumer_pairs,
     database_columns,
     differences,
+    lock_checker,
+    lock_columns,
     lock_differences,
+    lock_views,
+    parse_lock,
     read_dictionary,
     read_lock,
+    view_digest,
 )
+from tests.db.alembic_support import alembic_config
+from tests.db.schema_support import frozen_views, views
 
 ENTRY = """\
 ## Tables
@@ -41,15 +51,31 @@ ENTRY = """\
 """
 
 
-# Sync bookkeeping, the tag tables nothing writes yet (D17), and alembic's own table.
-INTERNAL_TABLES = (
-    "sync_runs",
-    "repo_sync_state",
-    "sync_pending",
-    "sync_failures",
-    "user_tags",
-    "pr_user_tags",
-    "alembic_version",
+# The tag tables nothing writes yet (D17), and alembic's own table.
+INTERNAL_TABLES = ("user_tags", "pr_user_tags", "alembic_version")
+# Gap 86: the columns that say how current a row is, or that an item failed, are consumer; the
+# run counters are internal (plan 5.1, consumer interface).
+CURRENCY_COLUMNS = (
+    ("pull_requests", "github_updated_at"),
+    ("pull_requests", "hydrated_at"),
+    ("pull_requests", "hydration_version"),
+    ("repositories", "resolved_at"),
+    ("github_users", "refreshed_at"),
+    ("account_profiles", "refreshed_at"),
+    ("sync_failures", "repository_id"),
+    ("sync_failures", "item_kind"),
+    ("sync_failures", "number"),
+    ("sync_failures", "last_error"),
+    ("sync_failures", "first_failed_at"),
+    ("sync_failures", "last_failed_at"),
+)
+RUN_COUNTERS = (
+    "graphql_points",
+    "rest_calls",
+    "items_planned",
+    "items_hydrated",
+    "items_deleted",
+    "failures",
 )
 
 
@@ -63,19 +89,58 @@ class TestDictionary:
         self, entries: dict[str, dict[str, str]], head_template: Path
     ) -> None:
         at_head = database_columns(head_template)
-        assert {"alembic_version", "pull_requests", "v_pr_reviewers"} <= at_head.keys()
+        assert {"alembic_version", "pull_requests", "v_pr_relationships"} <= at_head.keys()
         assert differences(entries, at_head) == []
 
     def test_every_view_column_is_consumer(self, entries: dict[str, dict[str, str]]) -> None:
         views = {name: columns for name, columns in entries.items() if name.startswith("v_")}
-        assert len(views) == 4
+        assert len(views) == 6
         assert {use for columns in views.values() for use in columns.values()} == {"consumer"}
 
-    def test_bookkeeping_tag_and_migration_tables_are_internal(
+    def test_tag_and_migration_tables_are_internal(
         self, entries: dict[str, dict[str, str]]
     ) -> None:
         for table in INTERNAL_TABLES:
             assert set(entries[table].values()) == {"internal"}, table
+
+    def test_the_columns_that_say_how_current_a_row_is_are_consumer(
+        self, entries: dict[str, dict[str, str]]
+    ) -> None:
+        for table, column in CURRENCY_COLUMNS:
+            assert entries[table][column] == "consumer", (table, column)
+        for table in ("repo_sync_state", "sync_pending"):
+            assert set(entries[table].values()) == {"consumer"}, table
+        sync_runs = entries["sync_runs"]
+        assert {column for column, use in sync_runs.items() if use == "internal"} == set(
+            RUN_COUNTERS
+        )
+
+    def test_every_github_derived_column_of_a_mirror_table_is_consumer(
+        self, entries: dict[str, dict[str, str]]
+    ) -> None:
+        """Plan 5.1: the mirror tables' internal columns are row ids nothing references."""
+        mirror = (
+            "repositories",
+            "repo_labels",
+            "github_users",
+            "account_profiles",
+            "pull_requests",
+            "pr_labels",
+            "pr_reviews",
+            "pr_comments",
+            "pr_commits",
+            "pr_files",
+            "pr_closing_issues",
+            "pr_review_requests",
+            "pr_assignees",
+        )
+        internal = {
+            (table, column)
+            for table in mirror
+            for column, use in entries[table].items()
+            if use == "internal"
+        }
+        assert internal == {("pr_reviews", "id"), ("pr_comments", "id")}
 
     def test_row_ids_are_consumer_exactly_where_consumers_join_on_them(
         self, entries: dict[str, dict[str, str]]
@@ -198,7 +263,71 @@ class TestSchemaLock:
     ) -> None:
         lock = read_lock()
         assert sorted(lock, key=int) == [str(v) for v in range(1, SCHEMA_VERSION + 1)]
-        assert lock_differences(lock[str(SCHEMA_VERSION)], consumer_pairs(entries)) == []
+        current = lock_columns(lock[str(SCHEMA_VERSION)])
+        assert lock_differences(current, consumer_pairs(entries)) == []
+
+    def test_the_current_entry_holds_the_digest_of_every_view_at_head(
+        self, head_template: Path
+    ) -> None:
+        frozen = frozen_views(alembic_config(head_template))
+        assert set(frozen) == set(views(head_template))
+        expected = {name: view_digest(sql) for name, sql in frozen.items()}
+        assert lock_views(read_lock()[str(SCHEMA_VERSION)]) == expected
+
+    @pytest.mark.parametrize(
+        "text",
+        [
+            '{"2": {"columns": [], "views": {}}, "2": {"columns": [], "views": {}}}',
+            '{"2": {"columns": [], "views": {"v": "a", "v": "b"}}}',
+        ],
+        ids=["version twice", "view twice"],
+    )
+    def test_a_key_listed_twice_is_refused(self, text: str) -> None:
+        with pytest.raises(lock_checker().CannotCheck, match="listed twice"):
+            parse_lock(text)
+
+    def test_the_lock_reads_without_repeated_keys(self) -> None:
+        assert parse_lock('{"1": [["t", "c"]]}') == {"1": ({("t", "c")}, {})}
+
+    @pytest.mark.parametrize(
+        ("before", "after"),
+        [
+            pytest.param(
+                "CREATE VIEW v AS SELECT 'a  b' AS value",
+                "CREATE VIEW v AS SELECT 'a b' AS value",
+                id="whitespace in a literal",
+            ),
+            pytest.param(
+                "CREATE VIEW v AS SELECT 1 AS value -- explanation\nWHERE 0",
+                "CREATE VIEW v AS SELECT 1 AS value -- explanation WHERE 0",
+                id="the end of a line comment",
+            ),
+        ],
+    )
+    def test_a_view_returning_other_rows_fails_the_lock(self, before: str, after: str) -> None:
+        """Two definitions that differ only in whitespace but return different rows get different
+        digests, so the checker reports the view as changed."""
+
+        def rows(sql: str) -> list[tuple[object, ...]]:
+            with closing(sqlite3.connect(":memory:")) as connection:
+                connection.execute(sql)
+                return connection.execute("SELECT * FROM v").fetchall()
+
+        def entry(sql: str) -> dict[str, LockEntry]:
+            return parse_lock(
+                json.dumps({"2": {"columns": [["v", "value"]], "views": {"v": view_digest(sql)}}})
+            )
+
+        assert rows(before) != rows(after)
+        assert lock_checker().schema_problems(entry(before), entry(after)) == [
+            "schema version 2 changed view v; a change to a view's rows or derivation needs a "
+            "new schema version"
+        ]
+
+    def test_the_digest_is_of_the_exact_sql(self) -> None:
+        sql = "CREATE VIEW v AS SELECT a FROM t"
+        assert view_digest(sql) == hashlib.sha256(sql.encode()).hexdigest()
+        assert view_digest(sql) != view_digest("CREATE VIEW v AS\n  SELECT a\nFROM t")
 
     def test_a_listed_pair_that_is_not_consumer_at_head_is_reported(self) -> None:
         consumer = consumer_pairs(read_dictionary(ENTRY))

@@ -1,15 +1,33 @@
 {
   "data": {
     "additions": 93,
+    "assignedActors": {
+      "nodes": [
+        {
+          "__typename": "User",
+          "databaseId": 10151381,
+          "id": "MDQ6VXNlcjEwMTUxMzgx",
+          "login": "dgirardi"
+        }
+      ],
+      "pageInfo": {
+        "endCursor": "MQ",
+        "hasNextPage": false
+      },
+      "totalCount": 1
+    },
     "author": null,
     "authorAssociation": "NONE",
     "baseRefName": "master",
     "baseRefOid": "063d88e2abcaf27cf25ece9c064994dc7d513eed",
     "body": "## Type of change\r\n- [x] Bugfix\r\n\r\n## Description of change\r\nIt assures that styling is added to the iframe even in case of the interstitial ads, as it was working fine for on page units but overriding 1px in styling\r\n\r\n## Other information\r\nCloses #12914 \r\n",
+    "canBeRebased": false,
     "changedFiles": 9,
+    "closedAt": "2025-04-08T18:41:03Z",
     "closingIssuesReferences": {
       "nodes": [
         {
+          "fullDatabaseId": "2942653924",
           "number": 12914,
           "repository": {
             "databaseId": 39321023,
@@ -32,11 +50,34 @@
             "id": "MDQ6VXNlcjEwMTUxMzgx",
             "login": "dgirardi"
           },
-          "fullDatabaseId": "2787188944"
+          "authorAssociation": "MEMBER",
+          "createdAt": "2025-04-08T17:33:20Z",
+          "createdViaEmail": false,
+          "editor": {
+            "__typename": "User",
+            "databaseId": 10151381,
+            "id": "MDQ6VXNlcjEwMTUxMzgx",
+            "login": "dgirardi"
+          },
+          "fullDatabaseId": "2787188944",
+          "id": "IC_kwDOAlf9v86mISDQ",
+          "includesCreatedEdit": true,
+          "lastEditedAt": "2025-04-08T17:34:23Z",
+          "publishedAt": "2025-04-08T17:33:20Z",
+          "updatedAt": "2025-04-08T17:34:23Z"
         },
         {
           "author": null,
-          "fullDatabaseId": "2787199734"
+          "authorAssociation": "NONE",
+          "createdAt": "2025-04-08T17:37:54Z",
+          "createdViaEmail": false,
+          "editor": null,
+          "fullDatabaseId": "2787199734",
+          "id": "IC_kwDOAlf9v86mIUr2",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2025-04-08T17:37:54Z",
+          "updatedAt": "2025-04-08T17:37:54Z"
         }
       ],
       "pageInfo": {
@@ -251,6 +292,7 @@
     },
     "createdAt": "2025-04-08T07:42:43Z",
     "deletions": 9,
+    "editor": null,
     "files": {
       "nodes": [
         {
@@ -315,13 +357,18 @@
       "totalCount": 9
     },
     "fullDatabaseId": "2445130198",
+    "headRefName": "bug-adRendering",
     "headRefOid": "71215638127c084723ab2d75d046fb39765bdc2a",
+    "headRepository": null,
+    "headRepositoryOwner": null,
     "id": "PR_kwDOAlf9v86RvbnW",
+    "includesCreatedEdit": true,
     "isCrossRepository": true,
     "isDraft": false,
     "labels": {
       "nodes": [
         {
+          "id": "MDU6TGFiZWwyNTU0MjQ0Mzk2",
           "name": "bugfix"
         }
       ],
@@ -331,6 +378,13 @@
       },
       "totalCount": 1
     },
+    "lastEditedAt": "2025-04-08T08:47:38Z",
+    "maintainerCanModify": false,
+    "mergeCommit": {
+      "oid": "8d426403f02a9b2c4843853af49ddff8c111f92b"
+    },
+    "mergeStateStatus": "UNKNOWN",
+    "mergeable": "UNKNOWN",
     "mergedAt": "2025-04-08T18:41:03Z",
     "mergedBy": {
       "__typename": "User",
@@ -338,7 +392,19 @@
       "id": "MDQ6VXNlcjM0NDQ3Mjc=",
       "login": "ChrisHuie"
     },
+    "milestone": null,
     "number": 12975,
+    "potentialMergeCommit": null,
+    "publishedAt": "2025-04-08T07:42:43Z",
+    "reviewDecision": "APPROVED",
+    "reviewRequests": {
+      "nodes": [],
+      "pageInfo": {
+        "endCursor": null,
+        "hasNextPage": false
+      },
+      "totalCount": 0
+    },
     "reviews": {
       "nodes": [
         {
@@ -348,18 +414,66 @@
             "id": "MDQ6VXNlcjEwMTUxMzgx",
             "login": "dgirardi"
           },
+          "authorAssociation": "MEMBER",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 2
+          },
+          "commit": {
+            "oid": "64739292537f292976f4f40271cd2d613ce23a87"
+          },
+          "createdAt": "2025-04-08T14:20:05Z",
+          "editor": null,
           "fullDatabaseId": "2750179613",
-          "state": "COMMENTED"
+          "id": "PRR_kwDOAlf9v86j7Gkd",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2025-04-08T14:20:05Z",
+          "state": "COMMENTED",
+          "submittedAt": "2025-04-08T14:28:27Z",
+          "updatedAt": "2025-04-08T14:28:27Z"
         },
         {
           "author": null,
+          "authorAssociation": "NONE",
+          "authorCanPushToRepository": false,
+          "comments": {
+            "totalCount": 1
+          },
+          "commit": {
+            "oid": "64739292537f292976f4f40271cd2d613ce23a87"
+          },
+          "createdAt": "2025-04-08T14:36:48Z",
+          "editor": null,
           "fullDatabaseId": "2750241537",
-          "state": "COMMENTED"
+          "id": "PRR_kwDOAlf9v86j7VsB",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2025-04-08T14:36:48Z",
+          "state": "COMMENTED",
+          "submittedAt": "2025-04-08T14:36:48Z",
+          "updatedAt": "2025-04-08T14:36:48Z"
         },
         {
           "author": null,
+          "authorAssociation": "NONE",
+          "authorCanPushToRepository": false,
+          "comments": {
+            "totalCount": 1
+          },
+          "commit": {
+            "oid": "64739292537f292976f4f40271cd2d613ce23a87"
+          },
+          "createdAt": "2025-04-08T14:38:00Z",
+          "editor": null,
           "fullDatabaseId": "2750246900",
-          "state": "COMMENTED"
+          "id": "PRR_kwDOAlf9v86j7W_0",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2025-04-08T14:38:00Z",
+          "state": "COMMENTED",
+          "submittedAt": "2025-04-08T14:38:01Z",
+          "updatedAt": "2025-04-08T14:38:01Z"
         },
         {
           "author": {
@@ -368,18 +482,66 @@
             "id": "MDQ6VXNlcjEwMTUxMzgx",
             "login": "dgirardi"
           },
+          "authorAssociation": "MEMBER",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 1
+          },
+          "commit": {
+            "oid": "64739292537f292976f4f40271cd2d613ce23a87"
+          },
+          "createdAt": "2025-04-08T15:29:47Z",
+          "editor": null,
           "fullDatabaseId": "2750432703",
-          "state": "COMMENTED"
+          "id": "PRR_kwDOAlf9v86j8EW_",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2025-04-08T15:29:47Z",
+          "state": "COMMENTED",
+          "submittedAt": "2025-04-08T15:29:47Z",
+          "updatedAt": "2025-04-08T15:29:47Z"
         },
         {
           "author": null,
+          "authorAssociation": "NONE",
+          "authorCanPushToRepository": false,
+          "comments": {
+            "totalCount": 1
+          },
+          "commit": {
+            "oid": "64739292537f292976f4f40271cd2d613ce23a87"
+          },
+          "createdAt": "2025-04-08T15:34:56Z",
+          "editor": null,
           "fullDatabaseId": "2750451049",
-          "state": "COMMENTED"
+          "id": "PRR_kwDOAlf9v86j8I1p",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2025-04-08T15:34:56Z",
+          "state": "COMMENTED",
+          "submittedAt": "2025-04-08T15:34:57Z",
+          "updatedAt": "2025-04-08T15:34:57Z"
         },
         {
           "author": null,
+          "authorAssociation": "NONE",
+          "authorCanPushToRepository": false,
+          "comments": {
+            "totalCount": 1
+          },
+          "commit": {
+            "oid": "64739292537f292976f4f40271cd2d613ce23a87"
+          },
+          "createdAt": "2025-04-08T15:39:08Z",
+          "editor": null,
           "fullDatabaseId": "2750473687",
-          "state": "COMMENTED"
+          "id": "PRR_kwDOAlf9v86j8OXX",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2025-04-08T15:39:08Z",
+          "state": "COMMENTED",
+          "submittedAt": "2025-04-08T15:39:08Z",
+          "updatedAt": "2025-04-08T15:39:08Z"
         },
         {
           "author": {
@@ -388,13 +550,45 @@
             "id": "MDQ6VXNlcjEwMTUxMzgx",
             "login": "dgirardi"
           },
+          "authorAssociation": "MEMBER",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 1
+          },
+          "commit": {
+            "oid": "64739292537f292976f4f40271cd2d613ce23a87"
+          },
+          "createdAt": "2025-04-08T15:49:23Z",
+          "editor": null,
           "fullDatabaseId": "2750509740",
-          "state": "COMMENTED"
+          "id": "PRR_kwDOAlf9v86j8XKs",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2025-04-08T15:49:23Z",
+          "state": "COMMENTED",
+          "submittedAt": "2025-04-08T15:49:24Z",
+          "updatedAt": "2025-04-08T15:49:24Z"
         },
         {
           "author": null,
+          "authorAssociation": "NONE",
+          "authorCanPushToRepository": false,
+          "comments": {
+            "totalCount": 1
+          },
+          "commit": {
+            "oid": "64739292537f292976f4f40271cd2d613ce23a87"
+          },
+          "createdAt": "2025-04-08T16:00:13Z",
+          "editor": null,
           "fullDatabaseId": "2750550597",
-          "state": "COMMENTED"
+          "id": "PRR_kwDOAlf9v86j8hJF",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2025-04-08T16:00:13Z",
+          "state": "COMMENTED",
+          "submittedAt": "2025-04-08T16:00:13Z",
+          "updatedAt": "2025-04-08T16:00:13Z"
         },
         {
           "author": {
@@ -403,8 +597,24 @@
             "id": "MDQ6VXNlcjEwMTUxMzgx",
             "login": "dgirardi"
           },
+          "authorAssociation": "MEMBER",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 0
+          },
+          "commit": {
+            "oid": "71215638127c084723ab2d75d046fb39765bdc2a"
+          },
+          "createdAt": "2025-04-08T17:48:44Z",
+          "editor": null,
           "fullDatabaseId": "2750912824",
-          "state": "APPROVED"
+          "id": "PRR_kwDOAlf9v86j95k4",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2025-04-08T17:48:44Z",
+          "state": "APPROVED",
+          "submittedAt": "2025-04-08T17:48:44Z",
+          "updatedAt": "2025-04-08T17:48:44Z"
         },
         {
           "author": {
@@ -413,8 +623,24 @@
             "id": "MDQ6VXNlcjM0NDQ3Mjc=",
             "login": "ChrisHuie"
           },
+          "authorAssociation": "MEMBER",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 0
+          },
+          "commit": {
+            "oid": "71215638127c084723ab2d75d046fb39765bdc2a"
+          },
+          "createdAt": "2025-04-08T18:40:56Z",
+          "editor": null,
           "fullDatabaseId": "2751076926",
-          "state": "APPROVED"
+          "id": "PRR_kwDOAlf9v86j-ho-",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2025-04-08T18:40:56Z",
+          "state": "APPROVED",
+          "submittedAt": "2025-04-08T18:40:56Z",
+          "updatedAt": "2025-04-08T18:40:56Z"
         }
       ],
       "pageInfo": {
@@ -423,20 +649,31 @@
       },
       "totalCount": 10
     },
+    "stack": null,
+    "stackEntry": null,
     "state": "MERGED",
     "title": "Bugfix: Update adRendering.js styling for iframe in case of insterstitial ads",
-    "updatedAt": "2025-04-08T18:41:04Z"
+    "totalCommentsCount": 11,
+    "updatedAt": "2025-04-08T18:41:04Z",
+    "userLinkedClosingIssues": {
+      "nodes": [],
+      "pageInfo": {
+        "endCursor": null,
+        "hasNextPage": false
+      },
+      "totalCount": 0
+    }
   },
-  "document_sha256": "39fd2b5d7744d57be4fd58ba38b2fcf50319c5bd19e1c3796ae4771203af3ea0",
+  "document_sha256": "3527b3fa77b23d4166d3a8a063506be04f20c8bec7cee75e2bf801d0d608c26c",
   "errors": [],
   "extra": {},
   "headers": {
-    "date": "Sat, 17 Oct 2026 12:09:24 GMT",
+    "date": "Sun, 18 Oct 2026 21:11:51 GMT",
     "x-ratelimit-limit": "5000",
-    "x-ratelimit-remaining": "4929",
-    "x-ratelimit-reset": "1792241340",
+    "x-ratelimit-remaining": "4971",
+    "x-ratelimit-reset": "1792360091",
     "x-ratelimit-resource": "graphql",
-    "x-ratelimit-used": "71"
+    "x-ratelimit-used": "29"
   },
   "key": {
     "name": "Prebid.js",
@@ -444,6 +681,6 @@
     "owner": "prebid"
   },
   "kind": "pull_request",
-  "recorded_at": "2026-10-17T12:09:19Z",
+  "recorded_at": "2026-10-18T21:11:43Z",
   "source": "live"
 }

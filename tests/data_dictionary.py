@@ -2,17 +2,21 @@
 
 from __future__ import annotations
 
-import json
+import functools
+import hashlib
+import importlib.util
 import re
 import sqlite3
 from contextlib import closing
 from pathlib import Path
+from types import ModuleType
 
 from tests.db.schema_support import user_objects
 
 ROOT = Path(__file__).resolve().parents[1]
 DICTIONARY = ROOT / "docs" / "data-dictionary.md"
 SCHEMA_LOCK = ROOT / "tests" / "schema_versions.json"
+CHECKER = ROOT / "scripts" / "check_query_lock.py"
 USES = ("consumer", "internal")
 
 _HEADING = re.compile(r"^### `(?P<name>\w+)`$")
@@ -97,9 +101,47 @@ def consumer_pairs(entries: dict[str, dict[str, str]]) -> list[list[str]]:
     )
 
 
-def read_lock() -> dict[str, list[list[str]]]:
-    lock: dict[str, list[list[str]]] = json.loads(SCHEMA_LOCK.read_text())
+# An entry as scripts/check_query_lock.py reads it: its consumer pairs and its view digests.
+LockEntry = tuple[set[tuple[str, str]], dict[str, str]]
+
+
+@functools.cache
+def lock_checker() -> ModuleType:
+    """scripts/check_query_lock.py, the one reader of the lock, loaded from its file: CI runs it
+    standalone, so it is not a package module."""
+    spec = importlib.util.spec_from_file_location("check_query_lock", CHECKER)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def parse_lock(text: str) -> dict[str, LockEntry]:
+    """Each version's entry, read by the checker's rule; raises its CannotCheck on a shape it
+    refuses (a key listed twice included)."""
+    lock: dict[str, LockEntry] = lock_checker().schema_entries(text, str(SCHEMA_LOCK))
     return lock
+
+
+def read_lock() -> dict[str, LockEntry]:
+    return parse_lock(SCHEMA_LOCK.read_text())
+
+
+def lock_columns(entry: LockEntry) -> list[list[str]]:
+    """An entry's consumer pairs, sorted, as the dictionary's consumer pairs are."""
+    return sorted([table, column] for table, column in entry[0])
+
+
+def lock_views(entry: LockEntry) -> dict[str, str]:
+    """An entry's view digests; version 1 has none."""
+    return entry[1]
+
+
+def view_digest(sql: str) -> str:
+    """SHA-256 of a view's frozen SQL exactly as the migration embeds it. Nothing is normalized:
+    whitespace inside a literal, or the line break that ends a ``--`` comment, can change a view's
+    rows."""
+    return hashlib.sha256(sql.encode()).hexdigest()
 
 
 def lock_differences(entry: list[list[str]], consumer: list[list[str]]) -> list[str]:

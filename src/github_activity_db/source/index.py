@@ -7,7 +7,7 @@ from datetime import datetime
 
 from pydantic import ValidationError
 
-from .convert import closing_issue, utc
+from .convert import closing_issue, utc, utc_or_none
 from .documents import PULL_REQUEST_INDEX
 from .errors import (
     IndexCountMismatch,
@@ -133,7 +133,8 @@ def _entry(full_name: str, node: IndexedPullRequestNode) -> IndexedPullRequest:
         author_association=node.author_association,
         created_at=utc(node.created_at),
         updated_at=utc(node.updated_at),
-        merged_at=utc(node.merged_at) if node.merged_at is not None else None,
+        merged_at=utc_or_none(node.merged_at),
+        closed_at=utc_or_none(node.closed_at),
         closing_issues=_distinct_links(
             closing_issue(link) for link in links.nodes if link is not None
         ),

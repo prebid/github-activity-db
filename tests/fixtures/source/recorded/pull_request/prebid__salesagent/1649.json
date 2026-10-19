@@ -1,0 +1,275 @@
+{
+  "data": {
+    "additions": 7,
+    "assignedActors": {
+      "nodes": [
+        {
+          "__typename": "User",
+          "databaseId": 283858362,
+          "id": "U_kgDOEOtVug",
+          "login": "mkostromin-sigma"
+        }
+      ],
+      "pageInfo": {
+        "endCursor": "MQ",
+        "hasNextPage": false
+      },
+      "totalCount": 1
+    },
+    "author": {
+      "__typename": "User",
+      "databaseId": 283858362,
+      "id": "U_kgDOEOtVug",
+      "login": "mkostromin-sigma"
+    },
+    "authorAssociation": "COLLABORATOR",
+    "baseRefName": "main",
+    "baseRefOid": "c7acbbd6e6445cdc8a803898959c1dcbc41ecb62",
+    "body": "## Summary\n- Correct BR-RULE-294 UC-019 targeting-rehydration BDD expectations from off-spec `INTERNAL_ERROR` to `SERVICE_UNAVAILABLE`, matching production (`media_buy_list.py`) and the existing unit pin.\n- No production or step-wiring changes; scenarios remain dormant (unbound → auto-xfail) until separately wired.\n- Orthogonal **suggestion** field gap tracked as follow-up leaf #1646 (blocked by this issue) so #1571 closes with no leftover debt.\n\n## Spec / grounding\n- Production advisory uses standard wire code `SERVICE_UNAVAILABLE` + `TARGETING_REHYDRATION_FAILED:` message prefix (`src/core/tools/media_buy_list.py`).\n- `INTERNAL_ERROR` is internal-only / not buyer-facing for this path.\n- Storyboard grading for this advisory path: ungraded; behavior pinned by `test_corrupted_targeting_surfaces_via_errors_channel`.\n\nCloses #1571\n\n## Test plan\n- [x] `rg` hygiene: no `INTERNAL_ERROR` in BR-RULE-294 targeting windows\n- [x] `uv run pytest tests/unit/test_get_media_buys.py -k corrupted_targeting -q`\n- [ ] CI green on PR",
+    "canBeRebased": false,
+    "changedFiles": 1,
+    "closedAt": "2026-07-15T21:26:55Z",
+    "closingIssuesReferences": {
+      "nodes": [
+        {
+          "fullDatabaseId": "4843093788",
+          "number": 1571,
+          "repository": {
+            "databaseId": 1025117899,
+            "nameWithOwner": "prebid/salesagent"
+          }
+        }
+      ],
+      "pageInfo": {
+        "endCursor": "MQ",
+        "hasNextPage": false
+      },
+      "totalCount": 1
+    },
+    "comments": {
+      "nodes": [
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 283858362,
+            "id": "U_kgDOEOtVug",
+            "login": "mkostromin-sigma"
+          },
+          "authorAssociation": "COLLABORATOR",
+          "createdAt": "2026-07-15T01:25:24Z",
+          "createdViaEmail": false,
+          "editor": null,
+          "fullDatabaseId": "4975877853",
+          "id": "IC_kwDOPRoOy88AAAABKJXe3Q",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-07-15T01:25:24Z",
+          "updatedAt": "2026-07-15T01:25:24Z"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 283858362,
+            "id": "U_kgDOEOtVug",
+            "login": "mkostromin-sigma"
+          },
+          "authorAssociation": "COLLABORATOR",
+          "createdAt": "2026-07-15T21:49:52Z",
+          "createdViaEmail": false,
+          "editor": null,
+          "fullDatabaseId": "4985612129",
+          "id": "IC_kwDOPRoOy88AAAABKSpnYQ",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-07-15T21:49:52Z",
+          "updatedAt": "2026-07-15T21:49:52Z"
+        }
+      ],
+      "pageInfo": {
+        "endCursor": "Y3Vyc29yOnYyOpHPAAAAASkqZ2E=",
+        "hasNextPage": false
+      },
+      "totalCount": 2
+    },
+    "commits": {
+      "nodes": [
+        {
+          "commit": {
+            "author": {
+              "email": "maksim.kostromin@sigma.software",
+              "name": "Maksim Kostromin",
+              "user": {
+                "databaseId": 283858362,
+                "id": "U_kgDOEOtVug",
+                "login": "mkostromin-sigma"
+              }
+            },
+            "authoredDate": "2026-07-14T23:11:15Z",
+            "oid": "8a5aa7491e8bf74ce5c813f3230975ae27c8b480"
+          }
+        }
+      ],
+      "pageInfo": {
+        "endCursor": "MQ",
+        "hasNextPage": false
+      },
+      "totalCount": 1
+    },
+    "createdAt": "2026-07-14T23:11:26Z",
+    "deletions": 7,
+    "editor": null,
+    "files": {
+      "nodes": [
+        {
+          "additions": 7,
+          "changeType": "MODIFIED",
+          "deletions": 7,
+          "path": "tests/bdd/features/BR-UC-019-query-media-buys.feature"
+        }
+      ],
+      "pageInfo": {
+        "endCursor": "MQ",
+        "hasNextPage": false
+      },
+      "totalCount": 1
+    },
+    "fullDatabaseId": "4056449748",
+    "headRefName": "fix/1571-uc019-targeting-rehydration-service-unavailable",
+    "headRefOid": "8a5aa7491e8bf74ce5c813f3230975ae27c8b480",
+    "headRepository": {
+      "databaseId": 1246090824,
+      "nameWithOwner": "mkostromin-sigma/salesagent"
+    },
+    "headRepositoryOwner": {
+      "id": "U_kgDOEOtVug",
+      "login": "mkostromin-sigma"
+    },
+    "id": "PR_kwDOPRoOy87xyILU",
+    "includesCreatedEdit": false,
+    "isCrossRepository": true,
+    "isDraft": false,
+    "labels": {
+      "nodes": [
+        {
+          "id": "LA_kwDOPRoOy88AAAACei712A",
+          "name": "2.0 Release"
+        }
+      ],
+      "pageInfo": {
+        "endCursor": "MQ",
+        "hasNextPage": false
+      },
+      "totalCount": 1
+    },
+    "lastEditedAt": null,
+    "maintainerCanModify": false,
+    "mergeCommit": {
+      "oid": "40aacea1d7bd0aebde756330d51886272176062e"
+    },
+    "mergeStateStatus": "UNKNOWN",
+    "mergeable": "UNKNOWN",
+    "mergedAt": "2026-07-15T21:26:55Z",
+    "mergedBy": {
+      "__typename": "User",
+      "databaseId": 283858362,
+      "id": "U_kgDOEOtVug",
+      "login": "mkostromin-sigma"
+    },
+    "milestone": {
+      "number": 3,
+      "title": "2.X (Non breaking)"
+    },
+    "number": 1649,
+    "potentialMergeCommit": null,
+    "publishedAt": "2026-07-14T23:11:26Z",
+    "reviewDecision": "APPROVED",
+    "reviewRequests": {
+      "nodes": [
+        {
+          "asCodeOwner": true,
+          "databaseId": 3366953077,
+          "id": "RR_kwDOPRoOy87Ir6B1",
+          "requestedReviewer": {
+            "__typename": "User",
+            "databaseId": 3444727,
+            "id": "MDQ6VXNlcjM0NDQ3Mjc=",
+            "login": "ChrisHuie"
+          }
+        }
+      ],
+      "pageInfo": {
+        "endCursor": "Y3Vyc29yOnYyOpHOyK-gdQ==",
+        "hasNextPage": false
+      },
+      "totalCount": 1
+    },
+    "reviews": {
+      "nodes": [
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 138468,
+            "id": "MDQ6VXNlcjEzODQ2OA==",
+            "login": "KonstantinMirin"
+          },
+          "authorAssociation": "COLLABORATOR",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 1
+          },
+          "commit": {
+            "oid": "8a5aa7491e8bf74ce5c813f3230975ae27c8b480"
+          },
+          "createdAt": "2026-07-15T12:02:45Z",
+          "editor": null,
+          "fullDatabaseId": "4703845301",
+          "id": "PRR_kwDOPRoOy88AAAABGF77tQ",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-07-15T12:02:45Z",
+          "state": "APPROVED",
+          "submittedAt": "2026-07-15T12:02:45Z",
+          "updatedAt": "2026-07-15T12:02:45Z"
+        }
+      ],
+      "pageInfo": {
+        "endCursor": "Y3Vyc29yOnYyOpO0MjAyNi0wNy0xNVQxMjowMjo0NVq0MjAyNi0wNy0xNVQxMjowMjo0NVrPAAAAARhe-7U=",
+        "hasNextPage": false
+      },
+      "totalCount": 1
+    },
+    "stack": null,
+    "stackEntry": null,
+    "state": "MERGED",
+    "title": "fix: Correct UC-019 targeting-rehydration BDD to expect SERVICE_UNAVAILABLE",
+    "totalCommentsCount": 4,
+    "updatedAt": "2026-07-15T21:49:52Z",
+    "userLinkedClosingIssues": {
+      "nodes": [],
+      "pageInfo": {
+        "endCursor": null,
+        "hasNextPage": false
+      },
+      "totalCount": 0
+    }
+  },
+  "document_sha256": "3527b3fa77b23d4166d3a8a063506be04f20c8bec7cee75e2bf801d0d608c26c",
+  "errors": [],
+  "extra": {},
+  "headers": {
+    "date": "Sun, 18 Oct 2026 21:11:59 GMT",
+    "x-ratelimit-limit": "5000",
+    "x-ratelimit-remaining": "4964",
+    "x-ratelimit-reset": "1792360091",
+    "x-ratelimit-resource": "graphql",
+    "x-ratelimit-used": "36"
+  },
+  "key": {
+    "name": "salesagent",
+    "number": 1649,
+    "owner": "prebid"
+  },
+  "kind": "pull_request",
+  "recorded_at": "2026-10-18T21:11:43Z",
+  "source": "live"
+}

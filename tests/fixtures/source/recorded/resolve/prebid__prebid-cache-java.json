@@ -1,55 +1,153 @@
 {
   "data": {
+    "allowUpdateBranch": false,
+    "archivedAt": null,
+    "createdAt": "2018-03-20T12:19:26Z",
     "databaseId": 126012969,
     "defaultBranchRef": {
       "name": "master"
     },
+    "deleteBranchOnMerge": true,
+    "description": "Java version of Prebid Cache server",
+    "diskUsage": 452,
+    "forkCount": 15,
+    "forkingAllowed": true,
+    "hasDiscussionsEnabled": false,
+    "hasProjectsEnabled": true,
+    "hasVulnerabilityAlertsEnabled": true,
+    "hasWikiEnabled": true,
+    "homepageUrl": null,
     "id": "MDEwOlJlcG9zaXRvcnkxMjYwMTI5Njk=",
     "isArchived": false,
     "isPrivate": false,
+    "isSecurityPolicyEnabled": false,
     "labels": {
       "nodes": [
         {
-          "name": "bug"
+          "color": "d73a4a",
+          "createdAt": "2018-03-20T12:19:26Z",
+          "description": "Something isn't working",
+          "id": "MDU6TGFiZWw4NzM0Mzc2ODg=",
+          "isDefault": true,
+          "name": "bug",
+          "updatedAt": "2018-03-20T12:19:26Z"
         },
         {
-          "name": "duplicate"
+          "color": "cfd3d7",
+          "createdAt": "2018-03-20T12:19:26Z",
+          "description": "This issue or pull request already exists",
+          "id": "MDU6TGFiZWw4NzM0Mzc2ODk=",
+          "isDefault": true,
+          "name": "duplicate",
+          "updatedAt": "2018-03-20T12:19:26Z"
         },
         {
-          "name": "enhancement"
+          "color": "a2eeef",
+          "createdAt": "2018-03-20T12:19:26Z",
+          "description": "New feature or request",
+          "id": "MDU6TGFiZWw4NzM0Mzc2OTA=",
+          "isDefault": true,
+          "name": "enhancement",
+          "updatedAt": "2018-03-20T12:19:26Z"
         },
         {
-          "name": "good first issue"
+          "color": "7057ff",
+          "createdAt": "2018-03-20T12:19:26Z",
+          "description": "Good for newcomers",
+          "id": "MDU6TGFiZWw4NzM0Mzc2OTI=",
+          "isDefault": true,
+          "name": "good first issue",
+          "updatedAt": "2018-03-20T12:19:26Z"
         },
         {
-          "name": "help wanted"
+          "color": "008672",
+          "createdAt": "2018-03-20T12:19:26Z",
+          "description": "Extra attention is needed",
+          "id": "MDU6TGFiZWw4NzM0Mzc2OTE=",
+          "isDefault": true,
+          "name": "help wanted",
+          "updatedAt": "2018-03-20T12:19:26Z"
         },
         {
-          "name": "invalid"
+          "color": "e4e669",
+          "createdAt": "2018-03-20T12:19:26Z",
+          "description": "This doesn't seem right",
+          "id": "MDU6TGFiZWw4NzM0Mzc2OTM=",
+          "isDefault": true,
+          "name": "invalid",
+          "updatedAt": "2018-03-20T12:19:26Z"
         },
         {
-          "name": "question"
+          "color": "d876e3",
+          "createdAt": "2018-03-20T12:19:26Z",
+          "description": "Further information is requested",
+          "id": "MDU6TGFiZWw4NzM0Mzc2OTQ=",
+          "isDefault": true,
+          "name": "question",
+          "updatedAt": "2018-03-20T12:19:26Z"
         },
         {
-          "name": "wontfix"
+          "color": "ffffff",
+          "createdAt": "2018-03-20T12:19:26Z",
+          "description": "This will not be worked on",
+          "id": "MDU6TGFiZWw4NzM0Mzc2OTU=",
+          "isDefault": true,
+          "name": "wontfix",
+          "updatedAt": "2018-03-20T12:19:26Z"
         },
         {
-          "name": "dependencies"
+          "color": "0366d6",
+          "createdAt": "2020-01-31T18:16:40Z",
+          "description": "Pull requests that update a dependency file",
+          "id": "MDU6TGFiZWwxODIwMDMzNjQw",
+          "isDefault": false,
+          "name": "dependencies",
+          "updatedAt": "2020-01-31T18:16:40Z"
         },
         {
-          "name": "tests"
+          "color": "0052CC",
+          "createdAt": "2022-03-29T11:15:55Z",
+          "description": "functional Kotlin tests",
+          "id": "LA_kwDOB4LOKc7tIdXv",
+          "isDefault": false,
+          "name": "tests",
+          "updatedAt": "2022-03-29T11:15:55Z"
         },
         {
-          "name": "needs docs"
+          "color": "C8EE1D",
+          "createdAt": "2022-12-02T20:55:39Z",
+          "description": "",
+          "id": "LA_kwDOB4LOKc8AAAABIiUXuA",
+          "isDefault": false,
+          "name": "needs docs",
+          "updatedAt": "2022-12-02T20:55:39Z"
         },
         {
-          "name": "do not port"
+          "color": "754F7E",
+          "createdAt": "2023-01-20T20:42:20Z",
+          "description": "",
+          "id": "LA_kwDOB4LOKc8AAAABLbVWNQ",
+          "isDefault": false,
+          "name": "do not port",
+          "updatedAt": "2023-01-20T20:42:20Z"
         },
         {
-          "name": "auto"
+          "color": "CCCCCC",
+          "createdAt": "2023-01-23T19:04:13Z",
+          "description": "",
+          "id": "LA_kwDOB4LOKc8AAAABLj0O1A",
+          "isDefault": false,
+          "name": "auto",
+          "updatedAt": "2023-01-23T19:04:13Z"
         },
         {
-          "name": "Do not merge"
+          "color": "000000",
+          "createdAt": "2025-06-12T18:55:02Z",
+          "description": "",
+          "id": "LA_kwDOB4LOKc8AAAACCueLKw",
+          "isDefault": false,
+          "name": "Do not merge",
+          "updatedAt": "2025-06-12T18:55:02Z"
         }
       ],
       "pageInfo": {
@@ -58,28 +156,52 @@
       },
       "totalCount": 14
     },
+    "licenseInfo": {
+      "spdxId": "Apache-2.0"
+    },
+    "mergeCommitAllowed": false,
+    "mergeCommitMessage": "PR_TITLE",
+    "mergeCommitTitle": "MERGE_MESSAGE",
     "name": "prebid-cache-java",
     "nameWithOwner": "prebid/prebid-cache-java",
     "owner": {
       "login": "prebid"
-    }
+    },
+    "planFeatures": {
+      "codeowners": true,
+      "maximumManualReviewRequests": 15,
+      "teamReviewRequests": true
+    },
+    "primaryLanguage": {
+      "name": "Shell"
+    },
+    "pushedAt": "2026-06-17T03:01:44Z",
+    "rebaseMergeAllowed": false,
+    "squashMergeAllowed": true,
+    "squashMergeCommitMessage": "BLANK",
+    "squashMergeCommitTitle": "PR_TITLE",
+    "stargazerCount": 6,
+    "updatedAt": "2026-06-17T03:01:46Z",
+    "usesCustomOpenGraphImage": false,
+    "visibility": "PUBLIC",
+    "webCommitSignoffRequired": false
   },
-  "document_sha256": "035aef891393ccd81c36161af0b0d2e10034e582cac4bae68e62c9e5b035790e",
+  "document_sha256": "1911b98b9e2cc2b0446feebf94442c77d8c064810fa681773523ffe914c07a37",
   "errors": [],
   "extra": {},
   "headers": {
-    "date": "Sat, 17 Oct 2026 12:09:21 GMT",
+    "date": "Sun, 18 Oct 2026 21:11:45 GMT",
     "x-ratelimit-limit": "5000",
-    "x-ratelimit-remaining": "4996",
-    "x-ratelimit-reset": "1792242556",
+    "x-ratelimit-remaining": "4975",
+    "x-ratelimit-reset": "1792360091",
     "x-ratelimit-resource": "graphql",
-    "x-ratelimit-used": "4"
+    "x-ratelimit-used": "25"
   },
   "key": {
     "name": "prebid-cache-java",
     "owner": "prebid"
   },
   "kind": "resolve",
-  "recorded_at": "2026-10-17T12:09:19Z",
+  "recorded_at": "2026-10-18T21:11:43Z",
   "source": "live"
 }

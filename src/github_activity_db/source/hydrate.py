@@ -23,7 +23,7 @@ from typing import Any
 
 from pydantic import ValidationError
 
-from .convert import account, closing_issue, utc
+from .convert import account, union_account, utc, utc_or_none
 from .documents import (
     COMMITS,
     PULL_REQUEST_CONNECTIONS,
@@ -36,6 +36,7 @@ from .documents import (
 )
 from .errors import (
     AliasError,
+    CloseTimeMissing,
     CompareCountMismatch,
     CompareRefused,
     ConnectionCountMismatch,
@@ -53,6 +54,7 @@ from .errors import (
     ResponseShapeError,
     TotalCountChanged,
     UnattributedErrors,
+    UserLinkedIssueNotListed,
 )
 from .limits import (
     COMPARE_PAGE_SIZE,
@@ -61,17 +63,23 @@ from .limits import (
     PR_BATCH_SIZE,
 )
 from .models import (
-    ClosingIssueNode,
+    AssignedActorNode,
     CommentNode,
     CommitNode,
     CompareCommit,
     ComparePage,
     FileNode,
     LabelNode,
+    LinkedIssueNode,
     OverflowHead,
     Page,
     PullRequestNode,
+    RequestedAccount,
+    RequestedEnterpriseTeam,
+    RequestedTeamNode,
     ReviewNode,
+    ReviewRequestNode,
+    UserLinkedIssueNode,
 )
 from .records import (
     Comment,
@@ -81,12 +89,21 @@ from .records import (
     Failed,
     FileChange,
     Gone,
+    HeadRepository,
+    HeadRepositoryOwner,
     Hydrated,
+    Label,
     LinkedAccount,
+    LinkedClosingIssue,
+    Milestone,
     PullRequestOutcome,
     PullRequestRecord,
     RepositoryRecord,
+    RequestedTeam,
     Review,
+    ReviewRequest,
+    Stack,
+    StackEntry,
     link_key,
 )
 from .transport import GraphQLResult, RestRefused, Transport
@@ -109,11 +126,14 @@ class _Item:
     node: PullRequestNode
     date: datetime
     labels: _Collected[LabelNode]
-    closing_issues: _Collected[ClosingIssueNode]
+    closing_issues: _Collected[LinkedIssueNode]
+    user_linked_closing_issues: _Collected[UserLinkedIssueNode]
     reviews: _Collected[ReviewNode]
     comments: _Collected[CommentNode]
     commits: _Collected[CommitNode]
     files: _Collected[FileNode]
+    review_requests: _Collected[ReviewRequestNode]
+    assigned_actors: _Collected[AssignedActorNode]
     compare_commits: list[CommitRecord] | None = None
     error: ItemError | None = field(default=None)
 
@@ -122,7 +142,7 @@ class _Item:
         pending = [
             connection
             for connection in PULL_REQUEST_CONNECTIONS
-            if self.collected(connection.field).cursor is not None
+            if self.collected(connection.key).cursor is not None
         ]
         if self.uses_compare():
             pending = [connection for connection in pending if connection is not COMMITS]
@@ -131,12 +151,15 @@ class _Item:
     def uses_compare(self) -> bool:
         return _uses_compare(self.commits.total)
 
-    def collected(self, name: str) -> _Collected[Any]:
-        match name:
+    def collected(self, key: str) -> _Collected[Any]:
+        """The connection a response carries under ``key`` (``Connection.key``)."""
+        match key:
             case "labels":
                 return self.labels
             case "closingIssuesReferences":
                 return self.closing_issues
+            case "userLinkedClosingIssues":
+                return self.user_linked_closing_issues
             case "reviews":
                 return self.reviews
             case "comments":
@@ -145,16 +168,23 @@ class _Item:
                 return self.commits
             case "files":
                 return self.files
-        raise KeyError(name)
+            case "reviewRequests":
+                return self.review_requests
+            case "assignedActors":
+                return self.assigned_actors
+        raise KeyError(key)
 
 
 _PAGE_MODELS: dict[str, type[Page[Any]]] = {
     "labels": Page[LabelNode],
-    "closingIssuesReferences": Page[ClosingIssueNode],
+    "closingIssuesReferences": Page[LinkedIssueNode],
+    "userLinkedClosingIssues": Page[UserLinkedIssueNode],
     "reviews": Page[ReviewNode],
     "comments": Page[CommentNode],
     "commits": Page[CommitNode],
     "files": Page[FileNode],
+    "reviewRequests": Page[ReviewRequestNode],
+    "assignedActors": Page[AssignedActorNode],
 }
 
 
@@ -273,6 +303,8 @@ class PullRequestHydrator:
             return IdentityMismatch(number, "number", number, node.number)
         if (node.state == "MERGED") != (node.merged_at is not None):
             return MergeStateMismatch(number, node.state, node.merged_at is not None)
+        if node.state != "OPEN" and node.closed_at is None:
+            return CloseTimeMissing(number, node.state)
         try:
             return _Item(
                 number=number,
@@ -282,10 +314,15 @@ class PullRequestHydrator:
                 closing_issues=_first_collected(
                     number, "closingIssuesReferences", node.closing_issues_references
                 ),
+                user_linked_closing_issues=_first_collected(
+                    number, "userLinkedClosingIssues", node.user_linked_closing_issues
+                ),
                 reviews=_first_collected(number, "reviews", node.reviews),
                 comments=_first_collected(number, "comments", node.comments),
                 commits=_first_collected(number, "commits", node.commits),
                 files=_first_collected(number, "files", node.files),
+                review_requests=_first_collected(number, "reviewRequests", node.review_requests),
+                assigned_actors=_first_collected(number, "assignedActors", node.assigned_actors),
             )
         except ItemError as e:
             return e
@@ -301,7 +338,7 @@ class PullRequestHydrator:
             pending = [
                 (item, connection)
                 for item, connection in pending
-                if item.error is None and item.collected(connection.field).cursor is not None
+                if item.error is None and item.collected(connection.key).cursor is not None
             ]
 
     async def _continue(self, group: list[tuple[_Item, Connection]]) -> None:
@@ -313,7 +350,7 @@ class PullRequestHydrator:
         variables: dict[str, object] = {}
         for i, (item, connection) in enumerate(group):
             variables[f"id{i}"] = item.node.id
-            variables[f"after{i}"] = item.collected(connection.field).cursor
+            variables[f"after{i}"] = item.collected(connection.key).cursor
         try:
             result = await self._transport.graphql(
                 overflow_continuation(connections), variables, splittable=len(group) > 1
@@ -400,7 +437,7 @@ class PullRequestHydrator:
         for connection in PULL_REQUEST_CONNECTIONS:
             if connection is COMMITS and item.compare_commits is not None:
                 continue  # checked against compare's total_commits instead
-            _check_complete(number, connection.field, item.collected(connection.field))
+            _check_complete(number, connection.key, item.collected(connection.key))
         commit_source: CommitSource
         if item.compare_commits is not None:
             commits = item.compare_commits
@@ -409,32 +446,44 @@ class PullRequestHydrator:
             commits = [_graphql_commit(commit) for commit in item.commits.nodes]
             commit_source = "graphql"
 
-        reviews = tuple(
-            Review(
-                github_id=review.full_database_id,
-                reviewer=account(review.author, number=number, role="reviewer"),
-                state=review.state,
+        reviews = tuple(_review(review) for review in item.reviews.nodes)
+        comments = tuple(_comment(comment) for comment in item.comments.nodes)
+        labels = tuple(Label(name=label.name, node_id=label.id) for label in item.labels.nodes)
+        user_linked = [
+            (link.repository.database_id, link.number)
+            for link in item.user_linked_closing_issues.nodes
+        ]
+        closing_issues = tuple(
+            LinkedClosingIssue(
+                repo_github_id=link.repository.database_id,
+                repo_full_name=link.repository.name_with_owner,
+                number=link.number,
+                github_id=link.full_database_id,
+                user_linked=(link.repository.database_id, link.number) in user_linked,
             )
-            for review in item.reviews.nodes
+            for link in item.closing_issues.nodes
         )
-        comments = tuple(
-            Comment(
-                github_id=comment.full_database_id,
-                author=account(comment.author, number=number, role="commenter"),
-            )
-            for comment in item.comments.nodes
-        )
-        labels = tuple(label.name for label in item.labels.nodes)
-        closing_issues = tuple(closing_issue(link) for link in item.closing_issues.nodes)
+        review_requests = tuple(_review_request(request) for request in item.review_requests.nodes)
+        assignees = tuple(union_account(actor) for actor in item.assigned_actors.nodes)
         # The database keys these entries, so a duplicate standing in for a missing entry would
-        # pass the count check and drop a row.
-        _check_distinct(number, "labels", labels)
+        # pass the count check and drop a row. Review requests are stored by position, so theirs
+        # is compared by the request's own node id. An assignee is compared by its node id and by
+        # its github_id, the account key pr_assignees resolves to (plan 5.2).
+        _check_distinct(number, "labels", [label.name for label in labels])
         _check_distinct(
             number, "closingIssuesReferences", [link_key(link) for link in closing_issues]
         )
+        _check_distinct(number, "userLinkedClosingIssues", user_linked)
         _check_distinct(number, "reviews", [review.github_id for review in reviews])
         _check_distinct(number, "comments", [comment.github_id for comment in comments])
         _check_distinct(number, "commits", [commit.sha for commit in commits])
+        _check_distinct(number, "assignedActors", [assignee.node_id for assignee in assignees])
+        _check_distinct(number, "assignedActors", [assignee.github_id for assignee in assignees])
+        _check_distinct(number, "reviewRequests", [request.node_id for request in review_requests])
+        listed = {link_key(link) for link in closing_issues}
+        for key in user_linked:
+            if key not in listed:
+                raise UserLinkedIssueNotListed(number, key)
         return PullRequestRecord(
             repository=self._repository.full_name,
             github_id=node.full_database_id,
@@ -444,16 +493,69 @@ class PullRequestHydrator:
             is_draft=node.is_draft,
             title=node.title,
             body=node.body,
-            author=account(node.author, number=number, role="author"),
+            author=account(node.author),
             author_association=node.author_association,
             created_at=utc(node.created_at),
-            merged_at=utc(node.merged_at) if node.merged_at is not None else None,
-            merged_by=account(node.merged_by, number=number, role="merger"),
+            merged_at=utc_or_none(node.merged_at),
+            closed_at=utc_or_none(node.closed_at),
+            published_at=utc_or_none(node.published_at),
+            last_edited_at=utc_or_none(node.last_edited_at),
+            editor=account(node.editor),
+            includes_created_edit=node.includes_created_edit,
+            maintainer_can_modify=node.maintainer_can_modify,
+            merged_by=account(node.merged_by),
             base_ref=node.base_ref_name,
+            base_ref_oid=node.base_ref_oid,
+            head_ref_name=node.head_ref_name,
+            head_ref_oid=node.head_ref_oid,
+            head_repository=(
+                HeadRepository(
+                    github_id=node.head_repository.database_id,
+                    full_name=node.head_repository.name_with_owner,
+                )
+                if node.head_repository is not None
+                else None
+            ),
+            head_repository_owner=(
+                HeadRepositoryOwner(
+                    node_id=node.head_repository_owner.id, login=node.head_repository_owner.login
+                )
+                if node.head_repository_owner is not None
+                else None
+            ),
+            merge_commit_oid=node.merge_commit.oid if node.merge_commit is not None else None,
             is_cross_repository=node.is_cross_repository,
+            milestone=(
+                Milestone(number=node.milestone.number, title=node.milestone.title)
+                if node.milestone is not None
+                else None
+            ),
+            review_decision=node.review_decision,
+            mergeable=node.mergeable,
+            merge_state_status=node.merge_state_status,
+            can_be_rebased=node.can_be_rebased,
+            potential_merge_commit_oid=(
+                node.potential_merge_commit.oid if node.potential_merge_commit is not None else None
+            ),
+            stack=(
+                Stack(
+                    node_id=node.stack.id,
+                    number=node.stack.number,
+                    size=node.stack.size,
+                    base_ref_name=node.stack.base_ref_name,
+                )
+                if node.stack is not None
+                else None
+            ),
+            stack_entry=(
+                StackEntry(node_id=node.stack_entry.id, position=node.stack_entry.position)
+                if node.stack_entry is not None
+                else None
+            ),
             additions=node.additions,
             deletions=node.deletions,
             changed_files=node.changed_files,
+            total_comments_count=node.total_comments_count,
             labels=labels,
             closing_issues=closing_issues,
             reviews=reviews,
@@ -469,13 +571,18 @@ class PullRequestHydrator:
                 )
                 for change in item.files.nodes
             ),
+            review_requests=review_requests,
+            assignees=assignees,
             totals=ConnectionTotals(
                 labels=item.labels.total,
                 closing_issues=item.closing_issues.total,
+                user_linked_closing_issues=item.user_linked_closing_issues.total,
                 reviews=item.reviews.total,
                 comments=item.comments.total,
                 commits=item.commits.total,
                 files=item.files.total,
+                review_requests=item.review_requests.total,
+                assignees=item.assigned_actors.total,
             ),
             github_updated_at=utc(node.updated_at),
             hydrated_at=item.date,
@@ -532,12 +639,12 @@ def _apply_continuation(
             number, first.type if first else None, first.message if first else "null continuation"
         )
     raw = dict(raw)
-    raw_page = raw.pop(connection.field, None)
+    raw_page = raw.pop(connection.key, None)
     try:
         head = OverflowHead.model_validate(raw)
-        page = _PAGE_MODELS[connection.field].model_validate(raw_page)
+        page = _PAGE_MODELS[connection.key].model_validate(raw_page)
     except ValidationError as e:
-        return ResponseShapeError(number, f"{connection.field} continuation: {e}")
+        return ResponseShapeError(number, f"{connection.key} continuation: {e}")
     if head.head_ref_oid != item.node.head_ref_oid:
         return ItemChangedDuringRead(
             number, "headRefOid", item.node.head_ref_oid, head.head_ref_oid
@@ -546,20 +653,20 @@ def _apply_continuation(
         return ItemChangedDuringRead(
             number, "updatedAt", item.node.updated_at.isoformat(), head.updated_at.isoformat()
         )
-    collected = item.collected(connection.field)
+    collected = item.collected(connection.key)
     if page.total_count != collected.total:
-        return TotalCountChanged(number, connection.field, collected.total, page.total_count)
+        return TotalCountChanged(number, connection.key, collected.total, page.total_count)
     if page.nodes is None or any(node is None for node in page.nodes):
-        return NullEntry(number, connection.field)
+        return NullEntry(number, connection.key)
     collected.nodes.extend(node for node in page.nodes if node is not None)
     if len(collected.nodes) > collected.total:
         return ConnectionCountMismatch(
-            number, connection.field, len(collected.nodes), collected.total
+            number, connection.key, len(collected.nodes), collected.total
         )
     if page.page_info.has_next_page:
         cursor = page.page_info.end_cursor
         if cursor is None or cursor == collected.cursor or not page.nodes:
-            return PagingStalled(number, connection.field, cursor, len(page.nodes))
+            return PagingStalled(number, connection.key, cursor, len(page.nodes))
         collected.cursor = cursor
     else:
         collected.cursor = None
@@ -577,6 +684,69 @@ def _check_distinct(number: int, connection: str, keys: Sequence[Hashable]) -> N
 def _check_complete(number: int, name: str, collected: _Collected[Any]) -> None:
     if len(collected.nodes) != collected.total:
         raise ConnectionCountMismatch(number, name, len(collected.nodes), collected.total)
+
+
+def _review(node: ReviewNode) -> Review:
+    return Review(
+        github_id=node.full_database_id,
+        node_id=node.id,
+        reviewer=account(node.author),
+        state=node.state,
+        created_at=utc(node.created_at),
+        submitted_at=utc_or_none(node.submitted_at),
+        published_at=utc_or_none(node.published_at),
+        updated_at=utc(node.updated_at),
+        last_edited_at=utc_or_none(node.last_edited_at),
+        editor=account(node.editor),
+        includes_created_edit=node.includes_created_edit,
+        commit_oid=node.commit.oid if node.commit is not None else None,
+        author_association=node.author_association,
+        author_can_push_to_repository=node.author_can_push_to_repository,
+        inline_comments_total=node.comments.total_count,
+    )
+
+
+def _comment(node: CommentNode) -> Comment:
+    return Comment(
+        github_id=node.full_database_id,
+        node_id=node.id,
+        author=account(node.author),
+        created_at=utc(node.created_at),
+        published_at=utc_or_none(node.published_at),
+        updated_at=utc(node.updated_at),
+        last_edited_at=utc_or_none(node.last_edited_at),
+        editor=account(node.editor),
+        created_via_email=node.created_via_email,
+        includes_created_edit=node.includes_created_edit,
+        author_association=node.author_association,
+    )
+
+
+def _review_request(node: ReviewRequestNode) -> ReviewRequest:
+    requested = node.requested_reviewer
+    return ReviewRequest(
+        github_id=node.database_id,
+        node_id=node.id,
+        as_code_owner=node.as_code_owner,
+        requested_type=requested.typename if requested is not None else None,
+        account=union_account(requested) if isinstance(requested, RequestedAccount) else None,
+        team=_requested_team(requested),
+    )
+
+
+def _requested_team(
+    requested: RequestedAccount | RequestedTeamNode | RequestedEnterpriseTeam | None,
+) -> RequestedTeam | None:
+    """A ``Team`` or an ``EnterpriseTeam``; neither is an account."""
+    if isinstance(requested, RequestedTeamNode):
+        return RequestedTeam(
+            github_id=requested.database_id, node_id=requested.id, slug=requested.slug
+        )
+    if isinstance(requested, RequestedEnterpriseTeam):
+        return RequestedTeam(
+            github_id=requested.full_database_id, node_id=requested.id, slug=requested.slug
+        )
+    return None
 
 
 def _graphql_commit(node: CommitNode) -> CommitRecord:

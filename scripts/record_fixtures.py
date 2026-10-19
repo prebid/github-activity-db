@@ -8,7 +8,9 @@ Writes tests/fixtures/source/recorded/, replacing it only after every scenario r
 failed item or user lookup. See tests/source/recorder.py for the scenarios.
 
 With ``--only rate-limits`` it records the rate-limit readings alone and adds them to the
-existing recordings, leaving every other unit unchanged.
+existing recordings, leaving every other unit unchanged. With ``--only documents``, for a change
+of the GraphQL documents, it records every scenario and user again and replaces those units,
+keeping the recorded REST compare pages and rate-limit readings.
 """
 
 from __future__ import annotations

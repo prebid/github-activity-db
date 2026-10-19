@@ -88,12 +88,15 @@ A migration changes the models (`db/models.py`), the chain, and the documents to
   unnamed ones (gap 72).
 - Before batch-altering a table a view reads, drop the view, and recreate it afterwards from
   the migration's own frozen `VIEWS` constant; a view left in place fails the migration
-  (gap 71). A migration that creates or replaces a view embeds its SQL in `VIEWS`.
+  (gap 71). A migration that creates or replaces a view embeds its SQL in `VIEWS`, and one that
+  drops a view without replacing it names it in `DROPPED_VIEWS`, which the view comparison reads.
 - Add the revision id to `MIGRATION_REVISIONS` in `db/schema.py`: code that must refuse a
   database not at head reads the chain from there (Step 3b's head check, gap 74).
-- Update `docs/data-dictionary.md` and, for a consumer column, `tests/schema_versions.json`. A
-  removed, renamed, or redefined consumer column needs a new `SCHEMA_VERSION`, set by the
-  migration as `PRAGMA user_version`.
+- Update `docs/data-dictionary.md` and `tests/schema_versions.json`: the consumer columns, and
+  the SHA-256 of each view's frozen SQL, exactly as the migration embeds it. A removed, renamed,
+  or redefined consumer column, and any change to a view's frozen SQL (a new column on an
+  existing view, and a change of layout alone, included), needs a new `SCHEMA_VERSION`, set by
+  the migration as `PRAGMA user_version`.
 - A migration that adds or redefines a GitHub-derived column of a table that may hold rows
   bumps that kind's hydration version (plan 5.1).
 
@@ -111,18 +114,37 @@ dictionary and the schema-version lock. CI also runs `alembic check`.
 | `a2b3c4d5e6f7` | Adds `sync_failures` |
 | `b3c4d5e6f7g8` | Renames `pull_requests.filenames` to `file_changes` |
 | `33f8570f6540` | Step 3 schema: drops the first schema's tables except `user_tags`, creates the 5.1 tables and views, sets `user_version` 1 |
+| `94a52e4f1d57` | Step 3b-1 collection schema: refuses a file holding rows in a table it adds columns to, recreates those tables with the 5.1 columns, adds `repo_labels`, `pr_review_requests`, `pr_assignees`, and `account_profiles`, replaces the views with the row-level views, sets `user_version` 2 |
 
 ## Querying
 
-Consumers read the views and the columns the dictionary marks consumer. For example, the
-reviewers of one repository's pull requests, with their final verdicts:
+Consumers read the views and the columns the dictionary marks consumer. The views keep every
+row and leave counting to the query. For example, for each account, the merged pull requests of
+one tracked repository it approved, with the account's type and `[automation]` reason beside it,
+and the lines those pull requests changed, each pull request counted once however many times the
+account approved it. An approval GitHub returned without a reviewer, which the database had none
+stored for, has null account columns; the query leaves those out:
 
 ```sql
-SELECT pr_number, reviewer_login, final_verdict, comment_count
-FROM v_pr_reviewers
-WHERE repository_full_name = 'prebid/Prebid.js'
-ORDER BY pr_number;
+SELECT account_login, account_type, account_automation_reason,
+       COUNT(*) AS pull_requests_approved, SUM(additions + deletions) AS lines_changed
+FROM (
+    SELECT DISTINCT account_github_id, account_node_id, account_login, account_type,
+           account_automation_reason, pr_github_id, additions, deletions
+    FROM v_pr_relationships
+    WHERE repository_full_name = 'prebid/Prebid.js'
+      AND repository_is_tracked = 1
+      AND relationship = 'review'
+      AND review_state = 'APPROVED'
+      AND pr_state = 'MERGED'
+      AND account_node_id IS NOT NULL
+)
+GROUP BY account_github_id, account_node_id
+ORDER BY pull_requests_approved DESC;
 ```
+
+Counting approvals rather than pull requests, or lines once per approval, is the query's choice,
+not the view's.
 
 Application code uses `get_session()`, which commits on a clean exit and rolls back on an
 exception:

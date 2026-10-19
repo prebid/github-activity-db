@@ -1,6 +1,14 @@
 {
   "data": {
     "additions": 1222,
+    "assignedActors": {
+      "nodes": [],
+      "pageInfo": {
+        "endCursor": null,
+        "hasNextPage": false
+      },
+      "totalCount": 0
+    },
     "author": {
       "__typename": "User",
       "databaseId": 125548596,
@@ -11,10 +19,13 @@
     "baseRefName": "master",
     "baseRefOid": "3e2224948cd78da676b53b91b68684a1217a8588",
     "body": "### 🔧 Type of changes\r\n- [x] new bid adapter\r\n- [ ] bid adapter update\r\n- [ ] new feature\r\n- [ ] new analytics adapter\r\n- [ ] new module\r\n- [ ] module update\r\n- [ ] bugfix\r\n- [ ] documentation\r\n- [ ] configuration\r\n- [ ] dependency update\r\n- [ ] tech debt (test coverage, refactorings, etc.)\r\n\r\n### ✨ What's the context?\r\nWhat's the context for the changes?\r\n\r\n### 🧠 Rationale behind the change\r\nWhy did you choose to make these changes? Were there any trade-offs you had to consider?\r\n\r\n### 🔎 New Bid Adapter Checklist\r\n- [ ] verify email contact works\r\n- [ ] NO fully dynamic hostnames\r\n- [ ] geographic host parameters are NOT required\r\n- [ ] direct use of HTTP is prohibited - *implement an existing Bidder interface that will do all the job*\r\n- [ ] if the ORTB is just forwarded to the endpoint, use the generic adapter - *define the new adapter as the alias of the generic adapter*\r\n- [ ] cover an adapter configuration with an integration test\r\n\r\n### 🧪 Test plan\r\nHow do you know the changes are safe to ship to production?\r\n\r\n### 🏎 Quality check\r\n- [ ] Are your changes following [our code style guidelines](https://github.com/prebid/prebid-server-java/blob/master/docs/developers/code-style.md)?\r\n- [ ] Are there any breaking changes in your code?\r\n- [ ] Does your test coverage exceed 90%?\r\n- [ ] Are there any erroneous console logs, debuggers or leftover code in your changes?\r\n",
+    "canBeRebased": false,
     "changedFiles": 12,
+    "closedAt": "2026-09-23T15:52:00Z",
     "closingIssuesReferences": {
       "nodes": [
         {
+          "fullDatabaseId": "5061788839",
           "number": 4585,
           "repository": {
             "databaseId": 124555222,
@@ -92,6 +103,12 @@
     },
     "createdAt": "2026-09-21T18:03:36Z",
     "deletions": 0,
+    "editor": {
+      "__typename": "User",
+      "databaseId": 125548596,
+      "id": "U_kgDOB3u4NA",
+      "login": "osulzhenko"
+    },
     "files": {
       "nodes": [
         {
@@ -174,13 +191,24 @@
       "totalCount": 12
     },
     "fullDatabaseId": "4594602248",
+    "headRefName": "adapter/port-eskimi",
     "headRefOid": "e212ac5bd4bc64b56b8f2cad6249e13cc7e6de7f",
+    "headRepository": {
+      "databaseId": 124555222,
+      "nameWithOwner": "prebid/prebid-server-java"
+    },
+    "headRepositoryOwner": {
+      "id": "MDEyOk9yZ2FuaXphdGlvbjEzMjQyNzYw",
+      "login": "prebid"
+    },
     "id": "PR_kwDOB2yP1s8AAAABEdwRCA",
+    "includesCreatedEdit": true,
     "isCrossRepository": false,
     "isDraft": false,
     "labels": {
       "nodes": [
         {
+          "id": "LA_kwDOB2yP1s8AAAABLuzV1g",
           "name": "do not port"
         }
       ],
@@ -190,6 +218,13 @@
       },
       "totalCount": 1
     },
+    "lastEditedAt": "2026-09-21T18:03:44Z",
+    "maintainerCanModify": false,
+    "mergeCommit": {
+      "oid": "81da96c60e8d12e1cf8c652462bbfd258b769cab"
+    },
+    "mergeStateStatus": "UNKNOWN",
+    "mergeable": "UNKNOWN",
     "mergedAt": "2026-09-23T15:52:00Z",
     "mergedBy": {
       "__typename": "User",
@@ -197,7 +232,19 @@
       "id": "MDQ6VXNlcjI4MDEwNzAy",
       "login": "And1sS"
     },
+    "milestone": null,
     "number": 4637,
+    "potentialMergeCommit": null,
+    "publishedAt": "2026-09-21T18:03:36Z",
+    "reviewDecision": "APPROVED",
+    "reviewRequests": {
+      "nodes": [],
+      "pageInfo": {
+        "endCursor": null,
+        "hasNextPage": false
+      },
+      "totalCount": 0
+    },
     "reviews": {
       "nodes": [
         {
@@ -207,8 +254,24 @@
             "id": "MDQ6VXNlcjMzMTM2MDg5",
             "login": "Lightwood13"
           },
+          "authorAssociation": "MEMBER",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 9
+          },
+          "commit": {
+            "oid": "2993845a760f92b3cb5849c1e549861fdfc09fc9"
+          },
+          "createdAt": "2026-09-22T09:45:45Z",
+          "editor": null,
           "fullDatabaseId": "5276426920",
-          "state": "CHANGES_REQUESTED"
+          "id": "PRR_kwDOB2yP1s8AAAABOn_iqA",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-09-22T09:45:45Z",
+          "state": "CHANGES_REQUESTED",
+          "submittedAt": "2026-09-22T11:19:53Z",
+          "updatedAt": "2026-09-22T11:19:53Z"
         },
         {
           "author": {
@@ -217,8 +280,24 @@
             "id": "MDQ6VXNlcjMzMTM2MDg5",
             "login": "Lightwood13"
           },
+          "authorAssociation": "MEMBER",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 0
+          },
+          "commit": {
+            "oid": "47f71a81e6ee4d4d99e51755f50e56f90bef557d"
+          },
+          "createdAt": "2026-09-23T09:17:54Z",
+          "editor": null,
           "fullDatabaseId": "5289072517",
-          "state": "DISMISSED"
+          "id": "PRR_kwDOB2yP1s8AAAABO0DXhQ",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-09-23T09:17:54Z",
+          "state": "DISMISSED",
+          "submittedAt": "2026-09-23T09:17:54Z",
+          "updatedAt": "2026-09-23T15:44:02Z"
         },
         {
           "author": {
@@ -227,8 +306,24 @@
             "id": "MDQ6VXNlcjQ1NjcyMzcw",
             "login": "CTMBNara"
           },
+          "authorAssociation": "MEMBER",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 0
+          },
+          "commit": {
+            "oid": "e212ac5bd4bc64b56b8f2cad6249e13cc7e6de7f"
+          },
+          "createdAt": "2026-09-23T15:46:34Z",
+          "editor": null,
           "fullDatabaseId": "5293279824",
-          "state": "APPROVED"
+          "id": "PRR_kwDOB2yP1s8AAAABO4EKUA",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-09-23T15:46:34Z",
+          "state": "APPROVED",
+          "submittedAt": "2026-09-23T15:46:34Z",
+          "updatedAt": "2026-09-23T15:46:34Z"
         },
         {
           "author": {
@@ -237,8 +332,24 @@
             "id": "MDQ6VXNlcjI4MDEwNzAy",
             "login": "And1sS"
           },
+          "authorAssociation": "MEMBER",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 0
+          },
+          "commit": {
+            "oid": "e212ac5bd4bc64b56b8f2cad6249e13cc7e6de7f"
+          },
+          "createdAt": "2026-09-23T15:51:48Z",
+          "editor": null,
           "fullDatabaseId": "5293338649",
-          "state": "APPROVED"
+          "id": "PRR_kwDOB2yP1s8AAAABO4HwGQ",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-09-23T15:51:48Z",
+          "state": "APPROVED",
+          "submittedAt": "2026-09-23T15:51:48Z",
+          "updatedAt": "2026-09-23T15:51:48Z"
         }
       ],
       "pageInfo": {
@@ -247,20 +358,38 @@
       },
       "totalCount": 4
     },
+    "stack": null,
+    "stackEntry": null,
     "state": "MERGED",
     "title": "Port Eskimi: New Adapter",
-    "updatedAt": "2026-09-23T15:52:02Z"
+    "totalCommentsCount": 9,
+    "updatedAt": "2026-09-23T15:52:02Z",
+    "userLinkedClosingIssues": {
+      "nodes": [
+        {
+          "number": 4585,
+          "repository": {
+            "databaseId": 124555222
+          }
+        }
+      ],
+      "pageInfo": {
+        "endCursor": "MQ",
+        "hasNextPage": false
+      },
+      "totalCount": 1
+    }
   },
-  "document_sha256": "39fd2b5d7744d57be4fd58ba38b2fcf50319c5bd19e1c3796ae4771203af3ea0",
+  "document_sha256": "3527b3fa77b23d4166d3a8a063506be04f20c8bec7cee75e2bf801d0d608c26c",
   "errors": [],
   "extra": {},
   "headers": {
-    "date": "Sat, 17 Oct 2026 12:09:27 GMT",
+    "date": "Sun, 18 Oct 2026 21:11:54 GMT",
     "x-ratelimit-limit": "5000",
-    "x-ratelimit-remaining": "4990",
-    "x-ratelimit-reset": "1792242556",
+    "x-ratelimit-remaining": "4968",
+    "x-ratelimit-reset": "1792360091",
     "x-ratelimit-resource": "graphql",
-    "x-ratelimit-used": "10"
+    "x-ratelimit-used": "32"
   },
   "key": {
     "name": "prebid-server-java",
@@ -268,6 +397,6 @@
     "owner": "prebid"
   },
   "kind": "pull_request",
-  "recorded_at": "2026-10-17T12:09:19Z",
+  "recorded_at": "2026-10-18T21:11:43Z",
   "source": "live"
 }

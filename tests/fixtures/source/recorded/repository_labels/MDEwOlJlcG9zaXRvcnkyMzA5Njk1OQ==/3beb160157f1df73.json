@@ -4,136 +4,400 @@
     "labels": {
       "nodes": [
         {
-          "name": "x/vuln"
+          "color": "ededed",
+          "createdAt": "2022-09-02T19:38:10Z",
+          "description": null,
+          "id": "LA_kwDOAWBuf88AAAABC74mmA",
+          "isDefault": false,
+          "name": "x/vuln",
+          "updatedAt": "2022-09-02T19:38:10Z"
         },
         {
-          "name": "okay-after-rc1"
+          "color": "006B75",
+          "createdAt": "2022-10-18T21:03:37Z",
+          "description": "Used by release team to mark a release-blocker issue as okay to resolve either before or after rc1",
+          "id": "LA_kwDOAWBuf88AAAABF36DuA",
+          "isDefault": false,
+          "name": "okay-after-rc1",
+          "updatedAt": "2022-10-18T21:03:37Z"
         },
         {
-          "name": "allstar"
+          "color": "ededed",
+          "createdAt": "2022-12-15T16:33:34Z",
+          "description": null,
+          "id": "LA_kwDOAWBuf88AAAABJOJHvQ",
+          "isDefault": false,
+          "name": "allstar",
+          "updatedAt": "2022-12-15T16:33:34Z"
         },
         {
-          "name": "dependencies"
+          "color": "0366d6",
+          "createdAt": "2023-02-25T10:18:59Z",
+          "description": "Pull requests that update a dependency file",
+          "id": "LA_kwDOAWBuf88AAAABNcGnuA",
+          "isDefault": false,
+          "name": "dependencies",
+          "updatedAt": "2023-02-25T10:18:59Z"
         },
         {
-          "name": "gopls/incremental"
+          "color": "FEE19E",
+          "createdAt": "2023-04-04T15:27:01Z",
+          "description": "",
+          "id": "LA_kwDOAWBuf88AAAABPuUB_g",
+          "isDefault": false,
+          "name": "gopls/incremental",
+          "updatedAt": "2023-04-04T15:27:01Z"
         },
         {
-          "name": "OS-iOS"
+          "color": "ededed",
+          "createdAt": "2023-04-28T17:41:32Z",
+          "description": "GOOS=ios",
+          "id": "LA_kwDOAWBuf88AAAABRIJchQ",
+          "isDefault": false,
+          "name": "OS-iOS",
+          "updatedAt": "2023-04-28T17:41:32Z"
         },
         {
-          "name": "Proposal-Security"
+          "color": "b60205",
+          "createdAt": "2023-05-02T19:35:25Z",
+          "description": "PUBLIC issues for security fixes, per https://go.dev/security/policy",
+          "id": "LA_kwDOAWBuf88AAAABRVJNxw",
+          "isDefault": false,
+          "name": "Proposal-Security",
+          "updatedAt": "2023-05-02T19:35:49Z"
         },
         {
-          "name": "telemetry"
+          "color": "ACF39E",
+          "createdAt": "2023-06-05T18:08:55Z",
+          "description": "x/telemetry issues",
+          "id": "LA_kwDOAWBuf88AAAABTORqzA",
+          "isDefault": false,
+          "name": "telemetry",
+          "updatedAt": "2023-06-05T18:08:55Z"
         },
         {
-          "name": "gopls/imports"
+          "color": "F59A1E",
+          "createdAt": "2023-06-15T15:48:31Z",
+          "description": "",
+          "id": "LA_kwDOAWBuf88AAAABT0HWDQ",
+          "isDefault": false,
+          "name": "gopls/imports",
+          "updatedAt": "2023-06-15T18:48:30Z"
         },
         {
-          "name": "Telemetry-Proposal"
+          "color": "ededed",
+          "createdAt": "2023-06-27T20:13:28Z",
+          "description": "Issues proposing new telemetry counters.",
+          "id": "LA_kwDOAWBuf88AAAABUhKNWg",
+          "isDefault": false,
+          "name": "Telemetry-Proposal",
+          "updatedAt": "2025-01-13T21:42:15Z"
         },
         {
-          "name": "Telemetry-Accepted"
+          "color": "009800",
+          "createdAt": "2023-06-27T20:14:41Z",
+          "description": "",
+          "id": "LA_kwDOAWBuf88AAAABUhKYQw",
+          "isDefault": false,
+          "name": "Telemetry-Accepted",
+          "updatedAt": "2023-06-27T20:14:41Z"
         },
         {
-          "name": "Telemetry-Declined"
+          "color": "B60205",
+          "createdAt": "2023-06-27T20:15:23Z",
+          "description": "",
+          "id": "LA_kwDOAWBuf88AAAABUhKfjQ",
+          "isDefault": false,
+          "name": "Telemetry-Declined",
+          "updatedAt": "2023-06-27T20:15:23Z"
         },
         {
-          "name": "gopls/telemetry"
+          "color": "78CF1C",
+          "createdAt": "2023-08-16T15:54:46Z",
+          "description": "issues that would benefit from telemetry data",
+          "id": "LA_kwDOAWBuf88AAAABXNQL1A",
+          "isDefault": false,
+          "name": "gopls/telemetry",
+          "updatedAt": "2023-08-16T15:54:46Z"
         },
         {
-          "name": "gopls/telemetry-wins"
+          "color": "AFF0B2",
+          "createdAt": "2023-10-26T18:01:58Z",
+          "description": "",
+          "id": "LA_kwDOAWBuf88AAAABbZk2Gw",
+          "isDefault": false,
+          "name": "gopls/telemetry-wins",
+          "updatedAt": "2023-10-26T18:01:58Z"
         },
         {
-          "name": "FixPending"
+          "color": "fbca04",
+          "createdAt": "2023-10-31T21:48:32Z",
+          "description": "Issues that have a fix which has not yet been reviewed or submitted.",
+          "id": "LA_kwDOAWBuf88AAAABbscjNw",
+          "isDefault": false,
+          "name": "FixPending",
+          "updatedAt": "2023-10-31T21:48:32Z"
         },
         {
-          "name": "BadErrorMessage"
+          "color": "F00DAB",
+          "createdAt": "2023-12-07T18:17:58Z",
+          "description": "Issues related compiler error messages that should be better.",
+          "id": "LA_kwDOAWBuf88AAAABd4A2YQ",
+          "isDefault": false,
+          "name": "BadErrorMessage",
+          "updatedAt": "2023-12-07T18:17:58Z"
         },
         {
-          "name": "arch-amd64"
+          "color": "228851",
+          "createdAt": "2023-12-13T09:35:29Z",
+          "description": "",
+          "id": "LA_kwDOAWBuf88AAAABeLhqxA",
+          "isDefault": false,
+          "name": "arch-amd64",
+          "updatedAt": "2023-12-13T09:36:20Z"
         },
         {
-          "name": "Access"
+          "color": "fef2c0",
+          "createdAt": "2024-05-16T14:26:47Z",
+          "description": "Access request.",
+          "id": "LA_kwDOAWBuf88AAAABnskDyQ",
+          "isDefault": false,
+          "name": "Access",
+          "updatedAt": "2024-05-16T14:26:47Z"
         },
         {
-          "name": "Friction"
+          "color": "0086FD",
+          "createdAt": "2024-05-20T16:06:28Z",
+          "description": "Nuisances that make good candidates for our \"friction\" fix-it weeks",
+          "id": "LA_kwDOAWBuf88AAAABn8A2Ww",
+          "isDefault": false,
+          "name": "Friction",
+          "updatedAt": "2024-05-20T16:06:28Z"
         },
         {
-          "name": "Critical"
+          "color": "bfdadc",
+          "createdAt": "2024-06-25T03:03:18Z",
+          "description": "A critical problem that affects the availability or correctness of production systems built using Go",
+          "id": "LA_kwDOAWBuf88AAAABqI7sLA",
+          "isDefault": false,
+          "name": "Critical",
+          "updatedAt": "2024-11-08T17:39:28Z"
         },
         {
-          "name": "gabywins"
+          "color": "FEF2C0",
+          "createdAt": "2024-06-28T18:31:49Z",
+          "description": "",
+          "id": "LA_kwDOAWBuf88AAAABqYxTvQ",
+          "isDefault": false,
+          "name": "gabywins",
+          "updatedAt": "2024-06-28T18:31:49Z"
         },
         {
-          "name": "LanguageChangeReview"
+          "color": "C5DEF5",
+          "createdAt": "2024-08-06T16:54:23Z",
+          "description": "Discussed by language change review committee",
+          "id": "LA_kwDOAWBuf88AAAABsvYKiQ",
+          "isDefault": false,
+          "name": "LanguageChangeReview",
+          "updatedAt": "2024-08-07T20:19:22Z"
         },
         {
-          "name": "Scalability"
+          "color": "0e8a16",
+          "createdAt": "2024-12-05T16:46:01Z",
+          "description": "Issues related to runtime/application scalability",
+          "id": "LA_kwDOAWBuf88AAAAB047Q1w",
+          "isDefault": false,
+          "name": "Scalability",
+          "updatedAt": "2024-12-05T16:46:01Z"
         },
         {
-          "name": "invalid"
+          "color": "FFFFFF",
+          "createdAt": "2024-12-16T01:39:12Z",
+          "description": "This issue is empty, incomplete (e.g. unanswered template questions), or spam.",
+          "id": "LA_kwDOAWBuf88AAAAB1jAVHw",
+          "isDefault": true,
+          "name": "invalid",
+          "updatedAt": "2024-12-16T01:39:12Z"
         },
         {
-          "name": "compiler/telemetry-wins"
+          "color": "0e8a16",
+          "createdAt": "2024-12-26T03:21:16Z",
+          "description": "",
+          "id": "LA_kwDOAWBuf88AAAAB2Jp8sQ",
+          "isDefault": false,
+          "name": "compiler/telemetry-wins",
+          "updatedAt": "2024-12-26T03:21:16Z"
         },
         {
-          "name": "LanguageProposal"
+          "color": "4d0070",
+          "createdAt": "2025-01-02T18:39:42Z",
+          "description": "Issues describing a requested change to the Go language specification.",
+          "id": "LA_kwDOAWBuf88AAAAB2it64Q",
+          "isDefault": false,
+          "name": "LanguageProposal",
+          "updatedAt": "2025-01-02T18:39:42Z"
         },
         {
-          "name": "LibraryProposal"
+          "color": "4d0070",
+          "createdAt": "2025-01-02T18:39:42Z",
+          "description": "Issues describing a requested change to the Go standard library or x/ libraries, but not to a tool",
+          "id": "LA_kwDOAWBuf88AAAAB2it69A",
+          "isDefault": false,
+          "name": "LibraryProposal",
+          "updatedAt": "2025-01-02T18:39:42Z"
         },
         {
-          "name": "ToolProposal"
+          "color": "4d0070",
+          "createdAt": "2025-01-02T18:39:42Z",
+          "description": "Issues describing a requested change to a Go tool or command-line program.",
+          "id": "LA_kwDOAWBuf88AAAAB2it7DQ",
+          "isDefault": false,
+          "name": "ToolProposal",
+          "updatedAt": "2025-01-02T18:39:42Z"
         },
         {
-          "name": "AccessRequest"
+          "color": "4d0070",
+          "createdAt": "2025-01-02T18:39:43Z",
+          "description": "Issues requesting builder or gomote access.",
+          "id": "LA_kwDOAWBuf88AAAAB2it7GQ",
+          "isDefault": false,
+          "name": "AccessRequest",
+          "updatedAt": "2025-01-02T18:39:43Z"
         },
         {
-          "name": "Automation"
+          "color": "4d0070",
+          "createdAt": "2025-01-02T18:39:43Z",
+          "description": "Issues created by gopherbot or watchflakes automation.",
+          "id": "LA_kwDOAWBuf88AAAAB2it7HQ",
+          "isDefault": false,
+          "name": "Automation",
+          "updatedAt": "2025-01-02T18:39:43Z"
         },
         {
-          "name": "Backport"
+          "color": "4d0070",
+          "createdAt": "2025-01-02T18:39:43Z",
+          "description": "Issues created for requesting a backport of a change to a previous Go version.",
+          "id": "LA_kwDOAWBuf88AAAAB2it7Kg",
+          "isDefault": false,
+          "name": "Backport",
+          "updatedAt": "2025-01-02T18:39:43Z"
         },
         {
-          "name": "Implementation"
+          "color": "4d0070",
+          "createdAt": "2025-01-02T18:39:43Z",
+          "description": "Issues describing a semantics-preserving change to the Go implementation.",
+          "id": "LA_kwDOAWBuf88AAAAB2it7GA",
+          "isDefault": false,
+          "name": "Implementation",
+          "updatedAt": "2025-01-02T18:39:43Z"
         },
         {
-          "name": "Question"
+          "color": "4d0070",
+          "createdAt": "2025-01-02T18:39:43Z",
+          "description": "Issues that are questions about using Go.",
+          "id": "LA_kwDOAWBuf88AAAAB2it7OA",
+          "isDefault": false,
+          "name": "Question",
+          "updatedAt": "2025-01-02T18:39:43Z"
         },
         {
-          "name": "WorkingAsIntended"
+          "color": "4d0070",
+          "createdAt": "2025-01-02T18:39:44Z",
+          "description": "Issues describing something that is working as it is supposed to.",
+          "id": "LA_kwDOAWBuf88AAAAB2it7Pg",
+          "isDefault": false,
+          "name": "WorkingAsIntended",
+          "updatedAt": "2025-01-02T18:39:44Z"
         },
         {
-          "name": "Other"
+          "color": "4d0070",
+          "createdAt": "2025-01-02T20:47:17Z",
+          "description": "None of the above.",
+          "id": "LA_kwDOAWBuf88AAAAB2jDBmA",
+          "isDefault": false,
+          "name": "Other",
+          "updatedAt": "2025-01-02T20:47:17Z"
         },
         {
-          "name": "gopls/survey-candidate"
+          "color": "B3468F",
+          "createdAt": "2025-01-03T17:23:48Z",
+          "description": "",
+          "id": "LA_kwDOAWBuf88AAAAB2mKR6g",
+          "isDefault": false,
+          "name": "gopls/survey-candidate",
+          "updatedAt": "2025-01-03T17:23:48Z"
         },
         {
-          "name": "BugReport"
+          "color": "4d0070",
+          "createdAt": "2025-01-06T15:11:18Z",
+          "description": "Issues describing a possible bug in the Go implementation.",
+          "id": "LA_kwDOAWBuf88AAAAB2wHLDg",
+          "isDefault": false,
+          "name": "BugReport",
+          "updatedAt": "2025-01-06T15:11:18Z"
         },
         {
-          "name": "TelemetryProposal"
+          "color": "4d0070",
+          "createdAt": "2025-01-08T18:58:25Z",
+          "description": "Issues proposing new telemetry counters.",
+          "id": "LA_kwDOAWBuf88AAAAB257T0w",
+          "isDefault": false,
+          "name": "TelemetryProposal",
+          "updatedAt": "2025-01-08T18:58:25Z"
         },
         {
-          "name": "gopls/memory-corruption"
+          "color": "c2e0c6",
+          "createdAt": "2025-04-08T17:25:19Z",
+          "description": "\"can't happen\" gopls crashes (races, unsafe, miscompile, runtime bugs, faulty HW)",
+          "id": "LA_kwDOAWBuf88AAAAB9iA4SQ",
+          "isDefault": false,
+          "name": "gopls/memory-corruption",
+          "updatedAt": "2025-04-08T17:27:12Z"
         },
         {
-          "name": "Go Command Working Group"
+          "color": "b1f028",
+          "createdAt": "2026-03-17T18:29:48Z",
+          "description": "",
+          "id": "LA_kwDOAWBuf88AAAACbxKn-g",
+          "isDefault": false,
+          "name": "Go Command Working Group",
+          "updatedAt": "2026-03-17T18:29:48Z"
         },
         {
-          "name": "meeting-minutes"
+          "color": "4d0070",
+          "createdAt": "2026-03-31T16:48:59Z",
+          "description": "Meeting minutes/notes from periodic meetings.",
+          "id": "LA_kwDOAWBuf88AAAACdic60A",
+          "isDefault": false,
+          "name": "meeting-minutes",
+          "updatedAt": "2026-03-31T16:48:59Z"
         },
         {
-          "name": "pkgsite/api"
+          "color": "789e67",
+          "createdAt": "2026-06-18T19:19:05Z",
+          "description": "Issues related to the pkgsite api.",
+          "id": "LA_kwDOAWBuf88AAAACn_pa8g",
+          "isDefault": false,
+          "name": "pkgsite/api",
+          "updatedAt": "2026-06-18T19:19:05Z"
         },
         {
-          "name": "okay-after-rc2"
+          "color": "aaaaaa",
+          "createdAt": "2026-06-30T18:12:14Z",
+          "description": "Used by release team to mark a release-blocker issue as okay to resolve either before or after rc2",
+          "id": "LA_kwDOAWBuf88AAAACpmO1Qg",
+          "isDefault": false,
+          "name": "okay-after-rc2",
+          "updatedAt": "2026-06-30T18:35:25Z"
         },
         {
-          "name": "cgo"
+          "color": "7b218c",
+          "createdAt": "2026-09-10T08:20:32Z",
+          "description": "Issues affecting runtime/cgo and cmd/go",
+          "id": "LA_kwDOAWBuf88AAAAC0vtxNw",
+          "isDefault": false,
+          "name": "cgo",
+          "updatedAt": "2026-09-10T08:20:32Z"
         }
       ],
       "pageInfo": {
@@ -143,22 +407,22 @@
       "totalCount": 144
     }
   },
-  "document_sha256": "b4b471b4a4ae008f32082b791774dc31d2687633a2527e146c1916cc7c159e82",
+  "document_sha256": "7fe3642024958e2291bf6f57d3af60a36a45a3dd5f529dea00e63a5c31096028",
   "errors": [],
   "extra": {},
   "headers": {
-    "date": "Sat, 17 Oct 2026 12:09:32 GMT",
+    "date": "Sun, 18 Oct 2026 21:12:04 GMT",
     "x-ratelimit-limit": "5000",
-    "x-ratelimit-remaining": "4980",
-    "x-ratelimit-reset": "1792242556",
+    "x-ratelimit-remaining": "4956",
+    "x-ratelimit-reset": "1792360091",
     "x-ratelimit-resource": "graphql",
-    "x-ratelimit-used": "20"
+    "x-ratelimit-used": "44"
   },
   "key": {
     "after": "MTAw",
     "id": "MDEwOlJlcG9zaXRvcnkyMzA5Njk1OQ=="
   },
   "kind": "repository_labels",
-  "recorded_at": "2026-10-17T12:09:19Z",
+  "recorded_at": "2026-10-18T21:11:43Z",
   "source": "live"
 }

@@ -4,9 +4,15 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from .errors import ActorWithoutId
-from .models import Actor, ClosingIssueNode, EnterpriseActor
-from .records import Account, ClosingIssue
+from .models import (
+    AccountFields,
+    Actor,
+    AssignedActorNode,
+    ClosingIssueNode,
+    EnterpriseActor,
+    RequestedAccount,
+)
+from .records import Account, AccountType, ClosingIssue
 
 
 def utc(value: datetime) -> datetime:
@@ -14,19 +20,40 @@ def utc(value: datetime) -> datetime:
     return value.astimezone(UTC)
 
 
-def account(actor: Actor | None, *, number: int, role: str) -> Account | None:
-    """The account behind an actor; a null actor (deleted account) is None.
+def utc_or_none(value: datetime | None) -> datetime | None:
+    return utc(value) if value is not None else None
 
-    An ``EnterpriseUserAccount`` has no ``databaseId``, so the item fails rather than storing a
-    null reference that would read as a deleted account (plan 5.2).
+
+def account(actor: Actor | None) -> Account | None:
+    """The account behind an actor; None where GitHub returned no actor, which GitHub does not
+    explain (D28).
+
+    An ``EnterpriseUserAccount`` has no ``databaseId``: it is kept with a null ``github_id``,
+    identified by its node id, its user's ``databaseId`` beside it (plan 5.2, gap 85).
     """
     if actor is None:
         return None
     if isinstance(actor, EnterpriseActor):
-        raise ActorWithoutId(number, role, actor.typename, actor.login)
+        return Account(
+            github_id=None,
+            node_id=actor.id,
+            login=actor.login,
+            type=actor.typename,
+            linked_user_github_id=actor.user.database_id if actor.user is not None else None,
+        )
     return Account(
         github_id=actor.database_id, node_id=actor.id, login=actor.login, type=actor.typename
     )
+
+
+def union_account(node: RequestedAccount | AssignedActorNode) -> Account:
+    """An account selected through a union with ``__typename`` (a requested reviewer, an
+    assignee): an actor sighting like any other (plan 5.2)."""
+    return _account_fields(node, node.typename)
+
+
+def _account_fields(node: AccountFields, typename: AccountType) -> Account:
+    return Account(github_id=node.database_id, node_id=node.id, login=node.login, type=typename)
 
 
 def closing_issue(node: ClosingIssueNode) -> ClosingIssue:

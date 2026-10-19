@@ -276,7 +276,8 @@ class PagingStalled(InvariantError):
 
 
 class DuplicateEntry(InvariantError):
-    """A connection listed an entry twice by the key the database stores it under."""
+    """A connection listed an entry twice: by the key the database stores it under, or, for a
+    review request, which is stored by its position, by its own node id."""
 
     def __init__(self, number: int, connection: str, key: object) -> None:
         super().__init__(number, f"{connection}: {key!r} listed twice")
@@ -291,6 +292,14 @@ class MergeStateMismatch(InvariantError):
         super().__init__(number, f"state {state} with mergedAt {'set' if merged else 'null'}")
         self.state = state
         self.merged = merged
+
+
+class CloseTimeMissing(InvariantError):
+    """A closed or merged pull request without ``closedAt``, which the coverage rule reads."""
+
+    def __init__(self, number: int, state: str) -> None:
+        super().__init__(number, f"state {state} without closedAt")
+        self.state = state
 
 
 class NullEntry(InvariantError):
@@ -321,11 +330,13 @@ class IdentityMismatch(InvariantError):
         self.actual = actual
 
 
-class ActorWithoutId(InvariantError):
-    """A non-null actor has no ``databaseId`` (``EnterpriseUserAccount``)."""
+class UserLinkedIssueNotListed(InvariantError):
+    """A link GitHub lists under ``userLinkedOnly: true`` is missing from the full list."""
 
-    def __init__(self, number: int, role: str, typename: str, login: str) -> None:
-        super().__init__(number, f"{role} {login} is a {typename}, which has no databaseId")
-        self.role = role
-        self.typename = typename
-        self.login = login
+    def __init__(self, number: int, key: tuple[int, int]) -> None:
+        super().__init__(
+            number,
+            f"user-linked closing issue {key[1]} of repository {key[0]} is not in "
+            "closingIssuesReferences",
+        )
+        self.key = key

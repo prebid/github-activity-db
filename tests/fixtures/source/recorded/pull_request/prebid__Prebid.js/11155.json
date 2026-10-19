@@ -1,6 +1,21 @@
 {
   "data": {
     "additions": 43,
+    "assignedActors": {
+      "nodes": [
+        {
+          "__typename": "User",
+          "databaseId": 34142758,
+          "id": "MDQ6VXNlcjM0MTQyNzU4",
+          "login": "ncolletti"
+        }
+      ],
+      "pageInfo": {
+        "endCursor": "MQ",
+        "hasNextPage": false
+      },
+      "totalCount": 1
+    },
     "author": {
       "__typename": "User",
       "databaseId": 159261864,
@@ -11,7 +26,9 @@
     "baseRefName": "master",
     "baseRefOid": "b97b55a75b7d76292f08fc15c0d75d15ae284d91",
     "body": "<!--\r\nThank you for your pull request! \r\n\r\nPlease title your pull request like this: 'Module: Change', eg 'Fraggles Bid Adapter: support fragglerock'\r\n\r\nPlease make sure this PR is scoped to one change or you may be asked to resubmit. \r\n \r\nPlease make sure any added or changed code includes tests with greater than 80% code coverage. \r\n\r\nSee https://github.com/prebid/Prebid.js/blob/master/CONTRIBUTING.md#testing-prebidjs for documentation on testing Prebid.js.\r\n\r\nFor any user facing change, submit a link to a PR on the docs repo at https://github.com/prebid/prebid.github.io/\r\n-->\r\n\r\n## Type of change\r\n<!-- Remove items that don't apply and/or select an item by changing [ ] to [x] -->\r\n- [x] Bugfix\r\n- [ ] Feature\r\n- [ ] New bidder adapter  <!--  IMPORTANT: if checking here, also submit your bidder params documentation here https://github.com/prebid/prebid.github.io/tree/master/dev-docs/bidders --> \r\n- [ ] Code style update (formatting, local variables)\r\n- [ ] Refactoring (no functional changes, no api changes)\r\n- [ ] Build related changes\r\n- [ ] CI related changes\r\n\r\n- [ ] Does this change affect user-facing APIs or examples documented on http://prebid.org?\r\n- [ ] Other\r\n\r\n## Description of change\r\n<!-- Describe the change proposed in this pull request -->\r\n\r\n<!-- For new bidder adapters, please provide the following\r\n- contact email of the adapter’s maintainer\r\n- test parameters for validating bids:\r\n```\r\n{\r\n  bidder: '<bidder name>',\r\n  params: {\r\n    // ...\r\n  }\r\n}\r\n```\r\n\r\nBe sure to test the integration with your adserver using the [Hello World](/integrationExamples/gpt/hello_world.html) sample page. -->\r\n\r\n\r\n## Other information\r\n<!-- References to related PR or issue #s, @mentions of the person or team responsible for reviewing changes, etc. -->\r\n",
+    "canBeRebased": false,
     "changedFiles": 2,
+    "closedAt": "2024-03-06T21:05:23Z",
     "closingIssuesReferences": {
       "nodes": [],
       "pageInfo": {
@@ -29,7 +46,16 @@
             "id": "MDQ6VXNlcjM0MTQyNzU4",
             "login": "ncolletti"
           },
-          "fullDatabaseId": "1975232431"
+          "authorAssociation": "MEMBER",
+          "createdAt": "2024-03-03T17:07:35Z",
+          "createdViaEmail": false,
+          "editor": null,
+          "fullDatabaseId": "1975232431",
+          "id": "IC_kwDOAlf9v851u6ev",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2024-03-03T17:07:35Z",
+          "updatedAt": "2024-03-03T17:07:35Z"
         },
         {
           "author": {
@@ -38,7 +64,16 @@
             "id": "U_kgDOCX4kqA",
             "login": "bhasker-ddh"
           },
-          "fullDatabaseId": "1976089644"
+          "authorAssociation": "CONTRIBUTOR",
+          "createdAt": "2024-03-04T09:16:26Z",
+          "createdViaEmail": false,
+          "editor": null,
+          "fullDatabaseId": "1976089644",
+          "id": "IC_kwDOAlf9v851yLws",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2024-03-04T09:16:26Z",
+          "updatedAt": "2024-03-04T09:16:26Z"
         },
         {
           "author": {
@@ -47,7 +82,16 @@
             "id": "MDQ6VXNlcjM0MTQyNzU4",
             "login": "ncolletti"
           },
-          "fullDatabaseId": "1979065696"
+          "authorAssociation": "MEMBER",
+          "createdAt": "2024-03-05T15:42:20Z",
+          "createdViaEmail": false,
+          "editor": null,
+          "fullDatabaseId": "1979065696",
+          "id": "IC_kwDOAlf9v8519iVg",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2024-03-05T15:42:20Z",
+          "updatedAt": "2024-03-05T15:42:20Z"
         },
         {
           "author": {
@@ -56,7 +100,16 @@
             "id": "U_kgDOCX4kqA",
             "login": "bhasker-ddh"
           },
-          "fullDatabaseId": "1979255993"
+          "authorAssociation": "CONTRIBUTOR",
+          "createdAt": "2024-03-05T17:14:10Z",
+          "createdViaEmail": false,
+          "editor": null,
+          "fullDatabaseId": "1979255993",
+          "id": "IC_kwDOAlf9v851-Qy5",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2024-03-05T17:14:10Z",
+          "updatedAt": "2024-03-05T17:14:10Z"
         }
       ],
       "pageInfo": {
@@ -1220,6 +1273,12 @@
     },
     "createdAt": "2024-02-29T09:47:30Z",
     "deletions": 10,
+    "editor": {
+      "__typename": "User",
+      "databaseId": 159261864,
+      "id": "U_kgDOCX4kqA",
+      "login": "bhasker-ddh"
+    },
     "files": {
       "nodes": [
         {
@@ -1242,13 +1301,24 @@
       "totalCount": 2
     },
     "fullDatabaseId": "1749393683",
+    "headRefName": "master",
     "headRefOid": "4acfb10fdd4915a916f8c62ba9978b5fc7738731",
+    "headRepository": {
+      "databaseId": 125056476,
+      "nameWithOwner": "Direct-Digital-Holdings/Prebid.js"
+    },
+    "headRepositoryOwner": {
+      "id": "O_kgDOCWbklA",
+      "login": "Direct-Digital-Holdings"
+    },
     "id": "PR_kwDOAlf9v85oRaET",
+    "includesCreatedEdit": true,
     "isCrossRepository": true,
     "isDraft": false,
     "labels": {
       "nodes": [
         {
+          "id": "MDU6TGFiZWwyNTU0MjQ0Mzk2",
           "name": "bugfix"
         }
       ],
@@ -1258,6 +1328,13 @@
       },
       "totalCount": 1
     },
+    "lastEditedAt": "2024-02-29T09:47:51Z",
+    "maintainerCanModify": false,
+    "mergeCommit": {
+      "oid": "0210d2eeb5639753e1e39ad0069ea69325d60e2c"
+    },
+    "mergeStateStatus": "UNKNOWN",
+    "mergeable": "UNKNOWN",
     "mergedAt": "2024-03-06T21:05:23Z",
     "mergedBy": {
       "__typename": "User",
@@ -1265,7 +1342,19 @@
       "id": "MDQ6VXNlcjM0MTQyNzU4",
       "login": "ncolletti"
     },
+    "milestone": null,
     "number": 11155,
+    "potentialMergeCommit": null,
+    "publishedAt": "2024-02-29T09:47:30Z",
+    "reviewDecision": "APPROVED",
+    "reviewRequests": {
+      "nodes": [],
+      "pageInfo": {
+        "endCursor": null,
+        "hasNextPage": false
+      },
+      "totalCount": 0
+    },
     "reviews": {
       "nodes": [
         {
@@ -1275,8 +1364,24 @@
             "id": "MDQ6VXNlcjM0MTQyNzU4",
             "login": "ncolletti"
           },
+          "authorAssociation": "MEMBER",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 0
+          },
+          "commit": {
+            "oid": "dfaed095ad1909774f08094622e8f8158472501c"
+          },
+          "createdAt": "2024-03-04T15:19:32Z",
+          "editor": null,
           "fullDatabaseId": "1914599493",
-          "state": "APPROVED"
+          "id": "PRR_kwDOAlf9v85yHnhF",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2024-03-04T15:19:32Z",
+          "state": "APPROVED",
+          "submittedAt": "2024-03-04T15:19:32Z",
+          "updatedAt": "2024-03-04T15:19:32Z"
         },
         {
           "author": {
@@ -1285,8 +1390,24 @@
             "id": "MDQ6VXNlcjM0MTQyNzU4",
             "login": "ncolletti"
           },
+          "authorAssociation": "MEMBER",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 1
+          },
+          "commit": {
+            "oid": "dfaed095ad1909774f08094622e8f8158472501c"
+          },
+          "createdAt": "2024-03-04T15:20:19Z",
+          "editor": null,
           "fullDatabaseId": "1914601441",
-          "state": "COMMENTED"
+          "id": "PRR_kwDOAlf9v85yHn_h",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2024-03-04T15:20:19Z",
+          "state": "COMMENTED",
+          "submittedAt": "2024-03-04T15:20:20Z",
+          "updatedAt": "2024-03-04T15:20:20Z"
         },
         {
           "author": {
@@ -1295,8 +1416,24 @@
             "id": "U_kgDOCX4kqA",
             "login": "bhasker-ddh"
           },
+          "authorAssociation": "CONTRIBUTOR",
+          "authorCanPushToRepository": false,
+          "comments": {
+            "totalCount": 1
+          },
+          "commit": {
+            "oid": "dfaed095ad1909774f08094622e8f8158472501c"
+          },
+          "createdAt": "2024-03-04T15:41:53Z",
+          "editor": null,
           "fullDatabaseId": "1914653889",
-          "state": "COMMENTED"
+          "id": "PRR_kwDOAlf9v85yH0zB",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2024-03-04T15:41:53Z",
+          "state": "COMMENTED",
+          "submittedAt": "2024-03-04T15:41:53Z",
+          "updatedAt": "2024-03-04T15:41:53Z"
         },
         {
           "author": {
@@ -1305,8 +1442,24 @@
             "id": "MDQ6VXNlcjM0MTQyNzU4",
             "login": "ncolletti"
           },
+          "authorAssociation": "MEMBER",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 1
+          },
+          "commit": {
+            "oid": "7bffa6ce703ee8b2d333e316b59868e075d33b1b"
+          },
+          "createdAt": "2024-03-05T15:08:21Z",
+          "editor": null,
           "fullDatabaseId": "1917310385",
-          "state": "COMMENTED"
+          "id": "PRR_kwDOAlf9v85yR9Wx",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2024-03-05T15:08:21Z",
+          "state": "COMMENTED",
+          "submittedAt": "2024-03-05T15:08:21Z",
+          "updatedAt": "2024-03-05T15:08:21Z"
         },
         {
           "author": {
@@ -1315,8 +1468,24 @@
             "id": "U_kgDOCX4kqA",
             "login": "bhasker-ddh"
           },
+          "authorAssociation": "CONTRIBUTOR",
+          "authorCanPushToRepository": false,
+          "comments": {
+            "totalCount": 1
+          },
+          "commit": {
+            "oid": "dfaed095ad1909774f08094622e8f8158472501c"
+          },
+          "createdAt": "2024-03-05T15:23:56Z",
+          "editor": null,
           "fullDatabaseId": "1917354492",
-          "state": "COMMENTED"
+          "id": "PRR_kwDOAlf9v85ySIH8",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2024-03-05T15:23:56Z",
+          "state": "COMMENTED",
+          "submittedAt": "2024-03-05T15:23:56Z",
+          "updatedAt": "2024-03-05T15:23:56Z"
         }
       ],
       "pageInfo": {
@@ -1325,20 +1494,31 @@
       },
       "totalCount": 5
     },
+    "stack": null,
+    "stackEntry": null,
     "state": "MERGED",
     "title": "Colossus Bid Adapter: Add GPP Support and Accept eids from publisher request",
-    "updatedAt": "2024-03-06T21:05:23Z"
+    "totalCommentsCount": 9,
+    "updatedAt": "2024-03-06T21:05:23Z",
+    "userLinkedClosingIssues": {
+      "nodes": [],
+      "pageInfo": {
+        "endCursor": null,
+        "hasNextPage": false
+      },
+      "totalCount": 0
+    }
   },
-  "document_sha256": "39fd2b5d7744d57be4fd58ba38b2fcf50319c5bd19e1c3796ae4771203af3ea0",
+  "document_sha256": "3527b3fa77b23d4166d3a8a063506be04f20c8bec7cee75e2bf801d0d608c26c",
   "errors": [],
   "extra": {},
   "headers": {
-    "date": "Sat, 17 Oct 2026 12:09:24 GMT",
+    "date": "Sun, 18 Oct 2026 21:11:51 GMT",
     "x-ratelimit-limit": "5000",
-    "x-ratelimit-remaining": "4929",
-    "x-ratelimit-reset": "1792241340",
+    "x-ratelimit-remaining": "4971",
+    "x-ratelimit-reset": "1792360091",
     "x-ratelimit-resource": "graphql",
-    "x-ratelimit-used": "71"
+    "x-ratelimit-used": "29"
   },
   "key": {
     "name": "Prebid.js",
@@ -1346,6 +1526,6 @@
     "owner": "prebid"
   },
   "kind": "pull_request",
-  "recorded_at": "2026-10-17T12:09:19Z",
+  "recorded_at": "2026-10-18T21:11:43Z",
   "source": "live"
 }

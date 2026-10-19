@@ -19,13 +19,14 @@ from typing import Final
 from .limits import INDEX_CLOSING_LINKS, PAGE_SIZE
 
 PULL_REQUEST_KIND: Final = "pull_request"
-PULL_REQUEST_HYDRATION_VERSION: Final = 1
+PULL_REQUEST_HYDRATION_VERSION: Final = 2
 
 RATE_LIMIT: Final = "rateLimit { cost remaining resetAt }"
 
 # `ghactivity github rate-limit` (plan 5.8); REST /rate_limit supplies each pool's limit and use.
 RATE_LIMIT_QUERY: Final = f"query RateLimit {{ {RATE_LIMIT} }}"
 
+# An EnterpriseUserAccount has no databaseId; its user's id is selected instead (plan 5.2).
 ACTOR_FRAGMENT: Final = """
 fragment Actor on Actor {
   __typename
@@ -34,17 +35,28 @@ fragment Actor on Actor {
   ... on Bot { id databaseId }
   ... on Organization { id databaseId }
   ... on Mannequin { id databaseId }
+  ... on EnterpriseUserAccount { id user { databaseId } }
 }
 """
 
 
 @dataclass(frozen=True)
 class Connection:
-    """A pull request connection fetched in full: first page, then overflow continuations."""
+    """A pull request connection fetched in full: first page, then overflow continuations.
+
+    ``alias`` names a second selection of the same field (``closingIssuesReferences`` with
+    ``userLinkedOnly``); the response carries the connection under ``key``.
+    """
 
     field: str
     arguments: str
     nodes: str
+    alias: str | None = None
+
+    @property
+    def key(self) -> str:
+        """The connection's name in the response, and in its overflow alias."""
+        return self.alias or self.field
 
     @property
     def uses_actor(self) -> bool:
@@ -61,24 +73,45 @@ class Connection:
             arguments.append(f"after: ${after_variable}")
         if self.arguments:
             arguments.append(self.arguments)
+        prefix = f"{self.alias}: " if self.alias else ""
         return (
-            f"{self.field}({', '.join(arguments)}) {{ totalCount "
+            f"{prefix}{self.field}({', '.join(arguments)}) {{ totalCount "
             f"pageInfo {{ hasNextPage endCursor }} nodes {{ {self.nodes} }} }}"
         )
 
 
-LABELS: Final = Connection("labels", "", "name")
+# An account's own fields, for selections GitHub types as a union rather than as Actor.
+_ACCOUNT = "id databaseId login"
+
+LABELS: Final = Connection("labels", "", "id name")
 CLOSING_ISSUES: Final = Connection(
-    "closingIssuesReferences", "", "number repository { databaseId nameWithOwner }"
+    "closingIssuesReferences",
+    "",
+    "fullDatabaseId number repository { databaseId nameWithOwner }",
+)
+# The links GitHub lists as manually linked: "Return only manually linked Issues" (D23).
+USER_LINKED_CLOSING_ISSUES: Final = Connection(
+    "closingIssuesReferences",
+    "userLinkedOnly: true",
+    "number repository { databaseId }",
+    alias="userLinkedClosingIssues",
 )
 # Requested without PENDING, so totalCount counts exactly the reviews that are stored (D4).
+# `comments { totalCount }` selects no nodes: each review's inline-comment count (D5).
 REVIEWS: Final = Connection(
     "reviews",
     "states: [APPROVED, CHANGES_REQUESTED, COMMENTED, DISMISSED]",
-    "fullDatabaseId state author { ...Actor }",
+    "id fullDatabaseId state createdAt submittedAt authorAssociation authorCanPushToRepository "
+    "updatedAt lastEditedAt publishedAt includesCreatedEdit commit { oid } comments { totalCount } "
+    "author { ...Actor } editor { ...Actor }",
 )
-# Each comment's id and author, never its text (D24).
-COMMENTS: Final = Connection("comments", "", "fullDatabaseId author { ...Actor }")
+# Each comment's ids, authors, and times, never its text (D24).
+COMMENTS: Final = Connection(
+    "comments",
+    "",
+    "id fullDatabaseId createdAt updatedAt lastEditedAt authorAssociation publishedAt "
+    "createdViaEmail includesCreatedEdit author { ...Actor } editor { ...Actor }",
+)
 # No connection inside `commits`: GraphQL charges for every possible nested node (D15).
 COMMITS: Final = Connection(
     "commits",
@@ -86,29 +119,66 @@ COMMITS: Final = Connection(
     "commit { oid authoredDate author { name email user { id databaseId login } } }",
 )
 FILES: Final = Connection("files", "", "path changeType additions deletions")
+# GitHub's RequestedReviewer union also holds EnterpriseTeam, which has fullDatabaseId instead
+# of databaseId.
+REVIEW_REQUESTS: Final = Connection(
+    "reviewRequests",
+    "",
+    f"id databaseId asCodeOwner requestedReviewer {{ __typename ... on User {{ {_ACCOUNT} }} "
+    f"... on Bot {{ {_ACCOUNT} }} ... on Mannequin {{ {_ACCOUNT} }} "
+    "... on Team { id databaseId slug } ... on EnterpriseTeam { id fullDatabaseId slug } }",
+)
+# `assignedActors`, unlike `assignees`, lists bots and organizations too (D14).
+ASSIGNED_ACTORS: Final = Connection(
+    "assignedActors",
+    "",
+    f"__typename ... on User {{ {_ACCOUNT} }} ... on Bot {{ {_ACCOUNT} }} "
+    f"... on Mannequin {{ {_ACCOUNT} }} ... on Organization {{ {_ACCOUNT} }}",
+)
 
-PULL_REQUEST_CONNECTIONS: Final = (LABELS, CLOSING_ISSUES, REVIEWS, COMMENTS, COMMITS, FILES)
-CONNECTIONS_BY_FIELD: Final = {
-    connection.field: connection for connection in PULL_REQUEST_CONNECTIONS
-}
+PULL_REQUEST_CONNECTIONS: Final = (
+    LABELS,
+    CLOSING_ISSUES,
+    USER_LINKED_CLOSING_ISSUES,
+    REVIEWS,
+    COMMENTS,
+    COMMITS,
+    FILES,
+    REVIEW_REQUESTS,
+    ASSIGNED_ACTORS,
+)
+CONNECTIONS_BY_KEY: Final = {connection.key: connection for connection in PULL_REQUEST_CONNECTIONS}
 
 PULL_REQUEST_FIELDS: Final = f"""
 fragment PullRequestFields on PullRequest {{
-  id number fullDatabaseId state isDraft title body createdAt updatedAt mergedAt
-  baseRefName baseRefOid headRefOid isCrossRepository authorAssociation
+  id number fullDatabaseId state isDraft title body createdAt updatedAt mergedAt closedAt
+  lastEditedAt baseRefName baseRefOid headRefName headRefOid isCrossRepository authorAssociation
+  headRepository {{ databaseId nameWithOwner }} mergeCommit {{ oid }} milestone {{ number title }}
+  reviewDecision totalCommentsCount publishedAt includesCreatedEdit maintainerCanModify
+  headRepositoryOwner {{ id login }}
+  mergeable mergeStateStatus canBeRebased potentialMergeCommit {{ oid }}
+  stack {{ id number size baseRefName }} stackEntry {{ id position }}
   additions deletions changedFiles
-  author {{ ...Actor }} mergedBy {{ ...Actor }}
+  author {{ ...Actor }} mergedBy {{ ...Actor }} editor {{ ...Actor }}
   {" ".join(connection.selection() for connection in PULL_REQUEST_CONNECTIONS)}
 }}
 """
 
+_REPOSITORY_LABEL = "id name color description isDefault createdAt updatedAt"
+
 RESOLVE: Final = f"""
 query Resolve($owner: String!, $name: String!) {{
   repository(owner: $owner, name: $name) {{
-    id databaseId nameWithOwner name owner {{ login }} isPrivate isArchived
-    defaultBranchRef {{ name }}
+    id databaseId nameWithOwner name owner {{ login }} isPrivate isArchived isSecurityPolicyEnabled
+    visibility description homepageUrl createdAt updatedAt pushedAt archivedAt stargazerCount
+    forkCount diskUsage forkingAllowed allowUpdateBranch webCommitSignoffRequired hasWikiEnabled
+    hasDiscussionsEnabled hasProjectsEnabled hasVulnerabilityAlertsEnabled usesCustomOpenGraphImage
+    mergeCommitAllowed squashMergeAllowed rebaseMergeAllowed deleteBranchOnMerge mergeCommitTitle
+    mergeCommitMessage squashMergeCommitTitle squashMergeCommitMessage primaryLanguage {{ name }}
+    licenseInfo {{ spdxId }} defaultBranchRef {{ name }}
+    planFeatures {{ codeowners teamReviewRequests maximumManualReviewRequests }}
     labels(first: {PAGE_SIZE}) {{
-      totalCount pageInfo {{ hasNextPage endCursor }} nodes {{ name }}
+      totalCount pageInfo {{ hasNextPage endCursor }} nodes {{ {_REPOSITORY_LABEL} }}
     }}
   }}
   {RATE_LIMIT}
@@ -121,7 +191,7 @@ query RepositoryLabels($id: ID!, $after: String!) {{
     ... on Repository {{
       id
       labels(first: {PAGE_SIZE}, after: $after) {{
-        totalCount pageInfo {{ hasNextPage endCursor }} nodes {{ name }}
+        totalCount pageInfo {{ hasNextPage endCursor }} nodes {{ {_REPOSITORY_LABEL} }}
       }}
     }}
   }}
@@ -138,7 +208,7 @@ query PullRequestIndex($owner: String!, $name: String!, $after: String) {{
       totalCount
       pageInfo {{ hasNextPage endCursor }}
       nodes {{
-        number fullDatabaseId state isDraft authorAssociation createdAt updatedAt mergedAt
+        number fullDatabaseId state isDraft authorAssociation createdAt updatedAt mergedAt closedAt
         closingIssuesReferences(first: {INDEX_CLOSING_LINKS}) {{
           totalCount nodes {{ number repository {{ databaseId nameWithOwner }} }}
         }}
@@ -153,10 +223,14 @@ USER_LOOKUP: Final = f"""
 query UserLookup($ids: [ID!]!) {{
   nodes(ids: $ids) {{
     __typename id
-    ... on User {{ databaseId login }}
-    ... on Bot {{ databaseId login }}
-    ... on Organization {{ databaseId login }}
-    ... on Mannequin {{ databaseId login }}
+    ... on User {{ databaseId login name createdAt updatedAt company location websiteUrl }}
+    ... on Bot {{ databaseId login createdAt updatedAt }}
+    ... on Organization {{
+      databaseId login name createdAt updatedAt description email location websiteUrl
+      twitterUsername isVerified archivedAt hasSponsorsListing pinnedItemsRemaining
+    }}
+    ... on Mannequin {{ databaseId login name createdAt updatedAt claimant {{ databaseId }} }}
+    ... on EnterpriseUserAccount {{ login name createdAt updatedAt user {{ databaseId }} }}
   }}
   {RATE_LIMIT}
 }}
@@ -184,7 +258,7 @@ def pull_request_batch(count: int) -> str:
 
 def overflow_alias(index: int, connection: Connection) -> str:
     """Alias of the ``index``-th continuation, named after its connection."""
-    return f"o{index}_{connection.field}"
+    return f"o{index}_{connection.key}"
 
 
 def overflow_continuation(connections: list[Connection]) -> str:

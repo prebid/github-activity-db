@@ -4,7 +4,7 @@ import sqlite3
 from pathlib import Path
 
 import pytest
-from sqlalchemy import select, text
+from sqlalchemy import Connection, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -14,6 +14,7 @@ from github_activity_db.db.engine import (
     build_engine,
 )
 from github_activity_db.db.models import UserTag
+from tests.db.seed import Seed
 
 
 class TestDatabaseEngine:
@@ -128,53 +129,30 @@ class TestSqliteConnectionSettings:
 
     async def test_on_delete_cascade_removes_children(self, test_engine) -> None:
         async with test_engine.begin() as conn:
-            await conn.execute(
-                text(
-                    "INSERT INTO repositories (id, github_id, owner, name, full_name, repo_group, "
-                    "is_private, is_archived, default_branch, is_tracked) "
-                    "VALUES (1, 10, 'prebid', 'c', 'prebid/c', 'Tools', 0, 0, 'main', 1)"
-                )
-            )
+            repository = await conn.run_sync(lambda sync: Seed(sync).repository("prebid/c"))
             await conn.execute(
                 text(
                     "INSERT INTO sync_failures (repository_id, item_kind, number, attempts, "
-                    "last_error, first_failed_at, last_failed_at) VALUES (1, 'pull_request', 7, 1, "
-                    "'e', '2026-01-01 00:00:00.000000', '2026-01-01 00:00:00.000000')"
-                )
+                    "last_error, first_failed_at, last_failed_at) VALUES (:repository, "
+                    "'pull_request', 7, 1, 'e', '2026-01-01 00:00:00.000000', "
+                    "'2026-01-01 00:00:00.000000')"
+                ),
+                {"repository": repository},
             )
-            await conn.execute(text("DELETE FROM repositories WHERE id = 1"))
+            await conn.execute(text("DELETE FROM repositories"))
             remaining = (await conn.execute(text("SELECT COUNT(*) FROM sync_failures"))).scalar()
 
         assert remaining == 0
 
     async def test_on_delete_set_null_keeps_what_an_account_authored(self, test_engine) -> None:
+        def seed(sync: Connection) -> None:
+            rows = Seed(sync)
+            author = rows.user("someone")
+            rows.pull_request(rows.repository("prebid/r"), 5, author)
+
         async with test_engine.begin() as conn:
-            await conn.execute(
-                text(
-                    "INSERT INTO github_users (id, github_id, node_id, login, type, refreshed_at) "
-                    "VALUES (1, 20, 'U_20', 'someone', 'User', '2026-01-01 00:00:00.000000')"
-                )
-            )
-            await conn.execute(
-                text(
-                    "INSERT INTO repositories (id, github_id, owner, name, full_name, repo_group, "
-                    "is_private, is_archived, default_branch, is_tracked) "
-                    "VALUES (1, 10, 'prebid', 'r', 'prebid/r', 'Tools', 0, 0, 'main', 1)"
-                )
-            )
-            await conn.execute(
-                text(
-                    "INSERT INTO pull_requests (id, repository_id, number, github_id, node_id, "
-                    "state, is_draft, title, body, author_id, author_association, created_at, "
-                    "base_ref, targets_default_branch, is_cross_repository, additions, deletions, "
-                    "changed_files, commits_total, files_total, reviews_total, comments_total, "
-                    "labels_total, closing_issues_total, github_updated_at, hydrated_at, "
-                    "hydration_version) VALUES (1, 1, 5, 30, 'PR_30', 'OPEN', 0, 't', '', 1, "
-                    "'MEMBER', '2026-01-01 00:00:00.000000', 'main', 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, "
-                    "0, '2026-01-01 00:00:00.000000', '2026-01-01 00:00:00.000000', 1)"
-                )
-            )
-            await conn.execute(text("DELETE FROM github_users WHERE id = 1"))
+            await conn.run_sync(seed)
+            await conn.execute(text("DELETE FROM github_users"))
             pull_requests = (
                 await conn.execute(text("SELECT number, author_id FROM pull_requests"))
             ).all()

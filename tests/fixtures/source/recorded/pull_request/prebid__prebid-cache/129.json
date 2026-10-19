@@ -1,0 +1,397 @@
+{
+  "data": {
+    "additions": 19,
+    "assignedActors": {
+      "nodes": [
+        {
+          "__typename": "User",
+          "databaseId": 4790765,
+          "id": "MDQ6VXNlcjQ3OTA3NjU=",
+          "login": "VeronikaSolovei9"
+        },
+        {
+          "__typename": "User",
+          "databaseId": 15863840,
+          "id": "MDQ6VXNlcjE1ODYzODQw",
+          "login": "guscarreon"
+        }
+      ],
+      "pageInfo": {
+        "endCursor": "Mg",
+        "hasNextPage": false
+      },
+      "totalCount": 2
+    },
+    "author": {
+      "__typename": "User",
+      "databaseId": 29255587,
+      "id": "MDQ6VXNlcjI5MjU1NTg3",
+      "login": "sebmil-daily"
+    },
+    "authorAssociation": "CONTRIBUTOR",
+    "baseRefName": "master",
+    "baseRefOid": "b075d59e0d7f9c4b6a25a73e192059fe31834151",
+    "body": "Previously, any error happening when communicating with Redis would be considered as \"Record already exists\", even if there was a Redis error (like server went down, storage failure, etc).\r\n\r\nThis fix allows the real error to be propagated and sends the client an HTTP 500 error with context instead of a valid response with an empty UUID.",
+    "canBeRebased": false,
+    "changedFiles": 2,
+    "closedAt": "2023-03-15T17:07:14Z",
+    "closingIssuesReferences": {
+      "nodes": [],
+      "pageInfo": {
+        "endCursor": null,
+        "hasNextPage": false
+      },
+      "totalCount": 0
+    },
+    "comments": {
+      "nodes": [
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 1168933,
+            "id": "MDQ6VXNlcjExNjg5MzM=",
+            "login": "bsardo"
+          },
+          "authorAssociation": "MEMBER",
+          "createdAt": "2023-03-06T18:19:33Z",
+          "createdViaEmail": false,
+          "editor": null,
+          "fullDatabaseId": "1456706658",
+          "id": "IC_kwDOBiwIGM5W05Ri",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2023-03-06T18:19:33Z",
+          "updatedAt": "2023-03-06T18:19:33Z"
+        }
+      ],
+      "pageInfo": {
+        "endCursor": "Y3Vyc29yOnYyOpHOVtOUYg==",
+        "hasNextPage": false
+      },
+      "totalCount": 1
+    },
+    "commits": {
+      "nodes": [
+        {
+          "commit": {
+            "author": {
+              "email": "sebastien.millet@dailymotion.com",
+              "name": "Sébastien Millet",
+              "user": {
+                "databaseId": 29255587,
+                "id": "MDQ6VXNlcjI5MjU1NTg3",
+                "login": "sebmil-daily"
+              }
+            },
+            "authoredDate": "2023-02-14T15:15:07Z",
+            "oid": "599ab2361497049c0b2fd81407898efdc6c667c5"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "sebastien.millet@dailymotion.com",
+              "name": "Sébastien Millet",
+              "user": {
+                "databaseId": 29255587,
+                "id": "MDQ6VXNlcjI5MjU1NTg3",
+                "login": "sebmil-daily"
+              }
+            },
+            "authoredDate": "2023-03-06T17:33:58Z",
+            "oid": "fe4f1300f770c516892a0391c0877aa8eeaaa981"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "sebastien.millet@dailymotion.com",
+              "name": "Sébastien Millet",
+              "user": {
+                "databaseId": 29255587,
+                "id": "MDQ6VXNlcjI5MjU1NTg3",
+                "login": "sebmil-daily"
+              }
+            },
+            "authoredDate": "2023-03-06T17:35:15Z",
+            "oid": "955f9b86d05cdeb09416187db6d9e734663c2f16"
+          }
+        }
+      ],
+      "pageInfo": {
+        "endCursor": "Mw",
+        "hasNextPage": false
+      },
+      "totalCount": 3
+    },
+    "createdAt": "2023-01-30T14:10:39Z",
+    "deletions": 3,
+    "editor": null,
+    "files": {
+      "nodes": [
+        {
+          "additions": 4,
+          "changeType": "MODIFIED",
+          "deletions": 1,
+          "path": "backends/redis.go"
+        },
+        {
+          "additions": 15,
+          "changeType": "MODIFIED",
+          "deletions": 2,
+          "path": "backends/redis_test.go"
+        }
+      ],
+      "pageInfo": {
+        "endCursor": "Mg",
+        "hasNextPage": false
+      },
+      "totalCount": 2
+    },
+    "fullDatabaseId": "1221706942",
+    "headRefName": "handle_redis_error",
+    "headRefOid": "955f9b86d05cdeb09416187db6d9e734663c2f16",
+    "headRepository": null,
+    "headRepositoryOwner": {
+      "id": "MDQ6VXNlcjI5MjU1NTg3",
+      "login": "sebmil-daily"
+    },
+    "id": "PR_kwDOBiwIGM5I0cS-",
+    "includesCreatedEdit": false,
+    "isCrossRepository": true,
+    "isDraft": false,
+    "labels": {
+      "nodes": [],
+      "pageInfo": {
+        "endCursor": null,
+        "hasNextPage": false
+      },
+      "totalCount": 0
+    },
+    "lastEditedAt": null,
+    "maintainerCanModify": false,
+    "mergeCommit": {
+      "oid": "dbccaa340febaa476d74529944104b316849da97"
+    },
+    "mergeStateStatus": "UNKNOWN",
+    "mergeable": "UNKNOWN",
+    "mergedAt": "2023-03-15T17:07:14Z",
+    "mergedBy": {
+      "__typename": "User",
+      "databaseId": 1168933,
+      "id": "MDQ6VXNlcjExNjg5MzM=",
+      "login": "bsardo"
+    },
+    "milestone": null,
+    "number": 129,
+    "potentialMergeCommit": null,
+    "publishedAt": "2023-01-30T14:10:39Z",
+    "reviewDecision": "REVIEW_REQUIRED",
+    "reviewRequests": {
+      "nodes": [],
+      "pageInfo": {
+        "endCursor": null,
+        "hasNextPage": false
+      },
+      "totalCount": 0
+    },
+    "reviews": {
+      "nodes": [
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 15863840,
+            "id": "MDQ6VXNlcjE1ODYzODQw",
+            "login": "guscarreon"
+          },
+          "authorAssociation": "MEMBER",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 1
+          },
+          "commit": {
+            "oid": "0ec39ef432cb17458b69240ea4bbe142c92cae6b"
+          },
+          "createdAt": "2023-02-07T07:33:17Z",
+          "editor": null,
+          "fullDatabaseId": "1286527472",
+          "id": "PRR_kwDOBiwIGM5Mrtnw",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2023-02-07T07:33:17Z",
+          "state": "COMMENTED",
+          "submittedAt": "2023-02-07T07:34:08Z",
+          "updatedAt": "2023-02-07T07:34:08Z"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 29255587,
+            "id": "MDQ6VXNlcjI5MjU1NTg3",
+            "login": "sebmil-daily"
+          },
+          "authorAssociation": "CONTRIBUTOR",
+          "authorCanPushToRepository": false,
+          "comments": {
+            "totalCount": 1
+          },
+          "commit": {
+            "oid": "0ec39ef432cb17458b69240ea4bbe142c92cae6b"
+          },
+          "createdAt": "2023-02-14T15:15:20Z",
+          "editor": null,
+          "fullDatabaseId": "1297812721",
+          "id": "PRR_kwDOBiwIGM5NWwzx",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2023-02-14T15:15:20Z",
+          "state": "COMMENTED",
+          "submittedAt": "2023-02-14T15:15:21Z",
+          "updatedAt": "2023-02-14T15:15:21Z"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 15863840,
+            "id": "MDQ6VXNlcjE1ODYzODQw",
+            "login": "guscarreon"
+          },
+          "authorAssociation": "MEMBER",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 1
+          },
+          "commit": {
+            "oid": "599ab2361497049c0b2fd81407898efdc6c667c5"
+          },
+          "createdAt": "2023-03-05T23:32:55Z",
+          "editor": null,
+          "fullDatabaseId": "1325301538",
+          "id": "PRR_kwDOBiwIGM5O_n8i",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2023-03-05T23:32:55Z",
+          "state": "COMMENTED",
+          "submittedAt": "2023-03-05T23:33:03Z",
+          "updatedAt": "2023-03-05T23:33:03Z"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 29255587,
+            "id": "MDQ6VXNlcjI5MjU1NTg3",
+            "login": "sebmil-daily"
+          },
+          "authorAssociation": "CONTRIBUTOR",
+          "authorCanPushToRepository": false,
+          "comments": {
+            "totalCount": 1
+          },
+          "commit": {
+            "oid": "0ec39ef432cb17458b69240ea4bbe142c92cae6b"
+          },
+          "createdAt": "2023-03-06T17:34:18Z",
+          "editor": null,
+          "fullDatabaseId": "1326851432",
+          "id": "PRR_kwDOBiwIGM5PFiVo",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2023-03-06T17:34:18Z",
+          "state": "COMMENTED",
+          "submittedAt": "2023-03-06T17:34:19Z",
+          "updatedAt": "2023-03-06T17:34:19Z"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 15863840,
+            "id": "MDQ6VXNlcjE1ODYzODQw",
+            "login": "guscarreon"
+          },
+          "authorAssociation": "MEMBER",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 0
+          },
+          "commit": {
+            "oid": "955f9b86d05cdeb09416187db6d9e734663c2f16"
+          },
+          "createdAt": "2023-03-09T20:12:41Z",
+          "editor": null,
+          "fullDatabaseId": "1333719227",
+          "id": "PRR_kwDOBiwIGM5PfvC7",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2023-03-09T20:12:41Z",
+          "state": "APPROVED",
+          "submittedAt": "2023-03-09T20:12:41Z",
+          "updatedAt": "2023-03-09T20:12:41Z"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 4790765,
+            "id": "MDQ6VXNlcjQ3OTA3NjU=",
+            "login": "VeronikaSolovei9"
+          },
+          "authorAssociation": "MEMBER",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 0
+          },
+          "commit": {
+            "oid": "955f9b86d05cdeb09416187db6d9e734663c2f16"
+          },
+          "createdAt": "2023-03-14T18:01:09Z",
+          "editor": null,
+          "fullDatabaseId": "1339973518",
+          "id": "PRR_kwDOBiwIGM5P3l-O",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2023-03-14T18:01:09Z",
+          "state": "APPROVED",
+          "submittedAt": "2023-03-14T18:01:09Z",
+          "updatedAt": "2023-03-14T18:01:09Z"
+        }
+      ],
+      "pageInfo": {
+        "endCursor": "Y3Vyc29yOnYyOpO0MjAyMy0wMy0xNFQxODowMTowOVq0MjAyMy0wMy0xNFQxODowMTowOVrOT95fjg==",
+        "hasNextPage": false
+      },
+      "totalCount": 6
+    },
+    "stack": null,
+    "stackEntry": null,
+    "state": "MERGED",
+    "title": "Fix error handling when using the Redis backend",
+    "totalCommentsCount": 7,
+    "updatedAt": "2023-03-21T13:30:35Z",
+    "userLinkedClosingIssues": {
+      "nodes": [],
+      "pageInfo": {
+        "endCursor": null,
+        "hasNextPage": false
+      },
+      "totalCount": 0
+    }
+  },
+  "document_sha256": "3527b3fa77b23d4166d3a8a063506be04f20c8bec7cee75e2bf801d0d608c26c",
+  "errors": [],
+  "extra": {},
+  "headers": {
+    "date": "Sun, 18 Oct 2026 21:12:04 GMT",
+    "x-ratelimit-limit": "5000",
+    "x-ratelimit-remaining": "4958",
+    "x-ratelimit-reset": "1792360091",
+    "x-ratelimit-resource": "graphql",
+    "x-ratelimit-used": "42"
+  },
+  "key": {
+    "name": "prebid-cache",
+    "number": 129,
+    "owner": "prebid"
+  },
+  "kind": "pull_request",
+  "recorded_at": "2026-10-18T21:11:43Z",
+  "source": "live"
+}

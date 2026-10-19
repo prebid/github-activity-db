@@ -3,6 +3,7 @@
     "nodes": [
       {
         "authorAssociation": "CONTRIBUTOR",
+        "closedAt": "2018-08-15T10:30:22Z",
         "closingIssuesReferences": {
           "nodes": [],
           "totalCount": 0
@@ -17,6 +18,7 @@
       },
       {
         "authorAssociation": "CONTRIBUTOR",
+        "closedAt": "2018-09-19T15:07:45Z",
         "closingIssuesReferences": {
           "nodes": [],
           "totalCount": 0
@@ -31,6 +33,7 @@
       },
       {
         "authorAssociation": "CONTRIBUTOR",
+        "closedAt": "2018-09-21T14:24:58Z",
         "closingIssuesReferences": {
           "nodes": [],
           "totalCount": 0
@@ -45,6 +48,7 @@
       },
       {
         "authorAssociation": "CONTRIBUTOR",
+        "closedAt": "2018-10-02T13:17:35Z",
         "closingIssuesReferences": {
           "nodes": [],
           "totalCount": 0
@@ -59,6 +63,7 @@
       },
       {
         "authorAssociation": "CONTRIBUTOR",
+        "closedAt": "2018-10-02T13:29:42Z",
         "closingIssuesReferences": {
           "nodes": [],
           "totalCount": 0
@@ -73,6 +78,7 @@
       },
       {
         "authorAssociation": "CONTRIBUTOR",
+        "closedAt": "2018-10-08T09:25:11Z",
         "closingIssuesReferences": {
           "nodes": [],
           "totalCount": 0
@@ -87,6 +93,7 @@
       },
       {
         "authorAssociation": "CONTRIBUTOR",
+        "closedAt": "2018-10-16T11:02:56Z",
         "closingIssuesReferences": {
           "nodes": [],
           "totalCount": 0
@@ -101,6 +108,7 @@
       },
       {
         "authorAssociation": "CONTRIBUTOR",
+        "closedAt": "2018-10-17T13:27:40Z",
         "closingIssuesReferences": {
           "nodes": [],
           "totalCount": 0
@@ -115,6 +123,7 @@
       },
       {
         "authorAssociation": "CONTRIBUTOR",
+        "closedAt": "2018-10-25T11:54:17Z",
         "closingIssuesReferences": {
           "nodes": [],
           "totalCount": 0
@@ -129,6 +138,7 @@
       },
       {
         "authorAssociation": "CONTRIBUTOR",
+        "closedAt": "2018-10-30T10:17:27Z",
         "closingIssuesReferences": {
           "nodes": [],
           "totalCount": 0
@@ -143,6 +153,7 @@
       },
       {
         "authorAssociation": "CONTRIBUTOR",
+        "closedAt": "2018-10-31T15:24:44Z",
         "closingIssuesReferences": {
           "nodes": [],
           "totalCount": 0
@@ -157,6 +168,7 @@
       },
       {
         "authorAssociation": "CONTRIBUTOR",
+        "closedAt": "2018-11-05T11:34:34Z",
         "closingIssuesReferences": {
           "nodes": [],
           "totalCount": 0
@@ -171,6 +183,7 @@
       },
       {
         "authorAssociation": "CONTRIBUTOR",
+        "closedAt": "2018-11-23T11:21:57Z",
         "closingIssuesReferences": {
           "nodes": [],
           "totalCount": 0
@@ -185,6 +198,7 @@
       },
       {
         "authorAssociation": "CONTRIBUTOR",
+        "closedAt": "2018-12-12T09:06:59Z",
         "closingIssuesReferences": {
           "nodes": [],
           "totalCount": 0
@@ -199,6 +213,7 @@
       },
       {
         "authorAssociation": "CONTRIBUTOR",
+        "closedAt": "2019-01-09T09:49:08Z",
         "closingIssuesReferences": {
           "nodes": [],
           "totalCount": 0
@@ -213,6 +228,7 @@
       },
       {
         "authorAssociation": "CONTRIBUTOR",
+        "closedAt": "2019-02-01T12:07:33Z",
         "closingIssuesReferences": {
           "nodes": [],
           "totalCount": 0
@@ -227,6 +243,7 @@
       },
       {
         "authorAssociation": "CONTRIBUTOR",
+        "closedAt": "2019-02-01T14:44:01Z",
         "closingIssuesReferences": {
           "nodes": [],
           "totalCount": 0
@@ -241,6 +258,7 @@
       },
       {
         "authorAssociation": "CONTRIBUTOR",
+        "closedAt": "2019-02-04T12:28:52Z",
         "closingIssuesReferences": {
           "nodes": [],
           "totalCount": 0
@@ -255,6 +273,7 @@
       },
       {
         "authorAssociation": "CONTRIBUTOR",
+        "closedAt": "2019-02-06T14:21:53Z",
         "closingIssuesReferences": {
           "nodes": [],
           "totalCount": 0
@@ -269,6 +288,7 @@
       },
       {
         "authorAssociation": "CONTRIBUTOR",
+        "closedAt": "2019-02-08T09:58:58Z",
         "closingIssuesReferences": {
           "nodes": [],
           "totalCount": 0
@@ -283,6 +303,7 @@
       },
       {
         "authorAssociation": "CONTRIBUTOR",
+        "closedAt": "2019-03-01T14:54:24Z",
         "closingIssuesReferences": {
           "nodes": [],
           "totalCount": 0
@@ -297,6 +318,7 @@
       },
       {
         "authorAssociation": "CONTRIBUTOR",
+        "closedAt": "2019-04-05T13:29:07Z",
         "closingIssuesReferences": {
           "nodes": [],
           "totalCount": 0
@@ -311,6 +333,7 @@
       },
       {
         "authorAssociation": "CONTRIBUTOR",
+        "closedAt": "2019-06-07T12:51:22Z",
         "closingIssuesReferences": {
           "nodes": [],
           "totalCount": 0
@@ -325,6 +348,7 @@
       },
       {
         "authorAssociation": "CONTRIBUTOR",
+        "closedAt": "2019-06-07T12:51:37Z",
         "closingIssuesReferences": {
           "nodes": [],
           "totalCount": 0
@@ -339,6 +363,7 @@
       },
       {
         "authorAssociation": "CONTRIBUTOR",
+        "closedAt": "2019-06-07T12:51:50Z",
         "closingIssuesReferences": {
           "nodes": [],
           "totalCount": 0
@@ -353,6 +378,7 @@
       },
       {
         "authorAssociation": "CONTRIBUTOR",
+        "closedAt": "2019-07-30T11:28:51Z",
         "closingIssuesReferences": {
           "nodes": [],
           "totalCount": 0
@@ -367,6 +393,7 @@
       },
       {
         "authorAssociation": "CONTRIBUTOR",
+        "closedAt": "2019-08-15T11:40:20Z",
         "closingIssuesReferences": {
           "nodes": [],
           "totalCount": 0
@@ -381,6 +408,7 @@
       },
       {
         "authorAssociation": "CONTRIBUTOR",
+        "closedAt": "2020-01-17T11:00:17Z",
         "closingIssuesReferences": {
           "nodes": [],
           "totalCount": 0
@@ -395,6 +423,7 @@
       },
       {
         "authorAssociation": "CONTRIBUTOR",
+        "closedAt": "2022-05-04T05:26:03Z",
         "closingIssuesReferences": {
           "nodes": [],
           "totalCount": 0
@@ -409,6 +438,7 @@
       },
       {
         "authorAssociation": "NONE",
+        "closedAt": "2022-05-04T05:33:28Z",
         "closingIssuesReferences": {
           "nodes": [],
           "totalCount": 0
@@ -423,6 +453,7 @@
       },
       {
         "authorAssociation": "NONE",
+        "closedAt": "2023-09-07T11:05:40Z",
         "closingIssuesReferences": {
           "nodes": [],
           "totalCount": 0
@@ -437,6 +468,7 @@
       },
       {
         "authorAssociation": "CONTRIBUTOR",
+        "closedAt": "2020-04-27T09:24:27Z",
         "closingIssuesReferences": {
           "nodes": [],
           "totalCount": 0
@@ -451,6 +483,7 @@
       },
       {
         "authorAssociation": "NONE",
+        "closedAt": "2022-05-04T05:30:10Z",
         "closingIssuesReferences": {
           "nodes": [],
           "totalCount": 0
@@ -465,6 +498,7 @@
       },
       {
         "authorAssociation": "CONTRIBUTOR",
+        "closedAt": "2020-11-05T10:26:01Z",
         "closingIssuesReferences": {
           "nodes": [],
           "totalCount": 0
@@ -479,6 +513,7 @@
       },
       {
         "authorAssociation": "CONTRIBUTOR",
+        "closedAt": "2020-11-18T15:38:35Z",
         "closingIssuesReferences": {
           "nodes": [],
           "totalCount": 0
@@ -493,6 +528,7 @@
       },
       {
         "authorAssociation": "CONTRIBUTOR",
+        "closedAt": "2020-11-19T13:13:45Z",
         "closingIssuesReferences": {
           "nodes": [],
           "totalCount": 0
@@ -507,6 +543,7 @@
       },
       {
         "authorAssociation": "NONE",
+        "closedAt": "2021-02-04T13:50:16Z",
         "closingIssuesReferences": {
           "nodes": [],
           "totalCount": 0
@@ -521,6 +558,7 @@
       },
       {
         "authorAssociation": "NONE",
+        "closedAt": "2021-02-08T10:28:22Z",
         "closingIssuesReferences": {
           "nodes": [],
           "totalCount": 0
@@ -535,6 +573,7 @@
       },
       {
         "authorAssociation": "MEMBER",
+        "closedAt": "2023-01-13T10:03:14Z",
         "closingIssuesReferences": {
           "nodes": [],
           "totalCount": 0
@@ -549,6 +588,7 @@
       },
       {
         "authorAssociation": "MEMBER",
+        "closedAt": "2022-03-29T11:11:07Z",
         "closingIssuesReferences": {
           "nodes": [],
           "totalCount": 0
@@ -563,6 +603,7 @@
       },
       {
         "authorAssociation": "MEMBER",
+        "closedAt": "2022-03-29T11:12:46Z",
         "closingIssuesReferences": {
           "nodes": [],
           "totalCount": 0
@@ -577,6 +618,7 @@
       },
       {
         "authorAssociation": "MEMBER",
+        "closedAt": "2022-05-04T10:31:43Z",
         "closingIssuesReferences": {
           "nodes": [],
           "totalCount": 0
@@ -591,6 +633,7 @@
       },
       {
         "authorAssociation": "MEMBER",
+        "closedAt": "2021-12-14T11:48:55Z",
         "closingIssuesReferences": {
           "nodes": [],
           "totalCount": 0
@@ -605,6 +648,7 @@
       },
       {
         "authorAssociation": "CONTRIBUTOR",
+        "closedAt": "2021-12-16T09:45:28Z",
         "closingIssuesReferences": {
           "nodes": [],
           "totalCount": 0
@@ -619,6 +663,7 @@
       },
       {
         "authorAssociation": "CONTRIBUTOR",
+        "closedAt": "2021-12-20T10:33:31Z",
         "closingIssuesReferences": {
           "nodes": [],
           "totalCount": 0
@@ -633,6 +678,7 @@
       },
       {
         "authorAssociation": "MEMBER",
+        "closedAt": "2021-12-29T15:36:45Z",
         "closingIssuesReferences": {
           "nodes": [],
           "totalCount": 0
@@ -647,6 +693,7 @@
       },
       {
         "authorAssociation": "MEMBER",
+        "closedAt": "2021-12-29T15:41:15Z",
         "closingIssuesReferences": {
           "nodes": [],
           "totalCount": 0
@@ -661,6 +708,7 @@
       },
       {
         "authorAssociation": "CONTRIBUTOR",
+        "closedAt": "2021-12-29T16:31:56Z",
         "closingIssuesReferences": {
           "nodes": [],
           "totalCount": 0
@@ -675,6 +723,7 @@
       },
       {
         "authorAssociation": "CONTRIBUTOR",
+        "closedAt": "2022-01-21T15:40:05Z",
         "closingIssuesReferences": {
           "nodes": [],
           "totalCount": 0
@@ -689,6 +738,7 @@
       },
       {
         "authorAssociation": "CONTRIBUTOR",
+        "closedAt": "2022-05-23T14:16:40Z",
         "closingIssuesReferences": {
           "nodes": [],
           "totalCount": 0
@@ -703,6 +753,7 @@
       },
       {
         "authorAssociation": "CONTRIBUTOR",
+        "closedAt": "2022-04-09T08:44:09Z",
         "closingIssuesReferences": {
           "nodes": [],
           "totalCount": 0
@@ -717,6 +768,7 @@
       },
       {
         "authorAssociation": "MEMBER",
+        "closedAt": "2022-06-24T10:21:31Z",
         "closingIssuesReferences": {
           "nodes": [],
           "totalCount": 0
@@ -731,6 +783,7 @@
       },
       {
         "authorAssociation": "MEMBER",
+        "closedAt": "2022-05-04T10:50:41Z",
         "closingIssuesReferences": {
           "nodes": [],
           "totalCount": 0
@@ -745,6 +798,7 @@
       },
       {
         "authorAssociation": "MEMBER",
+        "closedAt": "2022-05-04T05:07:56Z",
         "closingIssuesReferences": {
           "nodes": [],
           "totalCount": 0
@@ -759,6 +813,7 @@
       },
       {
         "authorAssociation": "MEMBER",
+        "closedAt": "2022-05-24T14:28:45Z",
         "closingIssuesReferences": {
           "nodes": [],
           "totalCount": 0
@@ -773,6 +828,7 @@
       },
       {
         "authorAssociation": "MEMBER",
+        "closedAt": "2022-05-04T11:25:45Z",
         "closingIssuesReferences": {
           "nodes": [
             {
@@ -795,6 +851,7 @@
       },
       {
         "authorAssociation": "MEMBER",
+        "closedAt": "2022-07-11T11:00:42Z",
         "closingIssuesReferences": {
           "nodes": [],
           "totalCount": 0
@@ -809,6 +866,7 @@
       },
       {
         "authorAssociation": "CONTRIBUTOR",
+        "closedAt": "2022-05-23T06:41:44Z",
         "closingIssuesReferences": {
           "nodes": [],
           "totalCount": 0
@@ -823,6 +881,7 @@
       },
       {
         "authorAssociation": "MEMBER",
+        "closedAt": "2022-05-23T12:19:28Z",
         "closingIssuesReferences": {
           "nodes": [],
           "totalCount": 0
@@ -837,6 +896,7 @@
       },
       {
         "authorAssociation": "MEMBER",
+        "closedAt": "2022-05-24T10:27:18Z",
         "closingIssuesReferences": {
           "nodes": [],
           "totalCount": 0
@@ -851,6 +911,7 @@
       },
       {
         "authorAssociation": "MEMBER",
+        "closedAt": "2022-05-26T15:07:28Z",
         "closingIssuesReferences": {
           "nodes": [],
           "totalCount": 0
@@ -865,6 +926,7 @@
       },
       {
         "authorAssociation": "MEMBER",
+        "closedAt": "2022-06-20T12:58:34Z",
         "closingIssuesReferences": {
           "nodes": [],
           "totalCount": 0
@@ -879,6 +941,7 @@
       },
       {
         "authorAssociation": "MEMBER",
+        "closedAt": "2022-06-20T14:28:47Z",
         "closingIssuesReferences": {
           "nodes": [],
           "totalCount": 0
@@ -893,6 +956,7 @@
       },
       {
         "authorAssociation": "MEMBER",
+        "closedAt": "2022-07-05T10:29:47Z",
         "closingIssuesReferences": {
           "nodes": [],
           "totalCount": 0
@@ -907,6 +971,7 @@
       },
       {
         "authorAssociation": "MEMBER",
+        "closedAt": "2022-07-05T10:03:54Z",
         "closingIssuesReferences": {
           "nodes": [],
           "totalCount": 0
@@ -921,6 +986,7 @@
       },
       {
         "authorAssociation": "MEMBER",
+        "closedAt": "2022-07-12T14:04:31Z",
         "closingIssuesReferences": {
           "nodes": [],
           "totalCount": 0
@@ -935,6 +1001,7 @@
       },
       {
         "authorAssociation": "MEMBER",
+        "closedAt": "2022-07-12T10:36:00Z",
         "closingIssuesReferences": {
           "nodes": [],
           "totalCount": 0
@@ -949,6 +1016,7 @@
       },
       {
         "authorAssociation": "MEMBER",
+        "closedAt": "2022-07-12T14:03:31Z",
         "closingIssuesReferences": {
           "nodes": [],
           "totalCount": 0
@@ -963,6 +1031,7 @@
       },
       {
         "authorAssociation": "MEMBER",
+        "closedAt": "2022-07-13T12:19:56Z",
         "closingIssuesReferences": {
           "nodes": [],
           "totalCount": 0
@@ -977,6 +1046,7 @@
       },
       {
         "authorAssociation": "NONE",
+        "closedAt": "2023-07-18T04:25:16Z",
         "closingIssuesReferences": {
           "nodes": [],
           "totalCount": 0
@@ -991,6 +1061,7 @@
       },
       {
         "authorAssociation": "MEMBER",
+        "closedAt": "2023-05-09T10:23:40Z",
         "closingIssuesReferences": {
           "nodes": [],
           "totalCount": 0
@@ -1005,6 +1076,7 @@
       },
       {
         "authorAssociation": "MEMBER",
+        "closedAt": "2023-07-18T04:27:55Z",
         "closingIssuesReferences": {
           "nodes": [
             {
@@ -1027,6 +1099,7 @@
       },
       {
         "authorAssociation": "CONTRIBUTOR",
+        "closedAt": "2023-01-24T13:28:16Z",
         "closingIssuesReferences": {
           "nodes": [],
           "totalCount": 0
@@ -1041,6 +1114,7 @@
       },
       {
         "authorAssociation": "CONTRIBUTOR",
+        "closedAt": "2023-07-18T04:28:35Z",
         "closingIssuesReferences": {
           "nodes": [],
           "totalCount": 0
@@ -1055,6 +1129,7 @@
       },
       {
         "authorAssociation": "MEMBER",
+        "closedAt": "2023-07-18T10:59:30Z",
         "closingIssuesReferences": {
           "nodes": [],
           "totalCount": 0
@@ -1069,6 +1144,7 @@
       },
       {
         "authorAssociation": "MEMBER",
+        "closedAt": "2023-05-09T10:25:07Z",
         "closingIssuesReferences": {
           "nodes": [],
           "totalCount": 0
@@ -1083,6 +1159,7 @@
       },
       {
         "authorAssociation": "MEMBER",
+        "closedAt": "2023-05-24T12:59:23Z",
         "closingIssuesReferences": {
           "nodes": [],
           "totalCount": 0
@@ -1097,6 +1174,7 @@
       },
       {
         "authorAssociation": "CONTRIBUTOR",
+        "closedAt": "2023-07-17T14:09:28Z",
         "closingIssuesReferences": {
           "nodes": [],
           "totalCount": 0
@@ -1111,6 +1189,7 @@
       },
       {
         "authorAssociation": "MEMBER",
+        "closedAt": "2023-07-19T12:24:39Z",
         "closingIssuesReferences": {
           "nodes": [],
           "totalCount": 0
@@ -1125,6 +1204,7 @@
       },
       {
         "authorAssociation": "CONTRIBUTOR",
+        "closedAt": "2023-08-31T09:11:18Z",
         "closingIssuesReferences": {
           "nodes": [],
           "totalCount": 0
@@ -1139,6 +1219,7 @@
       },
       {
         "authorAssociation": "MEMBER",
+        "closedAt": "2023-08-29T15:13:06Z",
         "closingIssuesReferences": {
           "nodes": [
             {
@@ -1168,6 +1249,7 @@
       },
       {
         "authorAssociation": "MEMBER",
+        "closedAt": "2023-08-29T13:47:14Z",
         "closingIssuesReferences": {
           "nodes": [],
           "totalCount": 0
@@ -1182,6 +1264,7 @@
       },
       {
         "authorAssociation": "MEMBER",
+        "closedAt": "2023-09-07T10:27:22Z",
         "closingIssuesReferences": {
           "nodes": [],
           "totalCount": 0
@@ -1196,6 +1279,7 @@
       },
       {
         "authorAssociation": "CONTRIBUTOR",
+        "closedAt": "2023-11-28T11:55:16Z",
         "closingIssuesReferences": {
           "nodes": [],
           "totalCount": 0
@@ -1210,6 +1294,7 @@
       },
       {
         "authorAssociation": "MEMBER",
+        "closedAt": "2023-09-07T13:00:35Z",
         "closingIssuesReferences": {
           "nodes": [],
           "totalCount": 0
@@ -1224,6 +1309,7 @@
       },
       {
         "authorAssociation": "MEMBER",
+        "closedAt": "2023-09-07T00:47:34Z",
         "closingIssuesReferences": {
           "nodes": [],
           "totalCount": 0
@@ -1238,6 +1324,7 @@
       },
       {
         "authorAssociation": "MEMBER",
+        "closedAt": "2023-09-27T07:57:52Z",
         "closingIssuesReferences": {
           "nodes": [],
           "totalCount": 0
@@ -1252,6 +1339,7 @@
       },
       {
         "authorAssociation": "MEMBER",
+        "closedAt": "2023-09-27T11:52:54Z",
         "closingIssuesReferences": {
           "nodes": [],
           "totalCount": 0
@@ -1266,6 +1354,7 @@
       },
       {
         "authorAssociation": "MEMBER",
+        "closedAt": "2024-03-04T12:18:05Z",
         "closingIssuesReferences": {
           "nodes": [
             {
@@ -1288,6 +1377,7 @@
       },
       {
         "authorAssociation": "MEMBER",
+        "closedAt": "2023-09-29T10:04:05Z",
         "closingIssuesReferences": {
           "nodes": [],
           "totalCount": 0
@@ -1302,6 +1392,7 @@
       },
       {
         "authorAssociation": "MEMBER",
+        "closedAt": "2023-10-13T13:41:57Z",
         "closingIssuesReferences": {
           "nodes": [],
           "totalCount": 0
@@ -1316,6 +1407,7 @@
       },
       {
         "authorAssociation": "MEMBER",
+        "closedAt": "2023-10-13T13:38:31Z",
         "closingIssuesReferences": {
           "nodes": [],
           "totalCount": 0
@@ -1330,6 +1422,7 @@
       },
       {
         "authorAssociation": "MEMBER",
+        "closedAt": "2023-11-28T11:53:40Z",
         "closingIssuesReferences": {
           "nodes": [],
           "totalCount": 0
@@ -1344,6 +1437,7 @@
       },
       {
         "authorAssociation": "MEMBER",
+        "closedAt": "2024-02-20T13:01:30Z",
         "closingIssuesReferences": {
           "nodes": [],
           "totalCount": 0
@@ -1358,6 +1452,7 @@
       },
       {
         "authorAssociation": "MEMBER",
+        "closedAt": "2023-11-28T11:57:06Z",
         "closingIssuesReferences": {
           "nodes": [],
           "totalCount": 0
@@ -1372,6 +1467,7 @@
       },
       {
         "authorAssociation": "MEMBER",
+        "closedAt": "2024-02-27T14:43:08Z",
         "closingIssuesReferences": {
           "nodes": [
             {
@@ -1394,6 +1490,7 @@
       },
       {
         "authorAssociation": "MEMBER",
+        "closedAt": "2024-03-04T12:09:43Z",
         "closingIssuesReferences": {
           "nodes": [],
           "totalCount": 0
@@ -1408,6 +1505,7 @@
       },
       {
         "authorAssociation": "MEMBER",
+        "closedAt": "2024-02-26T09:03:54Z",
         "closingIssuesReferences": {
           "nodes": [],
           "totalCount": 0
@@ -1422,6 +1520,7 @@
       },
       {
         "authorAssociation": "MEMBER",
+        "closedAt": "2024-03-04T12:08:51Z",
         "closingIssuesReferences": {
           "nodes": [],
           "totalCount": 0
@@ -1436,6 +1535,7 @@
       },
       {
         "authorAssociation": "MEMBER",
+        "closedAt": "2024-03-04T12:07:44Z",
         "closingIssuesReferences": {
           "nodes": [],
           "totalCount": 0
@@ -1455,16 +1555,16 @@
     },
     "totalCount": 157
   },
-  "document_sha256": "257970e148a1f2f02077a1cbdff4bc6022dbe105a8046cca975acda16ae37a42",
+  "document_sha256": "7d6cecfe6c46221218d3a14132bfd8ac62c39ad7cc45316df1663f191ba7c264",
   "errors": [],
   "extra": {},
   "headers": {
-    "date": "Sat, 17 Oct 2026 12:09:21 GMT",
+    "date": "Sun, 18 Oct 2026 21:11:46 GMT",
     "x-ratelimit-limit": "5000",
-    "x-ratelimit-remaining": "4930",
-    "x-ratelimit-reset": "1792241340",
+    "x-ratelimit-remaining": "4974",
+    "x-ratelimit-reset": "1792360091",
     "x-ratelimit-resource": "graphql",
-    "x-ratelimit-used": "70"
+    "x-ratelimit-used": "26"
   },
   "key": {
     "after": null,
@@ -1472,6 +1572,6 @@
     "owner": "prebid"
   },
   "kind": "index",
-  "recorded_at": "2026-10-17T12:09:19Z",
+  "recorded_at": "2026-10-18T21:11:43Z",
   "source": "live"
 }

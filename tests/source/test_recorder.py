@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 import json
 from pathlib import Path
 from typing import Any
@@ -14,7 +15,7 @@ from github_activity_db.source.limits import RATE_LIMIT_FALLBACK_WAIT, SERVER_RE
 from tests.source import recorder
 from tests.source.conftest import FakeClock
 from tests.source.recorder import PrivateRepository, RecordingFailed, Scenario, record
-from tests.source.recordings import RECORDED
+from tests.source.recordings import RECORDED, Unit
 from tests.source.replay import Replay, synthetic
 
 
@@ -169,6 +170,52 @@ def test_only_rate_limits_adds_them_and_keeps_every_other_unit(
     assert (target / "kept.json").read_text() == "{}"
     for unit in units:
         assert (target / unit.path()).read_text() == unit.dumps()
+    assert [path.name for path in tmp_path.iterdir()] == ["recorded"]
+
+
+def test_only_documents_replaces_graphql_units_and_keeps_compare_and_rate_limits(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    units = recorded_units()
+    kept_kinds = recorder.KEPT_BY_DOCUMENTS
+    compare = [unit for unit in units if unit.kind == "compare"]
+    assert len(compare) > 1 and any(unit.kind == "rate_limit" for unit in units)
+    missing = compare[0]
+    target = tmp_path / "recorded"
+
+    def place(unit: Unit) -> Path:
+        path = target / unit.path()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(unit.dumps())
+        return path
+
+    # The existing recordings: every compare page but one and both readings, marked so a
+    # replacement shows, and a GraphQL unit no scenario records any more.
+    for unit in units:
+        if unit.kind in kept_kinds and unit is not missing:
+            place(dataclasses.replace(unit, recorded_at="kept"))
+    stale = next(unit for unit in units if unit.kind == "resolve")
+    stale_path = place(dataclasses.replace(stale, key={"owner": "prebid", "name": "retired"}))
+    calls: list[dict[str, Any]] = []
+
+    async def replayed(token: str, **kwargs: Any) -> list[Any]:
+        calls.append(kwargs)
+        return [unit for unit in units if unit.kind not in ("rate_limit", "rest_rate_limit")]
+
+    monkeypatch.setattr(recorder, "RECORDED", target)
+    monkeypatch.setattr(recorder, "record", replayed)
+    monkeypatch.setenv("GITHUB_TOKEN", "test-token")
+    assert recorder.main(["--only", "documents"]) == 0
+    assert calls == [{"rate_limits": False}]
+    assert not stale_path.exists()
+    written = sorted(str(path.relative_to(target)) for path in target.rglob("*.json"))
+    assert written == sorted(str(unit.path()) for unit in units)
+    for unit in units:
+        text = (target / unit.path()).read_text()
+        if unit.kind in kept_kinds and unit is not missing:
+            assert json.loads(text)["recorded_at"] == "kept", unit.path()
+        else:
+            assert text == unit.dumps(), unit.path()
     assert [path.name for path in tmp_path.iterdir()] == ["recorded"]
 
 

@@ -1,154 +1,450 @@
 {
   "data": {
+    "allowUpdateBranch": true,
+    "archivedAt": null,
+    "createdAt": "2015-07-19T03:26:23Z",
     "databaseId": 39321023,
     "defaultBranchRef": {
       "name": "master"
     },
+    "deleteBranchOnMerge": true,
+    "description": "Setup and manage header bidding advertising partners without writing code or confusing line items. Prebid.js is open source and free.",
+    "diskUsage": 169644,
+    "forkCount": 2413,
+    "forkingAllowed": true,
+    "hasDiscussionsEnabled": false,
+    "hasProjectsEnabled": true,
+    "hasVulnerabilityAlertsEnabled": true,
+    "hasWikiEnabled": false,
+    "homepageUrl": "https://docs.prebid.org",
     "id": "MDEwOlJlcG9zaXRvcnkzOTMyMTAyMw==",
     "isArchived": false,
     "isPrivate": false,
+    "isSecurityPolicyEnabled": false,
     "labels": {
       "nodes": [
         {
-          "name": "bug"
+          "color": "fc2929",
+          "createdAt": "2015-07-19T03:26:23Z",
+          "description": "",
+          "id": "MDU6TGFiZWwyMzc4ODI2NTI=",
+          "isDefault": true,
+          "name": "bug",
+          "updatedAt": "2018-03-19T18:59:25Z"
         },
         {
-          "name": "duplicate"
+          "color": "cccccc",
+          "createdAt": "2015-07-19T03:26:23Z",
+          "description": null,
+          "id": "MDU6TGFiZWwyMzc4ODI2NTM=",
+          "isDefault": true,
+          "name": "duplicate",
+          "updatedAt": "2015-07-19T03:26:23Z"
         },
         {
-          "name": "help wanted"
+          "color": "159818",
+          "createdAt": "2015-07-19T03:26:23Z",
+          "description": null,
+          "id": "MDU6TGFiZWwyMzc4ODI2NTU=",
+          "isDefault": true,
+          "name": "help wanted",
+          "updatedAt": "2015-07-19T03:26:23Z"
         },
         {
-          "name": "question"
+          "color": "cc317c",
+          "createdAt": "2015-07-19T03:26:23Z",
+          "description": null,
+          "id": "MDU6TGFiZWwyMzc4ODI2NTc=",
+          "isDefault": true,
+          "name": "question",
+          "updatedAt": "2015-07-19T03:26:23Z"
         },
         {
-          "name": "wontfix"
+          "color": "ffffff",
+          "createdAt": "2015-07-19T03:26:23Z",
+          "description": null,
+          "id": "MDU6TGFiZWwyMzc4ODI2NTg=",
+          "isDefault": true,
+          "name": "wontfix",
+          "updatedAt": "2015-07-19T03:26:23Z"
         },
         {
-          "name": "feature"
+          "color": "d4c5f9",
+          "createdAt": "2015-08-05T22:59:05Z",
+          "description": "",
+          "id": "MDU6TGFiZWwyNDQ2NTk2MzM=",
+          "isDefault": false,
+          "name": "feature",
+          "updatedAt": "2018-03-28T15:22:07Z"
         },
         {
-          "name": "needs review"
+          "color": "e11d21",
+          "createdAt": "2016-02-22T19:47:29Z",
+          "description": null,
+          "id": "MDU6TGFiZWwzMzAyNDE2ODU=",
+          "isDefault": false,
+          "name": "needs review",
+          "updatedAt": "2016-02-22T19:48:01Z"
         },
         {
-          "name": "needs update"
+          "color": "5319e7",
+          "createdAt": "2016-02-22T19:48:52Z",
+          "description": null,
+          "id": "MDU6TGFiZWwzMzAyNDI0MDg=",
+          "isDefault": false,
+          "name": "needs update",
+          "updatedAt": "2016-02-22T19:48:52Z"
         },
         {
-          "name": "on hold"
+          "color": "fbca04",
+          "createdAt": "2016-04-06T12:20:50Z",
+          "description": null,
+          "id": "MDU6TGFiZWwzNTM1ODEyMzA=",
+          "isDefault": false,
+          "name": "on hold",
+          "updatedAt": "2016-04-06T12:20:50Z"
         },
         {
-          "name": "build process"
+          "color": "bfd4f2",
+          "createdAt": "2016-07-18T14:32:25Z",
+          "description": null,
+          "id": "MDU6TGFiZWw0MTAwOTE1NDI=",
+          "isDefault": false,
+          "name": "build process",
+          "updatedAt": "2016-11-01T19:07:57Z"
         },
         {
-          "name": "intent to implement"
+          "color": "0052cc",
+          "createdAt": "2016-08-26T00:06:08Z",
+          "description": null,
+          "id": "MDU6TGFiZWw0MzExOTAzMTU=",
+          "isDefault": false,
+          "name": "intent to implement",
+          "updatedAt": "2016-11-01T19:07:26Z"
         },
         {
-          "name": "adapter support"
+          "color": "0052cc",
+          "createdAt": "2016-09-30T16:07:28Z",
+          "description": null,
+          "id": "MDU6TGFiZWw0NTI5MDI3Mjc=",
+          "isDefault": false,
+          "name": "adapter support",
+          "updatedAt": "2016-11-01T19:07:49Z"
         },
         {
-          "name": "in progress"
+          "color": "ededed",
+          "createdAt": "2016-11-29T20:25:04Z",
+          "description": null,
+          "id": "MDU6TGFiZWw0OTEyMTk4NzU=",
+          "isDefault": false,
+          "name": "in progress",
+          "updatedAt": "2021-09-27T13:22:04Z"
         },
         {
-          "name": "LGTM"
+          "color": "0e8a16",
+          "createdAt": "2016-11-30T21:54:18Z",
+          "description": null,
+          "id": "MDU6TGFiZWw0OTIwMDYzOTI=",
+          "isDefault": false,
+          "name": "LGTM",
+          "updatedAt": "2016-11-30T21:54:18Z"
         },
         {
-          "name": "FAQ"
+          "color": "1d76db",
+          "createdAt": "2017-01-22T13:26:09Z",
+          "description": null,
+          "id": "MDU6TGFiZWw1MjM2MjE3ODY=",
+          "isDefault": false,
+          "name": "FAQ",
+          "updatedAt": "2017-01-22T13:26:09Z"
         },
         {
-          "name": "video"
+          "color": "d4c5f9",
+          "createdAt": "2017-04-14T13:37:42Z",
+          "description": null,
+          "id": "MDU6TGFiZWw1ODM4NzMxODU=",
+          "isDefault": false,
+          "name": "video",
+          "updatedAt": "2017-04-14T13:37:42Z"
         },
         {
-          "name": "native"
+          "color": "fef2c0",
+          "createdAt": "2017-04-14T13:41:05Z",
+          "description": null,
+          "id": "MDU6TGFiZWw1ODM4NzQ4NTk=",
+          "isDefault": false,
+          "name": "native",
+          "updatedAt": "2017-04-14T13:41:05Z"
         },
         {
-          "name": "needs docs"
+          "color": "f3f704",
+          "createdAt": "2017-12-13T21:14:01Z",
+          "description": null,
+          "id": "MDU6TGFiZWw3NzgwOTY3MTI=",
+          "isDefault": false,
+          "name": "needs docs",
+          "updatedAt": "2017-12-13T21:14:01Z"
         },
         {
-          "name": "troubleshooting"
+          "color": "bfdadc",
+          "createdAt": "2018-01-17T16:53:54Z",
+          "description": "",
+          "id": "MDU6TGFiZWw4MDc4MzUwMzI=",
+          "isDefault": false,
+          "name": "troubleshooting",
+          "updatedAt": "2018-03-15T16:45:21Z"
         },
         {
-          "name": "improvement"
+          "color": "bfdadc",
+          "createdAt": "2018-01-31T15:43:27Z",
+          "description": null,
+          "id": "MDU6TGFiZWw4MjI2NzMxNDU=",
+          "isDefault": false,
+          "name": "improvement",
+          "updatedAt": "2018-01-31T15:43:27Z"
         },
         {
-          "name": "legacy"
+          "color": "8C898C",
+          "createdAt": "2018-02-08T17:36:55Z",
+          "description": null,
+          "id": "MDU6TGFiZWw4MzE0MzAyNjQ=",
+          "isDefault": false,
+          "name": "legacy",
+          "updatedAt": "2018-02-08T17:36:55Z"
         },
         {
-          "name": "good first issue"
+          "color": "32CD32",
+          "createdAt": "2018-02-21T19:43:38Z",
+          "description": "",
+          "id": "MDU6TGFiZWw4NDQyMjg4Mjg=",
+          "isDefault": true,
+          "name": "good first issue",
+          "updatedAt": "2018-03-06T17:52:33Z"
         },
         {
-          "name": "pinned"
+          "color": "bfd4f2",
+          "createdAt": "2018-03-06T21:27:00Z",
+          "description": "won't be closed by stalebot",
+          "id": "MDU6TGFiZWw4NTgzNzM5MTE=",
+          "isDefault": false,
+          "name": "pinned",
+          "updatedAt": "2018-03-06T21:27:00Z"
         },
         {
-          "name": "needs 2nd review"
+          "color": "e7edd7",
+          "createdAt": "2018-03-13T20:13:38Z",
+          "description": "Core module updates require two approvals from the core team",
+          "id": "MDU6TGFiZWw4NjYxNjUzODc=",
+          "isDefault": false,
+          "name": "needs 2nd review",
+          "updatedAt": "2018-03-13T20:16:27Z"
         },
         {
-          "name": "stale"
+          "color": "ffffff",
+          "createdAt": "2018-03-26T20:21:46Z",
+          "description": null,
+          "id": "MDU6TGFiZWw4ODA0NTMzNDA=",
+          "isDefault": false,
+          "name": "stale",
+          "updatedAt": "2018-03-26T20:21:46Z"
         },
         {
-          "name": "needs unit tests"
+          "color": "dd8c63",
+          "createdAt": "2018-08-15T19:09:01Z",
+          "description": "",
+          "id": "MDU6TGFiZWwxMDI1NDM3OTQ0",
+          "isDefault": false,
+          "name": "needs unit tests",
+          "updatedAt": "2018-08-15T19:09:01Z"
         },
         {
-          "name": "backlog"
+          "color": "5319e7",
+          "createdAt": "2018-08-31T15:13:57Z",
+          "description": "Items we should consider doing",
+          "id": "MDU6TGFiZWwxMDQxNjczNzM5",
+          "isDefault": false,
+          "name": "backlog",
+          "updatedAt": "2018-08-31T15:13:57Z"
         },
         {
-          "name": "do not merge"
+          "color": "f2b860",
+          "createdAt": "2019-10-23T17:29:28Z",
+          "description": "",
+          "id": "MDU6TGFiZWwxNjM0Mzk1ODQz",
+          "isDefault": false,
+          "name": "do not merge",
+          "updatedAt": "2019-10-23T17:29:28Z"
         },
         {
-          "name": "dependencies"
+          "color": "0366d6",
+          "createdAt": "2019-10-28T21:50:41Z",
+          "description": "Pull requests that update a dependency file",
+          "id": "MDU6TGFiZWwxNjQzNzg2MTcw",
+          "isDefault": false,
+          "name": "dependencies",
+          "updatedAt": "2019-10-28T21:50:41Z"
         },
         {
-          "name": "maintenance"
+          "color": "2af9a0",
+          "createdAt": "2020-11-14T17:46:00Z",
+          "description": "",
+          "id": "MDU6TGFiZWwyNTA1NjgzNzc4",
+          "isDefault": false,
+          "name": "maintenance",
+          "updatedAt": "2020-11-14T17:46:00Z"
         },
         {
-          "name": "patch"
+          "color": "80f2cc",
+          "createdAt": "2020-12-01T23:42:30Z",
+          "description": "",
+          "id": "MDU6TGFiZWwyNTQ5Mzc3ODUz",
+          "isDefault": false,
+          "name": "patch",
+          "updatedAt": "2020-12-01T23:42:30Z"
         },
         {
-          "name": "bugfix"
+          "color": "d93f0b",
+          "createdAt": "2020-12-03T15:21:30Z",
+          "description": "",
+          "id": "MDU6TGFiZWwyNTU0MjQ0Mzk2",
+          "isDefault": false,
+          "name": "bugfix",
+          "updatedAt": "2020-12-03T15:21:30Z"
         },
         {
-          "name": "major"
+          "color": "5319e7",
+          "createdAt": "2020-12-03T15:21:47Z",
+          "description": "",
+          "id": "MDU6TGFiZWwyNTU0MjQ1MTcx",
+          "isDefault": false,
+          "name": "major",
+          "updatedAt": "2020-12-03T15:21:47Z"
         },
         {
-          "name": "minor"
+          "color": "389ac1",
+          "createdAt": "2020-12-03T15:22:03Z",
+          "description": "",
+          "id": "MDU6TGFiZWwyNTU0MjQ1ODUx",
+          "isDefault": false,
+          "name": "minor",
+          "updatedAt": "2020-12-03T15:22:03Z"
         },
         {
-          "name": "documentation"
+          "color": "A76AD6",
+          "createdAt": "2021-05-10T15:42:42Z",
+          "description": "",
+          "id": "MDU6TGFiZWwyOTg4MTMzOTkw",
+          "isDefault": true,
+          "name": "documentation",
+          "updatedAt": "2021-05-10T15:42:42Z"
         },
         {
-          "name": "javascript"
+          "color": "168700",
+          "createdAt": "2022-06-23T13:12:14Z",
+          "description": "Pull requests that update Javascript code",
+          "id": "LA_kwDOAlf9v87-Azsl",
+          "isDefault": false,
+          "name": "javascript",
+          "updatedAt": "2022-06-23T13:12:14Z"
         },
         {
-          "name": "github_actions"
+          "color": "000000",
+          "createdAt": "2022-08-22T14:22:19Z",
+          "description": "Pull requests that update GitHub Actions code",
+          "id": "LA_kwDOAlf9v88AAAABCVV15w",
+          "isDefault": false,
+          "name": "github_actions",
+          "updatedAt": "2022-08-22T14:22:19Z"
         },
         {
-          "name": "9.0 API Change"
+          "color": "BECF41",
+          "createdAt": "2023-06-02T13:48:11Z",
+          "description": "",
+          "id": "LA_kwDOAlf9v88AAAABTETlnw",
+          "isDefault": false,
+          "name": "9.0 API Change",
+          "updatedAt": "2023-06-02T13:48:11Z"
         },
         {
-          "name": "pmc-review"
+          "color": "c5def5",
+          "createdAt": "2024-05-20T15:23:10Z",
+          "description": "",
+          "id": "LA_kwDOAlf9v88AAAABn71kyw",
+          "isDefault": false,
+          "name": "pmc-review",
+          "updatedAt": "2024-05-20T15:23:10Z"
         },
         {
-          "name": "10.0 API Change"
+          "color": "5EFC4C",
+          "createdAt": "2024-06-03T14:48:25Z",
+          "description": "",
+          "id": "LA_kwDOAlf9v88AAAABozwBbw",
+          "isDefault": false,
+          "name": "10.0 API Change",
+          "updatedAt": "2024-06-03T14:48:25Z"
         },
         {
-          "name": "Needs contributor"
+          "color": "0e8a16",
+          "createdAt": "2024-07-15T15:29:50Z",
+          "description": "",
+          "id": "LA_kwDOAlf9v88AAAABrZaVEQ",
+          "isDefault": false,
+          "name": "Needs contributor",
+          "updatedAt": "2024-07-15T15:29:50Z"
         },
         {
-          "name": "11.0 API Change"
+          "color": "aaaaaa",
+          "createdAt": "2025-04-14T15:53:51Z",
+          "description": null,
+          "id": "LA_kwDOAlf9v88AAAAB9_3G6g",
+          "isDefault": false,
+          "name": "11.0 API Change",
+          "updatedAt": "2025-04-14T15:53:51Z"
         },
         {
-          "name": "codex"
+          "color": "ededed",
+          "createdAt": "2026-01-15T15:08:04Z",
+          "description": null,
+          "id": "LA_kwDOAlf9v88AAAACVAdR9g",
+          "isDefault": false,
+          "name": "codex",
+          "updatedAt": "2026-01-15T15:08:04Z"
         },
         {
-          "name": "12.0 API Change"
+          "color": "aaaaaa",
+          "createdAt": "2026-01-28T18:40:42Z",
+          "description": null,
+          "id": "LA_kwDOAlf9v88AAAACWSoJrw",
+          "isDefault": false,
+          "name": "12.0 API Change",
+          "updatedAt": "2026-01-28T18:40:42Z"
         },
         {
-          "name": "core"
+          "color": "BF8224",
+          "createdAt": "2026-04-29T14:54:25Z",
+          "description": "",
+          "id": "LA_kwDOAlf9v88AAAAChQnWYQ",
+          "isDefault": false,
+          "name": "core",
+          "updatedAt": "2026-04-29T14:54:25Z"
         },
         {
-          "name": "aardvark"
+          "color": "ededed",
+          "createdAt": "2026-06-10T07:32:21Z",
+          "description": null,
+          "id": "LA_kwDOAlf9v88AAAACmxc7Zw",
+          "isDefault": false,
+          "name": "aardvark",
+          "updatedAt": "2026-06-10T07:32:21Z"
         },
         {
-          "name": "fix"
+          "color": "ededed",
+          "createdAt": "2026-07-28T22:32:00Z",
+          "description": null,
+          "id": "LA_kwDOAlf9v88AAAACtu7RPQ",
+          "isDefault": false,
+          "name": "fix",
+          "updatedAt": "2026-07-28T22:32:00Z"
         }
       ],
       "pageInfo": {
@@ -157,28 +453,52 @@
       },
       "totalCount": 47
     },
+    "licenseInfo": {
+      "spdxId": "Apache-2.0"
+    },
+    "mergeCommitAllowed": false,
+    "mergeCommitMessage": "PR_TITLE",
+    "mergeCommitTitle": "MERGE_MESSAGE",
     "name": "Prebid.js",
     "nameWithOwner": "prebid/Prebid.js",
     "owner": {
       "login": "prebid"
-    }
+    },
+    "planFeatures": {
+      "codeowners": true,
+      "maximumManualReviewRequests": 15,
+      "teamReviewRequests": true
+    },
+    "primaryLanguage": {
+      "name": "JavaScript"
+    },
+    "pushedAt": "2026-10-17T23:40:54Z",
+    "rebaseMergeAllowed": false,
+    "squashMergeAllowed": true,
+    "squashMergeCommitMessage": "COMMIT_MESSAGES",
+    "squashMergeCommitTitle": "COMMIT_OR_PR_TITLE",
+    "stargazerCount": 1611,
+    "updatedAt": "2026-10-18T12:26:14Z",
+    "usesCustomOpenGraphImage": true,
+    "visibility": "PUBLIC",
+    "webCommitSignoffRequired": false
   },
-  "document_sha256": "035aef891393ccd81c36161af0b0d2e10034e582cac4bae68e62c9e5b035790e",
+  "document_sha256": "1911b98b9e2cc2b0446feebf94442c77d8c064810fa681773523ffe914c07a37",
   "errors": [],
   "extra": {},
   "headers": {
-    "date": "Sat, 17 Oct 2026 12:09:22 GMT",
+    "date": "Sun, 18 Oct 2026 21:11:47 GMT",
     "x-ratelimit-limit": "5000",
-    "x-ratelimit-remaining": "4994",
-    "x-ratelimit-reset": "1792242556",
+    "x-ratelimit-remaining": "4972",
+    "x-ratelimit-reset": "1792360091",
     "x-ratelimit-resource": "graphql",
-    "x-ratelimit-used": "6"
+    "x-ratelimit-used": "28"
   },
   "key": {
     "name": "Prebid.js",
     "owner": "prebid"
   },
   "kind": "resolve",
-  "recorded_at": "2026-10-17T12:09:19Z",
+  "recorded_at": "2026-10-18T21:11:43Z",
   "source": "live"
 }

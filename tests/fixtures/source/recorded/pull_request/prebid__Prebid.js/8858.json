@@ -1,6 +1,14 @@
 {
   "data": {
     "additions": 18938,
+    "assignedActors": {
+      "nodes": [],
+      "pageInfo": {
+        "endCursor": null,
+        "hasNextPage": false
+      },
+      "totalCount": 0
+    },
     "author": {
       "__typename": "User",
       "databaseId": 12138319,
@@ -11,10 +19,13 @@
     "baseRefName": "master",
     "baseRefOid": "6c63c6f00267f396176e5b96629b6fc570e40805",
     "body": "## Type of change\r\n<!-- Remove items that don't apply and/or select an item by changing [ ] to [x] -->\r\n- [x] Feature\r\n\r\n## Description of change\r\n\r\nThe objective of this PR is to implement the Video Module proposed in https://github.com/prebid/Prebid.js/issues/6271 and detailed in the [official proposal doc](https://docs.google.com/document/d/1sueL8EXnD-DViTIEBNayAzNNrYocdHtmEl7433g0f5I/edit?usp=sharing).\r\n\r\n<!-- For new bidder adapters, please provide the following \r\n- test parameters for validating bids\r\n```\r\n{\r\n  bidder: '<bidder name>',\r\n  params: {\r\n    // ...\r\n  }\r\n}\r\n```\r\n\r\nBe sure to test the integration with your adserver using the [Hello World](/integrationExamples/gpt/hello_world.html) sample page.-->\r\n\r\n- contact email of the adapter’s maintainer\r\n karim mourra - karim@jwplayer.com\r\n\r\n<!--For any changes that affect user-facing APIs or example code documented on http://prebid.org, please provide:\r\n\r\n- A link to a PR on the docs repo at https://github.com/prebid/prebid.github.io/\r\n TBD-->\r\nDocumentation PR: https://github.com/prebid/prebid.github.io/pull/4100\r\n\r\n## Other information\r\n<!-- References to related PR or issue #s, @mentions of the person or team responsible for reviewing changes, etc. -->\r\nfulfills [proposal](https://docs.google.com/document/d/1sueL8EXnD-DViTIEBNayAzNNrYocdHtmEl7433g0f5I/edit?usp=sharing)\r\nAddresses:\r\nhttps://github.com/prebid/Prebid.js/issues/6271\r\n#5696\r\n\r\n",
+    "canBeRebased": false,
     "changedFiles": 49,
+    "closedAt": "2022-10-21T18:46:45Z",
     "closingIssuesReferences": {
       "nodes": [
         {
+          "fullDatabaseId": "692096506",
           "number": 5696,
           "repository": {
             "databaseId": 39321023,
@@ -37,7 +48,16 @@
             "id": "MDM6Qm90NDMxNDQzOTA=",
             "login": "lgtm-com"
           },
-          "fullDatabaseId": "1218564961"
+          "authorAssociation": "NONE",
+          "createdAt": "2022-08-17T22:44:18Z",
+          "createdViaEmail": false,
+          "editor": null,
+          "fullDatabaseId": "1218564961",
+          "id": "IC_kwDOAlf9v85IodNh",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2022-08-17T22:44:18Z",
+          "updatedAt": "2022-08-17T22:44:18Z"
         },
         {
           "author": {
@@ -46,7 +66,16 @@
             "id": "MDM6Qm90NDMxNDQzOTA=",
             "login": "lgtm-com"
           },
-          "fullDatabaseId": "1224930038"
+          "authorAssociation": "NONE",
+          "createdAt": "2022-08-23T21:57:40Z",
+          "createdViaEmail": false,
+          "editor": null,
+          "fullDatabaseId": "1224930038",
+          "id": "IC_kwDOAlf9v85JAvL2",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2022-08-23T21:57:40Z",
+          "updatedAt": "2022-08-23T21:57:40Z"
         },
         {
           "author": {
@@ -55,7 +84,16 @@
             "id": "MDQ6VXNlcjEyMTM4MzE5",
             "login": "karimMourra"
           },
-          "fullDatabaseId": "1225865343"
+          "authorAssociation": "COLLABORATOR",
+          "createdAt": "2022-08-24T15:16:09Z",
+          "createdViaEmail": false,
+          "editor": null,
+          "fullDatabaseId": "1225865343",
+          "id": "IC_kwDOAlf9v85JETh_",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2022-08-24T15:16:09Z",
+          "updatedAt": "2022-08-24T15:16:09Z"
         },
         {
           "author": {
@@ -64,7 +102,16 @@
             "id": "MDQ6VXNlcjEyMTM4MzE5",
             "login": "karimMourra"
           },
-          "fullDatabaseId": "1225943941"
+          "authorAssociation": "COLLABORATOR",
+          "createdAt": "2022-08-24T16:16:31Z",
+          "createdViaEmail": false,
+          "editor": null,
+          "fullDatabaseId": "1225943941",
+          "id": "IC_kwDOAlf9v85JEmuF",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2022-08-24T16:16:31Z",
+          "updatedAt": "2022-08-24T16:16:31Z"
         },
         {
           "author": {
@@ -73,7 +120,21 @@
             "id": "MDQ6VXNlcjE2ODMxNzU=",
             "login": "patmmccann"
           },
-          "fullDatabaseId": "1278019297"
+          "authorAssociation": "MEMBER",
+          "createdAt": "2022-10-13T18:29:58Z",
+          "createdViaEmail": false,
+          "editor": {
+            "__typename": "User",
+            "databaseId": 1683175,
+            "id": "MDQ6VXNlcjE2ODMxNzU=",
+            "login": "patmmccann"
+          },
+          "fullDatabaseId": "1278019297",
+          "id": "IC_kwDOAlf9v85MLQbh",
+          "includesCreatedEdit": true,
+          "lastEditedAt": "2022-10-13T18:31:14Z",
+          "publishedAt": "2022-10-13T18:29:58Z",
+          "updatedAt": "2022-10-13T18:31:14Z"
         },
         {
           "author": {
@@ -82,7 +143,16 @@
             "id": "MDQ6VXNlcjEyMTM4MzE5",
             "login": "karimMourra"
           },
-          "fullDatabaseId": "1287311445"
+          "authorAssociation": "COLLABORATOR",
+          "createdAt": "2022-10-21T18:34:42Z",
+          "createdViaEmail": false,
+          "editor": null,
+          "fullDatabaseId": "1287311445",
+          "id": "IC_kwDOAlf9v85MutBV",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2022-10-21T18:34:42Z",
+          "updatedAt": "2022-10-21T18:34:42Z"
         },
         {
           "author": {
@@ -91,7 +161,16 @@
             "id": "MDQ6VXNlcjE2ODMxNzU=",
             "login": "patmmccann"
           },
-          "fullDatabaseId": "1287322330"
+          "authorAssociation": "MEMBER",
+          "createdAt": "2022-10-21T18:46:37Z",
+          "createdViaEmail": false,
+          "editor": null,
+          "fullDatabaseId": "1287322330",
+          "id": "IC_kwDOAlf9v85Muvra",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2022-10-21T18:46:37Z",
+          "updatedAt": "2022-10-21T18:46:37Z"
         }
       ],
       "pageInfo": {
@@ -1531,6 +1610,12 @@
     },
     "createdAt": "2022-08-17T19:44:18Z",
     "deletions": 808,
+    "editor": {
+      "__typename": "User",
+      "databaseId": 12138319,
+      "id": "MDQ6VXNlcjEyMTM4MzE5",
+      "login": "karimMourra"
+    },
     "files": {
       "nodes": [
         {
@@ -1835,16 +1920,28 @@
       "totalCount": 49
     },
     "fullDatabaseId": "1029239745",
+    "headRefName": "feat/AD-1416",
     "headRefOid": "896a11a8ca80aef3156c06df76f460ca42ab3c75",
+    "headRepository": {
+      "databaseId": 223256950,
+      "nameWithOwner": "jwplayer/Prebid.js"
+    },
+    "headRepositoryOwner": {
+      "id": "MDEyOk9yZ2FuaXphdGlvbjUwOTAwNjA=",
+      "login": "jwplayer"
+    },
     "id": "PR_kwDOAlf9v849WPPB",
+    "includesCreatedEdit": true,
     "isCrossRepository": true,
     "isDraft": false,
     "labels": {
       "nodes": [
         {
+          "id": "MDU6TGFiZWwyNDQ2NTk2MzM=",
           "name": "feature"
         },
         {
+          "id": "MDU6TGFiZWw3NzgwOTY3MTI=",
           "name": "needs docs"
         }
       ],
@@ -1854,6 +1951,13 @@
       },
       "totalCount": 2
     },
+    "lastEditedAt": "2022-10-20T19:31:32Z",
+    "maintainerCanModify": false,
+    "mergeCommit": {
+      "oid": "0c69238d05017b372e4d527d02ad71bbeb0aca71"
+    },
+    "mergeStateStatus": "UNKNOWN",
+    "mergeable": "UNKNOWN",
     "mergedAt": "2022-10-21T18:46:45Z",
     "mergedBy": {
       "__typename": "User",
@@ -1861,7 +1965,53 @@
       "id": "MDQ6VXNlcjE2ODMxNzU=",
       "login": "patmmccann"
     },
+    "milestone": null,
     "number": 8858,
+    "potentialMergeCommit": null,
+    "publishedAt": "2022-08-17T19:44:18Z",
+    "reviewDecision": "APPROVED",
+    "reviewRequests": {
+      "nodes": [
+        {
+          "asCodeOwner": false,
+          "databaseId": 660679137,
+          "id": "RR_kwDOAlf9v84nYSnh",
+          "requestedReviewer": {
+            "__typename": "User",
+            "databaseId": 1683175,
+            "id": "MDQ6VXNlcjE2ODMxNzU=",
+            "login": "patmmccann"
+          }
+        },
+        {
+          "asCodeOwner": false,
+          "databaseId": 704523180,
+          "id": "RR_kwDOAlf9v84p_ius",
+          "requestedReviewer": {
+            "__typename": "User",
+            "databaseId": 31102355,
+            "id": "MDQ6VXNlcjMxMTAyMzU1",
+            "login": "jsnellbaker"
+          }
+        },
+        {
+          "asCodeOwner": false,
+          "databaseId": 717308785,
+          "id": "RR_kwDOAlf9v84qwUNx",
+          "requestedReviewer": {
+            "__typename": "User",
+            "databaseId": 13972794,
+            "id": "MDQ6VXNlcjEzOTcyNzk0",
+            "login": "robertrmartinez"
+          }
+        }
+      ],
+      "pageInfo": {
+        "endCursor": "Y3Vyc29yOnYyOpHOKsFDcQ==",
+        "hasNextPage": false
+      },
+      "totalCount": 3
+    },
     "reviews": {
       "nodes": [
         {
@@ -1871,8 +2021,22 @@
             "id": "MDQ6VXNlcjEwMTUxMzgx",
             "login": "dgirardi"
           },
+          "authorAssociation": "MEMBER",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 6
+          },
+          "commit": null,
+          "createdAt": "2022-09-01T16:47:03Z",
+          "editor": null,
           "fullDatabaseId": "1093743340",
-          "state": "COMMENTED"
+          "id": "PRR_kwDOAlf9v85BMTLs",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2022-09-01T16:47:03Z",
+          "state": "COMMENTED",
+          "submittedAt": "2022-09-01T17:22:26Z",
+          "updatedAt": "2022-09-01T17:22:27Z"
         },
         {
           "author": {
@@ -1881,8 +2045,22 @@
             "id": "MDQ6VXNlcjEwMTUxMzgx",
             "login": "dgirardi"
           },
+          "authorAssociation": "MEMBER",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 1
+          },
+          "commit": null,
+          "createdAt": "2022-09-01T17:29:56Z",
+          "editor": null,
           "fullDatabaseId": "1093805343",
-          "state": "COMMENTED"
+          "id": "PRR_kwDOAlf9v85BMiUf",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2022-09-01T17:29:56Z",
+          "state": "COMMENTED",
+          "submittedAt": "2022-09-01T17:29:57Z",
+          "updatedAt": "2022-09-01T17:29:57Z"
         },
         {
           "author": {
@@ -1891,8 +2069,22 @@
             "id": "MDQ6VXNlcjEyMTM4MzE5",
             "login": "karimMourra"
           },
+          "authorAssociation": "COLLABORATOR",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 1
+          },
+          "commit": null,
+          "createdAt": "2022-09-06T20:59:43Z",
+          "editor": null,
           "fullDatabaseId": "1098238013",
-          "state": "COMMENTED"
+          "id": "PRR_kwDOAlf9v85Bdcg9",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2022-09-06T20:59:43Z",
+          "state": "COMMENTED",
+          "submittedAt": "2022-09-06T20:59:43Z",
+          "updatedAt": "2022-09-06T20:59:43Z"
         },
         {
           "author": {
@@ -1901,8 +2093,22 @@
             "id": "MDQ6VXNlcjEwMTUxMzgx",
             "login": "dgirardi"
           },
+          "authorAssociation": "MEMBER",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 1
+          },
+          "commit": null,
+          "createdAt": "2022-09-06T21:33:51Z",
+          "editor": null,
           "fullDatabaseId": "1098271117",
-          "state": "COMMENTED"
+          "id": "PRR_kwDOAlf9v85BdkmN",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2022-09-06T21:33:51Z",
+          "state": "COMMENTED",
+          "submittedAt": "2022-09-06T21:33:51Z",
+          "updatedAt": "2022-09-06T21:33:51Z"
         },
         {
           "author": {
@@ -1911,8 +2117,22 @@
             "id": "MDQ6VXNlcjEyMTM4MzE5",
             "login": "karimMourra"
           },
+          "authorAssociation": "COLLABORATOR",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 1
+          },
+          "commit": null,
+          "createdAt": "2022-09-07T16:27:26Z",
+          "editor": null,
           "fullDatabaseId": "1099487050",
-          "state": "COMMENTED"
+          "id": "PRR_kwDOAlf9v85BiNdK",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2022-09-07T16:27:26Z",
+          "state": "COMMENTED",
+          "submittedAt": "2022-09-07T16:27:27Z",
+          "updatedAt": "2022-09-07T16:27:27Z"
         },
         {
           "author": {
@@ -1921,8 +2141,22 @@
             "id": "MDQ6VXNlcjEyMTM4MzE5",
             "login": "karimMourra"
           },
+          "authorAssociation": "COLLABORATOR",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 1
+          },
+          "commit": null,
+          "createdAt": "2022-09-07T16:35:58Z",
+          "editor": null,
           "fullDatabaseId": "1099498157",
-          "state": "COMMENTED"
+          "id": "PRR_kwDOAlf9v85BiQKt",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2022-09-07T16:35:58Z",
+          "state": "COMMENTED",
+          "submittedAt": "2022-09-07T16:35:58Z",
+          "updatedAt": "2022-09-07T16:35:58Z"
         },
         {
           "author": {
@@ -1931,8 +2165,22 @@
             "id": "MDQ6VXNlcjEwMTUxMzgx",
             "login": "dgirardi"
           },
+          "authorAssociation": "MEMBER",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 1
+          },
+          "commit": null,
+          "createdAt": "2022-09-07T17:34:03Z",
+          "editor": null,
           "fullDatabaseId": "1099569099",
-          "state": "COMMENTED"
+          "id": "PRR_kwDOAlf9v85BihfL",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2022-09-07T17:34:03Z",
+          "state": "COMMENTED",
+          "submittedAt": "2022-09-07T17:34:03Z",
+          "updatedAt": "2022-09-07T17:34:03Z"
         },
         {
           "author": {
@@ -1941,8 +2189,22 @@
             "id": "MDQ6VXNlcjEyMTM4MzE5",
             "login": "karimMourra"
           },
+          "authorAssociation": "COLLABORATOR",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 1
+          },
+          "commit": null,
+          "createdAt": "2022-09-07T17:44:11Z",
+          "editor": null,
           "fullDatabaseId": "1099580395",
-          "state": "COMMENTED"
+          "id": "PRR_kwDOAlf9v85BikPr",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2022-09-07T17:44:11Z",
+          "state": "COMMENTED",
+          "submittedAt": "2022-09-07T17:44:11Z",
+          "updatedAt": "2022-09-07T17:44:11Z"
         },
         {
           "author": {
@@ -1951,8 +2213,22 @@
             "id": "MDQ6VXNlcjEyMTM4MzE5",
             "login": "karimMourra"
           },
+          "authorAssociation": "COLLABORATOR",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 1
+          },
+          "commit": null,
+          "createdAt": "2022-09-07T20:15:42Z",
+          "editor": null,
           "fullDatabaseId": "1099741899",
-          "state": "COMMENTED"
+          "id": "PRR_kwDOAlf9v85BjLrL",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2022-09-07T20:15:42Z",
+          "state": "COMMENTED",
+          "submittedAt": "2022-09-07T20:15:43Z",
+          "updatedAt": "2022-09-07T20:15:43Z"
         },
         {
           "author": {
@@ -1961,8 +2237,22 @@
             "id": "MDQ6VXNlcjEyMTM4MzE5",
             "login": "karimMourra"
           },
+          "authorAssociation": "COLLABORATOR",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 1
+          },
+          "commit": null,
+          "createdAt": "2022-09-07T20:28:15Z",
+          "editor": null,
           "fullDatabaseId": "1099754755",
-          "state": "COMMENTED"
+          "id": "PRR_kwDOAlf9v85BjO0D",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2022-09-07T20:28:15Z",
+          "state": "COMMENTED",
+          "submittedAt": "2022-09-07T20:28:15Z",
+          "updatedAt": "2022-09-07T20:28:15Z"
         },
         {
           "author": {
@@ -1971,8 +2261,22 @@
             "id": "MDQ6VXNlcjEyMTM4MzE5",
             "login": "karimMourra"
           },
+          "authorAssociation": "COLLABORATOR",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 1
+          },
+          "commit": null,
+          "createdAt": "2022-09-12T16:50:04Z",
+          "editor": null,
           "fullDatabaseId": "1104482119",
-          "state": "COMMENTED"
+          "id": "PRR_kwDOAlf9v85B1Q9H",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2022-09-12T16:50:04Z",
+          "state": "COMMENTED",
+          "submittedAt": "2022-09-12T16:50:04Z",
+          "updatedAt": "2022-09-12T16:50:04Z"
         },
         {
           "author": {
@@ -1981,8 +2285,22 @@
             "id": "MDQ6VXNlcjEyMTM4MzE5",
             "login": "karimMourra"
           },
+          "authorAssociation": "COLLABORATOR",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 1
+          },
+          "commit": null,
+          "createdAt": "2022-09-12T16:50:11Z",
+          "editor": null,
           "fullDatabaseId": "1104482264",
-          "state": "COMMENTED"
+          "id": "PRR_kwDOAlf9v85B1Q_Y",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2022-09-12T16:50:11Z",
+          "state": "COMMENTED",
+          "submittedAt": "2022-09-12T16:50:11Z",
+          "updatedAt": "2022-09-12T16:50:11Z"
         },
         {
           "author": {
@@ -1991,8 +2309,22 @@
             "id": "MDQ6VXNlcjEyMTM4MzE5",
             "login": "karimMourra"
           },
+          "authorAssociation": "COLLABORATOR",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 1
+          },
+          "commit": null,
+          "createdAt": "2022-09-12T16:50:18Z",
+          "editor": null,
           "fullDatabaseId": "1104482393",
-          "state": "COMMENTED"
+          "id": "PRR_kwDOAlf9v85B1RBZ",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2022-09-12T16:50:18Z",
+          "state": "COMMENTED",
+          "submittedAt": "2022-09-12T16:50:18Z",
+          "updatedAt": "2022-09-12T16:50:18Z"
         },
         {
           "author": {
@@ -2001,8 +2333,22 @@
             "id": "MDQ6VXNlcjEyMTM4MzE5",
             "login": "karimMourra"
           },
+          "authorAssociation": "COLLABORATOR",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 1
+          },
+          "commit": null,
+          "createdAt": "2022-09-12T16:50:34Z",
+          "editor": null,
           "fullDatabaseId": "1104482767",
-          "state": "COMMENTED"
+          "id": "PRR_kwDOAlf9v85B1RHP",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2022-09-12T16:50:34Z",
+          "state": "COMMENTED",
+          "submittedAt": "2022-09-12T16:50:35Z",
+          "updatedAt": "2022-09-12T16:50:35Z"
         },
         {
           "author": {
@@ -2011,8 +2357,22 @@
             "id": "MDQ6VXNlcjEyMTM4MzE5",
             "login": "karimMourra"
           },
+          "authorAssociation": "COLLABORATOR",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 1
+          },
+          "commit": null,
+          "createdAt": "2022-09-12T16:50:56Z",
+          "editor": null,
           "fullDatabaseId": "1104483227",
-          "state": "COMMENTED"
+          "id": "PRR_kwDOAlf9v85B1ROb",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2022-09-12T16:50:56Z",
+          "state": "COMMENTED",
+          "submittedAt": "2022-09-12T16:50:56Z",
+          "updatedAt": "2022-09-12T16:50:56Z"
         },
         {
           "author": {
@@ -2021,8 +2381,22 @@
             "id": "MDQ6VXNlcjEwMTUxMzgx",
             "login": "dgirardi"
           },
+          "authorAssociation": "MEMBER",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 2
+          },
+          "commit": null,
+          "createdAt": "2022-10-03T15:44:26Z",
+          "editor": null,
           "fullDatabaseId": "1128626704",
-          "state": "APPROVED"
+          "id": "PRR_kwDOAlf9v85DRXoQ",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2022-10-03T15:44:26Z",
+          "state": "APPROVED",
+          "submittedAt": "2022-10-03T15:48:20Z",
+          "updatedAt": "2022-10-03T15:48:20Z"
         },
         {
           "author": {
@@ -2031,8 +2405,22 @@
             "id": "MDQ6VXNlcjEyMTM4MzE5",
             "login": "karimMourra"
           },
+          "authorAssociation": "COLLABORATOR",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 1
+          },
+          "commit": null,
+          "createdAt": "2022-10-03T18:26:06Z",
+          "editor": null,
           "fullDatabaseId": "1128833378",
-          "state": "COMMENTED"
+          "id": "PRR_kwDOAlf9v85DSKFi",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2022-10-03T18:26:06Z",
+          "state": "COMMENTED",
+          "submittedAt": "2022-10-03T18:26:06Z",
+          "updatedAt": "2022-10-03T18:26:06Z"
         },
         {
           "author": {
@@ -2041,8 +2429,22 @@
             "id": "MDQ6VXNlcjI1MDc1MzU=",
             "login": "bwschmidt"
           },
+          "authorAssociation": "MEMBER",
+          "authorCanPushToRepository": false,
+          "comments": {
+            "totalCount": 0
+          },
+          "commit": null,
+          "createdAt": "2022-10-20T21:40:09Z",
+          "editor": null,
           "fullDatabaseId": "1150022918",
-          "state": "APPROVED"
+          "id": "PRR_kwDOAlf9v85Ei_UG",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2022-10-20T21:40:09Z",
+          "state": "APPROVED",
+          "submittedAt": "2022-10-20T21:40:09Z",
+          "updatedAt": "2022-10-20T21:40:09Z"
         }
       ],
       "pageInfo": {
@@ -2051,20 +2453,38 @@
       },
       "totalCount": 18
     },
+    "stack": null,
+    "stackEntry": null,
     "state": "MERGED",
     "title": "Video Module: Initial Release",
-    "updatedAt": "2022-11-04T18:11:19Z"
+    "totalCommentsCount": 32,
+    "updatedAt": "2022-11-04T18:11:19Z",
+    "userLinkedClosingIssues": {
+      "nodes": [
+        {
+          "number": 5696,
+          "repository": {
+            "databaseId": 39321023
+          }
+        }
+      ],
+      "pageInfo": {
+        "endCursor": "MQ",
+        "hasNextPage": false
+      },
+      "totalCount": 1
+    }
   },
-  "document_sha256": "39fd2b5d7744d57be4fd58ba38b2fcf50319c5bd19e1c3796ae4771203af3ea0",
+  "document_sha256": "3527b3fa77b23d4166d3a8a063506be04f20c8bec7cee75e2bf801d0d608c26c",
   "errors": [],
   "extra": {},
   "headers": {
-    "date": "Sat, 17 Oct 2026 12:09:24 GMT",
+    "date": "Sun, 18 Oct 2026 21:11:51 GMT",
     "x-ratelimit-limit": "5000",
-    "x-ratelimit-remaining": "4929",
-    "x-ratelimit-reset": "1792241340",
+    "x-ratelimit-remaining": "4971",
+    "x-ratelimit-reset": "1792360091",
     "x-ratelimit-resource": "graphql",
-    "x-ratelimit-used": "71"
+    "x-ratelimit-used": "29"
   },
   "key": {
     "name": "Prebid.js",
@@ -2072,6 +2492,6 @@
     "owner": "prebid"
   },
   "kind": "pull_request",
-  "recorded_at": "2026-10-17T12:09:19Z",
+  "recorded_at": "2026-10-18T21:11:43Z",
   "source": "live"
 }

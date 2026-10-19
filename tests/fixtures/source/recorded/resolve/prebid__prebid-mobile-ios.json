@@ -1,70 +1,198 @@
 {
   "data": {
+    "allowUpdateBranch": false,
+    "archivedAt": null,
+    "createdAt": "2017-07-05T18:34:10Z",
     "databaseId": 96349829,
     "defaultBranchRef": {
       "name": "master"
     },
+    "deleteBranchOnMerge": false,
+    "description": "Prebid Mobile SDK for iOS applications",
+    "diskUsage": 348599,
+    "forkCount": 128,
+    "forkingAllowed": true,
+    "hasDiscussionsEnabled": false,
+    "hasProjectsEnabled": true,
+    "hasVulnerabilityAlertsEnabled": true,
+    "hasWikiEnabled": true,
+    "homepageUrl": null,
     "id": "MDEwOlJlcG9zaXRvcnk5NjM0OTgyOQ==",
     "isArchived": false,
     "isPrivate": false,
+    "isSecurityPolicyEnabled": false,
     "labels": {
       "nodes": [
         {
-          "name": "bug"
+          "color": "ee0701",
+          "createdAt": "2017-07-05T18:34:10Z",
+          "description": null,
+          "id": "MDU6TGFiZWw2NDA4MTEyMjc=",
+          "isDefault": true,
+          "name": "bug",
+          "updatedAt": "2017-07-05T18:34:10Z"
         },
         {
-          "name": "duplicate"
+          "color": "cccccc",
+          "createdAt": "2017-07-05T18:34:10Z",
+          "description": null,
+          "id": "MDU6TGFiZWw2NDA4MTEyMjg=",
+          "isDefault": true,
+          "name": "duplicate",
+          "updatedAt": "2017-07-05T18:34:10Z"
         },
         {
-          "name": "enhancement"
+          "color": "84b6eb",
+          "createdAt": "2017-07-05T18:34:10Z",
+          "description": null,
+          "id": "MDU6TGFiZWw2NDA4MTEyMjk=",
+          "isDefault": true,
+          "name": "enhancement",
+          "updatedAt": "2017-07-05T18:34:10Z"
         },
         {
-          "name": "invalid"
+          "color": "e6e6e6",
+          "createdAt": "2017-07-05T18:34:10Z",
+          "description": null,
+          "id": "MDU6TGFiZWw2NDA4MTEyMzE=",
+          "isDefault": true,
+          "name": "invalid",
+          "updatedAt": "2017-07-05T18:34:10Z"
         },
         {
-          "name": "question"
+          "color": "cc317c",
+          "createdAt": "2017-07-05T18:34:10Z",
+          "description": null,
+          "id": "MDU6TGFiZWw2NDA4MTEyMzI=",
+          "isDefault": true,
+          "name": "question",
+          "updatedAt": "2017-07-05T18:34:10Z"
         },
         {
-          "name": "needs docs"
+          "color": "f3f704",
+          "createdAt": "2017-12-13T21:15:38Z",
+          "description": null,
+          "id": "MDU6TGFiZWw3NzgwOTc2Mzg=",
+          "isDefault": false,
+          "name": "needs docs",
+          "updatedAt": "2017-12-13T21:15:38Z"
         },
         {
-          "name": "in progress"
+          "color": "52DCAF",
+          "createdAt": "2018-02-05T21:53:40Z",
+          "description": "",
+          "id": "MDU6TGFiZWw4Mjc5ODA1NTk=",
+          "isDefault": false,
+          "name": "in progress",
+          "updatedAt": "2022-10-28T12:17:00Z"
         },
         {
-          "name": "Intent to Implement"
+          "color": "d4c5f9",
+          "createdAt": "2018-10-29T20:30:39Z",
+          "description": "",
+          "id": "MDU6TGFiZWwxMTA5MTA0NjAy",
+          "isDefault": false,
+          "name": "Intent to Implement",
+          "updatedAt": "2018-10-29T20:30:39Z"
         },
         {
-          "name": "feature"
+          "color": "d66064",
+          "createdAt": "2019-07-05T14:30:49Z",
+          "description": "",
+          "id": "MDU6TGFiZWwxNDM3Nzk0ODk4",
+          "isDefault": false,
+          "name": "feature",
+          "updatedAt": "2019-07-05T14:30:49Z"
         },
         {
-          "name": "draft issue"
+          "color": "37094C",
+          "createdAt": "2021-10-27T13:48:01Z",
+          "description": "",
+          "id": "LA_kwDOBb4uhc7QMh9q",
+          "isDefault": false,
+          "name": "draft issue",
+          "updatedAt": "2021-10-27T13:48:01Z"
         },
         {
-          "name": "PMC discussion required"
+          "color": "D93F0B",
+          "createdAt": "2022-10-28T07:44:59Z",
+          "description": "",
+          "id": "LA_kwDOBb4uhc8AAAABGiUCuQ",
+          "isDefault": false,
+          "name": "PMC discussion required",
+          "updatedAt": "2022-10-28T07:44:59Z"
         },
         {
-          "name": "in review"
+          "color": "e99695",
+          "createdAt": "2024-03-07T16:59:54Z",
+          "description": "",
+          "id": "LA_kwDOBb4uhc8AAAABjQrh1g",
+          "isDefault": false,
+          "name": "in review",
+          "updatedAt": "2024-03-07T16:59:54Z"
         },
         {
-          "name": "iOS & Android"
+          "color": "10C08A",
+          "createdAt": "2024-03-07T17:06:46Z",
+          "description": "Used when issue is for both platforms.",
+          "id": "LA_kwDOBb4uhc8AAAABjQtUiA",
+          "isDefault": false,
+          "name": "iOS & Android",
+          "updatedAt": "2024-03-07T17:07:33Z"
         },
         {
-          "name": "PBMSDK 3.0"
+          "color": "FBF829",
+          "createdAt": "2024-05-09T14:55:45Z",
+          "description": "",
+          "id": "LA_kwDOBb4uhc8AAAABnQXabw",
+          "isDefault": false,
+          "name": "PBMSDK 3.0",
+          "updatedAt": "2024-05-09T14:55:45Z"
         },
         {
-          "name": "run-full-tests"
+          "color": "cd61e2",
+          "createdAt": "2025-07-31T14:08:43Z",
+          "description": "Set this label for PR if you need to run full set of tests: unit, smoke UI and integration.",
+          "id": "LA_kwDOBb4uhc8AAAACGoVTzA",
+          "isDefault": false,
+          "name": "run-full-tests",
+          "updatedAt": "2025-07-31T14:08:43Z"
         },
         {
-          "name": "4.0 Creatives Standardization"
+          "color": "aaaaaa",
+          "createdAt": "2025-08-12T10:26:14Z",
+          "description": null,
+          "id": "LA_kwDOBb4uhc8AAAACHkF1gg",
+          "isDefault": false,
+          "name": "4.0 Creatives Standardization",
+          "updatedAt": "2025-08-12T10:26:14Z"
         },
         {
-          "name": "4.0 In-App Header Bidding"
+          "color": "aaaaaa",
+          "createdAt": "2025-08-16T04:51:36Z",
+          "description": null,
+          "id": "LA_kwDOBb4uhc8AAAACH4TozQ",
+          "isDefault": false,
+          "name": "4.0 In-App Header Bidding",
+          "updatedAt": "2025-08-16T04:51:36Z"
         },
         {
-          "name": "product reliability"
+          "color": "aaaaaa",
+          "createdAt": "2025-08-21T08:48:15Z",
+          "description": null,
+          "id": "LA_kwDOBb4uhc8AAAACISsiYg",
+          "isDefault": false,
+          "name": "product reliability",
+          "updatedAt": "2025-08-21T08:48:15Z"
         },
         {
-          "name": "4.0 In-App Platform"
+          "color": "aaaaaa",
+          "createdAt": "2025-08-21T10:05:53Z",
+          "description": "",
+          "id": "LA_kwDOBb4uhc8AAAACITDuRg",
+          "isDefault": false,
+          "name": "4.0 In-App Platform",
+          "updatedAt": "2026-02-09T21:08:32Z"
         }
       ],
       "pageInfo": {
@@ -73,28 +201,52 @@
       },
       "totalCount": 19
     },
+    "licenseInfo": {
+      "spdxId": "Apache-2.0"
+    },
+    "mergeCommitAllowed": true,
+    "mergeCommitMessage": "PR_TITLE",
+    "mergeCommitTitle": "MERGE_MESSAGE",
     "name": "prebid-mobile-ios",
     "nameWithOwner": "prebid/prebid-mobile-ios",
     "owner": {
       "login": "prebid"
-    }
+    },
+    "planFeatures": {
+      "codeowners": true,
+      "maximumManualReviewRequests": 15,
+      "teamReviewRequests": true
+    },
+    "primaryLanguage": {
+      "name": "Swift"
+    },
+    "pushedAt": "2026-10-18T19:53:09Z",
+    "rebaseMergeAllowed": true,
+    "squashMergeAllowed": true,
+    "squashMergeCommitMessage": "COMMIT_MESSAGES",
+    "squashMergeCommitTitle": "COMMIT_OR_PR_TITLE",
+    "stargazerCount": 72,
+    "updatedAt": "2026-10-18T19:53:15Z",
+    "usesCustomOpenGraphImage": false,
+    "visibility": "PUBLIC",
+    "webCommitSignoffRequired": false
   },
-  "document_sha256": "035aef891393ccd81c36161af0b0d2e10034e582cac4bae68e62c9e5b035790e",
+  "document_sha256": "1911b98b9e2cc2b0446feebf94442c77d8c064810fa681773523ffe914c07a37",
   "errors": [],
   "extra": {},
   "headers": {
-    "date": "Sat, 17 Oct 2026 12:09:27 GMT",
+    "date": "Sun, 18 Oct 2026 21:11:54 GMT",
     "x-ratelimit-limit": "5000",
-    "x-ratelimit-remaining": "4989",
-    "x-ratelimit-reset": "1792242556",
+    "x-ratelimit-remaining": "4967",
+    "x-ratelimit-reset": "1792360091",
     "x-ratelimit-resource": "graphql",
-    "x-ratelimit-used": "11"
+    "x-ratelimit-used": "33"
   },
   "key": {
     "name": "prebid-mobile-ios",
     "owner": "prebid"
   },
   "kind": "resolve",
-  "recorded_at": "2026-10-17T12:09:19Z",
+  "recorded_at": "2026-10-18T21:11:43Z",
   "source": "live"
 }

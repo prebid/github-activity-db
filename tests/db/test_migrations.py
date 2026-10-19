@@ -43,8 +43,15 @@ from tests.test_import_boundaries import imported_modules
 
 TRACKED = REPO_ROOT / "github_activity.db"
 TEST_REVISION = "f1e57000a001"
-ORPHAN = "op.execute(\"INSERT INTO pr_labels (pr_id, name) VALUES (999, 'orphan')\")"
-VIEWS_READING_PULL_REQUESTS = ("v_pr_reviewers", "v_pr_commenters", "v_commit_authors")
+# A pr_labels row whose pull request does not exist.
+PLANTED_LABEL = "INSERT INTO pr_labels (pr_id, name, label_node_id) VALUES (999, {!r}, 'x')"
+ORPHAN = f"op.execute({PLANTED_LABEL.format('orphan')!r})"
+VIEWS_READING_PULL_REQUESTS = (
+    "v_pr_reviews",
+    "v_pr_comments",
+    "v_commit_authors",
+    "v_pr_relationships",
+)
 PULL_REQUEST_INDEXES = (
     "SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'pull_requests' "
     "ORDER BY name"
@@ -164,7 +171,7 @@ class TestChain:
     ) -> None:
         """No command commits a file that fails the check, whether it ran a revision or not."""
         with closing(sqlite3.connect(migrated_database)) as connection, connection:
-            connection.execute("INSERT INTO pr_labels (pr_id, name) VALUES (999, 'orphan')")
+            connection.execute(PLANTED_LABEL.format("orphan"))
         before = snapshot(migrated_database)
         with pytest.raises(RuntimeError) as error:
             run(alembic_config(migrated_database))
@@ -297,6 +304,129 @@ class TestStep3Migration:
         assert snapshot(first_schema) == before
 
 
+STEP3A = "33f8570f6540"
+STEP3A_ROWS = {
+    "repositories": (
+        "INSERT INTO repositories (id, github_id, owner, name, full_name, repo_group, is_private, "
+        "is_archived, default_branch, is_tracked) "
+        "VALUES (1, 39321023, 'prebid', 'Prebid.js', 'prebid/Prebid.js', 'Client', 0, 0, "
+        "'master', 1)"
+    ),
+    "github_users": (
+        "INSERT INTO github_users (github_id, node_id, login, type, refreshed_at) "
+        "VALUES (1683175, 'MDQ6VXNlcjE2ODMxNzU=', 'patmmccann', 'User', "
+        "'2026-01-01 00:00:00.000000')"
+    ),
+    "sync_runs": (
+        'INSERT INTO sync_runs (started_at, status, "trigger", code_version, graphql_points, '
+        "rest_calls, items_planned, items_hydrated, items_deleted, failures) "
+        "VALUES ('2026-01-01 00:00:00.000000', 'running', 'manual', 'test', 0, 0, 0, 0, 0, 0)"
+    ),
+    "pull_requests": (
+        "INSERT INTO pull_requests (repository_id, number, github_id, node_id, state, is_draft, "
+        "title, body, author_association, created_at, base_ref, targets_default_branch, "
+        "is_cross_repository, additions, deletions, changed_files, commits_total, files_total, "
+        "reviews_total, comments_total, labels_total, closing_issues_total, github_updated_at, "
+        "hydrated_at, hydration_version) VALUES (1, 1, 1, 'PR_1', 'OPEN', 0, 't', '', 'MEMBER', "
+        "'2026-01-01 00:00:00.000000', 'master', 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, "
+        "'2026-01-01 00:00:00.000000', '2026-01-01 00:00:00.000000', 1)"
+    ),
+}
+
+
+@pytest.fixture
+def step3a_database(tmp_path: Path) -> Path:
+    """A database at the Step 3a revision, which no sync has written."""
+    database = tmp_path / "step3a.db"
+    upgrade(database, STEP3A)
+    assert revision_of(database) == STEP3A
+    return database
+
+
+class TestStep3b1Migration:
+    @pytest.mark.parametrize(
+        ("tables", "held"),
+        [
+            (("repositories", "pull_requests"), "repositories 1, pull_requests 1"),
+            (("repositories",), "repositories 1"),
+            (("github_users",), "github_users 1"),
+            (("sync_runs",), "sync_runs 1"),
+        ],
+        ids=["pull_requests", "repositories", "github_users", "sync_runs"],
+    )
+    def test_refuses_a_database_holding_rows_in_a_table_it_adds_columns_to(
+        self, step3a_database: Path, tables: tuple[str, ...], held: str
+    ) -> None:
+        with closing(sqlite3.connect(step3a_database)) as connection, connection:
+            for table in tables:
+                connection.execute(STEP3A_ROWS[table])
+        before = snapshot(step3a_database)
+        with pytest.raises(RuntimeError, match=rf"rows would be lost \({held}\)"):
+            upgrade(step3a_database)
+        assert snapshot(step3a_database) == before
+
+    def test_upgrades_a_database_without_rows(
+        self, step3a_database: Path, head_template: Path
+    ) -> None:
+        upgrade(step3a_database)
+        assert revision_of(step3a_database) == HEAD_REVISION
+        assert query(step3a_database, "PRAGMA user_version") == [(SCHEMA_VERSION,)]
+        assert schema_of(step3a_database) == schema_of(head_template)
+
+    def test_a_row_in_a_table_it_keeps_is_not_refused(self, step3a_database: Path) -> None:
+        """A user tag is kept as it was; only the tables the revision recreates must be empty."""
+        with closing(sqlite3.connect(step3a_database)) as connection, connection:
+            connection.execute(
+                "INSERT INTO user_tags (name, created_at) VALUES ('kept', '2026-01-01 00:00:00')"
+            )
+        upgrade(step3a_database)
+        assert query(step3a_database, "SELECT name FROM user_tags") == [("kept",)]
+
+    def test_the_refusal_covers_every_table_the_revision_recreates(
+        self, step3a_database: Path, head_template: Path
+    ) -> None:
+        """CHANGED_TABLES, which the refusal counts, is exactly the set of tables present at
+        Step 3a whose definition differs at head; a table it leaves alone is unchanged."""
+        module = (
+            ScriptDirectory.from_config(alembic_config(head_template))
+            .get_revision(HEAD_REVISION)
+            .module
+        )
+        before, after = table_definitions(step3a_database), table_definitions(head_template)
+        changed = {table for table in before if before[table] != after.get(table)}
+        assert set(module.CHANGED_TABLES) == changed
+        assert after.keys() - before.keys() == {
+            "repo_labels",
+            "pr_review_requests",
+            "pr_assignees",
+            "account_profiles",
+        }
+
+    def test_the_definition_reading_sees_a_changed_table(
+        self, step3a_database: Path, tmp_path: Path
+    ) -> None:
+        """Positive control: a column added to a table is a changed definition."""
+        changed = tmp_path / "changed.db"
+        shutil.copyfile(step3a_database, changed)
+        with closing(sqlite3.connect(changed)) as connection, connection:
+            connection.execute("ALTER TABLE pr_files ADD COLUMN probe INTEGER")
+        assert (
+            table_definitions(changed)["pr_files"] != table_definitions(step3a_database)["pr_files"]
+        )
+
+
+def table_definitions(database: Path) -> dict[str, str]:
+    """Each table's CREATE statement, whitespace collapsed, alembic's own table excluded."""
+    return {
+        str(name): " ".join(str(sql).split())
+        for name, sql in query(
+            database,
+            "SELECT name, sql FROM sqlite_master WHERE type = 'table' "
+            "AND name <> 'alembic_version'",
+        )
+    }
+
+
 class TestOneTransaction:
     def test_a_failure_in_the_second_revision_applies_neither(
         self, first_schema: Path, tmp_path: Path
@@ -319,7 +449,7 @@ class TestOneTransaction:
             versions,
             TEST_REVISION,
             HEAD_REVISION,
-            "op.execute(\"INSERT INTO pr_labels (pr_id, name) VALUES (999, 'orphan')\")",
+            ORPHAN,
         )
         before = snapshot(migrated_database)
         with pytest.raises(RuntimeError) as error:
@@ -403,14 +533,11 @@ STOP_TRIGGER = (
     "BEGIN SELECT RAISE(ROLLBACK, 'stop'); END"
 )
 STOPPED_INSERT = (
-    "try:\n"
-    "    op.execute(\"INSERT INTO pr_labels (pr_id, name) VALUES (999, 'stop')\")\n"
-    "except Exception:\n"
-    "    pass\n"
+    f"try:\n    op.execute({PLANTED_LABEL.format('stop')!r})\nexcept Exception:\n    pass\n"
 )
 BOUND_INSERT = (
-    'op.get_bind().exec_driver_sql("INSERT INTO pr_labels (pr_id, name) VALUES (?, ?)", '
-    "(999, {!r}))"
+    'op.get_bind().exec_driver_sql("INSERT INTO pr_labels (pr_id, name, label_node_id) '
+    "VALUES (?, ?, 'LA_bound')\", (999, {!r}))"
 )
 
 
@@ -634,15 +761,19 @@ def _seed_a_pull_request_with_children(database: Path) -> None:
         seed.comment(pr, reviewer)
         seed.comment(pr, seed.user("commenter"))
         seed.commit(pr, "a" * 40, author)
-        connection.exec_driver_sql(f"INSERT INTO pr_labels (pr_id, name) VALUES ({pr}, 'bug')")
+        connection.exec_driver_sql(
+            f"INSERT INTO pr_labels (pr_id, name, label_node_id) VALUES ({pr}, 'bug', 'LA_bug')"
+        )
         connection.exec_driver_sql(
             "INSERT INTO pr_files (pr_id, ordinal, path, change_type, additions, deletions) "
             f"VALUES ({pr}, 0, 'a.js', 'MODIFIED', 1, 1)"
         )
         connection.exec_driver_sql(
             "INSERT INTO pr_closing_issues VALUES "
-            f"({pr}, {repository + 1000}, 'prebid/Prebid.js', 1)"
+            f"({pr}, {repository + 1000}, 'prebid/Prebid.js', 1, 5846445299, 1)"
         )
+        seed.review_request(pr, 0, account_id=reviewer, requested_type="User")
+        seed.assignee(pr, author)
         connection.exec_driver_sql(
             "INSERT INTO user_tags (id, name, created_at) "
             "VALUES (1, 'kept', '2026-01-01 00:00:00.000000')"
@@ -659,6 +790,8 @@ CHILD_TABLES = (
     "pr_commits",
     "pr_files",
     "pr_closing_issues",
+    "pr_review_requests",
+    "pr_assignees",
     "pr_user_tags",
 )
 

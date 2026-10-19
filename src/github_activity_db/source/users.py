@@ -3,16 +3,33 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator, Sequence
+from datetime import datetime
 from typing import Any
 
-from pydantic import ValidationError
+from pydantic import TypeAdapter, ValidationError
 
+from .convert import utc, utc_or_none
 from .documents import USER_LOOKUP
 from .errors import LookupShapeError, RequestFailedError, SourceError, UserLookupFailed
 from .limits import USER_LOOKUP_BATCH
-from .models import LookedUpUser
-from .records import Account, UserLookup
+from .models import (
+    LookedUpBotNode,
+    LookedUpEnterpriseUserNode,
+    LookedUpMannequinNode,
+    LookedUpNode,
+    LookedUpOrganizationNode,
+    LookedUpUserNode,
+)
+from .records import (
+    Account,
+    LookedUpAccount,
+    OrganizationProfile,
+    UserLookup,
+    UserProfile,
+)
 from .transport import GraphQLError, Transport
+
+_NODE: TypeAdapter[LookedUpNode] = TypeAdapter(LookedUpNode)
 
 
 async def lookup_user_batches(
@@ -20,9 +37,11 @@ async def lookup_user_batches(
 ) -> AsyncIterator[UserLookup]:
     """The account behind each distinct node id, batch by batch.
 
-    An account is None where GitHub has none (deleted). This is where an account first seen
-    through a commit gets its type and its GraphQL login (plan 5.2): GraphQL types a commit's
-    user ``User`` even for a bot, while ``nodes(ids:)`` returns the real type.
+    An account is None where GitHub answers ``NOT_FOUND`` for its id; GitHub does not say why
+    (D28). This is where an account first seen through a commit gets its type and its GraphQL
+    login (plan 5.2): GraphQL types a commit's user ``User`` even for a bot, while
+    ``nodes(ids:)`` returns the real type. A ``User`` or an ``Organization`` also comes with its
+    profile (D31).
 
     A failure is scoped to what it covers: an error or a mismatch for one node fails that id; a
     request that still fails after its retries, or an answer that does not line up with the
@@ -37,10 +56,12 @@ async def _lookup(transport: Transport, batch: list[str]) -> UserLookup:
     try:
         result = await transport.graphql(USER_LOOKUP, {"ids": batch}, splittable=False)
     except RequestFailedError as e:
-        return _all_failed(batch, e)
+        return _all_failed(batch, e, None)
     nodes = result.data.get("nodes")
     if not isinstance(nodes, list) or len(nodes) != len(batch):
-        return _all_failed(batch, LookupShapeError(f"{len(batch)} ids, nodes {nodes!r:.200}"))
+        return _all_failed(
+            batch, LookupShapeError(f"{len(batch)} ids, nodes {nodes!r:.200}"), result.date
+        )
     stray = [
         error
         for error in result.errors
@@ -51,8 +72,10 @@ async def _lookup(transport: Transport, batch: list[str]) -> UserLookup:
     ]
     if stray:
         # An error outside every node cannot be pinned on one id.
-        return _all_failed(batch, LookupShapeError(f"errors outside the nodes: {stray[0]}"))
-    accounts: dict[str, Account | None] = {}
+        return _all_failed(
+            batch, LookupShapeError(f"errors outside the nodes: {stray[0]}"), result.date
+        )
+    accounts: dict[str, LookedUpAccount | None] = {}
     failed: dict[str, UserLookupFailed] = {}
     for index, (node_id, raw) in enumerate(zip(batch, nodes, strict=True)):
         account = _account(node_id, index, raw, result.errors_under("nodes", index))
@@ -60,15 +83,15 @@ async def _lookup(transport: Transport, batch: list[str]) -> UserLookup:
             failed[node_id] = account
         else:
             accounts[node_id] = account
-    return UserLookup(accounts=accounts, failed=failed)
+    return UserLookup(accounts=accounts, failed=failed, looked_up_at=result.date)
 
 
 def _account(
     node_id: str, index: int, raw: Any, errors: tuple[GraphQLError, ...]
-) -> Account | None | UserLookupFailed:
+) -> LookedUpAccount | None | UserLookupFailed:
     if raw is None:
-        # None means deleted (D28) only when NOT_FOUND names this node itself, as for a pull
-        # request alias; an unexplained null, or one nulled from deeper down, fails the id.
+        # None only when NOT_FOUND names this node itself, as for a pull request alias; an
+        # unexplained null, or one nulled from deeper down, fails the id.
         if errors and all(
             error.type == "NOT_FOUND" and error.path == ("nodes", index) for error in errors
         ):
@@ -80,13 +103,61 @@ def _account(
     if errors:
         return _failed(node_id, f"partial data with {errors[0].type}: {errors[0].message}")
     try:
-        user = LookedUpUser.model_validate(raw)
+        node = _NODE.validate_python(raw)
     except ValidationError as e:
         return _failed(node_id, str(e))
-    if user.id != node_id:
-        return _failed(node_id, f"answered for {user.id}")
-    return Account(
-        github_id=user.database_id, node_id=user.id, login=user.login, type=user.typename
+    if node.id != node_id:
+        return _failed(node_id, f"answered for {node.id}")
+    return _looked_up(node)
+
+
+def _looked_up(node: LookedUpNode) -> LookedUpAccount:
+    name: str | None = None
+    claimant: int | None = None
+    profile: UserProfile | OrganizationProfile | None = None
+    match node:
+        case LookedUpUserNode():
+            account = Account(node.database_id, node.id, node.login, node.typename)
+            name = node.name
+            profile = UserProfile(
+                company=node.company, location=node.location, website_url=node.website_url
+            )
+        case LookedUpBotNode():
+            account = Account(node.database_id, node.id, node.login, node.typename)
+        case LookedUpOrganizationNode():
+            account = Account(node.database_id, node.id, node.login, node.typename)
+            name = node.name
+            profile = OrganizationProfile(
+                description=node.description,
+                email=node.email,
+                location=node.location,
+                website_url=node.website_url,
+                twitter_username=node.twitter_username,
+                is_verified=node.is_verified,
+                archived_at=utc_or_none(node.archived_at),
+                has_sponsors_listing=node.has_sponsors_listing,
+                pinned_items_remaining=node.pinned_items_remaining,
+            )
+        case LookedUpMannequinNode():
+            account = Account(node.database_id, node.id, node.login, node.typename)
+            name = node.name
+            claimant = node.claimant.database_id if node.claimant is not None else None
+        case LookedUpEnterpriseUserNode():
+            account = Account(
+                github_id=None,
+                node_id=node.id,
+                login=node.login,
+                type=node.typename,
+                linked_user_github_id=node.user.database_id if node.user is not None else None,
+            )
+            name = node.name
+    return LookedUpAccount(
+        account=account,
+        name=name,
+        created_at=utc(node.created_at),
+        updated_at=utc(node.updated_at),
+        claimant_github_id=claimant,
+        profile=profile,
     )
 
 
@@ -94,7 +165,9 @@ def _failed(node_id: str, message: str) -> UserLookupFailed:
     return UserLookupFailed(node_id, LookupShapeError(message))
 
 
-def _all_failed(batch: list[str], cause: SourceError) -> UserLookup:
+def _all_failed(batch: list[str], cause: SourceError, date: datetime | None) -> UserLookup:
     return UserLookup(
-        accounts={}, failed={node_id: UserLookupFailed(node_id, cause) for node_id in batch}
+        accounts={},
+        failed={node_id: UserLookupFailed(node_id, cause) for node_id in batch},
+        looked_up_at=date,
     )

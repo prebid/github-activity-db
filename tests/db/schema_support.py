@@ -227,23 +227,28 @@ def unindexed_foreign_keys(database: Path) -> set[tuple[str, tuple[str, ...]]]:
 
 
 def frozen_views(config: Config) -> dict[str, str]:
-    """Each view's SQL from the newest revision that creates or replaces it (its ``VIEWS``)."""
+    """Each view at head with the SQL of the newest revision that creates or replaces it (its
+    ``VIEWS``); a view a later revision lists in ``DROPPED_VIEWS`` is not at head."""
     script = ScriptDirectory.from_config(config)
     frozen: dict[str, str] = {}
     for revision in reversed(list(script.walk_revisions())):
         for name, sql in getattr(revision.module, "VIEWS", ()):
             frozen[name] = sql
+        for name in getattr(revision.module, "DROPPED_VIEWS", ()):
+            del frozen[name]
     return frozen
 
 
 def view_differences(database: Path, frozen: dict[str, str]) -> list[str]:
-    """Views missing, extra, or whose SQL differs from ``frozen``, whitespace aside."""
+    """Views missing, extra, or whose SQL differs from ``frozen``. SQLite stores a view's SQL as
+    written, without its leading and trailing whitespace; nothing else is normalized, since
+    whitespace inside a literal changes a view's rows."""
     present = views(database)
     differences = [f"missing {name}" for name in sorted(frozen.keys() - present.keys())]
     differences += [f"not frozen {name}" for name in sorted(present.keys() - frozen.keys())]
     differences += [
         f"differs {name}"
         for name in sorted(frozen.keys() & present.keys())
-        if normalized(frozen[name]) != normalized(present[name])
+        if frozen[name].strip() != present[name]
     ]
     return differences

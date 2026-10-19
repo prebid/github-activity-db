@@ -2,13 +2,24 @@
 
 from __future__ import annotations
 
+import dataclasses
+import itertools
 from datetime import UTC, datetime, timedelta
 from email.utils import format_datetime
 from typing import Any
 
 import pytest
 
-from github_activity_db.source import Account, ClosingIssue, IndexedPullRequest
+from github_activity_db.source import (
+    Account,
+    ClosingIssue,
+    IndexedPullRequest,
+    LookedUpAccount,
+    OrganizationProfile,
+    RepositoryLabel,
+    RepositoryRecord,
+    UserProfile,
+)
 from github_activity_db.source.errors import (
     IndexCountMismatch,
     IndexOrderViolation,
@@ -253,7 +264,9 @@ class TestLabelPages:
         # a page the replay does not have.
         page = label_page(replay)
         labels = page.data["labels"]
-        labels["nodes"].append({"name": "one too many"})
+        labels["nodes"].append(
+            {**labels["nodes"][0], "id": "LA_one_too_many", "name": "one too many"}
+        )
         labels["pageInfo"] = {"hasNextPage": True, "endCursor": "MTQ1"}
         replay.add(page)
         async with open_source() as source:
@@ -262,39 +275,238 @@ class TestLabelPages:
         assert (raised.value.fetched, raised.value.total_count) == (145, 144)
 
 
+def wire_time(value: str | None) -> datetime | None:
+    return datetime.fromisoformat(value) if value is not None else None
+
+
+def wire_label(node: dict[str, Any]) -> RepositoryLabel:
+    return RepositoryLabel(
+        node_id=node["id"],
+        name=node["name"],
+        color=node["color"],
+        description=node["description"],
+        is_default=node["isDefault"],
+        created_at=wire_time(node["createdAt"]),
+        updated_at=wire_time(node["updatedAt"]),
+    )
+
+
 @pytest.mark.parametrize("unit", recorded("resolve"), ids=labelled)
 async def test_resolve_maps_every_field_from_its_wire_name(open_source, unit: Unit) -> None:
     data = unit.data
     async with open_source() as source:
         repository = await source.resolve(unit.key["owner"], unit.key["name"])
-    assert (
-        repository.github_id,
-        repository.node_id,
-        repository.owner,
-        repository.name,
-        repository.full_name,
-        repository.is_private,
-        repository.is_archived,
-        repository.default_branch,
-    ) == (
-        data["databaseId"],
-        data["id"],
-        data["owner"]["login"],
-        data["name"],
-        data["nameWithOwner"],
-        data["isPrivate"],
-        data["isArchived"],
-        data["defaultBranchRef"]["name"],
+    plan = data["planFeatures"]
+    assert dataclasses.replace(repository, labels=()) == RepositoryRecord(
+        github_id=data["databaseId"],
+        node_id=data["id"],
+        owner=data["owner"]["login"],
+        name=data["name"],
+        full_name=data["nameWithOwner"],
+        is_private=data["isPrivate"],
+        is_archived=data["isArchived"],
+        default_branch=data["defaultBranchRef"]["name"],
+        labels=(),
+        labels_total=data["labels"]["totalCount"],
+        is_security_policy_enabled=data["isSecurityPolicyEnabled"],
+        visibility=data["visibility"],
+        description=data["description"],
+        homepage_url=data["homepageUrl"],
+        created_at=datetime.fromisoformat(data["createdAt"]),
+        updated_at=datetime.fromisoformat(data["updatedAt"]),
+        pushed_at=wire_time(data["pushedAt"]),
+        archived_at=wire_time(data["archivedAt"]),
+        stargazer_count=data["stargazerCount"],
+        fork_count=data["forkCount"],
+        disk_usage=data["diskUsage"],
+        forking_allowed=data["forkingAllowed"],
+        allow_update_branch=data["allowUpdateBranch"],
+        web_commit_signoff_required=data["webCommitSignoffRequired"],
+        has_wiki_enabled=data["hasWikiEnabled"],
+        has_discussions_enabled=data["hasDiscussionsEnabled"],
+        has_projects_enabled=data["hasProjectsEnabled"],
+        has_vulnerability_alerts_enabled=data["hasVulnerabilityAlertsEnabled"],
+        uses_custom_open_graph_image=data["usesCustomOpenGraphImage"],
+        merge_commit_allowed=data["mergeCommitAllowed"],
+        squash_merge_allowed=data["squashMergeAllowed"],
+        rebase_merge_allowed=data["rebaseMergeAllowed"],
+        delete_branch_on_merge=data["deleteBranchOnMerge"],
+        merge_commit_title=data["mergeCommitTitle"],
+        merge_commit_message=data["mergeCommitMessage"],
+        squash_merge_commit_title=data["squashMergeCommitTitle"],
+        squash_merge_commit_message=data["squashMergeCommitMessage"],
+        primary_language=(data["primaryLanguage"] or {}).get("name"),
+        license_spdx_id=(data["licenseInfo"] or {}).get("spdxId"),
+        plan_features_codeowners=plan["codeowners"],
+        plan_features_team_review_requests=plan["teamReviewRequests"],
+        plan_features_maximum_manual_review_requests=plan["maximumManualReviewRequests"],
+        resolved_at=parsed_date(unit),
     )
-    names = [node["name"] for node in data["labels"]["nodes"]]
-    names += [
-        node["name"]
+    labels = [wire_label(node) for node in data["labels"]["nodes"]]
+    labels += [
+        wire_label(node)
         for page in recorded("repository_labels")
         if page.key["id"] == data["id"]
         for node in page.data["labels"]["nodes"]
     ]
-    assert repository.label_names == frozenset(names)
-    assert len(names) == data["labels"]["totalCount"]
+    assert list(repository.labels) == labels
+    assert len(labels) == data["labels"]["totalCount"]
+    assert repository.label_names == frozenset(label.name for label in labels)
+
+
+def test_the_resolve_recordings_hold_a_value_for_each_added_field() -> None:
+    """Some recording gives each added field a value that is neither null nor false, so a field
+    mapped to the wrong record field cannot pass the mapping test on nulls alone."""
+    units = [unit.data for unit in recorded("resolve")]
+    labels = [node for data in units for node in data["labels"]["nodes"]]
+    fields = [
+        "isSecurityPolicyEnabled",
+        "description",
+        "homepageUrl",
+        "pushedAt",
+        "diskUsage",
+        "forkingAllowed",
+        "allowUpdateBranch",
+        "hasWikiEnabled",
+        "hasDiscussionsEnabled",
+        "hasProjectsEnabled",
+        "hasVulnerabilityAlertsEnabled",
+        "usesCustomOpenGraphImage",
+        "mergeCommitAllowed",
+        "rebaseMergeAllowed",
+        "deleteBranchOnMerge",
+        "primaryLanguage",
+        "licenseInfo",
+    ]
+    empty = [field for field in fields if not any(data[field] for data in units)]
+    empty += [
+        f"label {field}"
+        for field in ("description", "isDefault", "createdAt", "updatedAt")
+        if not any(node[field] for node in labels)
+    ]
+    assert empty == []
+
+
+# Every true-or-false setting the resolve reads, in RepositoryRecord's order.
+RESOLVE_SETTINGS = (
+    "isPrivate",
+    "isArchived",
+    "isSecurityPolicyEnabled",
+    "forkingAllowed",
+    "allowUpdateBranch",
+    "webCommitSignoffRequired",
+    "hasWikiEnabled",
+    "hasDiscussionsEnabled",
+    "hasProjectsEnabled",
+    "hasVulnerabilityAlertsEnabled",
+    "usesCustomOpenGraphImage",
+    "mergeCommitAllowed",
+    "squashMergeAllowed",
+    "rebaseMergeAllowed",
+    "deleteBranchOnMerge",
+    "planFeatures.codeowners",
+    "planFeatures.teamReviewRequests",
+)
+SETTING_BITS = range((len(RESOLVE_SETTINGS) - 1).bit_length())
+
+
+def settings_variant(bit: int) -> dict[str, bool]:
+    """Setting i takes bit ``bit`` of i, so any two settings differ in some variant."""
+    return {name: bool(i >> bit & 1) for i, name in enumerate(RESOLVE_SETTINGS)}
+
+
+def test_the_settings_variants_tell_every_two_settings_apart() -> None:
+    flags = [
+        field.name
+        for field in dataclasses.fields(RepositoryRecord)
+        if field.type in ("bool", "bool | None")
+    ]
+    assert len(flags) == len(RESOLVE_SETTINGS)
+    variants = [settings_variant(bit) for bit in SETTING_BITS]
+    alike = [
+        (first, second)
+        for first, second in itertools.combinations(RESOLVE_SETTINGS, 2)
+        if all(variant[first] == variant[second] for variant in variants)
+    ]
+    assert alike == []
+
+
+@pytest.mark.parametrize("bit", SETTING_BITS)
+async def test_every_two_resolve_settings_map_apart(open_source, replay: Replay, bit: int) -> None:
+    """Several settings hold one value in every recording (forkingAllowed and
+    squashMergeAllowed among them); in these variants no two are equal throughout."""
+    unit = replay.unit("resolve", owner="prebid", name="go-gdpr")
+    for name, value in settings_variant(bit).items():
+        *parents, leaf = name.split(".")
+        target = unit.data
+        for parent in parents:
+            target = target[parent]
+        target[leaf] = value
+    unit.source = f"synthetic: go-gdpr's resolve, setting i set to bit {bit} of i"
+    replay.add(unit)
+    await test_resolve_maps_every_field_from_its_wire_name(open_source, unit)
+
+
+async def test_an_archived_at_time_maps(open_source, replay: Replay) -> None:
+    """archivedAt is null in every recording; here it holds a time pushedAt does not."""
+    unit = replay.unit("resolve", owner="prebid", name="go-gdpr")
+    unit.data.update(archivedAt="2026-02-01T00:00:00Z", pushedAt="2026-01-01T00:00:00Z")
+    unit.data["planFeatures"]["maximumManualReviewRequests"] = 3
+    unit.source = "synthetic: go-gdpr's resolve with an archivedAt time"
+    replay.add(unit)
+    await test_resolve_maps_every_field_from_its_wire_name(open_source, unit)
+
+
+async def test_organization_fields_equal_in_the_recording_map_apart(
+    open_source, replay: Replay
+) -> None:
+    """The recorded organization has isVerified and hasSponsorsListing both false and no
+    twitterUsername or archivedAt; here each has a value of its own."""
+    unit = replay.unit("user", id="MDEyOk9yZ2FuaXphdGlvbjEzMjQyNzYw")
+    unit.data.update(
+        isVerified=True,
+        hasSponsorsListing=False,
+        twitterUsername="prebid_org",
+        archivedAt="2026-03-01T00:00:00Z",
+        email="info@example.org",
+        websiteUrl="https://example.org",
+    )
+    unit.source = "synthetic: prebid's lookup with profile fields that differ from each other"
+    replay.add(unit)
+    assert unit.data["isVerified"] != unit.data["hasSponsorsListing"]
+    assert unit.data["email"] != unit.data["websiteUrl"]
+    await test_a_lookup_maps_every_field_from_its_wire_name(open_source, unit)
+
+
+async def test_a_label_id_listed_twice_fails_the_repository(open_source, replay: Replay) -> None:
+    unit = replay.unit("resolve", owner="prebid", name="go-gdpr")
+    nodes = unit.data["labels"]["nodes"]
+    nodes[1] = {**nodes[1], "id": nodes[0]["id"]}
+    replay.add(unit)
+    async with open_source() as source:
+        with pytest.raises(RepositoryShapeError, match="listed twice"):
+            await source.resolve("prebid", "go-gdpr")
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("visibility", None),
+        ("forkingAllowed", "true"),
+        ("diskUsage", "1"),
+        ("pushedAt", "1700000000"),
+        ("planFeatures", None),
+    ],
+)
+async def test_a_resolve_field_the_models_reject(
+    open_source, replay: Replay, field: str, value: object
+) -> None:
+    unit = replay.unit("resolve", owner="prebid", name="go-gdpr")
+    unit.data[field] = value
+    replay.add(unit)
+    async with open_source() as source:
+        with pytest.raises(RepositoryShapeError, match="unexpected repository shape"):
+            await source.resolve("prebid", "go-gdpr")
 
 
 @pytest.mark.parametrize(("field", "value"), [("isPrivate", True), ("isArchived", True)])
@@ -532,6 +744,30 @@ class TestIndex:
         assert len(entry.closing_issues) == 1
         assert entry.closing_issues[0].repo_full_name != "prebid/renamed"
 
+    async def test_a_state_its_dates_disagree_with_passes_through(
+        self, open_source, replay: Replay
+    ) -> None:
+        # The index does not fail the repository for one entry: the planner records such an
+        # entry as an item failure and keeps its stored row (plan section 3).
+        disagreeing: dict[str, dict[str, str | None]] = {
+            "CLOSED": {"mergedAt": None, "closedAt": None},
+            "MERGED": {"mergedAt": None, "closedAt": "2024-05-01T00:00:00Z"},
+            "OPEN": {"mergedAt": "2024-05-01T00:00:00Z", "closedAt": None},
+        }
+
+        def disagree(body: dict[str, Any]) -> None:
+            nodes = body["data"]["repository"]["pullRequests"]["nodes"]
+            for node, (state, dates) in zip(nodes, disagreeing.items(), strict=False):
+                node.update(state=state, **dates)
+
+        replay.modify(disagree, when=operation("PullRequestIndex"))
+        async with open_source() as source:
+            index = await source.index_pull_requests(await source.resolve("prebid", "go-gdpr"))
+        assert [(entry.state, entry.merged_at, entry.closed_at) for entry in index.entries[:3]] == [
+            (state, wire_time(dates["mergedAt"]), wire_time(dates["closedAt"]))
+            for state, dates in disagreeing.items()
+        ]
+
     async def test_errors_in_an_index_page_fail_the_repository(
         self, open_source, replay: Replay
     ) -> None:
@@ -578,6 +814,7 @@ async def test_index_maps_every_field_from_its_wire_name(
                 created_at=datetime.fromisoformat(node["createdAt"]),
                 updated_at=datetime.fromisoformat(node["updatedAt"]),
                 merged_at=datetime.fromisoformat(node["mergedAt"]) if node["mergedAt"] else None,
+                closed_at=datetime.fromisoformat(node["closedAt"]) if node["closedAt"] else None,
                 closing_issues=tuple(
                     ClosingIssue(
                         repo_github_id=link["repository"]["databaseId"],
@@ -594,6 +831,178 @@ async def test_index_maps_every_field_from_its_wire_name(
     )
     assert sorted(index.entries, key=lambda entry: entry.number) == expected
     assert index.repository == f"{owner}/{name}"
+
+
+def test_the_index_recordings_hold_a_closed_pull_request() -> None:
+    nodes = [node for unit in recorded("index") for node in unit.data["nodes"]]
+    assert any(node["state"] == "CLOSED" and node["closedAt"] for node in nodes)
+
+
+def wire_looked_up(node: dict[str, Any]) -> LookedUpAccount:
+    """A lookup node as the source layer reads it, by wire name (plan 5.8, D31)."""
+    typename = node["__typename"]
+    profile: UserProfile | OrganizationProfile | None = None
+    if typename == "User":
+        profile = UserProfile(
+            company=node["company"], location=node["location"], website_url=node["websiteUrl"]
+        )
+    elif typename == "Organization":
+        profile = OrganizationProfile(
+            description=node["description"],
+            email=node["email"],
+            location=node["location"],
+            website_url=node["websiteUrl"],
+            twitter_username=node["twitterUsername"],
+            is_verified=node["isVerified"],
+            archived_at=wire_time(node["archivedAt"]),
+            has_sponsors_listing=node["hasSponsorsListing"],
+            pinned_items_remaining=node["pinnedItemsRemaining"],
+        )
+    return LookedUpAccount(
+        account=Account(
+            github_id=node.get("databaseId"),
+            node_id=node["id"],
+            login=node["login"],
+            type=typename,
+            linked_user_github_id=(node.get("user") or {}).get("databaseId"),
+        ),
+        name=node.get("name"),
+        created_at=datetime.fromisoformat(node["createdAt"]),
+        updated_at=datetime.fromisoformat(node["updatedAt"]),
+        claimant_github_id=(node.get("claimant") or {}).get("databaseId"),
+        profile=profile,
+    )
+
+
+@pytest.mark.parametrize("unit", [u for u in recorded("user") if u.data], ids=labelled)
+async def test_a_lookup_maps_every_field_from_its_wire_name(open_source, unit: Unit) -> None:
+    async with open_source() as source:
+        lookups = [lookup async for lookup in source.lookup_users([unit.key["id"]])]
+    ((only,),) = [list(lookup.accounts.values()) for lookup in lookups]
+    assert only == wire_looked_up(unit.data)
+    assert lookups[0].looked_up_at == parsed_date(unit)
+
+
+def test_the_lookup_recordings_hold_each_profile_kind() -> None:
+    nodes = [unit.data for unit in recorded("user") if unit.data]
+    users = [node for node in nodes if node["__typename"] == "User"]
+    assert {node["__typename"] for node in nodes} == {"User", "Bot", "Organization"}
+    assert all(
+        any(node[field] for node in users) for field in ("company", "location", "websiteUrl")
+    )
+    (organization,) = [node for node in nodes if node["__typename"] == "Organization"]
+    assert all(
+        organization[field]
+        for field in ("description", "email", "location", "websiteUrl", "pinnedItemsRemaining")
+    )
+
+
+MANNEQUIN: dict[str, Any] = {
+    "__typename": "Mannequin",
+    "id": "MQ_1",
+    "databaseId": 501,
+    "login": "imported-someone",
+    "name": "Someone",
+    "createdAt": "2020-01-01T00:00:00Z",
+    "updatedAt": "2020-01-02T00:00:00Z",
+    "claimant": {"databaseId": 1683175},
+}
+ENTERPRISE_USER: dict[str, Any] = {
+    "__typename": "EnterpriseUserAccount",
+    "id": "MQ_1",
+    "login": "someone_corp",
+    "name": "Someone",
+    "createdAt": "2020-01-01T00:00:00Z",
+    "updatedAt": "2020-01-02T00:00:00Z",
+    "user": {"databaseId": 81847},
+}
+
+
+@pytest.mark.parametrize(
+    "node",
+    [
+        MANNEQUIN,
+        {
+            "__typename": "Mannequin",
+            "id": "MQ_1",
+            "databaseId": 501,
+            "login": "imported-someone",
+            "name": None,
+            "createdAt": "2020-01-01T00:00:00Z",
+            "updatedAt": "2020-01-02T00:00:00Z",
+            "claimant": None,
+        },
+        ENTERPRISE_USER,
+        {**MANNEQUIN, "claimant": {"databaseId": None}},
+        {**ENTERPRISE_USER, "user": {"databaseId": None}},
+    ],
+    ids=[
+        "claimed-mannequin",
+        "unclaimed-mannequin",
+        "enterprise-user",
+        "claimant-without-database-id",
+        "enterprise-user-without-database-id",
+    ],
+)
+async def test_a_lookup_of_a_type_without_a_profile(
+    open_source, replay: Replay, node: dict[str, Any]
+) -> None:
+    # Synthetic: no tracked repository refers to a mannequin or an enterprise account.
+    unit = replay.unit("user", id=PATMMCCANN)
+    unit.key = {"id": "MQ_1"}
+    unit.data = node
+    unit.source = "synthetic: a lookup of a type no recording holds"
+    replay.add(unit)
+    async with open_source() as source:
+        lookups = [lookup async for lookup in source.lookup_users(["MQ_1"])]
+    assert lookups[0].accounts == {"MQ_1": wire_looked_up(node)}
+    assert lookups[0].accounts["MQ_1"] is not None
+    assert lookups[0].accounts["MQ_1"].profile is None
+
+
+@pytest.mark.parametrize(
+    ("node", "field", "link"),
+    [
+        (MANNEQUIN, "claimant", {"databaseId": "1683175"}),
+        (MANNEQUIN, "claimant", {}),
+        (ENTERPRISE_USER, "user", {"databaseId": "81847"}),
+        (ENTERPRISE_USER, "user", {}),
+    ],
+    ids=["claimant-id-a-string", "claimant-id-missing", "user-id-a-string", "user-id-missing"],
+)
+async def test_a_lookup_with_a_malformed_link_fails_that_id(
+    open_source, replay: Replay, node: dict[str, Any], field: str, link: dict[str, object]
+) -> None:
+    # A null databaseId on the link is GitHub's (User.databaseId is nullable); another type,
+    # or the selected field missing, is not.
+    unit = replay.unit("user", id=PATMMCCANN)
+    unit.key = {"id": "MQ_1"}
+    unit.data = {**node, field: link}
+    unit.source = "synthetic: a lookup whose linked user is malformed"
+    replay.add(unit)
+    async with open_source() as source:
+        accounts, failed = await all_lookups(source, ["MQ_1"])
+    assert accounts == {}
+    assert list(failed) == ["MQ_1"]
+    assert isinstance(failed["MQ_1"].cause, LookupShapeError)
+    assert "databaseId" in str(failed["MQ_1"].cause)
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [("company", 7), ("createdAt", None), ("websiteUrl", False), ("__typename", "Team")],
+)
+async def test_a_lookup_field_the_models_reject_fails_that_id(
+    open_source, replay: Replay, field: str, value: object
+) -> None:
+    unit = replay.unit("user", id=PATMMCCANN)
+    unit.data[field] = value
+    replay.add(unit)
+    async with open_source() as source:
+        accounts, failed = await all_lookups(source, [PATMMCCANN, DEPENDABOT])
+    assert list(failed) == [PATMMCCANN]
+    assert isinstance(failed[PATMMCCANN].cause, LookupShapeError)
+    assert accounts[DEPENDABOT] is not None
 
 
 def synthetic_users(replay: Replay, count: int) -> list[str]:
@@ -758,10 +1167,13 @@ class TestUserLookup:
     ) -> None:
         replay.modify(change, when=operation("UserLookup"))
         async with open_source() as source:
-            accounts, failed = await all_lookups(source, [PATMMCCANN, DEPENDABOT])
-        assert accounts == {}
-        assert set(failed) == {PATMMCCANN, DEPENDABOT}
-        assert all(isinstance(error.cause, LookupShapeError) for error in failed.values())
+            lookups = [lookup async for lookup in source.lookup_users([PATMMCCANN, DEPENDABOT])]
+        (lookup,) = lookups
+        assert lookup.accounts == {}
+        assert set(lookup.failed) == {PATMMCCANN, DEPENDABOT}
+        assert all(isinstance(error.cause, LookupShapeError) for error in lookup.failed.values())
+        # A response came, so it has a time: the first unit's Date header the replay served.
+        assert lookup.looked_up_at == parsed_date(replay.unit("user", id=PATMMCCANN))
 
     async def test_a_failed_request_fails_its_batch_and_later_batches_continue(
         self, open_source, replay: Replay
@@ -773,10 +1185,16 @@ class TestUserLookup:
             times=None,
         )
         async with open_source() as source:
-            accounts, failed = await all_lookups(source, ids)
-        assert list(failed) == ids[:100]
-        assert all(isinstance(error.cause, ServerError) for error in failed.values())
-        assert list(accounts) == ids[100:]
+            lookups = [lookup async for lookup in source.lookup_users(ids)]
+        first, second = lookups
+        assert list(first.failed) == ids[:100]
+        assert all(isinstance(error.cause, ServerError) for error in first.failed.values())
+        assert first.accounts == {}
+        # The failed request has no response, so no response time; the next batch has one.
+        assert first.looked_up_at is None
+        assert list(second.accounts) == ids[100:]
+        assert second.failed == {}
+        assert second.looked_up_at is not None
 
     async def test_a_lookup_timeout_is_retried(
         self, open_source, replay: Replay, clock: FakeClock

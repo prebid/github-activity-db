@@ -12,6 +12,7 @@ import pytest
 from github_activity_db.source import (
     Account,
     GitHubSource,
+    LookedUpAccount,
     PullRequestOutcome,
     RepositoryRecord,
     UserLookupFailed,
@@ -85,9 +86,9 @@ async def all_outcomes(
 
 async def all_lookups(
     source: GitHubSource, node_ids: Sequence[str]
-) -> tuple[dict[str, Account | None], dict[str, UserLookupFailed]]:
-    """Every batch's accounts and failed ids, merged."""
-    accounts: dict[str, Account | None] = {}
+) -> tuple[dict[str, LookedUpAccount | None], dict[str, UserLookupFailed]]:
+    """Every batch's looked-up accounts and failed ids, merged."""
+    accounts: dict[str, LookedUpAccount | None] = {}
     failed: dict[str, UserLookupFailed] = {}
     async for lookup in source.lookup_users(node_ids):
         accounts.update(lookup.accounts)
@@ -99,4 +100,7 @@ async def all_accounts(source: GitHubSource, node_ids: Sequence[str]) -> dict[st
     """Every account, for a lookup that must not fail."""
     accounts, failed = await all_lookups(source, node_ids)
     assert failed == {}, failed
-    return accounts
+    return {
+        node_id: looked_up.account if looked_up is not None else None
+        for node_id, looked_up in accounts.items()
+    }

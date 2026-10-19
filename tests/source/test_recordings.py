@@ -89,10 +89,10 @@ def test_a_batch_stamp_does_not_depend_on_its_size(size: int) -> None:
     assert pull_request_stamp(batch) == expected_pull_request_stamp()
 
 
-@pytest.mark.parametrize("connection", documents.PULL_REQUEST_CONNECTIONS, ids=lambda c: c.field)
+@pytest.mark.parametrize("connection", documents.PULL_REQUEST_CONNECTIONS, ids=lambda c: c.key)
 def test_a_continuation_stamp_does_not_depend_on_its_neighbours(connection) -> None:
     query = documents.overflow_continuation([documents.LABELS, documents.REVIEWS, connection])
-    assert overflow_stamp(query, 2, connection.field) == expected_overflow_stamp(connection.field)
+    assert overflow_stamp(query, 2, connection.key) == expected_overflow_stamp(connection.key)
 
 
 @pytest.mark.parametrize(
@@ -153,7 +153,7 @@ def test_the_replay_refuses_a_batch_alias_bound_to_another_number() -> None:
 
 
 def test_the_replay_refuses_a_continuation_bound_to_another_cursor() -> None:
-    connections = [documents.CONNECTIONS_BY_FIELD["commits"]] * 2
+    connections = [documents.CONNECTIONS_BY_KEY["commits"]] * 2
     query = documents.overflow_continuation(connections)
     block = recordings.extract_block(query, "o1_commits: node(")
     query = query.replace(block, block.replace("$after1", "$after0"))
@@ -171,7 +171,7 @@ def test_the_replay_refuses_a_batch_declaring_an_unsent_number() -> None:
 
 
 def test_the_replay_refuses_a_continuation_with_an_unbound_variable() -> None:
-    query = documents.overflow_continuation([documents.CONNECTIONS_BY_FIELD["commits"]])
+    query = documents.overflow_continuation([documents.CONNECTIONS_BY_KEY["commits"]])
     payload = {"query": query, "variables": {"id0": "PR_a", "after0": "x", "id1": "PR_b"}}
     assert "variables" in _refused(Replay.from_fixtures(), payload)
 
@@ -190,7 +190,7 @@ def test_the_replay_refuses_batch_aliases_out_of_order() -> None:
 
 
 def test_the_replay_refuses_a_continuation_reading_another_alias_id() -> None:
-    connections = [documents.CONNECTIONS_BY_FIELD["commits"]] * 2
+    connections = [documents.CONNECTIONS_BY_KEY["commits"]] * 2
     query = documents.overflow_continuation(connections).replace(
         "o1_commits: node(id: $id1)", "o1_commits: node(id: $id0)"
     )
@@ -202,7 +202,7 @@ def test_the_replay_refuses_a_continuation_reading_another_alias_id() -> None:
 
 
 def test_the_replay_refuses_a_continuation_declaring_an_unused_alias() -> None:
-    query = documents.overflow_continuation([documents.CONNECTIONS_BY_FIELD["commits"]]).replace(
+    query = documents.overflow_continuation([documents.CONNECTIONS_BY_KEY["commits"]]).replace(
         "$id0: ID! $after0: String!", "$id0: ID! $after0: String! $id1: ID! $after1: String!"
     )
     payload = {"query": query, "variables": {"id0": "PR_a", "after0": "x"}}
