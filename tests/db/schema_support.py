@@ -1,4 +1,10 @@
-"""Structural readings of a SQLite schema, for comparing a migrated database with the models."""
+"""Structural readings of a SQLite schema, for comparing a migrated database with the models.
+
+Index, trigger, and view SQL is compared exactly, apart from leading and trailing whitespace; a
+table's definition by the items of its body, sorted, each exact apart from its ends (column order
+and table options are read by pragmas). Whitespace inside a quoted literal is data, so collapsing
+it could hide a changed CHECK, index, trigger, or view.
+"""
 
 from __future__ import annotations
 
@@ -10,10 +16,6 @@ from typing import Any
 
 from alembic.config import Config
 from alembic.script import ScriptDirectory
-
-
-def normalized(sql: str) -> str:
-    return " ".join(sql.split())
 
 
 def create_table_items(sql: str) -> list[str]:
@@ -44,18 +46,31 @@ def create_table_items(sql: str) -> list[str]:
             current = []
             continue
         current.append(char)
-    return [normalized(item) for item in items]
+    return [item.strip() for item in items]
 
 
 def named_constraints(database: Path, table: str) -> dict[str, str]:
-    """``CONSTRAINT <name> ...`` items of the table's definition, by name."""
+    """``CONSTRAINT <name> ...`` items of the table's definition, by name, each as written. SQL
+    separates the keyword, the name, and the constraint by any whitespace, so an item is read in
+    words."""
     (sql,) = _rows(
         database, "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?", table
     )[0]
+    found: dict[str, str] = {}
+    for item in create_table_items(str(sql)):
+        words = item.split()
+        if len(words) > 1 and words[0].upper() == "CONSTRAINT":
+            found[words[1].strip('"')] = item
+    return found
+
+
+def check_constraints(database: Path, table: str) -> dict[str, str]:
+    """The named constraints that are CHECKs: the word after the name is ``CHECK``, alone or
+    with its opening parenthesis."""
     return {
-        item.split()[1].strip('"'): item
-        for item in create_table_items(str(sql))
-        if item.upper().startswith("CONSTRAINT ")
+        name: item
+        for name, item in named_constraints(database, table).items()
+        if len(words := item.split()) > 2 and words[2].upper().split("(")[0] == "CHECK"
     }
 
 
@@ -110,7 +125,7 @@ def schema_of(database: Path) -> dict[str, dict[str, Any]]:
                 ((created,),) = _rows(
                     database, "SELECT sql FROM sqlite_master WHERE name = ?", name
                 )
-                created = (name, normalized(str(created)))
+                created = (name, str(created).strip())
             indexes.append((created, unique, origin, partial, keys))
         foreign_keys: dict[int, list[tuple[Any, ...]]] = {}
         for fk_id, *rest in _rows(database, f'PRAGMA foreign_key_list("{table}")'):
@@ -126,7 +141,7 @@ def schema_of(database: Path) -> dict[str, dict[str, Any]]:
             # (type, ncol, without rowid, strict)
             "flags": [row[2:] for row in _rows(database, f'PRAGMA table_list("{table}")')],
             "triggers": sorted(
-                (str(name), normalized(str(trigger)))
+                (str(name), str(trigger).strip())
                 for name, trigger in _rows(
                     database,
                     "SELECT name, sql FROM sqlite_master WHERE type = 'trigger' AND tbl_name = ?",

@@ -13,7 +13,7 @@ import sqlite3
 from collections.abc import Callable
 from contextlib import closing
 from pathlib import Path
-from typing import get_args
+from typing import Any, get_args
 
 import pytest
 from sqlalchemy import create_engine, insert, pool
@@ -28,6 +28,7 @@ from github_activity_db.db.models import (
 from github_activity_db.source.records import AccountType, ReviewState
 from tests.db.alembic_support import alembic_config, query
 from tests.db.schema_support import (
+    check_constraints,
     delete_actions,
     frozen_views,
     named_constraints,
@@ -69,6 +70,31 @@ def _redefined(database: Path, table: str, old: str, new: str) -> tuple[str, str
     return f"DROP TABLE {table}", sql.replace(old, new)
 
 
+@pytest.mark.parametrize(
+    "separator", [" ", "\t", "\n", "\r\n"], ids=["space", "tab", "newline", "crlf"]
+)
+def test_a_named_check_is_read_whatever_whitespace_separates_its_words(
+    tmp_path: Path, separator: str
+) -> None:
+    """SQLite accepts any whitespace between a constraint's words and keeps the text as written."""
+    database = tmp_path / "probe.db"
+    item = f"CONSTRAINT{separator}ck_probe{separator}CHECK{separator}(value != 'blocked')"
+    with closing(sqlite3.connect(database)) as connection, connection:
+        connection.execute(
+            f"CREATE TABLE probe (value TEXT, {item}, "
+            "CONSTRAINT ck_tight CHECK(value != 'x'), CONSTRAINT uq_probe UNIQUE (value))"
+        )
+    assert named_constraints(database, "probe") == {
+        "ck_probe": item,
+        "ck_tight": "CONSTRAINT ck_tight CHECK(value != 'x')",
+        "uq_probe": "CONSTRAINT uq_probe UNIQUE (value)",
+    }
+    assert check_constraints(database, "probe") == {
+        "ck_probe": item,
+        "ck_tight": "CONSTRAINT ck_tight CHECK(value != 'x')",
+    }
+
+
 class TestModelsComparison:
     def test_head_matches_the_models(self, head_template: Path, models_database: Path) -> None:
         migrated, models = schema_of(head_template), schema_of(models_database)
@@ -82,8 +108,7 @@ class TestModelsComparison:
         checks = {
             name
             for table in Base.metadata.tables
-            for name, item in named_constraints(models_database, table).items()
-            if " CHECK " in f" {item} "
+            for name in check_constraints(models_database, table)
         }
         assert checks == set(CHECKS) | PAIRED_CHECKS
 
@@ -179,6 +204,38 @@ class TestModelsComparison:
         one = _tampered(head_template, tmp_path / "one.db", *first)
         two = _tampered(head_template, tmp_path / "two.db", *second)
         assert schema_of(one)["pr_labels"] != schema_of(two)["pr_labels"]
+
+    @pytest.mark.parametrize("kind", ["check", "index", "trigger"])
+    def test_whitespace_inside_a_literal_is_a_difference(
+        self, head_template: Path, tmp_path: Path, kind: str
+    ) -> None:
+        """Two schemas whose SQL differs only in a literal's whitespace read differently."""
+
+        def read(literal: str, name: str) -> dict[str, Any]:
+            statements: tuple[str, ...]
+            if kind == "check":
+                statements = _redefined(
+                    head_template,
+                    "pr_files",
+                    "path TEXT NOT NULL",
+                    f"path TEXT NOT NULL CHECK (path != {literal})",
+                )
+            elif kind == "index":
+                statements = (f"CREATE INDEX ix_probe ON pr_files (path) WHERE path != {literal}",)
+            else:
+                statements = (
+                    "CREATE TRIGGER tr_probe BEFORE INSERT ON pr_files "
+                    f"BEGIN SELECT RAISE(ABORT, {literal}); END",
+                )
+            tampered = _tampered(head_template, tmp_path / f"{name}.db", *statements)
+            return schema_of(tampered)["pr_files"]
+
+        one, again, two = read("'a b'", "one"), read("'a b'", "again"), read("'a  b'", "two")
+        assert one == again
+        # The difference is read where the kind's SQL is: a table's items, an index, a trigger.
+        assert [key for key in one if one[key] != two[key]] == [
+            {"check": "definition", "index": "indexes", "trigger": "triggers"}[kind]
+        ]
 
     @pytest.mark.parametrize("option", ["STRICT", "WITHOUT ROWID"])
     def test_a_table_option_is_reported(
