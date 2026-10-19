@@ -31,7 +31,7 @@ issue totals) are dated; regenerate them with `ghactivity verify` once Step 3b-2
 |------|-------|--------|
 | 1 | Guardrails | done (PR #5) |
 | 2 | GitHub source layer | done (PR #7) |
-| 3 | New schema, PR sync engine, cutover (pull requests 3a, 3b-1, and 3b-2) | in progress: 3a done (PR #11), 3b-1 in progress |
+| 3 | New schema, PR sync engine, cutover (pull requests 3a, 3b-1, and 3b-2) | in progress: 3a done (PR #11), 3b-1 done (PR #14) |
 | 4 | Issues, closing-issue links, and default-branch activity (pull requests 4a and 4b) | not started |
 | 5 | Full bootstrap and verification | not started |
 | 6 | Scheduled sync and publication | not started |
