@@ -868,6 +868,32 @@ async def test_a_duplicate_assignee(open_source, replay: Replay) -> None:
     assert error.connection == "assignedActors"
 
 
+async def test_an_assignee_github_id_listed_twice_under_two_node_ids(
+    open_source, replay: Replay
+) -> None:
+    # pr_assignees keys an assignee by its account, which plan 5.2 resolves by databaseId, so
+    # two node ids for one databaseId cannot both be stored.
+    unit = pr_unit(replay, 15771)
+    nodes = unit.data["assignedActors"]["nodes"]
+    nodes[1] = {**nodes[0], "id": "U_another_node_id"}
+    replay.add(unit)
+    error = await failure(open_source, PREBID_JS, 15771)
+    assert isinstance(error, DuplicateEntry)
+    assert (error.connection, error.key) == ("assignedActors", nodes[0]["databaseId"])
+
+
+async def test_an_assignee_github_id_listed_again_on_a_later_page(
+    open_source, replay: Replay
+) -> None:
+    unit = pr_unit(replay, 15771)
+    first = unit.data["assignedActors"]["nodes"][0]
+    second_page(replay, unit, "assignedActors", {**first, "id": "U_another_node_id"})
+    replay.add(unit)
+    error = await failure(open_source, PREBID_JS, 15771)
+    assert isinstance(error, DuplicateEntry)
+    assert (error.connection, error.key) == ("assignedActors", first["databaseId"])
+
+
 async def test_a_duplicate_review_request(open_source, replay: Replay) -> None:
     # A request listed again in place of a missing one would pass the count check.
     unit = pr_unit(replay, 15771)
@@ -1187,7 +1213,9 @@ class TestInvariants:
         assert (error.first, error.later) == (101, 102)
 
     @pytest.mark.parametrize(
-        ("user", "linked"), [({"databaseId": 81847}, 81847), (None, None)], ids=["user", "no-user"]
+        ("user", "linked"),
+        [({"databaseId": 81847}, 81847), (None, None), ({"databaseId": None}, None)],
+        ids=["user", "no-user", "user-without-database-id"],
     )
     async def test_an_enterprise_actor_is_kept_as_an_account(
         self, open_source, replay: Replay, user: dict[str, int] | None, linked: int | None
@@ -1212,6 +1240,26 @@ class TestInvariants:
         )
         assert record.author == expected
         assert expected in record.accounts()
+
+    @pytest.mark.parametrize(
+        "user", [{"databaseId": "81847"}, {}], ids=["database-id-a-string", "database-id-missing"]
+    )
+    async def test_an_enterprise_actor_s_malformed_user_fails_the_item(
+        self, open_source, replay: Replay, user: dict[str, object]
+    ) -> None:
+        # A null databaseId is GitHub's (User.databaseId is nullable); another type, or the
+        # selected field missing, is not.
+        unit = pr_unit(replay, 13481)
+        unit.data["author"] = {
+            "__typename": "EnterpriseUserAccount",
+            "login": "someone_corp",
+            "id": "EUA_kgDOAAAAAQ",
+            "user": user,
+        }
+        replay.add(unit)
+        error = await failure(open_source, PREBID_JS, 13481)
+        assert isinstance(error, ResponseShapeError)
+        assert "databaseId" in str(error)
 
     @pytest.mark.parametrize(
         ("path", "value"),

@@ -897,19 +897,31 @@ def test_the_lookup_recordings_hold_each_profile_kind() -> None:
     )
 
 
+MANNEQUIN: dict[str, Any] = {
+    "__typename": "Mannequin",
+    "id": "MQ_1",
+    "databaseId": 501,
+    "login": "imported-someone",
+    "name": "Someone",
+    "createdAt": "2020-01-01T00:00:00Z",
+    "updatedAt": "2020-01-02T00:00:00Z",
+    "claimant": {"databaseId": 1683175},
+}
+ENTERPRISE_USER: dict[str, Any] = {
+    "__typename": "EnterpriseUserAccount",
+    "id": "MQ_1",
+    "login": "someone_corp",
+    "name": "Someone",
+    "createdAt": "2020-01-01T00:00:00Z",
+    "updatedAt": "2020-01-02T00:00:00Z",
+    "user": {"databaseId": 81847},
+}
+
+
 @pytest.mark.parametrize(
     "node",
     [
-        {
-            "__typename": "Mannequin",
-            "id": "MQ_1",
-            "databaseId": 501,
-            "login": "imported-someone",
-            "name": "Someone",
-            "createdAt": "2020-01-01T00:00:00Z",
-            "updatedAt": "2020-01-02T00:00:00Z",
-            "claimant": {"databaseId": 1683175},
-        },
+        MANNEQUIN,
         {
             "__typename": "Mannequin",
             "id": "MQ_1",
@@ -920,17 +932,17 @@ def test_the_lookup_recordings_hold_each_profile_kind() -> None:
             "updatedAt": "2020-01-02T00:00:00Z",
             "claimant": None,
         },
-        {
-            "__typename": "EnterpriseUserAccount",
-            "id": "MQ_1",
-            "login": "someone_corp",
-            "name": "Someone",
-            "createdAt": "2020-01-01T00:00:00Z",
-            "updatedAt": "2020-01-02T00:00:00Z",
-            "user": {"databaseId": 81847},
-        },
+        ENTERPRISE_USER,
+        {**MANNEQUIN, "claimant": {"databaseId": None}},
+        {**ENTERPRISE_USER, "user": {"databaseId": None}},
     ],
-    ids=["claimed-mannequin", "unclaimed-mannequin", "enterprise-user"],
+    ids=[
+        "claimed-mannequin",
+        "unclaimed-mannequin",
+        "enterprise-user",
+        "claimant-without-database-id",
+        "enterprise-user-without-database-id",
+    ],
 )
 async def test_a_lookup_of_a_type_without_a_profile(
     open_source, replay: Replay, node: dict[str, Any]
@@ -946,6 +958,34 @@ async def test_a_lookup_of_a_type_without_a_profile(
     assert lookups[0].accounts == {"MQ_1": wire_looked_up(node)}
     assert lookups[0].accounts["MQ_1"] is not None
     assert lookups[0].accounts["MQ_1"].profile is None
+
+
+@pytest.mark.parametrize(
+    ("node", "field", "link"),
+    [
+        (MANNEQUIN, "claimant", {"databaseId": "1683175"}),
+        (MANNEQUIN, "claimant", {}),
+        (ENTERPRISE_USER, "user", {"databaseId": "81847"}),
+        (ENTERPRISE_USER, "user", {}),
+    ],
+    ids=["claimant-id-a-string", "claimant-id-missing", "user-id-a-string", "user-id-missing"],
+)
+async def test_a_lookup_with_a_malformed_link_fails_that_id(
+    open_source, replay: Replay, node: dict[str, Any], field: str, link: dict[str, object]
+) -> None:
+    # A null databaseId on the link is GitHub's (User.databaseId is nullable); another type,
+    # or the selected field missing, is not.
+    unit = replay.unit("user", id=PATMMCCANN)
+    unit.key = {"id": "MQ_1"}
+    unit.data = {**node, field: link}
+    unit.source = "synthetic: a lookup whose linked user is malformed"
+    replay.add(unit)
+    async with open_source() as source:
+        accounts, failed = await all_lookups(source, ["MQ_1"])
+    assert accounts == {}
+    assert list(failed) == ["MQ_1"]
+    assert isinstance(failed["MQ_1"].cause, LookupShapeError)
+    assert "databaseId" in str(failed["MQ_1"].cause)
 
 
 @pytest.mark.parametrize(

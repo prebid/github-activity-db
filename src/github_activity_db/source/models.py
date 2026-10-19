@@ -101,9 +101,11 @@ class IdentifiedActor(GraphQLModel):
 
 
 class DatabaseIdRef(GraphQLModel):
-    """An object GitHub refers to by its ``databaseId`` alone."""
+    """An object GitHub refers to by its ``databaseId`` alone, beside an account's own identity (an
+    enterprise account's user, a mannequin's claimant). ``User.databaseId`` is nullable in GitHub's
+    schema, so the value may be null; the field itself is required."""
 
-    database_id: StrictInt = Field(alias="databaseId")
+    database_id: StrictInt | None = Field(alias="databaseId")
 
 
 class EnterpriseActor(GraphQLModel):

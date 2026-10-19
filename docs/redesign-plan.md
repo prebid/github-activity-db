@@ -685,7 +685,8 @@ engine, never through alembic, whose commands take the write lock; it exits 1 ot
    the request (the batch names the resolved repository); `state` is `MERGED` exactly when
    `mergedAt` is set, and a `CLOSED` or `MERGED` PR has `closedAt`, which the coverage rule reads;
    the entries the database keys (labels, closing issues, user-linked closing issues, reviews,
-   comments, commits, assignees) and the review requests, by their own id, are distinct; every page with a next page has entries and a new cursor; and an error
+   comments, commits, assignees, each assignee by its node id and by its `github_id`) and the
+   review requests, by their own id, are distinct; every page with a next page has entries and a new cursor; and an error
    outside every item fails the request, which then splits, and an item it fails alone gets its
    solo retry, since no retry of the transport preceded it. The hydrated PR's `github_id` equals the
    one the index listed for its number, and a review or comment whose `github_id` is stored under

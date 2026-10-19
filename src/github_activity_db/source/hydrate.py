@@ -467,7 +467,8 @@ class PullRequestHydrator:
         assignees = tuple(union_account(actor) for actor in item.assigned_actors.nodes)
         # The database keys these entries, so a duplicate standing in for a missing entry would
         # pass the count check and drop a row. Review requests are stored by position, so theirs
-        # is compared by the request's own node id.
+        # is compared by the request's own node id. An assignee is compared by its node id and by
+        # its github_id, the account key pr_assignees resolves to (plan 5.2).
         _check_distinct(number, "labels", [label.name for label in labels])
         _check_distinct(
             number, "closingIssuesReferences", [link_key(link) for link in closing_issues]
@@ -477,6 +478,7 @@ class PullRequestHydrator:
         _check_distinct(number, "comments", [comment.github_id for comment in comments])
         _check_distinct(number, "commits", [commit.sha for commit in commits])
         _check_distinct(number, "assignedActors", [assignee.node_id for assignee in assignees])
+        _check_distinct(number, "assignedActors", [assignee.github_id for assignee in assignees])
         _check_distinct(number, "reviewRequests", [request.node_id for request in review_requests])
         listed = {link_key(link) for link in closing_issues}
         for key in user_linked:
