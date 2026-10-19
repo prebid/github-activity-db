@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any, cast
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncConnection
 
 from github_activity_db.db.engine import build_engine
@@ -133,11 +133,38 @@ async def test_an_empty_database(migrated_database: Path) -> None:
     assert await snapshot_of(migrated_database) == Snapshot(repositories=())
 
 
+def _digest(database: Path) -> str:
+    return hashlib.sha256(database.read_bytes()).hexdigest()
+
+
+async def _commit_after(database: Path, statement: Any | None) -> None:
+    """Run ``read_snapshot`` or ``statement`` on an application connection, then commit, so a
+    write either made lands in the file."""
+    engine = build_engine(f"sqlite+aiosqlite:///{database}")
+    try:
+        async with engine.connect() as connection:
+            if statement is None:
+                await read_snapshot(connection)
+            else:
+                await connection.execute(statement)
+            await connection.commit()
+    finally:
+        await engine.dispose()
+
+
 async def test_writes_nothing(migrated_database: Path) -> None:
     _seed(migrated_database)
-    before = hashlib.sha256(migrated_database.read_bytes()).hexdigest()
-    await snapshot_of(migrated_database)
-    assert hashlib.sha256(migrated_database.read_bytes()).hexdigest() == before
+    before = _digest(migrated_database)
+    await _commit_after(migrated_database, None)
+    assert _digest(migrated_database) == before
+
+
+async def test_the_digest_sees_a_committed_write(migrated_database: Path) -> None:
+    """Positive control: an UPDATE committed on the same kind of connection changes the file."""
+    _seed(migrated_database)
+    before = _digest(migrated_database)
+    await _commit_after(migrated_database, update(PullRequest).values(is_draft=False))
+    assert _digest(migrated_database) != before
 
 
 class _CheckedConnection:

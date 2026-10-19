@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from pathlib import Path
 
 import pytest
@@ -19,55 +20,53 @@ from github_activity_db.sync.deletions import (
     parse_allow_deletions,
 )
 from github_activity_db.sync.plan import AttemptedRepository, Coverage, plan
-from github_activity_db.sync.snapshot import StoredPullRequest, StoredRepository
-from github_activity_db.tracking import SyncConfig, TrackedRepository, TrackingConfig
+from github_activity_db.sync.snapshot import StoredRepository
+from github_activity_db.tracking import (
+    SyncConfig,
+    TrackedRepository,
+    TrackingConfig,
+    load_tracking_config,
+)
 from tests.db.seed import Seed, connect
-from tests.sync.support import HYDRATED, UPDATED, config, entry, index, snapshot_of, stored_pr
+from tests.sync.support import UPDATED, config, entry, index, snapshot_of, stored_pr
 
 DEFAULT = SyncConfig()
 JS_ID = 11
 
 
-def _rows(count: int, start: int = 1) -> tuple[StoredPullRequest, ...]:
-    return tuple(
-        StoredPullRequest(
-            row_id=n,
-            github_id=1000 + n,
-            number=n,
-            state="OPEN",
-            is_draft=False,
-            author_association="MEMBER",
-            github_updated_at=UPDATED,
-            hydrated_at=HYDRATED,
-            hydration_version=2,
-            closing_issues_total=0,
-            labels=frozenset(),
-            closing_links=frozenset(),
-        )
-        for n in range(start, start + count)
-    )
-
-
-def _stored(
-    rows: tuple[StoredPullRequest, ...], failures: frozenset[tuple[str, int]] = frozenset()
+async def _seeded(
+    database: Path, count: int, failures: Iterable[tuple[str, int]] = ()
 ) -> StoredRepository:
-    return StoredRepository(
-        row_id=1,
-        github_id=JS_ID,
-        full_name="prebid/Prebid.js",
-        is_tracked=True,
-        pull_requests=rows,
-        failures=failures,
-        pending=frozenset(),
-    )
+    """Prebid.js stored with PRs #1 to #count (github_id 1000 + number) and the failure rows,
+    as ``read_snapshot`` reads them back."""
+    with connect(database) as connection:
+        seed = Seed(connection)
+        repo = seed.repository("prebid/Prebid.js", github_id=JS_ID)
+        for number in range(1, count + 1):
+            stored_pr(seed, repo, number, 1000 + number)
+        for kind, number in failures:
+            seed.failure(repo, number, kind=kind)
+    stored = (await snapshot_of(database)).repository(JS_ID)
+    assert stored is not None
+    assert len(stored.pull_requests) == count
+    return stored
 
 
-def _coverage(rows: tuple[StoredPullRequest, ...]) -> Coverage:
+def _coverage(numbers: Iterable[int]) -> Coverage:
+    covered = frozenset(numbers)
     return Coverage(
         repository_github_id=JS_ID,
         kind="pull_request",
-        github_ids=frozenset(row.github_id for row in rows),
-        numbers=frozenset(row.number for row in rows),
+        github_ids=frozenset(1000 + number for number in covered),
+        numbers=covered,
+    )
+
+
+def _candidates(stored: StoredRepository, numbers: Iterable[int]) -> tuple[Candidate, ...]:
+    """The candidates for these stored numbers, with the row ids the database gave them."""
+    rows = {row.number: row for row in stored.pull_requests}
+    return tuple(
+        Candidate("pull_request", rows[number].row_id, 1000 + number, number) for number in numbers
     )
 
 
@@ -160,11 +159,13 @@ def test_the_halt_reason(approved: int | None, reason: str) -> None:
 # --------------------------------------------------------------------------------------------
 # Candidates
 # --------------------------------------------------------------------------------------------
-def test_candidates_are_the_stored_items_absent_from_coverage() -> None:
-    rows = _rows(5)
+async def test_candidates_are_the_stored_items_absent_from_coverage(
+    migrated_database: Path,
+) -> None:
+    stored = await _seeded(migrated_database, 5)
     result = item_deletions(
-        _stored(rows),
-        _coverage(rows[:3]),
+        stored,
+        _coverage([1, 2, 3]),
         failed_during_hydration=False,
         stored_rows_before_run=5,
         config=DEFAULT,
@@ -172,17 +173,17 @@ def test_candidates_are_the_stored_items_absent_from_coverage() -> None:
     )
     assert result == Deletions(
         repository_github_id=JS_ID,
-        candidates=(Candidate("pull_request", 4, 1004, 4), Candidate("pull_request", 5, 1005, 5)),
+        candidates=_candidates(stored, [4, 5]),
         decision=GuardDecision(candidates=2, stored_rows=5, limit=25, approved_limit=None),
         failures_removed=(),
     )
 
 
-def test_no_candidates_when_every_stored_item_is_covered() -> None:
-    rows = _rows(3)
+async def test_no_candidates_when_every_stored_item_is_covered(migrated_database: Path) -> None:
+    stored = await _seeded(migrated_database, 3)
     result = item_deletions(
-        _stored(rows),
-        _coverage(rows),
+        stored,
+        _coverage([1, 2, 3]),
         failed_during_hydration=False,
         stored_rows_before_run=3,
         config=DEFAULT,
@@ -192,10 +193,12 @@ def test_no_candidates_when_every_stored_item_is_covered() -> None:
     assert (result.candidates, result.decision.runs) == ((), True)
 
 
-def test_a_repository_with_nothing_stored() -> None:
+async def test_a_repository_with_nothing_stored(migrated_database: Path) -> None:
+    stored = (await snapshot_of(migrated_database)).repository(JS_ID)
+    assert stored is None
     result = item_deletions(
-        None,
-        _coverage(()),
+        stored,
+        _coverage([]),
         failed_during_hydration=False,
         stored_rows_before_run=0,
         config=DEFAULT,
@@ -209,40 +212,41 @@ def test_a_repository_with_nothing_stored() -> None:
     )
 
 
-def test_the_guard_counts_the_rows_before_the_run() -> None:
+async def test_the_guard_counts_the_rows_before_the_run(migrated_database: Path) -> None:
     """2,000 rows after the writes would let 40 through; the 100 before the run allow 25."""
-    rows = _rows(2000)
+    stored = await _seeded(migrated_database, 2000)
     result = item_deletions(
-        _stored(rows),
-        _coverage(rows[26:]),
+        stored,
+        _coverage(range(27, 2001)),
         failed_during_hydration=False,
         stored_rows_before_run=100,
         config=DEFAULT,
         approved_limit=None,
     )
     assert result is not None
-    assert len(result.candidates) == 26
+    assert result.candidates == _candidates(stored, range(1, 27))
+    assert result.decision == GuardDecision(
+        candidates=26, stored_rows=100, limit=25, approved_limit=None
+    )
     assert result.decision.runs is False
 
 
 @pytest.mark.parametrize("approved", [None, 30])
-def test_failure_rows_absent_from_coverage_are_removed_under_a_halt_too(
-    approved: int | None,
+async def test_failure_rows_absent_from_coverage_are_removed_under_a_halt_too(
+    migrated_database: Path, approved: int | None
 ) -> None:
-    rows = _rows(130)
-    failures = frozenset(
-        {("pull_request", 101), ("pull_request", 7), ("pull_request", 500), ("issue", 500)}
-    )
+    failures = [("pull_request", 101), ("pull_request", 7), ("pull_request", 500), ("issue", 500)]
+    stored = await _seeded(migrated_database, 130, failures)
     result = item_deletions(
-        _stored(rows, failures),
-        _coverage(rows[:100]),
+        stored,
+        _coverage(range(1, 101)),
         failed_during_hydration=False,
         stored_rows_before_run=130,
         config=DEFAULT,
         approved_limit=approved,
     )
     assert result is not None
-    assert len(result.candidates) == 30
+    assert result.candidates == _candidates(stored, range(101, 131))
     assert result.decision.runs is (approved is not None)
     assert result.failures_removed == (("pull_request", 101), ("pull_request", 500))
 
@@ -252,11 +256,13 @@ def test_failure_rows_absent_from_coverage_are_removed_under_a_halt_too(
     [(None, False), (None, True), ("complete", True)],
     ids=["incomplete-index", "incomplete-and-failed", "failed-during-hydration"],
 )
-def test_step_7_skips_a_repository(coverage: str | None, failed: bool) -> None:
-    rows = _rows(3)
+async def test_step_7_skips_a_repository(
+    migrated_database: Path, coverage: str | None, failed: bool
+) -> None:
+    stored = await _seeded(migrated_database, 3, [("pull_request", 9)])
     result = item_deletions(
-        _stored(rows, frozenset({("pull_request", 9)})),
-        _coverage(rows[:1]) if coverage else None,
+        stored,
+        _coverage([1]) if coverage else None,
         failed_during_hydration=failed,
         stored_rows_before_run=3,
         config=DEFAULT,
@@ -265,11 +271,12 @@ def test_step_7_skips_a_repository(coverage: str | None, failed: bool) -> None:
     assert result is None
 
 
-def test_only_pull_request_coverage_is_read() -> None:
+async def test_only_pull_request_coverage_is_read(migrated_database: Path) -> None:
+    stored = await _seeded(migrated_database, 1)
     issues = Coverage(JS_ID, "issue", frozenset(), frozenset())
     with pytest.raises(ValueError, match="no stored issue rows are read before Step 4"):
         item_deletions(
-            _stored(_rows(1)),
+            stored,
             issues,
             failed_during_hydration=False,
             stored_rows_before_run=1,
@@ -278,19 +285,19 @@ def test_only_pull_request_coverage_is_read() -> None:
         )
 
 
-def test_the_control_for_skipping_lists_candidates() -> None:
+async def test_the_control_for_skipping_lists_candidates(migrated_database: Path) -> None:
     """The same inputs as the skipped cases, completely indexed and not failed."""
-    rows = _rows(3)
+    stored = await _seeded(migrated_database, 3, [("pull_request", 9)])
     result = item_deletions(
-        _stored(rows, frozenset({("pull_request", 9)})),
-        _coverage(rows[:1]),
+        stored,
+        _coverage([1]),
         failed_during_hydration=False,
         stored_rows_before_run=3,
         config=DEFAULT,
         approved_limit=None,
     )
     assert result is not None
-    assert [c.number for c in result.candidates] == [2, 3]
+    assert result.candidates == _candidates(stored, [2, 3])
     assert result.failures_removed == (("pull_request", 9),)
 
 
@@ -378,7 +385,7 @@ def test_parse_allow_deletions(value: str, repository: TrackedRepository, limit:
         ("prebid/Prebid.js=3 ", "takes owner/name=N"),
         ("prebid/Prebid.js=3\n", "takes owner/name=N"),
         ("prebid/Prebid.js=1.5", "takes owner/name=N"),
-        ("prebid/Prebid.js=٣", "takes owner/name=N"),
+        ("prebid/Prebid.js=\u0663", "takes an ASCII owner/name=N"),
         ("prebid/Prebid.js", "takes owner/name=N"),
         ("prebid/Prebid.js=", "takes owner/name=N"),
         ("=3", "takes owner/name=N"),
@@ -393,6 +400,15 @@ def test_parse_allow_deletions(value: str, repository: TrackedRepository, limit:
 def test_parse_allow_deletions_refuses(value: str, message: str) -> None:
     with pytest.raises(AllowDeletionsError, match=message.replace("+", r"\+")):
         parse_allow_deletions(value, TWO_REPOSITORIES)
+
+
+def test_a_non_ascii_letter_that_folds_to_a_configured_name_is_refused() -> None:
+    """KELVIN SIGN lowers to "k", so without the ASCII check this value would approve the
+    packaged prebid/prebid-agent-skills."""
+    value = "prebid/prebid-agent-s\u212aills=3"
+    assert value.split("=")[0].lower() == "prebid/prebid-agent-skills"
+    with pytest.raises(AllowDeletionsError, match="takes an ASCII owner/name=N"):
+        parse_allow_deletions(value, load_tracking_config())
 
 
 def test_an_approval_applies_to_its_repository_only() -> None:

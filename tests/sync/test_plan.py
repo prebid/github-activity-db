@@ -435,7 +435,7 @@ CONTRADICTIONS = [
     entry(5, 50, state="CLOSED"),
     entry(5, 50, state="MERGED", closed_at=UPDATED),
     entry(5, 50, merged_at=UPDATED),
-    entry(5, 50, state="CLOSED", merged_at=UPDATED, closed_at=UPDATED),
+    entry(5, 50, state="CLOSED", merged_at=OLD, closed_at=OLD, created_at=OLD, updated_at=OLD),
     entry(5, 50, merged_at=OLD, created_at=OLD, updated_at=OLD),
 ]
 CONTRADICTION_IDS = [
@@ -443,7 +443,7 @@ CONTRADICTION_IDS = [
     "merged-without-merged-at",
     "open-with-merged-at",
     "closed-with-merged-at",
-    "open-with-merged-at-before-the-floor",
+    "open-with-merged-at-in-2016",
 ]
 
 
@@ -612,6 +612,51 @@ async def test_a_pending_item_no_condition_selects_is_not_planned(migrated_datab
     _js(migrated_database, build)
     result = await plan_of(migrated_database, attempted(entry(5, 50), entry(6, 60)))
     assert result.queue == (item(6, 60, {Reason.HYDRATION_VERSION}, pending=True),)
+
+
+@pytest.mark.parametrize(("kind", "pending"), [("issue", False), ("pull_request", True)])
+async def test_a_pending_row_is_matched_by_kind(
+    migrated_database: Path, kind: str, pending: bool
+) -> None:
+    """#5 is not stored and #6 is updated later: only a pull-request pending row for #5 puts
+    it first."""
+    _js(migrated_database, lambda seed, repo: seed.pending(repo, 5, kind=kind))
+    later = UPDATED + timedelta(hours=1)
+    result = await plan_of(
+        migrated_database, attempted(entry(5, 50), entry(6, 60, updated_at=later))
+    )
+    expected = [(5, True), (6, False)] if pending else [(6, False), (5, False)]
+    assert [(p.number, p.pending) for p in result.queue] == expected
+
+
+async def test_pending_and_failure_rows_are_matched_by_repository(migrated_database: Path) -> None:
+    """Both repositories store #1 as indexed; prebid-server alone has a pending and a failure row
+    for it."""
+
+    def build(seed: Seed, js: int) -> None:
+        stored_pr(seed, js, 1, 10)
+        server = seed.repository(SERVER, github_id=SERVER_ID)
+        stored_pr(seed, server, 1, 110)
+        seed.pending(server, 1)
+        seed.failure(server, 1)
+
+    _js(migrated_database, build)
+    result = await plan_of(
+        migrated_database,
+        attempted(entry(1, 10)),
+        attempted(entry(1, 110), github_id=SERVER_ID, full_name=SERVER),
+    )
+    assert result.queue == (
+        item(1, 110, {Reason.FAILED}, repository=(SERVER_ID, SERVER), pending=True),
+    )
+
+
+async def test_coverage_is_looked_up_by_repository_and_kind(migrated_database: Path) -> None:
+    result = await plan_of(migrated_database, attempted(entry(1, 10)))
+    expected = Coverage(JS_ID, "pull_request", frozenset({10}), frozenset({1}))
+    assert result.coverage_of(JS_ID, "pull_request") == expected
+    assert result.coverage_of(JS_ID, "issue") is None
+    assert result.coverage_of(SERVER_ID, "pull_request") is None
 
 
 # --------------------------------------------------------------------------------------------

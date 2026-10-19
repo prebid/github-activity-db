@@ -40,12 +40,17 @@ class DeletionApproval:
 
 
 def parse_allow_deletions(value: str, config: TrackingConfig) -> DeletionApproval:
-    """Read ``owner/name=N``; the name matches a configured repository ignoring case.
+    """Read ``owner/name=N``; the name matches a configured repository ignoring ASCII case.
+
+    GitHub names are ASCII, and ``str.lower()`` folds some other characters into ASCII letters
+    (KELVIN SIGN into "k"), so a value with any other character is refused.
 
     Raises:
-        AllowDeletionsError: the value has another form, N is below 1 or has more digits than
-            ``int()`` converts, or no configured repository has the name.
+        AllowDeletionsError: the value is not ASCII or has another form, N is below 1 or has more
+            digits than ``int()`` converts, or no configured repository has the name.
     """
+    if not value.isascii():
+        raise AllowDeletionsError(f"--allow-deletions takes an ASCII owner/name=N, not {value!r}")
     match = _APPROVAL.fullmatch(value)
     if match is None:
         raise AllowDeletionsError(f"--allow-deletions takes owner/name=N, not {value!r}")

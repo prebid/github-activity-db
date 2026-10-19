@@ -718,8 +718,9 @@ engine, never through alembic, whose commands take the write lock; it exits 1 ot
    candidate count in `repo_sync_state.halt_reason`; the `sync_failures` rows of items absent from
    the in-coverage set are removed even then. `ghactivity sync --allow-deletions owner/name=N` (given at
    most once, N at least 1, naming a configured repository)
-   deletes all of that repository's candidates when there are at most N, otherwise halts as without
-   the flag, applying N to each guarded set separately (the items here, and from Step 4b the
+   deletes all of that repository's candidates when there are at most N; otherwise the guard decides
+   as without the flag, so a count within max(25, 2%) is still deleted. It applies N to each guarded
+   set separately (the items here, and from Step 4b the
    repository's activity events and default-branch commits), and records the approval in
    `sync_runs.deletions_approved`. `--prune-untracked` deletes
    the repositories that were untracked when the run started and are still untracked after step 1

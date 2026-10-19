@@ -60,7 +60,9 @@ def test_in_coverage(the_entry: IndexedPullRequest, covered: bool) -> None:
     ],
 )
 def test_a_contradicted_state_counts_as_in_coverage(the_entry: IndexedPullRequest) -> None:
-    """Every date here is before the floor, which would leave a consistent entry out."""
+    """In the CLOSED and MERGED cases the dates the rule reads (mergedAt, closedAt) are missing or
+    before the floor, so only the contradiction keeps them in coverage. An OPEN entry is in
+    coverage whatever its dates, so the two OPEN cases test the contradiction check alone."""
     assert state_contradicts_dates(the_entry) is True
     assert in_coverage(the_entry, FLOOR) is True
 
