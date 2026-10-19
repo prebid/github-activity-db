@@ -858,14 +858,23 @@ async def test_a_short_page_on_an_added_connection(open_source, replay: Replay, 
     assert error.connection == key
 
 
-async def test_a_duplicate_assignee(open_source, replay: Replay) -> None:
+@pytest.mark.parametrize("overflow", [False, True], ids=["first-page", "overflow"])
+async def test_an_assignee_node_id_listed_twice_with_two_github_ids(
+    open_source, replay: Replay, overflow: bool
+) -> None:
+    # The github_ids differ, so only the node-id comparison can refuse this; its key is the
+    # node id, where the github_id comparison's is a number.
     unit = pr_unit(replay, 15771)
-    nodes = unit.data["assignedActors"]["nodes"]
-    nodes[1] = dict(nodes[0])
+    first = dict(unit.data["assignedActors"]["nodes"][0])
+    second = {**first, "databaseId": first["databaseId"] + 999999}
+    if overflow:
+        second_page(replay, unit, "assignedActors", second)
+    else:
+        unit.data["assignedActors"]["nodes"][1] = second
     replay.add(unit)
     error = await failure(open_source, PREBID_JS, 15771)
-    assert isinstance(error, DuplicateEntry)
-    assert error.connection == "assignedActors"
+    assert type(error) is DuplicateEntry
+    assert (error.connection, error.key) == ("assignedActors", first["id"])
 
 
 async def test_an_assignee_github_id_listed_twice_under_two_node_ids(
