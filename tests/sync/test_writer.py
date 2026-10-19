@@ -1626,7 +1626,7 @@ async def test_stored_accounts_by_github_id(w: Writer) -> None:
 # Failures
 # --------------------------------------------------------------------------------------------
 async def test_attempts_count_runs_and_the_first_failure_stays(w: Writer) -> None:
-    await w.repository()
+    repository_id = (await w.repository()).row_id
     run_started = T0
 
     async def fail(at: Any, started: Any, message: str) -> None:
@@ -1643,10 +1643,11 @@ async def test_attempts_count_runs_and_the_first_failure_stays(w: Writer) -> Non
 
     await fail(T0 + timedelta(minutes=1), run_started, "first")
     await fail(T0 + timedelta(minutes=2), run_started, "same run")
-    assert w.rows(
-        "SELECT attempts, last_error, first_failed_at, last_failed_at FROM sync_failures"
-    ) == [
+    assert w.without_ids("sync_failures") == [
         {
+            "repository_id": repository_id,
+            "item_kind": "pull_request",
+            "number": 5,
             "attempts": 1,
             "last_error": "ValueError: same run",
             "first_failed_at": ts(T0 + timedelta(minutes=1)),
@@ -1655,11 +1656,15 @@ async def test_attempts_count_runs_and_the_first_failure_stays(w: Writer) -> Non
     ]
     next_run = T0 + timedelta(hours=6)
     await fail(next_run + timedelta(minutes=1), next_run, "next run")
-    assert w.rows("SELECT attempts, last_error, first_failed_at FROM sync_failures") == [
+    assert w.without_ids("sync_failures") == [
         {
+            "repository_id": repository_id,
+            "item_kind": "pull_request",
+            "number": 5,
             "attempts": 2,
             "last_error": "ValueError: next run",
             "first_failed_at": ts(T0 + timedelta(minutes=1)),
+            "last_failed_at": ts(next_run + timedelta(minutes=1)),
         }
     ]
 
