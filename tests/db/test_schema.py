@@ -28,6 +28,7 @@ from github_activity_db.db.models import (
 from github_activity_db.source.records import AccountType, ReviewState
 from tests.db.alembic_support import alembic_config, query
 from tests.db.schema_support import (
+    check_constraints,
     delete_actions,
     frozen_views,
     named_constraints,
@@ -69,6 +70,31 @@ def _redefined(database: Path, table: str, old: str, new: str) -> tuple[str, str
     return f"DROP TABLE {table}", sql.replace(old, new)
 
 
+@pytest.mark.parametrize(
+    "separator", [" ", "\t", "\n", "\r\n"], ids=["space", "tab", "newline", "crlf"]
+)
+def test_a_named_check_is_read_whatever_whitespace_separates_its_words(
+    tmp_path: Path, separator: str
+) -> None:
+    """SQLite accepts any whitespace between a constraint's words and keeps the text as written."""
+    database = tmp_path / "probe.db"
+    item = f"CONSTRAINT{separator}ck_probe{separator}CHECK{separator}(value != 'blocked')"
+    with closing(sqlite3.connect(database)) as connection, connection:
+        connection.execute(
+            f"CREATE TABLE probe (value TEXT, {item}, "
+            "CONSTRAINT ck_tight CHECK(value != 'x'), CONSTRAINT uq_probe UNIQUE (value))"
+        )
+    assert named_constraints(database, "probe") == {
+        "ck_probe": item,
+        "ck_tight": "CONSTRAINT ck_tight CHECK(value != 'x')",
+        "uq_probe": "CONSTRAINT uq_probe UNIQUE (value)",
+    }
+    assert check_constraints(database, "probe") == {
+        "ck_probe": item,
+        "ck_tight": "CONSTRAINT ck_tight CHECK(value != 'x')",
+    }
+
+
 class TestModelsComparison:
     def test_head_matches_the_models(self, head_template: Path, models_database: Path) -> None:
         migrated, models = schema_of(head_template), schema_of(models_database)
@@ -82,8 +108,7 @@ class TestModelsComparison:
         checks = {
             name
             for table in Base.metadata.tables
-            for name, item in named_constraints(models_database, table).items()
-            if " CHECK " in f" {item} "
+            for name in check_constraints(models_database, table)
         }
         assert checks == set(CHECKS) | PAIRED_CHECKS
 

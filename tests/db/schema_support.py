@@ -50,14 +50,27 @@ def create_table_items(sql: str) -> list[str]:
 
 
 def named_constraints(database: Path, table: str) -> dict[str, str]:
-    """``CONSTRAINT <name> ...`` items of the table's definition, by name."""
+    """``CONSTRAINT <name> ...`` items of the table's definition, by name, each as written. SQL
+    separates the keyword, the name, and the constraint by any whitespace, so an item is read in
+    words."""
     (sql,) = _rows(
         database, "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?", table
     )[0]
+    found: dict[str, str] = {}
+    for item in create_table_items(str(sql)):
+        words = item.split()
+        if len(words) > 1 and words[0].upper() == "CONSTRAINT":
+            found[words[1].strip('"')] = item
+    return found
+
+
+def check_constraints(database: Path, table: str) -> dict[str, str]:
+    """The named constraints that are CHECKs: the word after the name is ``CHECK``, alone or
+    with its opening parenthesis."""
     return {
-        item.split()[1].strip('"'): item
-        for item in create_table_items(str(sql))
-        if item.upper().startswith("CONSTRAINT ")
+        name: item
+        for name, item in named_constraints(database, table).items()
+        if len(words := item.split()) > 2 and words[2].upper().split("(")[0] == "CHECK"
     }
 
 
