@@ -77,11 +77,12 @@ tests/
 - **Dictionary and schema version.** `tests/test_data_dictionary.py` compares
   `docs/data-dictionary.md` with a migrated database in both directions.
   `tests/schema_versions.json` maps each schema version (`PRAGMA user_version`) to its consumer
-  (table or view, column) pairs; a test fails when the current entry differs from the columns
-  the dictionary marks consumer, and on pull requests the CI step that checks the
-  hydration-version lock rejects a removed entry or a pair removed from one, so removing or
-  renaming a consumer column needs a new schema version. Pairs may be added to the newest
-  entry only.
+  (table or view, column) pairs and, from version 2, to the SHA-256 of each view's frozen SQL;
+  a test fails when the current entry differs from the columns the dictionary marks consumer,
+  and on pull requests the CI step that checks the hydration-version lock rejects a removed
+  entry, a pair removed from one, and a view digest removed or changed in one, so removing or
+  renaming a consumer column, or changing a view, needs a new schema version. Pairs and views
+  may be added to the newest entry only.
 
 ## GitHub Source Layer: Recorded Responses
 
