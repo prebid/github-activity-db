@@ -11,7 +11,7 @@ Step 3 was planned against `main` at `c1f474b`, and the library behaviours it re
 with the installed versions (section 7); Step 3a's review probes ran on the PR #11 branch (merged as
 `6fedb05`). On 2026-10-18 the plan and `main` at `6fedb05` were audited against D29, and the
 collection D29 calls for was measured against live GitHub (section 7). Counts that drift (PR and
-issue totals) are dated; regenerate them with `ghactivity verify` once Step 3b-2 lands.
+issue totals) are dated; regenerate them with `ghactivity verify` once Step 3b-2b lands.
 
 ## Contents
 
@@ -31,7 +31,7 @@ issue totals) are dated; regenerate them with `ghactivity verify` once Step 3b-2
 |------|-------|--------|
 | 1 | Guardrails | done (PR #5) |
 | 2 | GitHub source layer | done (PR #7) |
-| 3 | New schema, PR sync engine, cutover (pull requests 3a, 3b-1, and 3b-2) | in progress: 3a done (PR #11), 3b-1 done (PR #14) |
+| 3 | New schema, PR sync engine, cutover (pull requests 3a, 3b-1, 3b-2a, and 3b-2b) | in progress: 3a done (PR #11), 3b-1 done (PR #14) |
 | 4 | Issues, closing-issue links, and default-branch activity (pull requests 4a and 4b) | not started |
 | 5 | Full bootstrap and verification | not started |
 | 6 | Scheduled sync and publication | not started |
@@ -87,7 +87,7 @@ Within scope the database collects and distinguishes data and never interprets i
 
 ## 3. Coverage rule
 
-Floor `F = 2023-01-01T00:00:00Z`, set in `tracking.toml` `[coverage]` (added in Step 3b-2). The
+Floor `F = 2023-01-01T00:00:00Z`, set in `tracking.toml` `[coverage]` (added in Step 3b-2a). The
 loader rejects a floor that is not a TOML offset date-time and converts it to UTC.
 
 - A pull request is in coverage when its state is `OPEN`, or its state is `MERGED` and
@@ -208,7 +208,7 @@ Every gap found in the audit, and where it is resolved.
 | 85 | A PR with an `EnterpriseUserAccount` actor is an item failure and is not stored (5.2 at `6fedb05`) | Step 3b-1 collects such an actor and 3b-2 writes it, the account keyed by its node id (5.2) |
 | 86 | When a value was read is internal: `hydrated_at`, `hydration_version`, `refreshed_at`, `repo_sync_state`, `sync_failures`; a consumer cannot tell how current a row is or that an item failed | Step 3b-1: consumer columns (5.1) |
 | 87 | The schema-version rule and its lock name only columns, so a change to which rows a view returns ships under the same `user_version` | Step 3b-1: a change to a view's rows or derivation bumps the version, and the lock entry records each consumer view's frozen-SQL SHA-256 (5.1) |
-| 88 | Nothing records which `tracking.toml` produced `repo_group`, `is_tracked`, and the automation tables when `TRACKING_CONFIG_PATH` overrides the packaged file or the checkout is changed | Step 3b-2: `sync_runs.config_source` and `config_sha256`, and the manifest (5.1, 5.6) |
+| 88 | Nothing records which `tracking.toml` produced `repo_group`, `is_tracked`, and the automation tables when `TRACKING_CONFIG_PATH` overrides the packaged file or the checkout is changed | Step 3b-2a: `sync_runs.config_source` and `config_sha256` (5.1); Step 6a: the manifest (5.6) |
 | 89 | Wording that gives data a meaning GitHub does not state: a null actor called a deleted account (the data dictionary, `cli/github.py`), "final verdict", a dismissal called a withdrawal, "reviewer metrics", "review activity", closing links said to close an issue (GitHub: "List of issues that may be closed by this pull request"), the `source/` docstrings that call a null actor or `NOT_FOUND` deleted, `github_users.deleted_at` itself, and `tracking.toml` groups described as "for reporting" | This plan (2026-10-18); Step 3b-1 (the data dictionary, `cli/github.py`, the docstrings in `source/convert.py`, `source/users.py`, and `source/records.py`, and `deleted_at` renamed `not_found_at`); Step 3b-2 (the `tracking.toml` comment) |
 | 90 | An account a lookup returned `NOT_FOUND` for, which GitHub links again only through commits, is never looked up again, so its `not_found_at` and login stay as they were | Step 3b-2: a commit link to a stored account with `not_found_at` set queues it for a lookup (5.2) |
 
@@ -354,7 +354,7 @@ Column rules:
   and overflow continuations) or a migration that adds or redefines a GitHub-derived column of a
   table that may hold rows bumps that kind's version in the same pull request. Step 3b-1 changes
   the pull request documents, so the pull-request version becomes 2. No sync has written the new
-  schema before 3b-2, so Step 3b-1's migration refuses a database holding rows in any table it
+  schema before 3b-2a, so Step 3b-1's migration refuses a database holding rows in any table it
   adds a column to (the hydrated tables, `repositories`, `github_users`, `sync_runs`, and the
   automation tables), as Step 3a's refuses tag rows, and its added columns need no value for existing rows. A
   column a later migration adds to tables that hold rows is null on rows hydrated at an older
@@ -786,10 +786,11 @@ the first class that matches, in this order:
 - drift: the fresh index shows a `createdAt` or `updatedAt` at or after the boundary, or, for an
   `is_draft` or closing-link difference with an earlier `updatedAt`, the matching timeline event
   (ready-for-review or convert-to-draft; connected or disconnected) is at or after it, looked up only
-  for differing items; an `author_association` difference is drift with its own count. Which
-  connected or disconnected event matches a link difference (any of the type, or one naming the
-  differing issue), and whether a link made by a closing keyword produces one, is settled by a live
-  timeline probe before verify's document is written (section 8);
+  for differing items; an `author_association` difference is drift with its own count. A
+  connected or disconnected event matches a link difference when its `subject` is the differing
+  issue (its repository and number); a link made by a closing keyword produces no such event, so
+  its difference is drift only through `createdAt` or `updatedAt` (section 7, "Closing-link
+  timeline events");
 - removed since sync: a stored item missing from the fresh index whose lookup by number returns
   `NOT_FOUND`, listed by number (the lookup is a hydration batch: `Gone` is removed since sync, a
   hydrated PR an error);
@@ -854,7 +855,7 @@ and `delete_guard_percent` a number above 0 and at most 100; an `accepted_failur
 `number` of at least 1, is unique by repository and number, must name a configured repository, and
 matches by that entry and the number, so a rename does not unhook it; an entry whose item did not
 fail is reported.
-The file holds domain policy only. Step 1 added `[[repositories]]`; Step 3b-2 adds `[coverage]`,
+The file holds domain policy only. Step 1 added `[[repositories]]`; Step 3b-2a adds `[coverage]`,
 `[automation]`, and `[sync]`.
 
 ```toml
@@ -1154,10 +1155,14 @@ pool's limit and use):
 query RateLimit { rateLimit { cost remaining resetAt } }
 ```
 
-Verify's timeline lookup (Step 3b-2) reads, for each differing PR, its ready-for-review,
-convert-to-draft, connected, and disconnected events at or after the repository's boundary. Its
-document, formula cost, and recordings are added here when it is written; the recorder adds them
-without changing the existing recordings.
+Verify's timeline lookup (Step 3b-2b) reads, for each differing PR, its ready-for-review,
+convert-to-draft, connected, and disconnected events at or after the repository's boundary. It
+pages by `pageInfo.hasNextPage` and checks the entries it read against the first page's
+`filteredCount`, which applies `itemTypes` and `since`; a later page's `filteredCount` counts only
+the items after its cursor, and `totalCount` is neither filtered nor the number of entries GitHub
+returns (section 7, "Closing-link timeline events"). Its document, formula cost, and recordings
+are added here when it is written; the recorder adds them without changing the existing
+recordings.
 
 Default-branch history (Step 4b; 100 commits per page cost 1, dry run on Prebid.js, 2026-10-18):
 
@@ -1186,7 +1191,8 @@ nested node.
 ## 6. Execution steps
 
 Each step is one pull request from a `feature/<slug>` branch, except Step 3 (pull requests 3a, 3b-1,
-and 3b-2), Step 4 (pull requests 4a and 4b), and Step 6 (pull requests 6a and 6c, with the 6b manual
+3b-2a, and 3b-2b), Step 4 (pull requests 4a and 4b), and Step 6 (pull requests 6a and 6c, with the
+6b manual
 runs between them). A step, or a pull request within one, starts after the previous one merges.
 
 ### Step 1: Guardrails
@@ -1269,12 +1275,15 @@ repository) and runs on the exact PR head; CI passes on the exact PR head.
 
 ### Step 3: New schema, PR sync engine, cutover
 
-Three pull requests. 3a lands the schema and removes the old pipeline, which imports the old models
+Four pull requests. 3a lands the schema and removes the old pipeline, which imports the old models
 and so cannot outlive them; 3b-1 adds what the sync collects under D29 (the query documents, typed
-records, schema, and row-level views of D3-D6, D8, D14, and D28); 3b-2 adds the sync engine and verify
-on that schema, so the writer is built against the final tables. Until 3b-2 `main` has no `sync`
-command and the tracked database stays frozen (D26). No sync has written the new schema before
-3b-2, so 3b-1's changes touch no stored data: the tracked `github_activity.db` holds the first
+records, schema, and row-level views of D3-D6, D8, D14, and D28); 3b-2a adds the sync engine on that
+schema, so the writer is built against the final tables; and 3b-2b adds verify and the REST sampler
+that checks what the sync wrote. "Step 3b-2" elsewhere in this plan means 3b-2a and 3b-2b together:
+verify (5.4), its timeline lookup, and the REST sampler are 3b-2b's, and the rest is 3b-2a's. Until
+3b-2a `main` has no `sync` command and the tracked database stays frozen (D26). No sync has written
+the new schema before
+3b-2a, so 3b-1's changes touch no stored data: the tracked `github_activity.db` holds the first
 schema's data, which D18 rebuilds from GitHub rather than migrating (Step 5).
 Prerequisites for 3a: the gap 68 counter follow-up and the httpx declaration (gap 76) have merged.
 
@@ -1373,7 +1382,7 @@ and column, with gap 86's consumer columns and gap 89's wording; `cli/github.py`
 returned no author instead of "(deleted account)", and the `source/` docstrings in `convert.py`,
 `users.py`, and `records.py` describing a null actor or `NOT_FOUND` as GitHub reports it;
 `docs/database.md`'s query example rewritten for the new views. No sync code: nothing writes the
-new columns until 3b-2.
+new columns until 3b-2a.
 
 Tests: each document's formula cost pinned (2 for the batch) and each changed document's recordings
 round-tripping through the replay; every added field parsed from a recording, and a value of the
@@ -1399,29 +1408,16 @@ invariant check without a test that targets it, no consumer surface that does wh
 and no computed column outside D29's list; the batch's `rateLimit(dryRun: true)` cost is 2 on the
 exact head; CI passes on the exact PR head.
 
-#### Step 3b-2: PR sync engine and verify
+#### Step 3b-2a: PR sync engine
 
 Scope: the writer; the planner with the coverage rule, in-place updates, `sync_pending`, deletions,
 guards, and their overrides; untracked repositories (D27); accepted failures; the label-set check;
 the automation tables; user lookup and refresh; unsettled re-hydration; `hydration_version`
-compared by inequality; run records, the run lock, and the head check (gap 74); `ghactivity sync`
-and `ghactivity verify` (5.4; `--db-only` is Step 6a). `tracking.toml` gains `[coverage]`,
+compared by inequality; run records, the run lock, and the sync's head check (gap 74); `ghactivity
+sync`. `tracking.toml` gains `[coverage]`,
 `[automation]`, and `[sync]` (5.5), its "Order is the sync order" comment changes to the resolve
 and index order (5.3 steps 1-2), and its group comment calls a group a maintainer-assigned name
-stored as `repositories.repo_group` (gap 89). Verify's timeline lookup in `source/` with its recordings
-(5.8). The REST sampler the acceptance uses, laid out like the recorder: comparison logic in a
-module under `tests/source/`, tested offline on recorded or synthetic REST bodies with one planted
-mismatch per compared field, REST's `ghost` matching a null reference or a stored reference to an
-account a lookup now returns `NOT_FOUND` for (the sampler looks it up), REST's 250 commits of a PR
-above 250 compared as a subset of the stored commits with equal attribution, a PR whose REST
-`updated_at` differs from the stored `github_updated_at` reported as changed and not compared, and
-the per-file sum rule; the fields it compares listed in the module, the Step 3b-1 fields REST
-returns among them (`closed_at`, the head and base commits, the merge commit, the milestone, review
-times and commits, comment times, review requests, assignees) and those REST does not return named,
-the stack fields among them; REST's `mergeable`, `rebaseable`, and `mergeable_state` are returned
-but not compared, since the stored merge state is as of `hydrated_at` (5.1);
-REST bodies recorded as their own unit kind by an additive recorder mode; run
-from `scripts/`, reaching GitHub through `GitHubSource.transport`; Steps 4 and 5 reuse it. The
+stored as `repositories.repo_group` (gap 89). The
 busy-timeout comment in `db/engine.py` (gap 77). Writing what 3b-1 collects: closed PRs, review
 requests, assignees, repository labels, the `*_reported` columns and `linked_github_id` (D28),
 `config_source` and `config_sha256` (gap 88), the lookup gap 90 queues, and `account_profiles`
@@ -1470,9 +1466,9 @@ recomputing `targets_default_branch`, a bot seen first through a commit and a fa
 (its solo lookup succeeding, and failing), an account seen in two shapes keeping its login until a
 lookup, identity conflicts (a lookup `databaseId` differing from the commit link's, a review id
 stored under another PR, a PR number stored under another `github_id`), a repository gone during
-hydration, a database error in the writer exiting 1, a `--dry-run` started during a sync and a
-verify started before the sync's claim, each reading beside the sync's item commits without
-blocking them (gap 77),
+hydration, a database error in the writer exiting 1, a `--dry-run` started during a sync, reading
+beside the sync's item commits without blocking
+them (gap 77),
 an account the scenario deletes after it was stored (`not_found_at` set by a lookup; its PR author, merger, review, comment,
 and commit references kept through a re-hydration that returns it as null, each with its
 `*_reported` false and the commit's `linked_github_id` null) and then seen again, an
@@ -1481,7 +1477,7 @@ null stored without a linked account and with `linked_github_id` set), an object
 after its author's deletion stored with a null author, a different non-null commit link replacing a
 stored one, the 24-hour refresh skipping an account with `not_found_at` set, a commit link to such
 an account queuing its lookup (gap 90), a `CLOSED` PR whose `closedAt` falls on each side of the
-floor in the planner, step 7, and verify, `refreshed_at` taken from the lookup's `Date` header
+floor in the planner and step 7, `refreshed_at` taken from the lookup's `Date` header
 on both sides of the 24-hour boundary, `config_sha256` equal to the read file's digest with and
 without `TRACKING_CONFIG_PATH`, the delete guard counted on the pre-run snapshot, a `--repo` run
 writing no `repo_sync_state` for another repository,
@@ -1496,10 +1492,8 @@ fatal run included, `sync_failures` rows removed when their item leaves
 coverage, also under a deletion halt, `last_index_started_at` left unwritten for a failed,
 incompletely indexed, or gone-during-hydration repository and written for a time-limited one, an
 in-process interrupt closing the run as `aborted` with `last_outcome = failed` for each attempted
-repository and `last_index_started_at` unchanged, view rows after a sync, each verify class, each overlapping pair of
-classes taking the first in the 5.4 order, a stale item, verify's repository set, its child-count
-checks (each by a planted row deletion), an unverified repository, a verify reaching
-`--max-minutes` exiting 1, and its report written on exit 1; config loading for the new sections (defaults, invalid values, unknown keys, a
+repository and `last_index_started_at` unchanged, view rows after a sync; config loading for the new
+sections (defaults, invalid values, unknown keys, a
 missing floor, a string floor, an accepted failure naming no configured repository, a non-ASCII
 automation email); step 1 keeping two `is_tracked` repositories from sharing a `full_name`, ignoring
 case, which 5.1 states and no constraint holds (a unique index would make a rename swap a database
@@ -1508,6 +1502,56 @@ seeds each drive several runs over random GitHub changes, and after each run the
 expected state computed separately from the scenario model, compared on every column except row
 ids, the times the sync stamps from `Date` headers, and the run counters; the expected state applies
 D28's kept references and the refresh from the model's own history, not from the writer's code.
+
+Acceptance: `sync --repo` on Prebid.js, salesagent, and prebid-server, from a fresh database at an
+explicit path, with `GITHUB_TOKEN="$(gh auth token)"` and the token never printed; it reads
+`ghactivity github rate-limit` before and after, does not start with fewer than 1,500 GraphQL
+points remaining, runs a second, incremental sync, and records the points, REST calls, and time it
+spent. Each run exits 0; a live item failure that cannot pass is listed in
+`[sync].accepted_failures` with REST evidence of why, as in Step 5, which leaves the exit 0 (5.3
+step 8). On the resulting file, SQL queries recorded in the pull request show every stored pull
+request's child rows equal to its stored totals (reviews, comments, commits, files, labels,
+closing issues, user-linked closing issues, review requests, assignees), its `v_pr_relationships`
+rows equal to the rows 5.1 lists for it, and every stored repository's `repo_labels` rows equal to
+its `labels_total`. If a merge to an open PR's base branch by someone else falls between the two
+syncs, the pull request records that PR's `updatedAt` and `mergeStateStatus` from both (section
+8). An adversarial review of the change, by reviewers who did not write it, finds no invariant
+check without a test that targets it; CI passes on the exact PR head.
+
+#### Step 3b-2b: Verify
+
+Prerequisite: Step 3b-2a has merged.
+
+Scope: `ghactivity verify` (5.4; `--db-only` is Step 6a) and its head check (gap 74). Verify's
+timeline lookup in `source/` with its recordings (5.8). The REST sampler the acceptance uses, laid
+out like the recorder: comparison logic in a
+module under `tests/source/`, tested offline on recorded or synthetic REST bodies with one planted
+mismatch per compared field, REST's `ghost` matching a null reference or a stored reference to an
+account a lookup now returns `NOT_FOUND` for (the sampler looks it up), REST's 250 commits of a PR
+above 250 compared as a subset of the stored commits with equal attribution, a PR whose REST
+`updated_at` differs from the stored `github_updated_at` reported as changed and not compared, and
+the per-file sum rule; the fields it compares listed in the module, the Step 3b-1 fields REST
+returns among them (`closed_at`, the head and base commits, the merge commit, the milestone, review
+times and commits, comment times, review requests, assignees) and those REST does not return named,
+the stack fields among them; REST's `mergeable`, `rebaseable`, and `mergeable_state` are returned
+but not compared, since the stored merge state is as of `hydrated_at` (5.1);
+REST bodies recorded as their own unit kind by an additive recorder mode; run
+from `scripts/`, reaching GitHub through `GitHubSource.transport`; Steps 4 and 5 reuse it.
+
+Tests through 3b-2a's scenario model, extended to render the timeline lookup's responses from
+each PR's draft and link history (the timeline recordings join the model's round-trip test), and
+fake GitHub: each verify class, each overlapping pair of classes taking the first in the 5.4
+order, a stale item, verify's repository set, its child-count checks (each by a planted row
+deletion), an unverified repository, a `CLOSED` PR whose `closedAt` falls on each side of the
+floor, verify's head check refusing an older revision, an empty file, and a missing path before
+any request and without creating a file, verify exiting 1 while a sync run holds the lock (5.4), a
+verify started before a sync's claim reading beside the sync's item commits without blocking them
+(gap 77), a verify reaching `--max-minutes` exiting 1, and its report written on exit 1. The
+timeline lookup through the replay: a connected event naming the differing issue, one naming
+another issue, a link difference made by a closing keyword with no event, a synthetic
+disconnected event, a filtered page whose `totalCount` differs from its entries, and a lookup
+spanning two pages whose second page's `filteredCount` counts only the entries after its cursor
+(5.8). The REST sampler's offline tests as its scope lists them.
 
 Acceptance: `sync --repo` and `verify --exact --repo` on Prebid.js, salesagent, and prebid-server
 (without `--repo`, verify would report the other configured repositories as not synced); a REST
@@ -1714,6 +1758,8 @@ Measured 2026-10-16 unless noted. "Index" means the created-order enumeration in
 | Null-author comments | `Prebid.js#12975`: PR author null; 1 of its 2 conversation comments has a null author | live query |
 | Dismissed verdicts | `prebid-server-java#4637`: Lightwood13 submitted CHANGES_REQUESTED (5276426920), then a review now DISMISSED (5289072517); `latestOpinionatedReviews` lists only the two APPROVED reviewers. A rule taking the latest APPROVED or CHANGES_REQUESTED review would report CHANGES_REQUESTED | live query |
 | Late closing links | `prebid-server-java#4380`, `#4350`, `#4397`: a `ConnectedEvent` on 2026-08-14 linked an issue months after merge, and the PR's `updatedAt` did not change. Adding `fullDatabaseId`, `authorAssociation`, and `closingIssuesReferences(first: 10)` with `nameWithOwner` keeps an index page at 1 point | timeline scan; live index page and `rateLimit(dryRun: true)` |
+| Closing-link timeline events | Over the 100 most recent PRs each of Prebid.js, prebid-server-java, and prebid-server (2026-10-19), the `ConnectedEvent` subjects of each of the 48 PRs with closing links equal its user-linked issues (`userLinkedOnly: true`); each event's `source` is the PR and its `subject` the issue. None of the 30 links made only by a closing keyword has an event, nor does `Prebid.js#12975`'s ("Closes #12914"), read separately; no `DisconnectedEvent` occurs. `filteredCount` equals the filtered entries on all 300, each a single page. On a later page `filteredCount` counts only the items after its cursor (`Prebid.js#15694`, `ISSUE_COMMENT`, two entries per page: 11 on the first page, 9 on the second). `totalCount` is the same with and without `itemTypes` and is not the number of entries returned (56 on `prebid-server-java#4380`, whose unfiltered timeline returns 66 entries and one connected event) | `timelineItems(itemTypes: [CONNECTED_EVENT, DISCONNECTED_EVENT])` beside both closing lists, and `ISSUE_COMMENT` pages, live |
+| Copilot review requests | In 3 of the last 60 Prebid.js PRs, and none of the last 60 of prebid-server or prebid-server-java (2026-10-19), each `ReviewRequestedEvent` for Copilot names the bot `copilot-pull-request-reviewer` (`BOT_kgDOCnlnWA`, `databaseId` 175728472), the account that writes its review; no other Copilot account appears. A pending request was not caught | `reviews`, `reviewRequests`, and `timelineItems(itemTypes: [REVIEW_REQUESTED_EVENT, REVIEW_REQUEST_REMOVED_EVENT])`, live |
 | Label renames | The prebid-mobile-ios label "4.0 In-App Platfrom" became "4.0 In-App Platform"; issue #1030, which carries it, kept its `updatedAt` | REST events; live query |
 | Author association | GraphQL and REST agree on 100 of 100 PRs; on Prebid.js, the earliest merged PR of each of 60 recent first-time authors reads CONTRIBUTOR (59) or MEMBER (1), not FIRST_TIME_CONTRIBUTOR, so the value is computed when read, not stored at creation. `Prebid.js#15715`, merged, whose commits link to no account, still reads FIRST_TIME_CONTRIBUTOR (GitHub: "Author has not previously committed to the repository.") | live queries; introspection |
 | Issue transfer | `prebid.github.io#6053`, transferred from Prebid.js on 2025-05-23, has `databaseId` 3087307383, in the range of issues created that day rather than of its July 2024 creation; GraphQL returns `NOT_FOUND` for `Prebid.js#13150`, while REST follows that number to `prebid.github.io#6052` | live query; REST |
@@ -1806,9 +1852,9 @@ Measured 2026-10-16 unless noted. "Index" means the created-order enumeration in
 | Compare fallback on a PR whose head fork was deleted (only a live fork tested) | A count mismatch fails the item; Step 5 reports any |
 | Full bootstrap time, cost, and size are projections from two repositories | Step 5 measures them |
 | Overflow continuations per request (25), the server retry delays (2, 4, 8 s), the reset margin (1 s), retry jitter (25%), the index boundary margin (60 s), the budget reserves (100 points, 100 calls), the longest accepted rate-limit wait (65 min), and the HTTP timeouts (read 30 s, connect 10 s) are chosen, not measured | Step 5 records secondary-limit responses, budget readings, and request times at these values |
-| Whether Prebid.js, salesagent, or prebid-server holds an in-coverage dismissed review (the plan's example, `prebid-server-java#4637`, is in none of them) | Step 3b-2's acceptance queries its database; without one, prebid-server-java joins the acceptance run |
-| Whether REST compare and GraphQL give one account's node id in the same form (the recordings use the `MDQ6...` form in both); a lookup checks the returned id against the requested one | A mismatch fails the waiting item, which exit 2 makes visible; Step 3b-2's acceptance reports any |
-| The cost of one commit per item in rollback-journal mode, and of a live Step 3b-2 acceptance run (not measured) | Step 3b-2's acceptance records its points, REST calls, and time; Step 5 measures the full run |
+| Whether Prebid.js, salesagent, or prebid-server holds an in-coverage dismissed review (the plan's example, `prebid-server-java#4637`, is in none of them) | Step 3b-2b's acceptance queries its database; without one, prebid-server-java joins the acceptance run |
+| Whether REST compare and GraphQL give one account's node id in the same form (the recordings use the `MDQ6...` form in both); a lookup checks the returned id against the requested one | A mismatch fails the waiting item, which exit 2 makes visible; Step 3b-2a's acceptance reports any |
+| The cost of one commit per item in rollback-journal mode, and of a live Step 3b-2a acceptance run (not measured) | Step 3b-2a's acceptance records its points, REST calls, and time; Step 5 measures the full run |
 | Whether the activity log's 2023-03-07 start is fixed or a rolling window (seen on two repositories) | Step 4b records each repository's first logged event; it reads the whole log every run, so an event that ages out leaves the database as GitHub stops listing it (D7) |
 | Whether `history(since:)` filters on the committed or the authored date (only its `totalCount` was read) | Step 4b's recordings settle it before the coverage rule's wording for commits is final |
 | Whether REST compare caps the `files` it returns for a large push (not measured) | Step 4b measures it on its largest recorded push and stores a count only where GitHub reports one |
@@ -1816,12 +1862,13 @@ Measured 2026-10-16 unless noted. "Index" means the created-order enumeration in
 | How a rebase merge appears in the activity log: whether its `pr_merge` event's `after` is the PR's `mergeCommit.oid` and its other commits come through the compare (the measured repositories hold merge-commit and squash merges only) | Step 4b records one on a tracked repository that allows rebase merges, before D30's join wording is final |
 | Whether GitHub returns `EnterpriseUserAccount.id` to a token without the `read:enterprise` scope (the dry run validated the document; no tracked repository has such an actor yet) | Step 3b-1 tests the synthetic actor. A live occurrence decides between two outcomes (a prediction): an error at the alias's path is an item failure (exit 2), and an error without a path is fatal (5.3 step 4, exit 1), which Step 5's bootstrap would surface |
 | Whether the scheduled App token can read every resolve field the token used here read (`diskUsage`, `webCommitSignoffRequired`, `hasVulnerabilityAlertsEnabled`, and `planFeatures` included) | Step 6b's first manual run; a field it cannot read is an error 5.3 step 4 classifies |
-| Which connected or disconnected timeline event matches a closing-link difference, and whether a link made by a closing keyword produces one (verify, 5.4) | A live timeline probe before verify's document is written in Step 3b-2 |
-| Whether GitHub changes a PR's `updatedAt` when it recomputes the merge state (not measured; the stored merge state is as of `hydrated_at` either way, 5.1) | Passive observation in Step 3b-2: an open PR's `updatedAt` and `mergeStateStatus` read before and after a merge to its base branch that someone else made |
+| A `DisconnectedEvent`'s `source` and `subject` (none in the 300 PRs read for section 7, "Closing-link timeline events"; GitHub's schema gives it `ConnectedEvent`'s fields) | Step 3b-2b tests a synthetic one; a live one is recorded when seen |
+| Whether a closing-keyword link can change without the PR's `updatedAt` changing (an issue transfer or deletion, a body edit, a base-ref or default-branch change); 5.4 then reports the difference as an error | Step 3b-2b's acceptance lists each such error with its PR and link; Step 5 reports any |
+| Whether a pending `reviewRequests` entry for Copilot carries `BOT_kgDOCnlnWA` (the review-request events and the reviews do; no pending request was seen, section 7, "Copilot review requests") | Step 3b-2a's acceptance reports any Copilot request row; a second node id for `databaseId` 175728472 would need a writer rule before Step 5 |
+| Whether GitHub changes a PR's `updatedAt` when it recomputes the merge state (not measured; the stored merge state is as of `hydrated_at` either way, 5.1) | Passive observation in Step 3b-2a's acceptance: an open PR's `updatedAt` and `mergeStateStatus` read before and after a merge to its base branch that someone else made |
 | Whether to collect a `Mannequin`'s `email` ("The mannequin's email on the source instance"; the maintainer's profile decision named users and organizations only, and no mannequin was available to read, so whether GitHub requires a scope for it is unmeasured) | The maintainer decides; a live read on a mannequin comes first |
 | Whether GitHub returns an `EnterpriseUserAccount`'s `enterprise` to the tokens used (an `Enterprise` object; no tracked repository has such an actor) | Not selected until a live occurrence is read |
 | Whether GitHub returns an `EnterpriseTeam` requested reviewer's `id`, `fullDatabaseId`, and `slug` to the tokens used (the batch with them dry-runs at 2 points; no tracked repository has such a request) | Step 3b-1 tests a synthetic one; a live occurrence decides, as for `EnterpriseUserAccount.id`: an error at the alias's path fails the item (exit 2) |
-| Whether a `Copilot` requested reviewer is the account that reviews as `copilot-pull-request-reviewer` (`databaseId` 175728472) under the same node id (only the reviewer was seen, in the last 40 Prebid.js PRs); `github_users` holds one unique `node_id` per `github_id` (5.1), so two node ids for one `databaseId` would need a rule in Step 3b-2's writer | Read live on a PR with Copilot requested before Step 3b-2's writer is written |
 | Whether the scheduled App token reads a `Team` requested reviewer and an `Organization` assignee as the token used here does (null or FORBIDDEN not measured) | Step 6b's first manual run; a FORBIDDEN fails the item, which 5.3 step 4 classifies |
 | `--help` anywhere on a command line, or `--version` before the subcommand, exits 0 without doing any work (click's eager options), the code D25 publishes on, so a workflow input that expands to either would publish the unchanged database | Step 6's workflow passes inputs as validated option values, never as raw arguments |
 
