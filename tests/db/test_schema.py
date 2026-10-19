@@ -223,6 +223,22 @@ class TestViews:
             "differs v_github_users",
         ]
 
+    def test_whitespace_inside_a_literal_is_a_difference(
+        self, head_template: Path, tmp_path: Path
+    ) -> None:
+        tampered = _tampered(
+            head_template,
+            tmp_path / "tampered.db",
+            "CREATE VIEW v_literal AS SELECT 'a  b' AS value",
+            "CREATE VIEW v_kept AS SELECT 'a b' AS value",
+        )
+        frozen = {
+            **frozen_views(alembic_config(head_template)),
+            "v_literal": "\nCREATE VIEW v_literal AS SELECT 'a b' AS value\n",
+            "v_kept": "\nCREATE VIEW v_kept AS SELECT 'a b' AS value\n",
+        }
+        assert view_differences(tampered, frozen) == ["differs v_literal"]
+
 
 class TestObjectsOutsideTheComparison:
     """schema_of reads tables and the indexes and triggers on them, view_differences the views;

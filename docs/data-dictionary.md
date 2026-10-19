@@ -20,9 +20,11 @@ entry here, or an entry names one that does not exist.
   and changes when the repository is renamed.
 - `PRAGMA user_version` holds the schema version (`SCHEMA_VERSION` in
   `src/github_activity_db/db/schema.py`). It is bumped when a consumer column is removed,
-  renamed, or changes meaning, or a view's rows or derivation change; an added table column,
-  table, or view does not bump it. `tests/schema_versions.json` lists each version's consumer
-  columns and, from version 2, the SHA-256 of each view's SQL; on pull requests CI fails when an
+  renamed, or changes meaning, or a view's frozen SQL changes (its rows, its derivation, or its
+  layout alone); an added table column, table, or view does not bump it.
+  `tests/schema_versions.json` lists each version's consumer columns and, from version 2, the
+  SHA-256 of each view's SQL exactly as its migration embeds it (SQLite stores that text without
+  its leading and trailing line breaks); on pull requests CI fails when an
   entry, a column of one, or a view digest of one that exists on the base branch is removed or
   changed.
 - Timestamps are UTC, stored as `YYYY-MM-DD HH:MM:SS.ffffff` text, so text order is time order.
@@ -433,7 +435,9 @@ Items a time-limited run planned but did not reach: an in-coverage item not yet 
 
 ### `sync_failures`
 
-Items whose last hydration failed; a row is deleted when the item succeeds.
+Items whose latest attempt failed, in a hydration or in the planner's check of an index entry
+(redesign plan 5.3 step 3). The next run plans the item again; its row is deleted when the item is
+written, or when the item leaves coverage.
 
 | Column | Use | Meaning |
 |--------|-----|---------|

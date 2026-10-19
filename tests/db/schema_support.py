@@ -240,13 +240,15 @@ def frozen_views(config: Config) -> dict[str, str]:
 
 
 def view_differences(database: Path, frozen: dict[str, str]) -> list[str]:
-    """Views missing, extra, or whose SQL differs from ``frozen``, whitespace aside."""
+    """Views missing, extra, or whose SQL differs from ``frozen``. SQLite stores a view's SQL as
+    written, without its leading and trailing whitespace; nothing else is normalized, since
+    whitespace inside a literal changes a view's rows."""
     present = views(database)
     differences = [f"missing {name}" for name in sorted(frozen.keys() - present.keys())]
     differences += [f"not frozen {name}" for name in sorted(present.keys() - frozen.keys())]
     differences += [
         f"differs {name}"
         for name in sorted(frozen.keys() & present.keys())
-        if normalized(frozen[name]) != normalized(present[name])
+        if frozen[name].strip() != present[name]
     ]
     return differences

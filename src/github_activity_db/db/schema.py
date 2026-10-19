@@ -10,8 +10,8 @@ from __future__ import annotations
 from typing import Final
 
 # PRAGMA user_version of a database at head (redesign plan 5.1). Bumped when a consumer column is
-# removed, renamed, or changes meaning, or a consumer view's rows or derivation change, never for
-# an added table column, table, or view; the newest migration sets it.
+# removed, renamed, or changes meaning, or a consumer view's frozen SQL changes (layout alone
+# included), never for an added table column, table, or view; the newest migration sets it.
 SCHEMA_VERSION: Final = 2
 
 # Every migration revision id, oldest first.
