@@ -36,6 +36,7 @@ import re
 import shutil
 import subprocess
 import sys
+from collections import Counter
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -54,8 +55,8 @@ class RepeatedKey(ValueError):
 
 def _unique_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
     """A JSON object whose keys are distinct."""
-    keys = [key for key, _ in pairs]
-    if repeated := sorted({key for key in keys if keys.count(key) > 1}):
+    counts = Counter(key for key, _ in pairs)
+    if repeated := sorted(key for key, count in counts.items() if count > 1):
         raise RepeatedKey(f"key listed twice: {', '.join(repeated)}")
     return dict(pairs)
 
