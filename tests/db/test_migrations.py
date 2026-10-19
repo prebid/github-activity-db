@@ -414,6 +414,30 @@ class TestStep3b1Migration:
             table_definitions(changed)["pr_files"] != table_definitions(step3a_database)["pr_files"]
         )
 
+    def test_the_definition_reading_sees_a_literal_s_whitespace(
+        self, step3a_database: Path, tmp_path: Path
+    ) -> None:
+        """Whitespace inside a literal is data: a CHECK on 'a b' and one on 'a  b' differ."""
+
+        def defined(literal: str, name: str) -> str:
+            copy = tmp_path / f"{name}.db"
+            shutil.copyfile(step3a_database, copy)
+            with closing(sqlite3.connect(copy)) as connection, connection:
+                ((sql,),) = connection.execute(
+                    "SELECT sql FROM sqlite_master WHERE name = 'pr_files'"
+                ).fetchall()
+                assert "path TEXT NOT NULL" in sql
+                connection.execute("DROP TABLE pr_files")
+                connection.execute(
+                    sql.replace(
+                        "path TEXT NOT NULL", f"path TEXT NOT NULL CHECK (path != {literal})"
+                    )
+                )
+            return table_definitions(copy)["pr_files"]
+
+        assert defined("'a b'", "one") == defined("'a b'", "again")
+        assert defined("'a  b'", "two") != defined("'a b'", "one")
+
 
 def table_definitions(database: Path) -> dict[str, str]:
     """Each table's CREATE statement as SQLite stores it, alembic's own table excluded."""

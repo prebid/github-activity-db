@@ -1,7 +1,9 @@
 """Structural readings of a SQLite schema, for comparing a migrated database with the models.
 
-SQL text is compared exactly, apart from leading and trailing whitespace: whitespace inside a
-quoted literal is data, so collapsing it could hide a changed CHECK, index, trigger, or view.
+Index, trigger, and view SQL is compared exactly, apart from leading and trailing whitespace; a
+table's definition by the items of its body, sorted, each exact apart from its ends (column order
+and table options are read by pragmas). Whitespace inside a quoted literal is data, so collapsing
+it could hide a changed CHECK, index, trigger, or view.
 """
 
 from __future__ import annotations

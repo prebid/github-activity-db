@@ -180,6 +180,38 @@ class TestModelsComparison:
         two = _tampered(head_template, tmp_path / "two.db", *second)
         assert schema_of(one)["pr_labels"] != schema_of(two)["pr_labels"]
 
+    @pytest.mark.parametrize("kind", ["check", "index", "trigger"])
+    def test_whitespace_inside_a_literal_is_a_difference(
+        self, head_template: Path, tmp_path: Path, kind: str
+    ) -> None:
+        """Two schemas whose SQL differs only in a literal's whitespace read differently."""
+
+        def read(literal: str, name: str) -> dict[str, Any]:
+            statements: tuple[str, ...]
+            if kind == "check":
+                statements = _redefined(
+                    head_template,
+                    "pr_files",
+                    "path TEXT NOT NULL",
+                    f"path TEXT NOT NULL CHECK (path != {literal})",
+                )
+            elif kind == "index":
+                statements = (f"CREATE INDEX ix_probe ON pr_files (path) WHERE path != {literal}",)
+            else:
+                statements = (
+                    "CREATE TRIGGER tr_probe BEFORE INSERT ON pr_files "
+                    f"BEGIN SELECT RAISE(ABORT, {literal}); END",
+                )
+            tampered = _tampered(head_template, tmp_path / f"{name}.db", *statements)
+            return schema_of(tampered)["pr_files"]
+
+        one, again, two = read("'a b'", "one"), read("'a b'", "again"), read("'a  b'", "two")
+        assert one == again
+        # The difference is read where the kind's SQL is: a table's items, an index, a trigger.
+        assert [key for key in one if one[key] != two[key]] == [
+            {"check": "definition", "index": "indexes", "trigger": "triggers"}[kind]
+        ]
+
     @pytest.mark.parametrize("option", ["STRICT", "WITHOUT ROWID"])
     def test_a_table_option_is_reported(
         self, head_template: Path, models_database: Path, tmp_path: Path, option: str
@@ -458,34 +490,6 @@ class TestPlanRules:
             {("pr_reviews", "editor_id", "CASCADE")},
             OUTSIDE_THE_DELETE_RULE,
         )
-
-    @pytest.mark.parametrize("kind", ["check", "index", "trigger"])
-    def test_whitespace_inside_a_literal_is_a_difference(
-        self, head_template: Path, tmp_path: Path, kind: str
-    ) -> None:
-        """Two schemas whose SQL differs only in a literal's whitespace read differently."""
-
-        def read(literal: str, name: str) -> dict[str, Any]:
-            statements: tuple[str, ...]
-            if kind == "check":
-                statements = _redefined(
-                    head_template,
-                    "pr_files",
-                    "path TEXT NOT NULL",
-                    f"path TEXT NOT NULL CHECK (path != {literal})",
-                )
-            elif kind == "index":
-                statements = (f"CREATE INDEX ix_probe ON pr_files (path) WHERE path != {literal}",)
-            else:
-                statements = (
-                    "CREATE TRIGGER tr_probe BEFORE INSERT ON pr_files "
-                    f"BEGIN SELECT RAISE(ABORT, {literal}); END",
-                )
-            tampered = _tampered(head_template, tmp_path / f"{name}.db", *statements)
-            return schema_of(tampered)["pr_files"]
-
-        assert read("'a b'", "one") == read("'a b'", "again")
-        assert read("'a  b'", "two") != read("'a b'", "one")
 
     def test_the_cascade_exceptions_are_the_primary_key_references(
         self, head_template: Path
