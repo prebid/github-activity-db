@@ -99,7 +99,6 @@ ignore = [
 "tests/**/*.py" = ["S101", "S105", "S106", "S603", "S608"]
 "scripts/check_junit.py" = ["S314"]  # parses the report pytest wrote earlier in the same job
 "scripts/check_query_lock.py" = ["S603"]  # runs git with a fixed argument list
-"src/github_activity_db/sync/runs.py" = ["S603", "S607"]  # code_version: git from PATH, fixed arguments
 
 [tool.ruff.lint.isort]
 known-first-party = ["github_activity_db"]

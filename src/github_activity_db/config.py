@@ -7,7 +7,11 @@ from typing import Literal
 from pydantic import BaseModel, Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from github_activity_db.tracking import load_tracking_config
+from github_activity_db.tracking import (
+    TrackingConfigFile,
+    load_tracking_config,
+    read_tracking_config,
+)
 
 
 class LoggingConfig(BaseModel):
@@ -103,6 +107,10 @@ class Settings(BaseSettings):
     def tracked_repos(self) -> list[str]:
         """Tracked repositories in owner/name form, in tracking.toml order."""
         return load_tracking_config(self.tracking_config_path).full_names
+
+    def tracking_config(self) -> TrackingConfigFile:
+        """The tracking.toml a run reads, with its source and digest (gap 88)."""
+        return read_tracking_config(self.tracking_config_path)
 
 
 @lru_cache

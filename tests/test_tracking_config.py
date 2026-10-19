@@ -492,5 +492,20 @@ class TestReadTrackingConfig:
         path = _write(tmp_path, COVERAGE + ONE_REPO)
         monkeypatch.chdir(tmp_path)
         loaded = read_tracking_config(Path("tracking.toml"))
-        assert loaded.source == str(path.resolve())
+        assert loaded.source == str(Path.cwd() / "tracking.toml")
         assert loaded.sha256 == hashlib.sha256(path.read_bytes()).hexdigest()
+
+    def test_a_symlink_is_recorded_as_configured_not_as_its_target(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """5.1: config_source is the TRACKING_CONFIG_PATH path, made absolute."""
+        import hashlib
+
+        from github_activity_db.tracking import read_tracking_config
+
+        target = _write(tmp_path, COVERAGE + ONE_REPO)
+        (tmp_path / "link.toml").symlink_to(target)
+        monkeypatch.chdir(tmp_path)
+        loaded = read_tracking_config(Path("link.toml"))
+        assert loaded.source == str(Path.cwd() / "link.toml")
+        assert loaded.sha256 == hashlib.sha256(target.read_bytes()).hexdigest()

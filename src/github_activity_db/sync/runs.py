@@ -5,6 +5,7 @@ The engine passes every time it stamps; nothing here reads the clock.
 
 from __future__ import annotations
 
+import shutil
 import subprocess
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
@@ -289,11 +290,15 @@ async def close_run(
     """Step 8 and the close in one transaction, written only while the row is ``running``.
 
     Each outcome writes ``last_run_id`` and ``last_outcome`` and the columns it carries for a
-    repository still stored; a fatal or interrupted close passes ``failed`` outcomes with nothing
-    else, so ``last_index_started_at`` and ``sync_pending`` stay as they were (plan 5.3 step 8).
+    repository still stored. A fatal or interrupted close passes ``failed`` outcomes carrying at
+    most step 7's result, so ``last_index_started_at``, ``index_pr_total``, ``sync_pending``, and
+    ``last_success_at`` stay as they were, while a halt step 7 reached, or its clearing, is kept
+    beside the deletions that step committed (plan 5.1 ``halt_reason``, 5.3 step 8).
 
     Raises:
-        ValueError: an outcome marks success without ``complete``, or names a repository twice.
+        ValueError: an outcome marks success without ``complete`` or names a repository twice, or
+            a ``failed`` or ``aborted`` close carries an outcome other than ``failed``, or an
+            index, pending items, or success.
     """
     ids = [outcome.repository_github_id for outcome in outcomes]
     if len(set(ids)) != len(ids):
@@ -302,6 +307,16 @@ async def close_run(
         if outcome.succeeded and outcome.last_outcome != "complete":
             raise ValueError(
                 f"repository {outcome.repository_github_id}: success needs last_outcome complete"
+            )
+        if status in ("failed", "aborted") and (
+            outcome.last_outcome != "failed"
+            or outcome.index is not None
+            or outcome.pending is not None
+            or outcome.succeeded
+        ):
+            raise ValueError(
+                f"repository {outcome.repository_github_id}: a {status} close writes "
+                "last_outcome failed and at most step 7's result (plan 5.3 step 8)"
             )
     try:
         async with transaction(connection):
@@ -425,9 +440,13 @@ def code_version(package_dir: Path, environ: Mapping[str, str]) -> str:
 
 def _git(directory: Path, *args: str) -> str | None:
     """git's output, or None when git is missing, fails, or exceeds the timeout."""
+    git = shutil.which("git")
+    if git is None:
+        return None
     try:
-        result = subprocess.run(
-            ["git", "-C", str(directory), *args],
+        # A fixed argument list naming git by its resolved path; no shell.
+        result = subprocess.run(  # noqa: S603
+            [git, "-C", str(directory), *args],
             capture_output=True,
             text=True,
             timeout=GIT_TIMEOUT_SECONDS,

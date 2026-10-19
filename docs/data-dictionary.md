@@ -397,7 +397,7 @@ One row per sync run.
 | `exit_code` | consumer | The run's exit code; null while it runs, and on a row another process marked `aborted` |
 | `trigger` | consumer | `schedule` or `workflow_dispatch` from the Actions event, else `manual` |
 | `code_version` | consumer | `GITHUB_SHA`; else the commit of the git checkout the package ran from, with `-dirty` when its tracked files had changes; else the package version |
-| `config_source` | consumer | `packaged`, or the `TRACKING_CONFIG_PATH` path the run read |
+| `config_source` | consumer | `packaged`, or the `TRACKING_CONFIG_PATH` path the run read, made absolute without following symlinks |
 | `config_sha256` | consumer | SHA-256 of the `tracking.toml` bytes the run read |
 | `graphql_points` | internal | GraphQL rate-limit points spent |
 | `rest_calls` | internal | REST requests sent |

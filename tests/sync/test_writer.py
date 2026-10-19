@@ -2,17 +2,23 @@
 
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
+from dataclasses import replace
 from datetime import timedelta
 from pathlib import Path
 from typing import Any
 
 import pytest
 from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncConnection
 
 from github_activity_db.source.records import (
+    ConnectionTotals,
     FileChange,
+    LinkedClosingIssue,
     Milestone,
     OrganizationProfile,
+    RepositoryLabel,
     Stack,
     StackEntry,
     UserProfile,
@@ -73,6 +79,8 @@ from tests.sync.records import (
 
 ALICE = account("alice", 101)
 BOB = account("bob", 102)
+CAROL = account("carol", 103)
+DAVE = account("dave", 104)
 DEPENDABOT = account("dependabot", 49699333, "Bot", node_id="MDM6Qm90NDk2OTkzMzM=")
 JS = repository()
 
@@ -116,6 +124,23 @@ class Writer:
         (row,) = self.rows("SELECT * FROM pull_requests WHERE number = ?", number)
         return row
 
+    def without_ids(self, table: str) -> list[dict[str, Any]]:
+        """A table's rows with their own row id dropped, in id order."""
+        rows = self.rows(f"SELECT * FROM {table} ORDER BY id")
+        for row in rows:
+            assert isinstance(row.pop("id"), int)
+        return rows
+
+    def dump(self) -> dict[str, list[str]]:
+        """Every table's rows, for comparing the whole file before and after."""
+        tables = self.rows("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name")
+        return {
+            table["name"]: sorted(
+                repr(sorted(row.items())) for row in self.rows(f"SELECT * FROM {table['name']}")
+            )
+            for table in tables
+        }
+
 
 @pytest.fixture
 def w(migrated_database: Path) -> Writer:
@@ -126,36 +151,110 @@ def w(migrated_database: Path) -> Writer:
 # Step 1: repositories
 # --------------------------------------------------------------------------------------------
 async def test_a_repository_is_written_tracked_with_its_group_and_labels(w: Writer) -> None:
-    record = repository(labels=[("LA_1", "bug"), ("LA_2", "feature")])
+    """Every column, from a record whose values differ column to column where they can."""
+    record = replace(
+        repository(
+            description="a repository",
+            homepage_url="https://prebid.org",
+            is_security_policy_enabled=True,
+            updated_at=T0 - timedelta(hours=1),
+            pushed_at=T0 - timedelta(hours=2),
+            fork_count=3,
+        ),
+        labels=(
+            RepositoryLabel(
+                node_id="LA_1",
+                name="bug",
+                color="d73a4a",
+                description="Something is broken",
+                is_default=True,
+                created_at=T0 - timedelta(days=5),
+                updated_at=T0 - timedelta(days=4),
+            ),
+            RepositoryLabel(
+                node_id="LA_2",
+                name="feature",
+                color="a2eeef",
+                description=None,
+                is_default=False,
+                created_at=T0 - timedelta(days=3),
+                updated_at=None,
+            ),
+        ),
+        labels_total=2,
+    )
     result = await w.repository(record, group="Client")
     assert (result.inserted, result.default_branch_changed) == (True, False)
-    (row,) = w.rows("SELECT * FROM repositories")
-    assert row["id"] == result.row_id
-    expected = {
-        "github_id": 11,
-        "node_id": "R_11",
-        "owner": "prebid",
-        "name": "Prebid.js",
-        "full_name": "prebid/Prebid.js",
-        "repo_group": "Client",
-        "is_tracked": 1,
-        "default_branch": "master",
-        "labels_total": 2,
-        "resolved_at": ts(T0),
-        "visibility": "PUBLIC",
-        "primary_language": "JavaScript",
-        "license_spdx_id": "Apache-2.0",
-        "homepage_url": None,
-        "pushed_at": ts(T0),
-        "archived_at": None,
-        "disk_usage": 100,
-        "rebase_merge_allowed": 0,
-        "plan_features_maximum_manual_review_requests": 15,
-    }
-    assert {key: row[key] for key in expected} == expected
-    assert w.rows("SELECT node_id, name, color, is_default FROM repo_labels ORDER BY node_id") == [
-        {"node_id": "LA_1", "name": "bug", "color": "ededed", "is_default": 0},
-        {"node_id": "LA_2", "name": "feature", "color": "ededed", "is_default": 0},
+    assert w.rows("SELECT * FROM repositories") == [
+        {
+            "id": result.row_id,
+            "github_id": 11,
+            "node_id": "R_11",
+            "owner": "prebid",
+            "name": "Prebid.js",
+            "full_name": "prebid/Prebid.js",
+            "repo_group": "Client",
+            "is_private": 0,
+            "is_archived": 0,
+            "default_branch": "master",
+            "labels_total": 2,
+            "is_tracked": 1,
+            "resolved_at": ts(T0),
+            "is_security_policy_enabled": 1,
+            "visibility": "PUBLIC",
+            "description": "a repository",
+            "homepage_url": "https://prebid.org",
+            "created_at": ts(T0 - timedelta(days=1000)),
+            "updated_at": ts(T0 - timedelta(hours=1)),
+            "pushed_at": ts(T0 - timedelta(hours=2)),
+            "archived_at": None,
+            "stargazer_count": 5,
+            "fork_count": 3,
+            "disk_usage": 100,
+            "forking_allowed": 1,
+            "allow_update_branch": 0,
+            "web_commit_signoff_required": 0,
+            "has_wiki_enabled": 1,
+            "has_discussions_enabled": 0,
+            "has_projects_enabled": 1,
+            "has_vulnerability_alerts_enabled": 1,
+            "uses_custom_open_graph_image": 0,
+            "merge_commit_allowed": 1,
+            "squash_merge_allowed": 1,
+            "rebase_merge_allowed": 0,
+            "delete_branch_on_merge": 1,
+            "merge_commit_title": "MERGE_MESSAGE",
+            "merge_commit_message": "PR_TITLE",
+            "squash_merge_commit_title": "COMMIT_OR_PR_TITLE",
+            "squash_merge_commit_message": "COMMIT_MESSAGES",
+            "primary_language": "JavaScript",
+            "license_spdx_id": "Apache-2.0",
+            "plan_features_codeowners": 1,
+            "plan_features_team_review_requests": 1,
+            "plan_features_maximum_manual_review_requests": 15,
+        }
+    ]
+    assert w.rows("SELECT * FROM repo_labels ORDER BY node_id") == [
+        {
+            "repository_id": result.row_id,
+            "node_id": "LA_1",
+            "name": "bug",
+            "color": "d73a4a",
+            "description": "Something is broken",
+            "is_default": 1,
+            "created_at": ts(T0 - timedelta(days=5)),
+            "updated_at": ts(T0 - timedelta(days=4)),
+        },
+        {
+            "repository_id": result.row_id,
+            "node_id": "LA_2",
+            "name": "feature",
+            "color": "a2eeef",
+            "description": None,
+            "is_default": 0,
+            "created_at": ts(T0 - timedelta(days=3)),
+            "updated_at": None,
+        },
     ]
 
 
@@ -260,12 +359,62 @@ async def test_the_tracked_repository_for_a_configured_name(w: Writer) -> None:
 # --------------------------------------------------------------------------------------------
 # The run guard
 # --------------------------------------------------------------------------------------------
-async def test_a_run_another_process_aborted_writes_nothing(w: Writer) -> None:
+GuardedCall = Callable[[AsyncConnection, int, int], Awaitable[object]]
+GUARDED: dict[str, GuardedCall] = {
+    "write_repository": lambda c, run, pr: write_repository(
+        c, run, repository(stargazer_count=99), group="Tools"
+    ),
+    "mark_untracked": lambda c, run, pr: mark_untracked(c, run, [11]),
+    "apply_in_place_updates": lambda c, run, pr: apply_in_place_updates(
+        c, run, [InPlaceUpdate(11, "pull_request", pr, 1, True, "CONTRIBUTOR")]
+    ),
+    "write_pull_request": lambda c, run, pr: write_pull_request(
+        c, run, pull_request(2, 20, author=BOB), repository_github_id=11, links={}
+    ),
+    "write_lookup-found": lambda c, run, pr: write_lookup(
+        c, run, "N_alice", Found(looked_up(ALICE, name="New"), T0 + timedelta(days=1))
+    ),
+    "write_lookup-not-found": lambda c, run, pr: write_lookup(
+        c, run, "N_alice", NotFound(T0 + timedelta(days=1))
+    ),
+    "record_failure": lambda c, run, pr: record_failure(
+        c,
+        run,
+        repository_github_id=11,
+        number=9,
+        error=ValueError("x"),
+        failed_at=T0,
+        run_started_at=T0,
+    ),
+    "apply_item_deletions": lambda c, run, pr: apply_item_deletions(
+        c, run, _deletions((pr,), (10,), runs=True)
+    ),
+    "prune_repositories": lambda c, run, pr: prune_repositories(c, run, [12]),
+}
+
+
+@pytest.mark.parametrize("call", list(GUARDED.values()), ids=list(GUARDED))
+async def test_a_run_another_process_aborted_writes_nothing(w: Writer, call: GuardedCall) -> None:
+    """Each writer function checks the run's row before writing (5.3 step 6): aborted, the
+    file is unchanged; running again, the same call changes it."""
+    await w.repository()
+    await w.repository(repository(github_id=12, full_name="prebid/gone", node_id="R_12"))
+    pr = (await w.item(pull_request(1, 10, author=ALICE))).row_id
+    async with open_writer(_url(w.database)) as writer:
+        await mark_untracked(writer, w.run_id, [12])
     with connect(w.database) as connection:
         connection.execute(text("UPDATE sync_runs SET status = 'aborted'"))
+    before = w.dump()
     with pytest.raises(RunAborted):
-        await w.repository()
-    assert w.rows("SELECT count(*) AS n FROM repositories") == [{"n": 0}]
+        async with open_writer(_url(w.database)) as writer:
+            await call(writer, w.run_id, pr)
+    assert w.dump() == before
+    with connect(w.database) as connection:
+        connection.execute(text("UPDATE sync_runs SET status = 'running'"))
+    running = w.dump()
+    async with open_writer(_url(w.database)) as writer:
+        await call(writer, w.run_id, pr)
+    assert w.dump() != running
 
 
 # --------------------------------------------------------------------------------------------
@@ -291,105 +440,357 @@ async def test_in_place_updates_change_only_draft_and_association(w: Writer) -> 
 # --------------------------------------------------------------------------------------------
 # Step 6: an item
 # --------------------------------------------------------------------------------------------
-async def test_a_first_write_stores_the_record(w: Writer) -> None:
-    await w.repository()
+def _minutes(n: int) -> Any:
+    return T0 + timedelta(minutes=n)
+
+
+async def test_a_first_write_stores_every_column(w: Writer) -> None:
+    """Every column of the item, its child rows, and the accounts it sighted, from a record
+    whose values differ column to column where they can (5.1, 5.3 step 6). `changed_files` is
+    GitHub's figure, never the file rows' count, and each total is the record's."""
+    repository_id = (await w.repository()).row_id
     record = pull_request(
         7,
         70,
         author=ALICE,
         merged_by=BOB,
-        editor=BOB,
+        editor=CAROL,
         state="MERGED",
-        merged_at=T0,
-        closed_at=T0,
+        is_draft=False,
+        title="Add a bidder",
+        body="The body",
+        author_association="CONTRIBUTOR",
+        created_at=T0 - timedelta(days=3),
+        published_at=T0 - timedelta(days=2),
+        merged_at=_minutes(1),
+        closed_at=_minutes(2),
+        last_edited_at=T0 - timedelta(days=1),
+        includes_created_edit=True,
+        maintainer_can_modify=False,
         merge_commit_oid="m" * 40,
         milestone=Milestone(number=3, title="v9"),
         review_decision="APPROVED",
-        stack=Stack(node_id="S_1", number=4, size=2, base_ref_name="master"),
-        stack_entry=StackEntry(node_id="SE_1", position=1),
-        labels=[("LA_1", "bug")],
-        files=[FileChange("a.js", "MODIFIED", 1, 2), FileChange("a.js", "MODIFIED", 3, 4)],
-        closing_issues=[closing_issue(5, user_linked=True), closing_issue(6)],
-        reviews=[review(900, BOB, inline_comments_total=2)],
-        comments=[comment(800, ALICE)],
-        commits=[commit("s1", link(ALICE)), commit("s2", None)],
+        mergeable="CONFLICTING",
+        merge_state_status="DIRTY",
+        can_be_rebased=False,
+        stack=Stack(node_id="S_1", number=4, size=8, base_ref_name="stack-base"),
+        stack_entry=StackEntry(node_id="SE_1", position=5),
+        additions=31,
+        deletions=27,
+        changed_files=1,
+        total_comments_count=6,
+        labels=[("LA_1", "bug"), ("LA_2", "feature")],
+        files=[FileChange("a.js", "MODIFIED", 1, 2), FileChange("a.js", "RENAMED", 3, 4)],
+        closing_issues=[
+            LinkedClosingIssue(
+                repo_github_id=777,
+                repo_full_name="prebid/issues-a",
+                number=5,
+                github_id=90005,
+                user_linked=True,
+            ),
+            LinkedClosingIssue(
+                repo_github_id=778,
+                repo_full_name="prebid/issues-b",
+                number=6,
+                github_id=90006,
+                user_linked=False,
+            ),
+        ],
+        reviews=[
+            review(
+                900,
+                BOB,
+                state="CHANGES_REQUESTED",
+                created_at=_minutes(10),
+                submitted_at=_minutes(11),
+                published_at=_minutes(12),
+                updated_at=_minutes(13),
+                last_edited_at=_minutes(14),
+                editor=ALICE,
+                includes_created_edit=True,
+                commit_oid="c" * 40,
+                author_association="COLLABORATOR",
+                author_can_push_to_repository=False,
+                inline_comments_total=2,
+            )
+        ],
+        comments=[
+            comment(
+                800,
+                ALICE,
+                created_at=_minutes(20),
+                published_at=_minutes(21),
+                updated_at=_minutes(22),
+                last_edited_at=_minutes(23),
+                editor=BOB,
+                created_via_email=True,
+                includes_created_edit=False,
+                author_association="NONE",
+            )
+        ],
+        commits=[
+            commit(
+                "s1",
+                link(ALICE),
+                author_name="Alice A",
+                author_email="alice@example.com",
+                authored_at=_minutes(30),
+            ),
+            commit(
+                "s2",
+                None,
+                author_name="Someone",
+                author_email="someone@example.com",
+                authored_at=_minutes(31),
+            ),
+        ],
+        review_requests=[request_for(DAVE)],
+        assignees=[CAROL],
+        github_updated_at=_minutes(40),
+        totals=ConnectionTotals(
+            labels=11,
+            closing_issues=12,
+            user_linked_closing_issues=13,
+            reviews=14,
+            comments=15,
+            commits=16,
+            files=17,
+            review_requests=18,
+            assignees=19,
+        ),
     )
     written = await w.item(record)
-    row = w.pr(7)
-    assert row["id"] == written.row_id
-    expected = {
-        "github_id": 70,
-        "node_id": "PR_70",
-        "state": "MERGED",
-        "merged_at": ts(T0),
-        "closed_at": ts(T0),
-        "author_id": w.account_row("alice")["id"],
-        "author_reported": 1,
-        "merged_by_id": w.account_row("bob")["id"],
-        "merged_by_reported": 1,
-        "editor_id": w.account_row("bob")["id"],
-        "merge_commit_oid": "m" * 40,
-        "milestone_number": 3,
-        "milestone_title": "v9",
-        "review_decision": "APPROVED",
-        "stack_node_id": "S_1",
-        "stack_number": 4,
-        "stack_size": 2,
-        "stack_base_ref_name": "master",
-        "stack_entry_node_id": "SE_1",
-        "stack_position": 1,
-        "mergeable": "MERGEABLE",
-        "merge_state_status": "CLEAN",
-        "can_be_rebased": 1,
-        "potential_merge_commit_oid": "p" * 40,
-        "head_repo_github_id": 55,
-        "head_repo_full_name": "fork/Prebid.js",
-        "head_repo_owner_node_id": "O_fork",
-        "head_repo_owner_login": "fork",
-        "targets_default_branch": 1,
-        "files_total": 2,
-        "labels_total": 1,
-        "closing_issues_total": 2,
-        "user_linked_closing_issues_total": 1,
-        "reviews_total": 1,
-        "comments_total": 1,
-        "commits_total": 2,
-        "review_requests_total": 0,
-        "assignees_total": 0,
-        "github_updated_at": ts(T0),
-        "hydrated_at": ts(HYDRATED),
-        "hydration_version": 2,
-    }
-    assert {key: row[key] for key in expected} == expected
-    assert w.rows("SELECT ordinal, path, additions, deletions FROM pr_files ORDER BY ordinal") == [
-        {"ordinal": 0, "path": "a.js", "additions": 1, "deletions": 2},
-        {"ordinal": 1, "path": "a.js", "additions": 3, "deletions": 4},
+    pr = written.row_id
+    alice, bob, carol, dave = (
+        w.account_row(login)["id"] for login in ("alice", "bob", "carol", "dave")
+    )
+    assert w.rows("SELECT * FROM pull_requests") == [
+        {
+            "id": pr,
+            "repository_id": repository_id,
+            "number": 7,
+            "github_id": 70,
+            "node_id": "PR_70",
+            "state": "MERGED",
+            "is_draft": 0,
+            "title": "Add a bidder",
+            "body": "The body",
+            "author_id": alice,
+            "author_reported": 1,
+            "author_association": "CONTRIBUTOR",
+            "created_at": ts(T0 - timedelta(days=3)),
+            "merged_at": ts(_minutes(1)),
+            "closed_at": ts(_minutes(2)),
+            "published_at": ts(T0 - timedelta(days=2)),
+            "last_edited_at": ts(T0 - timedelta(days=1)),
+            "editor_id": carol,
+            "includes_created_edit": 1,
+            "maintainer_can_modify": 0,
+            "merged_by_id": bob,
+            "merged_by_reported": 1,
+            "base_ref": "master",
+            "base_ref_oid": "b" * 40,
+            "head_ref_name": "feature-7",
+            "head_ref_oid": "h" * 40,
+            "head_repo_github_id": 55,
+            "head_repo_full_name": "fork/Prebid.js",
+            "head_repo_owner_node_id": "O_fork",
+            "head_repo_owner_login": "fork",
+            "merge_commit_oid": "m" * 40,
+            "targets_default_branch": 1,
+            "is_cross_repository": 1,
+            "milestone_number": 3,
+            "milestone_title": "v9",
+            "review_decision": "APPROVED",
+            "mergeable": "CONFLICTING",
+            "merge_state_status": "DIRTY",
+            "can_be_rebased": 0,
+            "potential_merge_commit_oid": "p" * 40,
+            "stack_node_id": "S_1",
+            "stack_number": 4,
+            "stack_size": 8,
+            "stack_base_ref_name": "stack-base",
+            "stack_entry_node_id": "SE_1",
+            "stack_position": 5,
+            "additions": 31,
+            "deletions": 27,
+            "changed_files": 1,
+            "total_comments_count": 6,
+            "commits_total": 16,
+            "files_total": 17,
+            "reviews_total": 14,
+            "comments_total": 15,
+            "labels_total": 11,
+            "closing_issues_total": 12,
+            "user_linked_closing_issues_total": 13,
+            "review_requests_total": 18,
+            "assignees_total": 19,
+            "github_updated_at": ts(_minutes(40)),
+            "hydrated_at": ts(HYDRATED),
+            "hydration_version": 2,
+        }
     ]
-    assert w.rows("SELECT name, label_node_id FROM pr_labels") == [
-        {"name": "bug", "label_node_id": "LA_1"}
+    assert w.rows("SELECT * FROM pr_labels ORDER BY label_node_id") == [
+        {"pr_id": pr, "name": "bug", "label_node_id": "LA_1"},
+        {"pr_id": pr, "name": "feature", "label_node_id": "LA_2"},
     ]
-    assert w.rows(
-        "SELECT issue_number, issue_github_id, user_linked FROM pr_closing_issues "
-        "ORDER BY issue_number"
-    ) == [
-        {"issue_number": 5, "issue_github_id": 90005, "user_linked": 1},
-        {"issue_number": 6, "issue_github_id": 90006, "user_linked": 0},
+    assert w.rows("SELECT * FROM pr_files ORDER BY ordinal") == [
+        {
+            "pr_id": pr,
+            "ordinal": 0,
+            "path": "a.js",
+            "change_type": "MODIFIED",
+            "additions": 1,
+            "deletions": 2,
+        },
+        {
+            "pr_id": pr,
+            "ordinal": 1,
+            "path": "a.js",
+            "change_type": "RENAMED",
+            "additions": 3,
+            "deletions": 4,
+        },
     ]
-    assert w.rows(
-        "SELECT github_id, reviewer_id, reviewer_reported, inline_comments_total FROM pr_reviews"
-    ) == [
+    assert w.rows("SELECT * FROM pr_closing_issues ORDER BY issue_number") == [
+        {
+            "pr_id": pr,
+            "issue_repo_github_id": 777,
+            "issue_repo_full_name": "prebid/issues-a",
+            "issue_number": 5,
+            "issue_github_id": 90005,
+            "user_linked": 1,
+        },
+        {
+            "pr_id": pr,
+            "issue_repo_github_id": 778,
+            "issue_repo_full_name": "prebid/issues-b",
+            "issue_number": 6,
+            "issue_github_id": 90006,
+            "user_linked": 0,
+        },
+    ]
+    assert w.without_ids("pr_reviews") == [
         {
             "github_id": 900,
-            "reviewer_id": w.account_row("bob")["id"],
+            "node_id": "PRR_900",
+            "pr_id": pr,
+            "reviewer_id": bob,
             "reviewer_reported": 1,
+            "state": "CHANGES_REQUESTED",
+            "created_at": ts(_minutes(10)),
+            "submitted_at": ts(_minutes(11)),
+            "published_at": ts(_minutes(12)),
+            "updated_at": ts(_minutes(13)),
+            "last_edited_at": ts(_minutes(14)),
+            "editor_id": alice,
+            "includes_created_edit": 1,
+            "commit_oid": "c" * 40,
+            "author_association": "COLLABORATOR",
+            "author_can_push_to_repository": 0,
             "inline_comments_total": 2,
         }
     ]
-    assert w.rows("SELECT sha, author_id, linked_github_id FROM pr_commits ORDER BY sha") == [
-        {"sha": "s1", "author_id": w.account_row("alice")["id"], "linked_github_id": 101},
-        {"sha": "s2", "author_id": None, "linked_github_id": None},
+    assert w.without_ids("pr_comments") == [
+        {
+            "github_id": 800,
+            "node_id": "IC_800",
+            "pr_id": pr,
+            "author_id": alice,
+            "author_reported": 1,
+            "created_at": ts(_minutes(20)),
+            "published_at": ts(_minutes(21)),
+            "updated_at": ts(_minutes(22)),
+            "last_edited_at": ts(_minutes(23)),
+            "editor_id": bob,
+            "created_via_email": 1,
+            "includes_created_edit": 0,
+            "author_association": "NONE",
+        }
     ]
-    assert set(written.inserted_accounts) == {"N_alice", "N_bob"}
+    assert w.rows("SELECT * FROM pr_commits ORDER BY sha") == [
+        {
+            "pr_id": pr,
+            "sha": "s1",
+            "author_id": alice,
+            "linked_github_id": 101,
+            "author_name": "Alice A",
+            "author_email": "alice@example.com",
+            "authored_at": ts(_minutes(30)),
+        },
+        {
+            "pr_id": pr,
+            "sha": "s2",
+            "author_id": None,
+            "linked_github_id": None,
+            "author_name": "Someone",
+            "author_email": "someone@example.com",
+            "authored_at": ts(_minutes(31)),
+        },
+    ]
+    assert w.rows("SELECT * FROM pr_review_requests") == [
+        {
+            "pr_id": pr,
+            "ordinal": 0,
+            "request_github_id": 501,
+            "request_node_id": "RR_501",
+            "requested_type": "User",
+            "requested_github_id": 104,
+            "requested_node_id": "N_dave",
+            "account_id": dave,
+            "team_slug": None,
+            "as_code_owner": 0,
+        }
+    ]
+    assert w.rows("SELECT * FROM pr_assignees") == [{"pr_id": pr, "account_id": carol}]
+    assert w.without_ids("github_users") == [
+        {
+            "github_id": github_id,
+            "node_id": f"N_{login}",
+            "login": login,
+            "type": "User",
+            "name": None,
+            "created_at": None,
+            "updated_at": None,
+            "linked_user_github_id": None,
+            "claimant_github_id": None,
+            "refreshed_at": ts(HYDRATED),
+            "not_found_at": None,
+        }
+        for login, github_id in sorted(
+            (("alice", 101), ("bob", 102), ("carol", 103), ("dave", 104)),
+            key=lambda entry: w.account_row(entry[0])["id"],
+        )
+    ]
+    assert set(written.inserted_accounts) == {"N_alice", "N_bob", "N_carol", "N_dave"}
+
+
+async def test_a_closed_pull_request_and_its_reopening(w: Writer) -> None:
+    """D3: closed without a merge, it is stored as CLOSED; reopened, its row is updated."""
+    await w.repository()
+    closed = await w.item(pull_request(3, 30, state="CLOSED", closed_at=T0))
+    columns = ("id", "state", "closed_at", "merged_at", "merged_by_id", "hydrated_at")
+    assert {key: w.pr(3)[key] for key in columns} == {
+        "id": closed.row_id,
+        "state": "CLOSED",
+        "closed_at": ts(T0),
+        "merged_at": None,
+        "merged_by_id": None,
+        "hydrated_at": ts(HYDRATED),
+    }
+    reopened = await w.item(
+        pull_request(3, 30, state="OPEN", hydrated_at=HYDRATED + timedelta(days=1))
+    )
+    assert reopened.row_id == closed.row_id
+    assert {key: w.pr(3)[key] for key in columns} == {
+        "id": closed.row_id,
+        "state": "OPEN",
+        "closed_at": None,
+        "merged_at": None,
+        "merged_by_id": None,
+        "hydrated_at": ts(HYDRATED + timedelta(days=1)),
+    }
 
 
 async def test_an_account_sighting_inserts_and_never_relabels(w: Writer) -> None:
@@ -398,7 +799,7 @@ async def test_an_account_sighting_inserts_and_never_relabels(w: Writer) -> None
     await w.repository()
     copilot = account("Copilot", 175728472, "Bot", node_id="BOT_kgDOCnlnWA")
     await w.item(pull_request(1, 10, reviews=[review(900, copilot)]))
-    reviewer = account("copilot-pull-request-reviewer", 175728472, "Bot", node_id="BOT_kgDOCnlnWA")
+    reviewer = account("copilot-pull-request-reviewer", 175728472, "User", node_id="BOT_kgDOCnlnWA")
     await w.item(
         pull_request(
             2, 20, reviews=[review(901, reviewer)], hydrated_at=HYDRATED + timedelta(days=3)
@@ -456,6 +857,45 @@ async def test_a_node_stored_under_another_github_id_fails_the_item(w: Writer) -
     assert w.rows("SELECT number FROM pull_requests") == [{"number": 1}]
 
 
+async def test_a_second_node_id_another_account_holds_fails_the_item(w: Writer) -> None:
+    """github_id 7 is stored under N_a; GitHub reports it under N_b, which 8 holds."""
+    await w.repository()
+    await w.item(
+        pull_request(
+            1,
+            10,
+            author=account("a", 7, node_id="N_a"),
+            merged_by=account("b", 8, node_id="N_b"),
+        )
+    )
+    before = w.rows("SELECT * FROM github_users ORDER BY id")
+    with pytest.raises(
+        ItemConflict, match="node N_b is stored under github_id 8, GitHub reports 7"
+    ):
+        await w.item(pull_request(2, 20, author=account("a", 7, node_id="N_b")))
+    assert w.rows("SELECT number FROM pull_requests") == [{"number": 1}]
+    assert w.rows("SELECT * FROM github_users ORDER BY id") == before
+
+
+async def test_an_enterprise_sighting_of_a_node_stored_with_a_github_id_fails_the_item(
+    w: Writer,
+) -> None:
+    await w.repository()
+    await w.item(pull_request(1, 10, author=account("x", 7, node_id="EUA_1")))
+    with pytest.raises(
+        ItemConflict, match="node EUA_1 is stored as github_id 7, not as an EnterpriseUserAccount"
+    ):
+        await w.item(
+            pull_request(
+                2, 20, author=account("ent", None, "EnterpriseUserAccount", node_id="EUA_1")
+            )
+        )
+    assert w.rows("SELECT number FROM pull_requests") == [{"number": 1}]
+    assert w.rows("SELECT github_id, node_id, type FROM github_users") == [
+        {"github_id": 7, "node_id": "EUA_1", "type": "User"}
+    ]
+
+
 async def test_d28_keeps_references_github_returns_as_null(w: Writer) -> None:
     """A null author, merger, reviewer, and comment author keep the stored reference with
     `*_reported` false; a null commit link keeps the stored author with linked_github_id null;
@@ -475,6 +915,9 @@ async def test_d28_keeps_references_github_returns_as_null(w: Writer) -> None:
         commits=[commit("s1", link(ALICE))],
     )
     await w.item(first)
+    alice, bob = w.account_row("alice")["id"], w.account_row("bob")["id"]
+    assert w.rows("SELECT editor_id FROM pr_reviews") == [{"editor_id": alice}]
+    assert w.rows("SELECT editor_id FROM pr_comments") == [{"editor_id": bob}]
     again = pull_request(
         1,
         10,
@@ -490,7 +933,6 @@ async def test_d28_keeps_references_github_returns_as_null(w: Writer) -> None:
         hydrated_at=HYDRATED + timedelta(days=1),
     )
     await w.item(again)
-    alice, bob = w.account_row("alice")["id"], w.account_row("bob")["id"]
     row = w.pr(1)
     assert (
         row["author_id"],
@@ -513,6 +955,47 @@ async def test_d28_keeps_references_github_returns_as_null(w: Writer) -> None:
     ]
     assert w.rows("SELECT author_id, linked_github_id FROM pr_commits") == [
         {"author_id": alice, "linked_github_id": None}
+    ]
+
+
+async def test_d28_keeps_a_reference_only_from_the_same_review_comment_or_commit(
+    w: Writer,
+) -> None:
+    """A null actor takes the stored one of the row with the same review or comment id, or a
+    commit's of this PR's row with the same SHA, and no other (5.3 step 6)."""
+    await w.repository()
+    await w.item(
+        pull_request(
+            1,
+            10,
+            reviews=[review(900, BOB)],
+            comments=[comment(800, ALICE)],
+            commits=[commit("s1", link(ALICE))],
+        )
+    )
+    other = await w.item(pull_request(2, 20, commits=[commit("s1", None)]))
+    assert w.rows(
+        "SELECT author_id, linked_github_id FROM pr_commits WHERE pr_id = ?", other.row_id
+    ) == [{"author_id": None, "linked_github_id": None}]
+    await w.item(
+        pull_request(
+            1,
+            10,
+            reviews=[review(901, None)],
+            comments=[comment(801, None)],
+            commits=[commit("s2", None)],
+            hydrated_at=HYDRATED + timedelta(days=1),
+        )
+    )
+    first = w.pr(1)["id"]
+    assert w.rows("SELECT github_id, reviewer_id, reviewer_reported FROM pr_reviews") == [
+        {"github_id": 901, "reviewer_id": None, "reviewer_reported": 0}
+    ]
+    assert w.rows("SELECT github_id, author_id, author_reported FROM pr_comments") == [
+        {"github_id": 801, "author_id": None, "author_reported": 0}
+    ]
+    assert w.rows("SELECT sha, author_id FROM pr_commits WHERE pr_id = ?", first) == [
+        {"sha": "s2", "author_id": None}
     ]
 
 
@@ -846,10 +1329,37 @@ async def test_a_lookup_sets_login_type_and_the_profile(w: Writer) -> None:
     result = await _lookup(
         w, "N_alice", Found(looked_up(account("alice", 101), profile=profile), at)
     )
-    row = w.account_row("alice")
-    assert (result.row_id, row["refreshed_at"], row["not_found_at"]) == (row["id"], ts(at), None)
-    assert w.rows("SELECT company, location, website_url FROM account_profiles") == [
-        {"company": "Acme", "location": "Paris", "website_url": None}
+    assert w.rows("SELECT * FROM github_users") == [
+        {
+            "id": result.row_id,
+            "github_id": 101,
+            "node_id": "N_alice",
+            "login": "alice",
+            "type": "User",
+            "name": "A Name",
+            "created_at": ts(T0 - timedelta(days=2000)),
+            "updated_at": ts(T0 - timedelta(days=10)),
+            "linked_user_github_id": None,
+            "claimant_github_id": None,
+            "refreshed_at": ts(at),
+            "not_found_at": None,
+        }
+    ]
+    assert w.rows("SELECT * FROM account_profiles") == [
+        {
+            "account_id": result.row_id,
+            "company": "Acme",
+            "location": "Paris",
+            "website_url": None,
+            "description": None,
+            "email": None,
+            "twitter_username": None,
+            "is_verified": None,
+            "archived_at": None,
+            "has_sponsors_listing": None,
+            "pinned_items_remaining": None,
+            "refreshed_at": ts(at),
+        }
     ]
     changed = UserProfile(company=None, location="Paris", website_url=None)
     await _lookup(
@@ -867,28 +1377,84 @@ async def test_an_organization_profile(w: Writer) -> None:
     profile = OrganizationProfile(
         description="d",
         email="e@example.com",
-        location=None,
+        location="Earth",
         website_url="https://prebid.org",
-        twitter_username=None,
+        twitter_username="prebidorg",
         is_verified=True,
-        archived_at=None,
+        archived_at=T0 - timedelta(days=7),
         has_sponsors_listing=False,
         pinned_items_remaining=6,
     )
-    await _lookup(w, "ORG_1", Found(looked_up(org, profile=profile), T0))
-    assert w.rows(
-        "SELECT company, description, email, website_url, is_verified, has_sponsors_listing, "
-        "pinned_items_remaining FROM account_profiles"
-    ) == [
+    result = await _lookup(w, "ORG_1", Found(looked_up(org, profile=profile), T0))
+    assert w.rows("SELECT * FROM account_profiles") == [
         {
+            "account_id": result.row_id,
             "company": None,
+            "location": "Earth",
+            "website_url": "https://prebid.org",
             "description": "d",
             "email": "e@example.com",
-            "website_url": "https://prebid.org",
+            "twitter_username": "prebidorg",
             "is_verified": 1,
+            "archived_at": ts(T0 - timedelta(days=7)),
             "has_sponsors_listing": 0,
             "pinned_items_remaining": 6,
+            "refreshed_at": ts(T0),
         }
+    ]
+
+
+@pytest.mark.parametrize(
+    ("who", "claimant", "github_id", "linked"),
+    [
+        (account("mann", 6, "Mannequin", node_id="MAN_1"), 4242, 6, None),
+        (
+            account(
+                "ent", None, "EnterpriseUserAccount", node_id="EUA_9", linked_user_github_id=55
+            ),
+            None,
+            None,
+            55,
+        ),
+    ],
+    ids=["mannequin-claimant", "enterprise-linked-user"],
+)
+async def test_a_lookup_stores_the_claimant_and_the_linked_user(
+    w: Writer, who: Any, claimant: int | None, github_id: int | None, linked: int | None
+) -> None:
+    result = await _lookup(
+        w, who.node_id, Found(looked_up(who, name=None, claimant_github_id=claimant), T0)
+    )
+    assert w.rows("SELECT * FROM github_users") == [
+        {
+            "id": result.row_id,
+            "github_id": github_id,
+            "node_id": who.node_id,
+            "login": who.login,
+            "type": who.type,
+            "name": None,
+            "created_at": ts(T0 - timedelta(days=2000)),
+            "updated_at": ts(T0 - timedelta(days=10)),
+            "linked_user_github_id": linked,
+            "claimant_github_id": claimant,
+            "refreshed_at": ts(T0),
+            "not_found_at": None,
+        }
+    ]
+
+
+async def test_a_lookup_under_a_second_node_id_keeps_the_stored_row(w: Writer) -> None:
+    """5.2: the stored row keeps its node id, the lookup's values apply, and the second node id
+    is reported."""
+    first = await _lookup(w, "N_old", Found(looked_up(account("x", 7, node_id="N_old")), T0))
+    at = T0 + timedelta(days=1)
+    second = await _lookup(
+        w, "N_new", Found(looked_up(account("x-renamed", 7, node_id="N_new")), at)
+    )
+    assert (second.row_id, second.inserted) == (first.row_id, False)
+    assert second.second_node_ids == (SecondNodeId(7, "N_old", "N_new"),)
+    assert w.rows("SELECT id, node_id, login, refreshed_at FROM github_users") == [
+        {"id": first.row_id, "node_id": "N_old", "login": "x-renamed", "refreshed_at": ts(at)}
     ]
 
 
@@ -930,6 +1496,8 @@ async def test_a_not_found_lookup_keeps_the_account_and_its_profile(w: Writer) -
     await _lookup(w, "N_x", NotFound(T0 + timedelta(days=3)))
     after = w.account_row("x")
     assert after == {**before, "not_found_at": ts(T0 + timedelta(days=3))}
+    await _lookup(w, "N_x", NotFound(T0 + timedelta(days=3, hours=12)))
+    assert w.account_row("x") == after
     assert w.rows("SELECT company FROM account_profiles") == [{"company": "c"}]
     seen_again = await _lookup(
         w, "N_x", Found(looked_up(user, name="X", profile=None), T0 + timedelta(days=4))
@@ -1131,15 +1699,57 @@ async def test_an_approval_is_recorded_with_the_deletion(w: Writer, runs: bool) 
     )
 
 
-async def test_a_deletion_for_an_aborted_run_writes_nothing(w: Writer) -> None:
-    first, _ = await _two_items_and_failures(w)
-    with connect(w.database) as connection:
-        connection.execute(text("UPDATE sync_runs SET status = 'aborted'"))
-    with pytest.raises(RunAborted):
+async def test_an_approval_whose_n_is_not_the_guard_s_is_refused(w: Writer) -> None:
+    first, second = await _two_items_and_failures(w)
+    approval = DeletionApproval(
+        TrackedRepository(owner="prebid", name="Prebid.js", group="Client"), 3
+    )
+    before = w.dump()
+    with pytest.raises(ValueError, match="approval N 3 is not the guard's 2 for repository 11"):
         async with open_writer(_url(w.database)) as writer:
-            await apply_item_deletions(writer, w.run_id, _deletions((first,), (10,), runs=True))
-    assert w.rows("SELECT count(*) AS n FROM pull_requests") == [{"n": 2}]
-    assert w.rows("SELECT count(*) AS n FROM sync_failures") == [{"n": 2}]
+            await apply_item_deletions(
+                writer,
+                w.run_id,
+                _deletions((first, second), (10, 20), runs=False, approved=2),
+                approval=approval,
+            )
+    assert w.dump() == before
+
+
+async def test_one_run_records_its_approval_and_every_prune(w: Writer) -> None:
+    """deletions_approved gathers the approval and each prune in the order they ran, and
+    items_deleted adds up across their transactions (5.1)."""
+    first, second = await _two_items_and_failures(w)
+    await w.repository(repository(github_id=12, full_name="prebid/gone-a", node_id="R_12"))
+    await w.repository(repository(github_id=13, full_name="prebid/gone-b", node_id="R_13"))
+    await w.item(pull_request(1, 110, repository="prebid/gone-a"), repo=12)
+    await w.item(pull_request(1, 130, repository="prebid/gone-b"), repo=13)
+    await w.item(pull_request(2, 131, repository="prebid/gone-b"), repo=13)
+    approval = DeletionApproval(
+        TrackedRepository(owner="prebid", name="Prebid.js", group="Client"), 2
+    )
+    async with open_writer(_url(w.database)) as writer:
+        await mark_untracked(writer, w.run_id, [12, 13])
+        assert await prune_repositories(writer, w.run_id, [13]) == (Pruned(13, "prebid/gone-b", 2),)
+        deleted = await apply_item_deletions(
+            writer,
+            w.run_id,
+            _deletions((first, second), (10, 20), runs=False, approved=2),
+            approval=approval,
+        )
+        assert deleted == 2
+        assert await prune_repositories(writer, w.run_id, [12]) == (Pruned(12, "prebid/gone-a", 1),)
+    assert w.rows("SELECT items_deleted, deletions_approved FROM sync_runs") == [
+        {
+            "items_deleted": 5,
+            "deletions_approved": (
+                '{"allow_deletions":{"approved":2,"github_id":11,"repository":"prebid/Prebid.js",'
+                '"sets":{"items":{"candidates":2,"deleted":true}}},'
+                '"prune_untracked":[{"full_name":"prebid/gone-b","github_id":13,"items_deleted":2},'
+                '{"full_name":"prebid/gone-a","github_id":12,"items_deleted":1}]}'
+            ),
+        }
+    ]
 
 
 async def test_the_prune_deletes_untracked_repositories_and_records_them(w: Writer) -> None:
@@ -1239,19 +1849,20 @@ async def test_a_recorded_pull_request_is_written_with_every_child_row(w: Writer
         "pr_review_requests": totals.review_requests,
         "pr_assignees": totals.assignees,
     }
-    assert (
-        row["labels_total"],
-        row["reviews_total"],
-        row["comments_total"],
-        row["commits_total"],
-        row["files_total"],
-    ) == (
-        totals.labels,
-        totals.reviews,
-        totals.comments,
-        totals.commits,
-        totals.files,
-    )
+    assert {column: row[column] for column in row if column.endswith("_total")} == {
+        "labels_total": totals.labels,
+        "closing_issues_total": totals.closing_issues,
+        "user_linked_closing_issues_total": totals.user_linked_closing_issues,
+        "reviews_total": totals.reviews,
+        "comments_total": totals.comments,
+        "commits_total": totals.commits,
+        "files_total": totals.files,
+        "review_requests_total": totals.review_requests,
+        "assignees_total": totals.assignees,
+    }
+    assert w.rows("SELECT count(*) AS n FROM pr_closing_issues WHERE user_linked") == [
+        {"n": totals.user_linked_closing_issues}
+    ]
     assert sum(counts.values()) > 0
     assert w.rows("SELECT sha FROM pr_commits ORDER BY sha") == [
         {"sha": c.sha} for c in sorted(record.commits, key=lambda c: c.sha)
@@ -1261,17 +1872,27 @@ async def test_a_recorded_pull_request_is_written_with_every_child_row(w: Writer
 async def test_every_item_write_runs_on_the_writer_s_one_connection(
     w: Writer, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """Counted at the writer engine's connect hook and at the one every application engine
+    registers (db.engine), so a write that opened any other engine would show."""
+    from github_activity_db.db import engine as engine_module
     from github_activity_db.sync import connection as connection_module
 
     await w.repository()
     opened: list[object] = []
+    connected: list[object] = []
     original = connection_module._writer_connect
+    original_pragmas = engine_module._apply_sqlite_pragmas
 
     def counting(dbapi_connection: object, record: object, busy_timeout_ms: int | None) -> None:
         opened.append(dbapi_connection)
         original(dbapi_connection, record, busy_timeout_ms)
 
+    def counting_pragmas(dbapi_connection: object, record: object) -> None:
+        connected.append(dbapi_connection)
+        original_pragmas(dbapi_connection, record)
+
     monkeypatch.setattr(connection_module, "_writer_connect", counting)
+    monkeypatch.setattr(engine_module, "_apply_sqlite_pragmas", counting_pragmas)
     async with open_writer(_url(w.database)) as writer:
         for number in range(1, 6):
             await write_pull_request(
@@ -1283,5 +1904,16 @@ async def test_every_item_write_runs_on_the_writer_s_one_connection(
                 repository_github_id=11,
                 links={},
             )
+        await write_lookup(writer, w.run_id, "N_bob", Found(looked_up(BOB), HYDRATED))
+        await record_failure(
+            writer,
+            w.run_id,
+            repository_github_id=11,
+            number=9,
+            error=ValueError("x"),
+            failed_at=T0,
+            run_started_at=T0,
+        )
     assert len(opened) == 1
+    assert connected == opened
     assert w.rows("SELECT count(*) AS n FROM pull_requests") == [{"n": 5}]

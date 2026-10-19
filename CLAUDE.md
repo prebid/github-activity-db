@@ -104,8 +104,9 @@ The only package that imports githubkit, and it imports neither SQLAlchemy nor `
   and each completely indexed repository's in-coverage set
 - `deletions.py`: step 7's candidates, the delete guard, and `--allow-deletions owner/name=N`
 - `connection.py`: the writer's one connection, on which every statement runs inside
-  `transaction()` (one `BEGIN IMMEDIATE`, checking the run's row is still `running`); a bare
-  statement there would autobegin and keep the write lock. `open_reader` for reads that take no lock
+  `transaction()` (one `BEGIN IMMEDIATE`; given the run's id, it first checks the row is still
+  `running`); a bare statement there would autobegin and keep the write lock. `open_reader` for
+  reads that take no lock
 - `writer.py`: repositories, in-place updates, items with D28's kept references, accounts and
   lookups, failures, step 7's deletions, and the prune; `runs.py`: the head check, claim, and close
 

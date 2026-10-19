@@ -218,7 +218,7 @@ class TrackingConfigFile:
     bytes parsed, which ``sync_runs`` records (gap 88)."""
 
     config: TrackingConfig
-    # "packaged", or the absolute path of the file TRACKING_CONFIG_PATH names.
+    # "packaged", or the path TRACKING_CONFIG_PATH names, made absolute (symlinks not followed).
     source: str
     sha256: str
 
@@ -263,6 +263,6 @@ def read_tracking_config(path: Path | None = None) -> TrackingConfigFile:
         raise TrackingConfigError(f"invalid tracking config {shown}:\n{e}") from e
     return TrackingConfigFile(
         config=config,
-        source="packaged" if path is None else str(path.resolve()),
+        source="packaged" if path is None else str(path.absolute()),
         sha256=hashlib.sha256(raw).hexdigest(),
     )

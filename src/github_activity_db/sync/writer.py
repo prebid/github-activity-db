@@ -2,7 +2,8 @@
 
 Every function runs on the writer's one connection (``sync.connection``) in its own transaction,
 which with ``run_id`` first checks that the run's row is still ``running``. A refusal
-(``WriteRefused``) is raised before anything is written, and the transaction commits nothing.
+(``WriteRefused``) is raised inside that transaction, which then rolls back, so a refused write
+leaves nothing in the file.
 The engine passes every time stamped; nothing here reads the clock or sends a request.
 
 Accounts are keyed by GitHub's ``databaseId``, or by node id for an ``EnterpriseUserAccount``,
@@ -1187,8 +1188,16 @@ async def apply_item_deletions(
     set are deleted either way. The deleted rows add to ``sync_runs.items_deleted``, and an
     ``--allow-deletions`` approval naming this repository is recorded in ``deletions_approved``,
     in the same transaction. Returns the number of item rows deleted.
+
+    Raises:
+        ValueError: the approval's N is not the N the guard decided with; nothing is written.
     """
     decision = deletions.decision
+    if approval is not None and decision.approved_limit not in (None, approval.limit):
+        raise ValueError(
+            f"approval N {approval.limit} is not the guard's {decision.approved_limit} for "
+            f"repository {deletions.repository_github_id}"
+        )
     async with transaction(connection, run_id):
         repository_id = (
             await connection.execute(

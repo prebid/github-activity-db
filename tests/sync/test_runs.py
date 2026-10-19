@@ -6,12 +6,16 @@ import hashlib
 import shutil
 import sqlite3
 import subprocess
+import threading
+import time
 from datetime import timedelta
 from pathlib import Path
+from typing import Any
 
 import pytest
-from sqlalchemy import text
+from sqlalchemy import event, text
 
+from github_activity_db.config import Settings
 from github_activity_db.db.schema import HEAD_REVISION
 from github_activity_db.sync.connection import LocalDatabaseError, open_writer
 from github_activity_db.sync.runs import (
@@ -107,13 +111,41 @@ def test_a_url_without_a_file_is_refused(url: str) -> None:
         database_path(url)
 
 
-async def test_the_claim_checks_the_head_inside_its_transaction(migrated_database: Path) -> None:
+async def test_the_claim_refuses_a_database_not_at_head(migrated_database: Path) -> None:
     connection = sqlite3.connect(migrated_database)
     connection.execute("PRAGMA user_version = 1")
     connection.close()
     with pytest.raises(HeadCheckError):
         await _claim(migrated_database)
     assert fetch(migrated_database, "SELECT count(*) AS n FROM sync_runs") == [{"n": 0}]
+
+
+async def test_the_claim_checks_the_head_inside_its_transaction(migrated_database: Path) -> None:
+    """The statements the claim sends: the head reads come after its BEGIN IMMEDIATE and
+    before its insert, so no migration can land between the check and the claim."""
+    sent: list[str] = []
+
+    def record(*args: Any) -> None:
+        sent.append(" ".join(str(args[2]).split()))
+
+    async with open_writer(_url(migrated_database)) as writer:
+        event.listen(writer.sync_engine, "before_cursor_execute", record)
+        await claim_run(
+            writer,
+            started_at=T0,
+            deadline_at=None,
+            break_lock=False,
+            config=PACKAGED,
+            trigger="manual",
+            code_version="x",
+        )
+    begin = sent.index("BEGIN IMMEDIATE")
+    revision = next(i for i, sql in enumerate(sent) if "FROM alembic_version" in sql)
+    user_version = sent.index("PRAGMA user_version")
+    insert = next(i for i, sql in enumerate(sent) if sql.startswith("INSERT INTO sync_runs"))
+    assert begin < revision < insert
+    assert begin < user_version < insert
+    assert sent.count("BEGIN IMMEDIATE") == 1
 
 
 # --------------------------------------------------------------------------------------------
@@ -171,19 +203,33 @@ async def test_a_claim_inserts_the_run_and_copies_the_automation_lists(
 
 
 async def test_the_config_digest_with_and_without_tracking_config_path(
-    migrated_database: Path, tmp_path: Path
+    migrated_database: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """The file Settings reads, as a run reads it: the packaged one without the variable, the
+    named one with it (gap 88)."""
     packaged = Path(__file__).resolve().parents[2] / "src" / "github_activity_db" / "tracking.toml"
-    assert PACKAGED.sha256 == hashlib.sha256(packaged.read_bytes()).hexdigest()
+    monkeypatch.delenv("TRACKING_CONFIG_PATH", raising=False)
+    without = Settings(_env_file=None).tracking_config()
+    assert (without.source, without.sha256) == (
+        "packaged",
+        hashlib.sha256(packaged.read_bytes()).hexdigest(),
+    )
     other = tmp_path / "other.toml"
     other.write_bytes(packaged.read_bytes() + b"\n# a comment changes the digest\n")
-    custom = read_tracking_config(other)
-    assert custom.sha256 == hashlib.sha256(other.read_bytes()).hexdigest() != PACKAGED.sha256
-    assert custom.source == str(other.resolve())
-    run_id = await _claim(migrated_database, config=custom)
+    monkeypatch.setenv("TRACKING_CONFIG_PATH", str(other))
+    custom = Settings(_env_file=None).tracking_config()
+    assert custom.sha256 == hashlib.sha256(other.read_bytes()).hexdigest() != without.sha256
+    assert custom.source == str(other)
+    first = await _claim(migrated_database, config=without)
+    with connect(migrated_database) as connection:
+        connection.execute(text("UPDATE sync_runs SET status = 'complete'"))
+    second = await _claim(migrated_database, config=custom, started_at=T0 + timedelta(hours=1))
     assert fetch(
-        migrated_database, "SELECT config_source, config_sha256 FROM sync_runs WHERE id = ?", run_id
-    ) == [{"config_source": str(other.resolve()), "config_sha256": custom.sha256}]
+        migrated_database, "SELECT id, config_source, config_sha256 FROM sync_runs ORDER BY id"
+    ) == [
+        {"id": first, "config_source": "packaged", "config_sha256": without.sha256},
+        {"id": second, "config_source": str(other), "config_sha256": custom.sha256},
+    ]
 
 
 def _running(database: Path, deadline_at: object = None) -> int:
@@ -286,7 +332,8 @@ async def test_a_lock_held_by_a_separate_connection(migrated_database: Path) -> 
     holder = sqlite3.connect(migrated_database, isolation_level=None)
     holder.execute("BEGIN IMMEDIATE")
     try:
-        async with open_writer(_url(migrated_database), busy_timeout_ms=200) as writer:
+        async with open_writer(_url(migrated_database), busy_timeout_ms=300) as writer:
+            started = time.monotonic()
             with pytest.raises(LocalDatabaseError, match="database is locked"):
                 await claim_run(
                     writer,
@@ -297,10 +344,65 @@ async def test_a_lock_held_by_a_separate_connection(migrated_database: Path) -> 
                     trigger="manual",
                     code_version="x",
                 )
+            waited = time.monotonic() - started
     finally:
         holder.execute("ROLLBACK")
         holder.close()
+    assert waited >= 0.3
     assert fetch(migrated_database, "SELECT count(*) AS n FROM sync_runs") == [{"n": 0}]
+
+
+async def test_a_claim_waits_for_a_claim_in_progress_then_refuses(migrated_database: Path) -> None:
+    """Another claimant inserts its running row and commits within the busy timeout: this
+    claim's BEGIN IMMEDIATE waits for that commit, then reads the row and refuses (section 7,
+    "Run claim")."""
+    holding = threading.Event()
+    other: list[int] = []
+
+    def claimant() -> None:
+        connection = sqlite3.connect(migrated_database, isolation_level=None)
+        try:
+            connection.execute("BEGIN IMMEDIATE")
+            cursor = connection.execute(
+                "INSERT INTO sync_runs (started_at, status, trigger, code_version, config_source, "
+                "config_sha256, graphql_points, rest_calls, items_planned, items_hydrated, "
+                "items_deleted, failures) VALUES "
+                "('2026-05-01 11:59:00.000000', 'running', 'manual', 'other', 'packaged', ?, "
+                "0, 0, 0, 0, 0, 0)",
+                ("0" * 64,),
+            )
+            assert cursor.lastrowid is not None
+            other.append(cursor.lastrowid)
+            holding.set()
+            time.sleep(0.3)
+            connection.execute("COMMIT")
+        finally:
+            connection.close()
+
+    thread = threading.Thread(target=claimant)
+    thread.start()
+    try:
+        assert holding.wait(5)
+        async with open_writer(_url(migrated_database), busy_timeout_ms=5000) as writer:
+            started = time.monotonic()
+            with pytest.raises(ClaimRefused) as refused:
+                await claim_run(
+                    writer,
+                    started_at=T0,
+                    deadline_at=None,
+                    break_lock=False,
+                    config=PACKAGED,
+                    trigger="manual",
+                    code_version="x",
+                )
+            waited = time.monotonic() - started
+    finally:
+        thread.join(5)
+    assert refused.value.blocking == tuple(other)
+    assert 0.2 <= waited < 5
+    assert fetch(migrated_database, "SELECT id, code_version FROM sync_runs") == [
+        {"id": other[0], "code_version": "other"}
+    ]
 
 
 async def test_a_second_claim_replaces_the_automation_lists(
@@ -580,22 +682,83 @@ async def test_a_fresh_repository_row_has_only_what_the_outcome_carries(
     ]
 
 
+async def test_a_failed_close_keeps_step_7_s_result(migrated_database: Path) -> None:
+    """A run fatal after step 7: its halt, or a clearing, is written beside last_outcome failed,
+    and the index, pending, and success columns stay (5.1 halt_reason, 5.3 step 8)."""
+    ids = _repositories(migrated_database, 11, 12)
+    previous = await _claim(migrated_database)
+    with connect(migrated_database) as connection:
+        for github_id in (11, 12):
+            connection.execute(
+                text(
+                    "INSERT INTO repo_sync_state (repository_id, last_index_started_at, "
+                    "index_pr_total, last_success_at, last_run_id, last_outcome, halt_reason) "
+                    "VALUES (:r, '2026-01-01 00:00:00.000000', 5, '2026-01-02 00:00:00.000000', "
+                    ":run, 'halted', 'old halt')"
+                ),
+                {"r": ids[github_id], "run": previous},
+            )
+        connection.execute(text("UPDATE sync_runs SET status = 'complete'"))
+    run_id = await _claim(migrated_database, started_at=T0 + timedelta(hours=1))
+    result = await _close(
+        migrated_database,
+        run_id,
+        RepositoryOutcome(11, "failed", step_7_ran=True, halt_reason="40 candidates"),
+        RepositoryOutcome(12, "failed", step_7_ran=True, halt_reason=None),
+        status="failed",
+        exit_code=1,
+    )
+    assert result == CloseResult(closed=True, status="failed", exit_code=1)
+    assert fetch(
+        migrated_database,
+        "SELECT repository_id, last_index_started_at, index_pr_total, last_success_at, "
+        "last_run_id, last_outcome, halt_reason FROM repo_sync_state ORDER BY repository_id",
+    ) == [
+        {
+            "repository_id": ids[github_id],
+            "last_index_started_at": "2026-01-01 00:00:00.000000",
+            "index_pr_total": 5,
+            "last_success_at": "2026-01-02 00:00:00.000000",
+            "last_run_id": run_id,
+            "last_outcome": "failed",
+            "halt_reason": halt_reason,
+        }
+        for github_id, halt_reason in ((11, "40 candidates"), (12, None))
+    ]
+
+
 @pytest.mark.parametrize(
-    "outcomes",
+    ("status", "outcomes"),
     [
-        (RepositoryOutcome(11, "halted", succeeded=True),),
-        (RepositoryOutcome(11, "complete"), RepositoryOutcome(11, "failed")),
+        ("complete", (RepositoryOutcome(11, "halted", succeeded=True),)),
+        ("complete", (RepositoryOutcome(11, "complete"), RepositoryOutcome(11, "failed"))),
+        ("failed", (RepositoryOutcome(11, "complete"),)),
+        ("aborted", (RepositoryOutcome(11, "time_limited"),)),
+        ("failed", (RepositoryOutcome(11, "failed", index=IndexState(T0, 5)),)),
+        ("aborted", (RepositoryOutcome(11, "failed", pending=(4,)),)),
+        ("aborted", (RepositoryOutcome(11, "failed", pending=()),)),
+        ("failed", (RepositoryOutcome(11, "complete", succeeded=True),)),
     ],
-    ids=["success-without-complete", "a-repository-twice"],
+    ids=[
+        "success-without-complete",
+        "a-repository-twice",
+        "failed-close-complete",
+        "aborted-close-time-limited",
+        "failed-close-index",
+        "aborted-close-pending",
+        "aborted-close-no-pending",
+        "failed-close-success",
+    ],
 )
 async def test_invalid_outcomes_are_refused_before_writing(
-    migrated_database: Path, outcomes: tuple[RepositoryOutcome, ...]
+    migrated_database: Path, status: RunStatus, outcomes: tuple[RepositoryOutcome, ...]
 ) -> None:
     _repositories(migrated_database, 11)
     run_id = await _claim(migrated_database)
     with pytest.raises(ValueError):
-        await _close(migrated_database, run_id, *outcomes)
+        await _close(migrated_database, run_id, *outcomes, status=status, exit_code=1)
     assert fetch(migrated_database, "SELECT status FROM sync_runs") == [{"status": "running"}]
+    assert fetch(migrated_database, "SELECT count(*) AS n FROM repo_sync_state") == [{"n": 0}]
 
 
 # --------------------------------------------------------------------------------------------
@@ -660,6 +823,18 @@ def test_code_version_names_the_checkout_commit(checkout: Path) -> None:
     assert code_version(package, {}) == head
     (package / "__init__.py").write_text("# changed\n")
     assert code_version(package, {}) == f"{head}-dirty"
+
+
+def test_code_version_without_git_is_the_package_version(
+    checkout: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from importlib import metadata
+
+    monkeypatch.setenv("PATH", "")
+    assert shutil.which("git") is None
+    assert code_version(checkout / "github_activity_db", {}) == metadata.version(
+        "github-activity-db"
+    )
 
 
 def test_code_version_outside_a_checkout_is_the_package_version(
