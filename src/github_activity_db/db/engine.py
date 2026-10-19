@@ -22,7 +22,8 @@ _async_session_factory: async_sessionmaker[AsyncSession] | None = None
 # How long a connection waits on a locked database before raising "database is locked".
 # Python's sqlite3 waits 5 s by default (timeout=5.0). In rollback-journal mode a reader's
 # lock blocks a writer's commit; the sync is the only writer, and 30 s lets it outlast a
-# concurrent read instead of failing the item.
+# concurrent read. A lock held longer makes the writer's statement or commit raise, which ends
+# the run (redesign plan 5.3 step 4, gap 77).
 SQLITE_BUSY_TIMEOUT_MS = 30_000
 
 

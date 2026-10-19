@@ -51,7 +51,10 @@ uv run pytest                      # CI also runs Python 3.12, `alembic check`, 
 - CLI commands: `ghactivity github rate-limit` and `ghactivity github test`
 - Sync planning (`src/github_activity_db/sync/`, Step 3b-2a-1): the snapshot reader, the planner
   of plan 5.3 step 3, and step 7's deletion functions, with `tracking.toml`'s `[coverage]` floor
-  and `[sync]` settings; no command calls them yet
+  and `[sync]` settings
+- The writer and run records (Step 3b-2a-2a): every write the sync makes, the run claim and lock,
+  the close, and the head check, with `[automation]` and `[sync].accepted_failures`; no command
+  calls them yet
 
 **Not implemented yet:** nothing writes the new tables until the `sync` command (Step
 3b-2a-2c), which runs the engine (3b-2a-2b) over the planner and the writer (3b-2a-2a);
@@ -100,6 +103,11 @@ The only package that imports githubkit, and it imports neither SQLAlchemy nor `
   index), and `TrackingConfig`; returns the queue, batches, in-place updates, planner failures,
   and each completely indexed repository's in-coverage set
 - `deletions.py`: step 7's candidates, the delete guard, and `--allow-deletions owner/name=N`
+- `connection.py`: the writer's one connection, on which every statement runs inside
+  `transaction()` (one `BEGIN IMMEDIATE`, checking the run's row is still `running`); a bare
+  statement there would autobegin and keep the write lock. `open_reader` for reads that take no lock
+- `writer.py`: repositories, in-place updates, items with D28's kept references, accounts and
+  lookups, failures, step 7's deletions, and the prune; `runs.py`: the head check, claim, and close
 
 ### Database (`db/`, `alembic/`)
 - Databases are built only by `alembic upgrade head`; tests copy one session template

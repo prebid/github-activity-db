@@ -1,7 +1,6 @@
 # Repositories tracked by github-activity-db, and the sync's policy.
 #
-# Validated at load by github_activity_db.tracking; unknown keys are rejected. A later step of
-# docs/redesign-plan.md (3b-2a-2) adds [automation] and [sync].accepted_failures.
+# Validated at load by github_activity_db.tracking; unknown keys are rejected.
 
 # The coverage rule's floor (plan section 3). Required; a TOML offset date-time, converted to UTC.
 [coverage]
@@ -13,6 +12,22 @@ floor = 2023-01-01T00:00:00Z
 unsettled_minutes = 10
 delete_guard_min_rows = 25
 delete_guard_percent = 2.0
+# Items whose failure is understood: still recorded and reported, kept out of exit 2 (plan 5.3
+# step 8). Each names a configured repository, the item's number, and why.
+accepted_failures = [
+  # { repository = "prebid/Prebid.js", number = 12345, reason = "..." },
+]
+
+# Accounts and commit emails to list; each run copies them into automation_accounts and
+# automation_emails, and the views show an entry's reason beside GitHub's account type (plan 5.2).
+[automation]
+accounts = [
+  { github_id = 99054218, login = "prebidjs-release", reason = "release automation" },
+  { github_id = 81847, login = "claude", reason = "receives commits authored as noreply@anthropic.com" },
+]
+emails = [
+  { email = "noreply@anthropic.com", reason = "Claude commits without a linked account" },
+]
 
 # Each entry needs owner, name, and group. A group is a name the maintainer assigns (Client,
 # Server, Mobile, Docs, Agentic, Tools), stored as repositories.repo_group. Order is the order
