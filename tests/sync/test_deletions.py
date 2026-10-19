@@ -169,7 +169,7 @@ async def test_candidates_are_the_stored_items_absent_from_coverage(
         failed_during_hydration=False,
         stored_rows_before_run=5,
         config=DEFAULT,
-        repository=JS,
+        attempted=JS_ATTEMPTED,
         approval=None,
     )
     assert result == Deletions(
@@ -188,7 +188,7 @@ async def test_no_candidates_when_every_stored_item_is_covered(migrated_database
         failed_during_hydration=False,
         stored_rows_before_run=3,
         config=DEFAULT,
-        repository=JS,
+        attempted=JS_ATTEMPTED,
         approval=None,
     )
     assert result is not None
@@ -204,7 +204,7 @@ async def test_a_repository_with_nothing_stored(migrated_database: Path) -> None
         failed_during_hydration=False,
         stored_rows_before_run=0,
         config=DEFAULT,
-        repository=JS,
+        attempted=JS_ATTEMPTED,
         approval=None,
     )
     assert result == Deletions(
@@ -224,7 +224,7 @@ async def test_the_guard_counts_the_rows_before_the_run(migrated_database: Path)
         failed_during_hydration=False,
         stored_rows_before_run=100,
         config=DEFAULT,
-        repository=JS,
+        attempted=JS_ATTEMPTED,
         approval=None,
     )
     assert result is not None
@@ -247,7 +247,7 @@ async def test_failure_rows_absent_from_coverage_are_removed_under_a_halt_too(
         failed_during_hydration=False,
         stored_rows_before_run=130,
         config=DEFAULT,
-        repository=JS,
+        attempted=JS_ATTEMPTED,
         approval=None if approved is None else DeletionApproval(JS, approved),
     )
     assert result is not None
@@ -271,7 +271,7 @@ async def test_step_7_skips_a_repository(
         failed_during_hydration=failed,
         stored_rows_before_run=3,
         config=DEFAULT,
-        repository=JS,
+        attempted=JS_ATTEMPTED,
         approval=None,
     )
     assert result is None
@@ -287,7 +287,7 @@ async def test_only_pull_request_coverage_is_read(migrated_database: Path) -> No
             failed_during_hydration=False,
             stored_rows_before_run=1,
             config=DEFAULT,
-            repository=JS,
+            attempted=JS_ATTEMPTED,
             approval=None,
         )
 
@@ -295,16 +295,20 @@ async def test_only_pull_request_coverage_is_read(migrated_database: Path) -> No
 async def test_an_approval_naming_this_repository_travels_with_the_deletions(
     migrated_database: Path,
 ) -> None:
-    """It names the configured repository ignoring case; its N decides, and the writer records
-    the approval the result carries."""
+    """It names the configured repository ignoring case, after a rename too; its N decides, and
+    the result carries the configured repository, as tracking.toml spells it, for the writer to
+    record."""
     stored = await _seeded(migrated_database, 130)
     approval = DeletionApproval(
         TrackedRepository(owner="PREBID", name="prebid.JS", group="Client"), 30
     )
+    renamed = AttemptedRepository(
+        configured=JS, github_id=JS_ID, full_name="prebid/Prebid-js", labels=frozenset(), index=None
+    )
     result = item_deletions(
         stored,
         _coverage(range(1, 101)),
-        repository=JS,
+        attempted=renamed,
         failed_during_hydration=False,
         stored_rows_before_run=130,
         config=DEFAULT,
@@ -312,10 +316,41 @@ async def test_an_approval_naming_this_repository_travels_with_the_deletions(
     )
     assert result is not None
     assert (result.approval, result.decision.approved_limit, result.decision.runs) == (
-        approval,
+        DeletionApproval(JS, 30),
         30,
         True,
     )
+    assert result.approval is not None
+    assert result.approval.repository.full_name == "prebid/Prebid.js"
+
+
+@pytest.mark.parametrize("given", ["coverage", "stored rows"])
+async def test_deletions_for_another_repository_than_the_attempted_one_are_refused(
+    migrated_database: Path, given: str
+) -> None:
+    """Prebid.js's coverage or stored rows passed with prebid-server's attempt: an approval
+    naming prebid-server would otherwise lift Prebid.js's guard."""
+    stored = await _seeded(migrated_database, 130)
+    server = AttemptedRepository(
+        configured=SERVER,
+        github_id=JS_ID + 1,
+        full_name="prebid/prebid-server",
+        labels=frozenset(),
+        index=None,
+    )
+    coverage = _coverage(range(1, 101))
+    if given == "stored rows":
+        coverage = Coverage(JS_ID + 1, "pull_request", coverage.github_ids, coverage.numbers)
+    with pytest.raises(ValueError, match=f"{given} of repository 11, not of prebid/prebid-server"):
+        item_deletions(
+            stored,
+            coverage,
+            attempted=server,
+            failed_during_hydration=False,
+            stored_rows_before_run=130,
+            config=DEFAULT,
+            approval=DeletionApproval(SERVER, 30),
+        )
 
 
 async def test_an_approval_naming_another_repository_does_not_apply(
@@ -325,7 +360,7 @@ async def test_an_approval_naming_another_repository_does_not_apply(
     result = item_deletions(
         stored,
         _coverage(range(1, 101)),
-        repository=JS,
+        attempted=JS_ATTEMPTED,
         failed_during_hydration=False,
         stored_rows_before_run=130,
         config=DEFAULT,
@@ -368,7 +403,7 @@ async def test_the_control_for_skipping_lists_candidates(migrated_database: Path
         failed_during_hydration=False,
         stored_rows_before_run=3,
         config=DEFAULT,
-        repository=JS,
+        attempted=JS_ATTEMPTED,
         approval=None,
     )
     assert result is not None
@@ -400,7 +435,7 @@ async def test_candidates_from_the_planner_and_a_snapshot(migrated_database: Pat
         failed_during_hydration=False,
         stored_rows_before_run=4,
         config=DEFAULT,
-        repository=JS,
+        attempted=JS_ATTEMPTED,
         approval=None,
     )
     assert deletions is not None
@@ -414,6 +449,7 @@ async def test_candidates_from_the_planner_and_a_snapshot(migrated_database: Pat
 
 def _attempted(entries: tuple[IndexedPullRequest, ...]) -> AttemptedRepository:
     return AttemptedRepository(
+        configured=JS,
         github_id=JS_ID,
         full_name="prebid/Prebid.js",
         labels=frozenset(),
@@ -434,6 +470,9 @@ TWO_REPOSITORIES = TrackingConfig.model_validate(
     }
 )
 JS, SERVER = TWO_REPOSITORIES.repositories
+JS_ATTEMPTED = AttemptedRepository(
+    configured=JS, github_id=JS_ID, full_name="prebid/Prebid.js", labels=frozenset(), index=None
+)
 
 
 @pytest.mark.parametrize(

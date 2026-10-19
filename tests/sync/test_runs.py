@@ -594,6 +594,8 @@ async def test_outcomes_write_what_they_carry(migrated_database: Path) -> None:
             12, "halted", index=index, step_7_ran=True, halt_reason="30 candidates", pending=(7, 3)
         ),
         RepositoryOutcome(13, "failed"),
+        status="time_limited",
+        exit_code=2,
     )
     assert result.closed
     finished = ts(T0 + timedelta(hours=2))
@@ -739,18 +741,37 @@ async def test_a_failed_close_keeps_step_7_s_result(migrated_database: Path) -> 
     assert fetch(migrated_database, pending) == before
 
 
-@pytest.mark.parametrize("outcome", ["complete", "time_limited", "halted"])
+@pytest.mark.parametrize(
+    ("status", "outcome", "pending"),
+    [
+        ("complete", "complete", ()),
+        ("complete", "halted", ()),
+        ("time_limited", "time_limited", (6,)),
+        ("time_limited", "halted", (6,)),
+    ],
+    ids=["complete", "halted", "time-limited", "time-limited-run-halted"],
+)
 async def test_a_completely_indexed_repository_writes_its_index_and_pending_items(
-    migrated_database: Path, outcome: LastOutcome
+    migrated_database: Path, status: RunStatus, outcome: LastOutcome, pending: tuple[int, ...]
 ) -> None:
+    """Each outcome 5.3 step 8 gives a completely indexed repository, with the pending items a
+    run of that status leaves, replacing an earlier run's: none when it reached them all."""
     ids = _repositories(migrated_database, 11)
+    with connect(migrated_database) as connection:
+        earlier = Seed(connection).sync_run(status="complete")
+        connection.execute(
+            text(
+                "INSERT INTO sync_pending (repository_id, item_kind, number, run_id) "
+                "VALUES (:r, 'pull_request', 2, :run)"
+            ),
+            {"r": ids[11], "run": earlier},
+        )
     run_id = await _claim(migrated_database)
     index = IndexState(started_at=T0 + timedelta(minutes=5), pr_total=9)
-    status: RunStatus = "time_limited" if outcome == "time_limited" else "complete"
     await _close(
         migrated_database,
         run_id,
-        RepositoryOutcome(11, outcome, index=index, pending=(6,)),
+        RepositoryOutcome(11, outcome, index=index, pending=pending),
         status=status,
         exit_code=2,
     )
@@ -765,7 +786,7 @@ async def test_a_completely_indexed_repository_writes_its_index_and_pending_item
         }
     ]
     assert fetch(migrated_database, "SELECT repository_id, number, run_id FROM sync_pending") == [
-        {"repository_id": ids[11], "number": 6, "run_id": run_id}
+        {"repository_id": ids[11], "number": number, "run_id": run_id} for number in pending
     ]
 
 

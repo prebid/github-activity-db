@@ -26,7 +26,7 @@ from github_activity_db.sync.plan import (
     batches,
     plan,
 )
-from github_activity_db.tracking import MAX_UNSETTLED_MINUTES, TrackingConfig
+from github_activity_db.tracking import MAX_UNSETTLED_MINUTES, TrackedRepository, TrackingConfig
 from tests.db.seed import Seed, connect
 from tests.source.conftest import FakeClock
 from tests.source.replay import Replay
@@ -58,7 +58,9 @@ def attempted(
     labels: frozenset[tuple[str, str]] = LABELS,
     complete: bool = True,
 ) -> AttemptedRepository:
+    owner, name = full_name.split("/")
     return AttemptedRepository(
+        configured=TrackedRepository(owner=owner, name=name, group="Client"),
         github_id=github_id,
         full_name=full_name,
         labels=labels,
@@ -763,7 +765,8 @@ async def _recorded_go_gdpr() -> tuple[AttemptedRepository, PullRequestIndex]:
         record = await source.resolve("prebid", "go-gdpr")
         recorded_index = await source.index_pull_requests(record)
     assert replay.problems == []
-    return AttemptedRepository.resolved(record, recorded_index), recorded_index
+    configured = TrackedRepository(owner="prebid", name="go-gdpr", group="Tools")
+    return AttemptedRepository.resolved(configured, record, recorded_index), recorded_index
 
 
 GO_GDPR_ID = 132915235
