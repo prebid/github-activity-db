@@ -20,11 +20,16 @@ from github_activity_db.db.models import (
     GitHubUser,
     PullRequest,
     PullRequestAssignee,
+    PullRequestClosingIssue,
     PullRequestComment,
     PullRequestCommit,
+    PullRequestLabel,
     PullRequestReview,
     PullRequestReviewRequest,
     Repository,
+    RepositoryLabel,
+    SyncFailure,
+    SyncPending,
     SyncRun,
 )
 
@@ -267,3 +272,48 @@ class Seed:
 
     def automation_email(self, email: str, reason: str = "test") -> None:
         self._insert(AutomationEmail, {"email": email, "reason": reason, "run_id": self.run_id()})
+
+    def repo_label(self, repository_id: int, node_id: str, name: str) -> None:
+        row = {
+            "repository_id": repository_id,
+            "node_id": node_id,
+            "name": name,
+            "color": "ededed",
+            "is_default": False,
+        }
+        self._insert(RepositoryLabel, row)
+
+    def label(self, pr_id: int, name: str, node_id: str) -> None:
+        self._insert(PullRequestLabel, {"pr_id": pr_id, "name": name, "label_node_id": node_id})
+
+    def closing_issue(self, pr_id: int, repo_github_id: int, number: int, **values: Any) -> None:
+        row = {
+            "pr_id": pr_id,
+            "issue_repo_github_id": repo_github_id,
+            "issue_repo_full_name": f"owner/repo-{repo_github_id}",
+            "issue_number": number,
+            "issue_github_id": self.next_id(),
+            "user_linked": False,
+        }
+        self._insert(PullRequestClosingIssue, {**row, **values})
+
+    def failure(self, repository_id: int, number: int, kind: str = "pull_request") -> None:
+        row = {
+            "repository_id": repository_id,
+            "item_kind": kind,
+            "number": number,
+            "attempts": 1,
+            "last_error": "ItemError: test",
+            "first_failed_at": T0,
+            "last_failed_at": T0,
+        }
+        self._insert(SyncFailure, row)
+
+    def pending(self, repository_id: int, number: int, kind: str = "pull_request") -> None:
+        row = {
+            "repository_id": repository_id,
+            "item_kind": kind,
+            "number": number,
+            "run_id": self.run_id(),
+        }
+        self._insert(SyncPending, row)

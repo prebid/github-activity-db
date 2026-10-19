@@ -14,7 +14,7 @@ uv run pre-commit install
 cp .env.example .env  # Add GITHUB_TOKEN
 uv run alembic upgrade head  # builds github_activity.local.db; refuses the tracked github_activity.db
 
-# CLI (no sync command until redesign plan Step 3b)
+# CLI (no sync command until redesign plan Step 3b-2a-2)
 uv run ghactivity --help
 uv run ghactivity github rate-limit --all                          # Rate-limit pools
 uv run ghactivity github test --pr 13481 --repo prebid/Prebid.js   # Resolve and hydrate one PR
@@ -49,11 +49,13 @@ uv run pytest                      # CI also runs Python 3.12, `alembic check`, 
   (Step 3b-1, `schema_version` 2), the row-level `v_*` consumer views, the data dictionary, and
   the schema-version lock with view digests
 - CLI commands: `ghactivity github rate-limit` and `ghactivity github test`
+- Sync planning (`src/github_activity_db/sync/`, Step 3b-2a-1): the snapshot reader, the planner
+  of plan 5.3 step 3, and step 7's deletion functions, with `tracking.toml`'s `[coverage]` floor
+  and `[sync]` settings; no command calls them yet
 
-**Not implemented yet:** nothing writes the new tables until the `sync` command (Step 3b-2a-2,
-after the planner in 3b-2a-1); `verify` follows in Step 3b-2b. The tracked `github_activity.db`
-stays frozen at the first schema
-(D26).
+**Not implemented yet:** nothing writes the new tables until the `sync` command (Step 3b-2a-2),
+which calls the planner; `verify` follows in Step 3b-2b. The tracked `github_activity.db` stays
+frozen at the first schema (D26).
 
 **Planned in the redesign plan:** the sync engine and verify (Step 3b); GitHub Issues and
 closing-issue links (Step 4); scheduled sync and release publication (Step 6).
@@ -89,6 +91,14 @@ The only package that imports githubkit, and it imports neither SQLAlchemy nor `
 - `records.py` (public) and `models.py` (private, strict types); `errors.py` splits fatal,
   repository, and item errors
 - Recorded fixtures: `scripts/record_fixtures.py` (see docs/testing.md)
+
+### Sync (`sync/`)
+- `read_snapshot`: the stored rows the planner compares, one fully fetched statement per table,
+  never a server-side cursor (gap 77; `tests/test_server_side_cursors.py` scans `src/`)
+- `plan`: a pure function over the snapshot, the attempted repositories (resolve labels and
+  index), and `TrackingConfig`; returns the queue, batches, in-place updates, planner failures,
+  and each completely indexed repository's in-coverage set
+- `deletions.py`: step 7's candidates, the delete guard, and `--allow-deletions owner/name=N`
 
 ### Database (`db/`, `alembic/`)
 - Databases are built only by `alembic upgrade head`; tests copy one session template

@@ -1,9 +1,22 @@
-# Repositories tracked by github-activity-db.
+# Repositories tracked by github-activity-db, and the sync's policy.
 #
-# Each entry needs owner, name, and group. Groups label repositories for reporting
-# (Client, Server, Mobile, Docs, Agentic, Tools). Order is the sync order.
-# Validated at load by github_activity_db.tracking; unknown keys are rejected.
-# Later steps of docs/redesign-plan.md add [coverage], [automation], and [sync].
+# Validated at load by github_activity_db.tracking; unknown keys are rejected. A later step of
+# docs/redesign-plan.md (3b-2a-2) adds [automation] and [sync].accepted_failures.
+
+# The coverage rule's floor (plan section 3). Required; a TOML offset date-time, converted to UTC.
+[coverage]
+floor = 2023-01-01T00:00:00Z
+
+# The planner's unsettled window and the delete guard (plan 5.3 steps 3 and 7); each key may be
+# left out for the value shown.
+[sync]
+unsettled_minutes = 10
+delete_guard_min_rows = 25
+delete_guard_percent = 2.0
+
+# Each entry needs owner, name, and group. A group is a name the maintainer assigns (Client,
+# Server, Mobile, Docs, Agentic, Tools), stored as repositories.repo_group. Order is the order
+# in which the sync resolves and indexes the repositories.
 
 [[repositories]]
 owner = "prebid"

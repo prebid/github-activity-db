@@ -1425,12 +1425,12 @@ loader; its "Order is the sync order" comment changes to the resolve and index o
 its group comment calls a group a maintainer-assigned name stored as `repositories.repo_group`
 (gap 89). In `sync/`: the snapshot reader, which reads the stored rows the planner needs without a
 server-side cursor (gap 77), and the planner of 5.3 step 3, a pure function over those snapshots,
-step 1's resolved repositories (each one's `github_id` and current label names, which a dry run does
-not write), the fresh index, and the configuration. It applies the coverage rule (section 3) and the
-hydration
-conditions, `hydration_version` compared by inequality, unsettled re-hydration, the label-set
-check, the link conditions, and a `sync_failures` row among them. It returns the item failures it
-detects itself (an index entry whose number is stored under another `github_id`, and one whose
+step 1's resolved repositories (each one's `github_id` and current labels by id and name, which a
+dry run does not write), the fresh index, and the configuration. It applies the coverage rule
+(section 3) and the hydration conditions, `hydration_version` compared by inequality, unsettled
+re-hydration, the label-set check, the link conditions, and a `sync_failures` row among them. It
+returns the item failures it detects itself (an index entry whose number is stored under another
+`github_id`, and one whose
 state its dates contradict), which 3b-2a-2's engine records at once, and derives the in-place
 updates, the queue order with
 `sync_pending`, and the batches. Step 7's deletion candidates, the guard (max(25, 2%) of the
