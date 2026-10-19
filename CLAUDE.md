@@ -14,7 +14,7 @@ uv run pre-commit install
 cp .env.example .env  # Add GITHUB_TOKEN
 uv run alembic upgrade head  # builds github_activity.local.db; refuses the tracked github_activity.db
 
-# CLI (no sync command until redesign plan Step 3b-2a-2)
+# CLI (no sync command until redesign plan Step 3b-2a-2c)
 uv run ghactivity --help
 uv run ghactivity github rate-limit --all                          # Rate-limit pools
 uv run ghactivity github test --pr 13481 --repo prebid/Prebid.js   # Resolve and hydrate one PR
@@ -53,8 +53,9 @@ uv run pytest                      # CI also runs Python 3.12, `alembic check`, 
   of plan 5.3 step 3, and step 7's deletion functions, with `tracking.toml`'s `[coverage]` floor
   and `[sync]` settings; no command calls them yet
 
-**Not implemented yet:** nothing writes the new tables until the `sync` command (Step 3b-2a-2),
-which calls the planner; `verify` follows in Step 3b-2b. The tracked `github_activity.db` stays
+**Not implemented yet:** nothing writes the new tables until the `sync` command (Step
+3b-2a-2c), which runs the engine (3b-2a-2b) over the planner and the writer (3b-2a-2a);
+`verify` follows in Step 3b-2b. The tracked `github_activity.db` stays
 frozen at the first schema (D26).
 
 **Planned in the redesign plan:** the sync engine and verify (Step 3b); GitHub Issues and
