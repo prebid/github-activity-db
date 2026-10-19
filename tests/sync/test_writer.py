@@ -414,7 +414,6 @@ GUARDED: dict[str, GuardedCall] = {
         number=9,
         error=ValueError("x"),
         failed_at=T0,
-        run_started_at=T0,
     ),
     "apply_item_deletions": lambda c, run, pr: apply_item_deletions(
         c, run, _deletions((pr,), (10,), runs=True)
@@ -905,6 +904,120 @@ async def test_a_node_stored_under_another_github_id_fails_the_item(w: Writer) -
     assert w.rows("SELECT number FROM pull_requests") == [{"number": 1}]
 
 
+A_ON_N_A = account("a", 7, node_id="N_A")
+A_ON_N_B = account("a", 7, node_id="N_B")
+
+
+@pytest.mark.parametrize(
+    ("stored", "record_values", "links", "message"),
+    [
+        (
+            None,
+            {"author": account("a", 7, node_id="N_X"), "merged_by": account("b", 8, node_id="N_X")},
+            {},
+            "node N_X is reported under github_id 7 and under 8",
+        ),
+        (
+            A_ON_N_A,
+            {"author": A_ON_N_B, "merged_by": account("b", 8, node_id="N_B")},
+            {},
+            "node N_B is reported under github_id 7 and under 8",
+        ),
+        (
+            None,
+            {
+                "author": account("a", 7, node_id="N_E"),
+                "editor": account("e", None, "EnterpriseUserAccount", node_id="N_E"),
+            },
+            {},
+            "node N_E is reported under github_id 7 and under None",
+        ),
+        (
+            A_ON_N_A,
+            {"author": account("b", 8, node_id="N_B"), "commits": [commit("s1", link(A_ON_N_B))]},
+            {7: Found(looked_up(A_ON_N_B), HYDRATED)},
+            "node N_B is reported under github_id 7 and under 8",
+        ),
+        (
+            None,
+            {
+                "author": account("d", 10, node_id="N_C"),
+                "commits": [commit("s1", link(account("c", 9, node_id="N_C")))],
+            },
+            {9: Sighted(account("c", 9, node_id="N_C"), HYDRATED)},
+            "node N_C is reported under github_id 9 and under 10",
+        ),
+        (
+            A_ON_N_A,
+            {
+                "commits": [
+                    commit("s1", link(A_ON_N_B)),
+                    commit("s2", link(account("b", 8, node_id="N_B"))),
+                ]
+            },
+            {
+                7: Sighted(A_ON_N_B, HYDRATED),
+                8: Found(looked_up(account("b", 8, node_id="N_B")), HYDRATED),
+            },
+            "node N_B is reported under github_id 7 and under 8",
+        ),
+    ],
+    ids=[
+        "one-node-two-ids",
+        "a-second-node-id-then-another-id",
+        "an-account-and-an-enterprise-account",
+        "cached-by-a-commit-link-lookup",
+        "cached-by-a-commit-link-sighting",
+        "a-sighting-then-a-commit-link-lookup",
+    ],
+)
+async def test_a_node_sighted_or_looked_up_under_two_ids_in_one_item_is_refused(
+    w: Writer,
+    stored: Any,
+    record_values: dict[str, Any],
+    links: dict[int, LinkAccount],
+    message: str,
+) -> None:
+    """Every reuse of a node the item's sightings and lookups already resolved checks the
+    github_id it was reported under, also for a second node id, which is never written, and
+    through ``found`` as well as ``sighted`` (commit links resolve in github_id order, so the
+    last case's sighting fills the cache before its lookup); the item writes nothing. A commit
+    link's own node id is not compared: it resolves by github_id (5.2)."""
+    await w.repository()
+    if stored is not None:
+        await w.item(pull_request(1, 10, author=stored))
+    before = w.dump()
+    with pytest.raises(ItemConflict, match=message):
+        await w.item(pull_request(2, 20, **record_values), links)
+    assert w.dump() == before
+
+
+async def test_one_account_in_two_shapes_or_under_two_nodes_in_one_item(w: Writer) -> None:
+    """The controls: one github_id on one node as a Bot and as a User, and one github_id under
+    a second node id, each resolve to one row."""
+    await w.repository()
+    await w.item(pull_request(1, 10, author=A_ON_N_A))
+    bot = account("dependabot", 49699333, "Bot", node_id="N_D")
+    as_user = account("dependabot[bot]", 49699333, "User", node_id="N_D")
+    written = await w.item(
+        pull_request(2, 20, author=bot, reviews=[review(900, as_user)], merged_by=A_ON_N_B)
+    )
+    assert written.second_node_ids == (SecondNodeId(7, "N_A", "N_B"),)
+    rows = w.rows("SELECT github_id, node_id, login, type FROM github_users ORDER BY github_id")
+    assert rows == [
+        {"github_id": 7, "node_id": "N_A", "login": "a", "type": "User"},
+        {"github_id": 49699333, "node_id": "N_D", "login": "dependabot", "type": "Bot"},
+    ]
+    pr = w.pr(2)
+    assert (pr["author_id"], pr["merged_by_id"]) == (
+        w.account_row("dependabot")["id"],
+        w.account_row("a")["id"],
+    )
+    assert w.rows("SELECT reviewer_id FROM pr_reviews") == [
+        {"reviewer_id": w.account_row("dependabot")["id"]}
+    ]
+
+
 async def test_a_second_node_id_another_account_holds_fails_the_item(w: Writer) -> None:
     """github_id 7 is stored under N_a; GitHub reports it under N_b, which 8 holds."""
     await w.repository()
@@ -1247,9 +1360,9 @@ async def test_a_successful_write_deletes_the_item_s_failure_row(w: Writer) -> N
     with connect(w.database) as connection:
         repository_id = connection.execute(text("SELECT id FROM repositories")).scalar_one()
         seed = Seed(connection)
-        seed.failure(repository_id, 1)
-        seed.failure(repository_id, 2)
-        seed.failure(repository_id, 1, kind="issue")
+        seed.failure(repository_id, 1, run_id=w.run_id)
+        seed.failure(repository_id, 2, run_id=w.run_id)
+        seed.failure(repository_id, 1, kind="issue", run_id=w.run_id)
     await w.item(pull_request(1, 10))
     assert w.rows("SELECT item_kind, number FROM sync_failures ORDER BY number, item_kind") == [
         {"item_kind": "issue", "number": 1},
@@ -1662,47 +1775,55 @@ async def test_stored_accounts_by_github_id(w: Writer) -> None:
 # --------------------------------------------------------------------------------------------
 # Failures
 # --------------------------------------------------------------------------------------------
-async def test_attempts_count_runs_and_the_first_failure_stays(w: Writer) -> None:
+@pytest.mark.parametrize(
+    "second_start",
+    [timedelta(hours=6), timedelta(0), timedelta(hours=-6)],
+    ids=["later-clock", "same-clock", "earlier-clock"],
+)
+async def test_attempts_count_runs_by_their_id_and_the_first_failure_stays(
+    w: Writer, second_start: timedelta
+) -> None:
+    """Two failures in one run count once; a failure in the next run counts again, whether that
+    run's clock reads later, the same, or earlier (5.1)."""
     repository_id = (await w.repository()).row_id
-    run_started = T0
 
-    async def fail(at: Any, started: Any, message: str) -> None:
+    async def fail(run_id: int, at: Any, message: str) -> None:
         async with open_writer(_url(w.database)) as writer:
             await record_failure(
                 writer,
-                w.run_id,
+                run_id,
                 repository_github_id=11,
                 number=5,
                 error=ValueError(message),
                 failed_at=at,
-                run_started_at=started,
             )
 
-    await fail(T0 + timedelta(minutes=1), run_started, "first")
-    await fail(T0 + timedelta(minutes=2), run_started, "same run")
-    assert w.without_ids("sync_failures") == [
-        {
+    def row(attempts: int, run_id: int, message: str, last: Any) -> dict[str, Any]:
+        return {
             "repository_id": repository_id,
             "item_kind": "pull_request",
             "number": 5,
-            "attempts": 1,
-            "last_error": "ValueError: same run",
+            "attempts": attempts,
+            "last_error": f"ValueError: {message}",
             "first_failed_at": ts(T0 + timedelta(minutes=1)),
-            "last_failed_at": ts(T0 + timedelta(minutes=2)),
+            "last_failed_at": ts(last),
+            "last_run_id": run_id,
         }
+
+    await fail(w.run_id, T0 + timedelta(minutes=1), "first")
+    await fail(w.run_id, T0 + timedelta(minutes=2), "same run")
+    assert w.without_ids("sync_failures") == [
+        row(1, w.run_id, "same run", T0 + timedelta(minutes=2))
     ]
-    next_run = T0 + timedelta(hours=6)
-    await fail(next_run + timedelta(minutes=1), next_run, "next run")
+    with connect(w.database) as connection:
+        connection.execute(text("UPDATE sync_runs SET status = 'complete'"))
+        second = Seed(connection).sync_run(started_at=T0 + second_start)
+    at = T0 + second_start + timedelta(seconds=1)
+    await fail(second, at, "next run")
+    assert w.without_ids("sync_failures") == [row(2, second, "next run", at)]
+    await fail(second, at + timedelta(seconds=1), "next run again")
     assert w.without_ids("sync_failures") == [
-        {
-            "repository_id": repository_id,
-            "item_kind": "pull_request",
-            "number": 5,
-            "attempts": 2,
-            "last_error": "ValueError: next run",
-            "first_failed_at": ts(T0 + timedelta(minutes=1)),
-            "last_failed_at": ts(next_run + timedelta(minutes=1)),
-        }
+        row(2, second, "next run again", at + timedelta(seconds=1))
     ]
 
 
@@ -1715,8 +1836,8 @@ async def _two_items_and_failures(w: Writer) -> tuple[int, int]:
     second = await w.item(pull_request(2, 20))
     with connect(w.database) as connection:
         repository_id = connection.execute(text("SELECT id FROM repositories")).scalar_one()
-        Seed(connection).failure(repository_id, 8)
-        Seed(connection).failure(repository_id, 9)
+        Seed(connection).failure(repository_id, 8, run_id=w.run_id)
+        Seed(connection).failure(repository_id, 9, run_id=w.run_id)
     return first.row_id, second.row_id
 
 
@@ -1984,7 +2105,6 @@ async def test_every_write_runs_on_the_writer_s_one_connection(
             number=9,
             error=ValueError("x"),
             failed_at=T0,
-            run_started_at=T0,
         )
         for call in GUARDED.values():
             await call(writer, w.run_id, pr)

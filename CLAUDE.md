@@ -45,9 +45,10 @@ uv run pytest                      # CI also runs Python 3.12, `alembic check`, 
 - GitHub source layer (`src/github_activity_db/source/`, redesign plan Step 2): resolve, PR index,
   batch hydration, user lookup, and rate-limit readings, with typed records of every field
   Step 3b-1 collects (`hydration_version` 2)
-- The Step 3 schema (plan 5.1, without issues): migrations `33f8570f6540` and `94a52e4f1d57`
-  (Step 3b-1, `schema_version` 2), the row-level `v_*` consumer views, the data dictionary, and
-  the schema-version lock with view digests
+- The Step 3 schema (plan 5.1, without issues): migrations `33f8570f6540`, `94a52e4f1d57`
+  (Step 3b-1, `schema_version` 2), and `2d2ba76b177c` (Step 3b-2a-2a: `sync_failures.last_run_id`),
+  the row-level `v_*` consumer views, the data dictionary, and the schema-version lock with view
+  digests
 - CLI commands: `ghactivity github rate-limit` and `ghactivity github test`
 - Sync planning (`src/github_activity_db/sync/`, Step 3b-2a-1): the snapshot reader, the planner
   of plan 5.3 step 3, and step 7's deletion functions, with `tracking.toml`'s `[coverage]` floor

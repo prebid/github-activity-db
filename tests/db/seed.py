@@ -297,7 +297,10 @@ class Seed:
         }
         self._insert(PullRequestClosingIssue, {**row, **values})
 
-    def failure(self, repository_id: int, number: int, kind: str = "pull_request") -> None:
+    def failure(
+        self, repository_id: int, number: int, kind: str = "pull_request", run_id: int | None = None
+    ) -> None:
+        """A ``sync_failures`` row written by ``run_id``, or by this seed's own run."""
         row = {
             "repository_id": repository_id,
             "item_kind": kind,
@@ -306,6 +309,7 @@ class Seed:
             "last_error": "ItemError: test",
             "first_failed_at": T0,
             "last_failed_at": T0,
+            "last_run_id": run_id if run_id is not None else self.run_id(),
         }
         self._insert(SyncFailure, row)
 

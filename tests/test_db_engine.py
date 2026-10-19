@@ -129,16 +129,10 @@ class TestSqliteConnectionSettings:
 
     async def test_on_delete_cascade_removes_children(self, test_engine) -> None:
         async with test_engine.begin() as conn:
-            repository = await conn.run_sync(lambda sync: Seed(sync).repository("prebid/c"))
-            await conn.execute(
-                text(
-                    "INSERT INTO sync_failures (repository_id, item_kind, number, attempts, "
-                    "last_error, first_failed_at, last_failed_at) VALUES (:repository, "
-                    "'pull_request', 7, 1, 'e', '2026-01-01 00:00:00.000000', "
-                    "'2026-01-01 00:00:00.000000')"
-                ),
-                {"repository": repository},
+            await conn.run_sync(
+                lambda sync: Seed(sync).failure(Seed(sync).repository("prebid/c"), 7)
             )
+            assert (await conn.execute(text("SELECT COUNT(*) FROM sync_failures"))).scalar() == 1
             await conn.execute(text("DELETE FROM repositories"))
             remaining = (await conn.execute(text("SELECT COUNT(*) FROM sync_failures"))).scalar()
 

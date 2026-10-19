@@ -37,7 +37,7 @@ from tests.db.alembic_support import (
     upgrade,
     write_revision,
 )
-from tests.db.schema_support import named_constraints, schema_of
+from tests.db.schema_support import frozen_views, named_constraints, schema_of
 from tests.db.seed import T0, Seed, connect
 from tests.test_import_boundaries import imported_modules
 
@@ -343,6 +343,19 @@ def step3a_database(tmp_path: Path) -> Path:
     return database
 
 
+STEP3B1 = "94a52e4f1d57"
+LAST_RUN_ID = "2d2ba76b177c"
+
+
+@pytest.fixture
+def step3b1_database(tmp_path: Path) -> Path:
+    """A database at the Step 3b-1 revision, which no sync has written."""
+    database = tmp_path / "step3b1.db"
+    upgrade(database, STEP3B1)
+    assert revision_of(database) == STEP3B1
+    return database
+
+
 class TestStep3b1Migration:
     @pytest.mark.parametrize(
         ("tables", "held"),
@@ -383,16 +396,16 @@ class TestStep3b1Migration:
         assert query(step3a_database, "SELECT name FROM user_tags") == [("kept",)]
 
     def test_the_refusal_covers_every_table_the_revision_recreates(
-        self, step3a_database: Path, head_template: Path
+        self, step3a_database: Path, head_template: Path, tmp_path: Path
     ) -> None:
         """CHANGED_TABLES, which the refusal counts, is exactly the set of tables present at
-        Step 3a whose definition differs at head; a table it leaves alone is unchanged."""
+        Step 3a whose definition differs at Step 3b-1; a table it leaves alone is unchanged."""
         module = (
-            ScriptDirectory.from_config(alembic_config(head_template))
-            .get_revision(HEAD_REVISION)
-            .module
+            ScriptDirectory.from_config(alembic_config(head_template)).get_revision(STEP3B1).module
         )
-        before, after = table_definitions(step3a_database), table_definitions(head_template)
+        step3b1 = tmp_path / "at-step3b1.db"
+        upgrade(step3b1, STEP3B1)
+        before, after = table_definitions(step3a_database), table_definitions(step3b1)
         changed = {table for table in before if before[table] != after.get(table)}
         assert set(module.CHANGED_TABLES) == changed
         assert after.keys() - before.keys() == {
@@ -437,6 +450,58 @@ class TestStep3b1Migration:
 
         assert defined("'a b'", "one") == defined("'a b'", "again")
         assert defined("'a  b'", "two") != defined("'a b'", "one")
+
+
+class TestSyncFailuresLastRunIdMigration:
+    FAILURE = (
+        "INSERT INTO sync_failures (repository_id, item_kind, number, attempts, last_error, "
+        "first_failed_at, last_failed_at) VALUES (?, 'pull_request', 1, 1, 'e', "
+        "'2026-01-01 00:00:00.000000', '2026-01-01 00:00:00.000000')"
+    )
+
+    def _repository(self, database: Path) -> int:
+        with connect(database) as connection:
+            return Seed(connection).repository()
+
+    def test_refuses_a_database_holding_a_sync_failures_row(self, step3b1_database: Path) -> None:
+        repository = self._repository(step3b1_database)
+        with closing(sqlite3.connect(step3b1_database)) as connection, connection:
+            connection.execute(self.FAILURE, (repository,))
+        before = snapshot(step3b1_database)
+        with pytest.raises(RuntimeError, match=r"rows would be lost \(sync_failures 1\)"):
+            upgrade(step3b1_database)
+        assert snapshot(step3b1_database) == before
+        assert revision_of(step3b1_database) == STEP3B1
+
+    def test_upgrades_a_database_without_rows(
+        self, step3b1_database: Path, head_template: Path
+    ) -> None:
+        upgrade(step3b1_database)
+        assert revision_of(step3b1_database) == HEAD_REVISION
+        assert query(step3b1_database, "PRAGMA user_version") == [(SCHEMA_VERSION,)]
+        assert schema_of(step3b1_database) == schema_of(head_template)
+
+    def test_a_row_in_a_table_it_keeps_is_not_refused(self, step3b1_database: Path) -> None:
+        repository = self._repository(step3b1_database)
+        upgrade(step3b1_database)
+        assert query(step3b1_database, "SELECT id FROM repositories") == [(repository,)]
+
+    def test_the_refusal_covers_every_table_the_revision_recreates(
+        self, step3b1_database: Path, head_template: Path, tmp_path: Path
+    ) -> None:
+        """CHANGED_TABLES is exactly the set of tables whose definition the revision changes;
+        it adds no table."""
+        module = (
+            ScriptDirectory.from_config(alembic_config(head_template))
+            .get_revision(LAST_RUN_ID)
+            .module
+        )
+        migrated = tmp_path / "at-last-run-id.db"
+        upgrade(migrated, LAST_RUN_ID)
+        before, after = table_definitions(step3b1_database), table_definitions(migrated)
+        changed = {table for table in before if before[table] != after.get(table)}
+        assert set(module.CHANGED_TABLES) == changed == {"sync_failures"}
+        assert after.keys() == before.keys()
 
 
 def table_definitions(database: Path) -> dict[str, str]:
@@ -836,12 +901,8 @@ class TestBatchAlter:
         indexes = query(migrated_database, PULL_REQUEST_INDEXES)
         assert all(children.values())
         assert all(view_rows.values())
-        step3 = ScriptDirectory.from_config(alembic_config(head_template)).get_revision(
-            HEAD_REVISION
-        )
-        frozen = tuple(
-            (name, sql) for name, sql in step3.module.VIEWS if name in VIEWS_READING_PULL_REQUESTS
-        )
+        views = frozen_views(alembic_config(head_template))
+        frozen = tuple((name, views[name]) for name in VIEWS_READING_PULL_REQUESTS if name in views)
         assert len(frozen) == len(VIEWS_READING_PULL_REQUESTS)
         versions = tmp_path / "versions"
         write_revision(versions, TEST_REVISION, HEAD_REVISION, _batch_alter_revision(frozen))
@@ -1154,16 +1215,26 @@ class TestRevisionSources:
         assert len(revisions) == len(MIGRATION_REVISIONS)
         assert [problem for path in revisions for problem in revision_source_problems(path)] == []
 
-    def test_the_head_revision_has_a_literal_views_constant(self) -> None:
-        """Positive control: the rule reads the VIEWS the chain actually has."""
-        (path,) = (REPO_ROOT / "alembic" / "versions").glob(f"{HEAD_REVISION}_*.py")
-        tree = ast.parse(path.read_bytes())
-        assert any(
-            isinstance(node, ast.AnnAssign)
-            and isinstance(node.target, ast.Name)
-            and node.target.id == "VIEWS"
-            for node in tree.body
+    def test_the_newest_view_revision_has_a_literal_views_constant(self) -> None:
+        """Positive control: the rule reads the VIEWS the chain actually has, in the newest
+        revision that defines any."""
+
+        def defines_views(path: Path) -> bool:
+            return any(
+                isinstance(node, ast.AnnAssign)
+                and isinstance(node.target, ast.Name)
+                and node.target.id == "VIEWS"
+                for node in ast.parse(path.read_bytes()).body
+            )
+
+        versions = REPO_ROOT / "alembic" / "versions"
+        newest = next(
+            path
+            for revision in reversed(MIGRATION_REVISIONS)
+            for path in versions.glob(f"{revision}_*.py")
+            if defines_views(path)
         )
+        assert newest.name.startswith(STEP3B1)
 
     @pytest.mark.parametrize(
         ("source", "flagged"),

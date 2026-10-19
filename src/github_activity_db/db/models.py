@@ -543,6 +543,7 @@ class SyncFailure(Base):
             name="uq_sync_failures_repository_id_item_kind_number",
         ),
         CheckConstraint(_one_of("item_kind", ITEM_KINDS), name="item_kind"),
+        Index(None, "last_run_id"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -553,6 +554,8 @@ class SyncFailure(Base):
     last_error: Mapped[str] = mapped_column(Text)
     first_failed_at: Mapped[datetime] = mapped_column(UtcDateTime)
     last_failed_at: Mapped[datetime] = mapped_column(UtcDateTime)
+    # The latest run in which the item failed: attempts adds one for a failure in another run.
+    last_run_id: Mapped[int] = mapped_column(ForeignKey("sync_runs.id"))
 
 
 class UserTag(Base):

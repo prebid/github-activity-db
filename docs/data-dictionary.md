@@ -449,6 +449,7 @@ written, or when the item leaves coverage.
 | `last_error` | consumer | The last error's class and message |
 | `first_failed_at` | consumer | When the item first failed |
 | `last_failed_at` | consumer | When the item last failed |
+| `last_run_id` | consumer | Row id of the latest run in which the item failed; `attempts` adds one only for a failure in another run |
 
 ### `user_tags`
 

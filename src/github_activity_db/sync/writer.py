@@ -79,8 +79,9 @@ class RepositoryConflict(WriteRefused):
 
 class ItemConflict(WriteRefused):
     """A hydrated item that cannot be written as GitHub reports it: an id the database stores
-    under another pull request, or an account identity it stores differently. The engine records
-    it at once, without the solo retry (5.3 step 3)."""
+    under another pull request, an account identity it stores differently, or a node the item
+    itself reports under two ``github_id`` values, a second node id never stored included. The
+    engine records it at once, without the solo retry (5.3 step 3)."""
 
     def __init__(self, number: int, message: str) -> None:
         super().__init__(f"#{number}: {message}")
@@ -413,7 +414,10 @@ class _Accounts:
     def __init__(self, connection: AsyncConnection, number: int | None) -> None:
         self.connection = connection
         self.number = number
-        self.rows: dict[str, int] = {}  # node id -> row id, for this transaction
+        # Node id -> (row id, the github_id it was reported under), for this transaction. A node
+        # is cached as reported, a second node id of a stored account included, which is never
+        # written, so only the cache holds what it was reported as.
+        self.rows: dict[str, tuple[int, int | None]] = {}
         self.inserted: list[str] = []
         self.second_node_ids: list[SecondNodeId] = []
 
@@ -421,6 +425,20 @@ class _Accounts:
         if self.number is None:
             return LookupConflict(message)
         return ItemConflict(self.number, message)
+
+    def _cached(self, account: Account) -> int | None:
+        """The row this transaction resolved for the account's node, which must be reported
+        under the same ``github_id`` each time; None when the node is not cached."""
+        cached = self.rows.get(account.node_id)
+        if cached is None:
+            return None
+        row_id, github_id = cached
+        if github_id != account.github_id:
+            raise self._conflict(
+                f"node {account.node_id} is reported under github_id {github_id} and under "
+                f"{account.github_id}"
+            )
+        return row_id
 
     async def _row(self, account: Account) -> Any:
         if account.type == _ENTERPRISE or account.github_id is None:
@@ -451,8 +469,9 @@ class _Accounts:
 
     async def sighted(self, account: Account, seen_at: datetime) -> int:
         """An actor sighting: insert it when not stored, and clear ``not_found_at`` (D28)."""
-        if account.node_id in self.rows:
-            return self.rows[account.node_id]
+        cached = self._cached(account)
+        if cached is not None:
+            return cached
         row = await self._row(account)
         if row is not None:
             self._refuse_enterprise_over_id(account, row)
@@ -465,7 +484,7 @@ class _Accounts:
             await self.connection.execute(
                 update(GitHubUser).where(GitHubUser.id == row.id).values(not_found_at=None)
             )
-            self.rows[account.node_id] = row.id
+            self.rows[account.node_id] = (int(row.id), account.github_id)
             return int(row.id)
         await self._check_node_free(account)
         result = await self.connection.execute(
@@ -480,7 +499,7 @@ class _Accounts:
         )
         assert result.inserted_primary_key is not None
         row_id = int(result.inserted_primary_key[0])
-        self.rows[account.node_id] = row_id
+        self.rows[account.node_id] = (row_id, account.github_id)
         self.inserted.append(account.node_id)
         return row_id
 
@@ -496,6 +515,7 @@ class _Accounts:
         """A lookup that returned the account: login, type, and the looked-up fields, the
         profile, ``refreshed_at``, and ``not_found_at`` cleared (5.2, D31)."""
         account = looked.account
+        self._cached(account)
         row = await self._row(account)
         if row is not None:
             self._refuse_enterprise_over_id(account, row)
@@ -536,7 +556,7 @@ class _Accounts:
                 update(GitHubUser).where(GitHubUser.id == row_id).values(**values)
             )
         await _replace_profile(self.connection, row_id, looked, looked_up_at)
-        self.rows[account.node_id] = row_id
+        self.rows[account.node_id] = (row_id, account.github_id)
         return row_id
 
 
@@ -658,7 +678,8 @@ async def write_pull_request(
     Raises:
         ItemConflict: the number is stored under another ``github_id``, the ``github_id`` under
             another repository or number, a review or comment id under another pull request,
-            or an account identity differs from the stored one.
+            an account identity differs from the stored one, or the item reports one node under
+            two ``github_id`` values.
         AccountMissing: a commit link's account is neither stored nor in ``links``.
     """
     number = record.number
@@ -1117,11 +1138,10 @@ async def record_failure(
     number: int,
     error: BaseException,
     failed_at: datetime,
-    run_started_at: datetime,
 ) -> None:
-    """An item failure: ``attempts`` counts the runs in which it failed, so a second failure in
-    the same run (its stored ``last_failed_at`` at or after ``run_started_at``) does not add one;
-    ``first_failed_at`` stays (5.1)."""
+    """An item failure: ``attempts`` counts the runs in which it failed, so it adds one only
+    when the stored ``last_run_id`` is another run than ``run_id``, whatever either run's clock
+    read; ``first_failed_at`` stays (5.1)."""
     async with transaction(connection, run_id):
         repository_id = (
             await connection.execute(
@@ -1130,7 +1150,7 @@ async def record_failure(
         ).scalar_one()
         stored = (
             await connection.execute(
-                select(SyncFailure.id, SyncFailure.attempts, SyncFailure.last_failed_at).where(
+                select(SyncFailure.id, SyncFailure.attempts, SyncFailure.last_run_id).where(
                     SyncFailure.repository_id == repository_id,
                     SyncFailure.item_kind == PULL_REQUEST_KIND,
                     SyncFailure.number == number,
@@ -1147,17 +1167,18 @@ async def record_failure(
                     last_error=error_text(error),
                     first_failed_at=failed_at,
                     last_failed_at=failed_at,
+                    last_run_id=run_id,
                 )
             )
             return
-        new_run = stored.last_failed_at < run_started_at
         await connection.execute(
             update(SyncFailure)
             .where(SyncFailure.id == stored.id)
             .values(
-                attempts=stored.attempts + (1 if new_run else 0),
+                attempts=stored.attempts + (0 if stored.last_run_id == run_id else 1),
                 last_error=error_text(error),
                 last_failed_at=failed_at,
+                last_run_id=run_id,
             )
         )
 

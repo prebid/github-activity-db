@@ -326,6 +326,7 @@
       ["sync_failures", "item_kind"],
       ["sync_failures", "last_error"],
       ["sync_failures", "last_failed_at"],
+      ["sync_failures", "last_run_id"],
       ["sync_failures", "number"],
       ["sync_failures", "repository_id"],
       ["sync_pending", "item_kind"],
