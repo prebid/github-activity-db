@@ -50,8 +50,9 @@ uv run pytest                      # CI also runs Python 3.12, `alembic check`, 
   the schema-version lock with view digests
 - CLI commands: `ghactivity github rate-limit` and `ghactivity github test`
 
-**Not implemented yet:** nothing writes the new tables until the `sync` command (Step 3b-2a);
-`verify` follows in Step 3b-2b. The tracked `github_activity.db` stays frozen at the first schema
+**Not implemented yet:** nothing writes the new tables until the `sync` command (Step 3b-2a-2,
+after the planner in 3b-2a-1); `verify` follows in Step 3b-2b. The tracked `github_activity.db`
+stays frozen at the first schema
 (D26).
 
 **Planned in the redesign plan:** the sync engine and verify (Step 3b); GitHub Issues and
