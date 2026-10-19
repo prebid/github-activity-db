@@ -35,7 +35,7 @@ issue totals) are dated; regenerate them with `ghactivity verify` once Step 3b-2
 | 4 | Issues, closing-issue links, and default-branch activity (pull requests 4a and 4b) | not started |
 | 5 | Full bootstrap and verification | not started |
 | 6 | Scheduled sync and publication | not started |
-| 7 | Documentation rewrite | not started |
+| 7 | Documentation rewrite and code audit | not started |
 
 ## 1. Scope
 
@@ -1660,11 +1660,24 @@ its manifest was written, a manifest whose counts disagree, and, each with a mat
 that does not decompress, a database failing `integrity_check`, one with a foreign-key violation,
 and one at a revision unknown to the code.
 
-### Step 7: Documentation rewrite
+### Step 7: Documentation rewrite and code audit
 
 Scope: README, `CONTRIBUTING.md`, `CLAUDE.md`, and `docs/` rewritten from the code; the data
 dictionary from Steps 3-4 completed with the coverage rule and column definitions; no hardcoded
-counts.
+counts. A final audit of the whole repository, made once Steps 1-6 have landed, lists:
+- code that no command, workflow, or test reaches;
+- dependencies in `pyproject.toml` that nothing imports;
+- scripts, hooks, and CI steps for mechanisms a step removed;
+- tests and fixtures of removed paths, and fixtures no test reads;
+- every note that defers something until a step that has landed (in code, docs, `.gitignore`,
+  and hook comments).
+
+Each entry is removed in Step 7 or given an owner (a later step or an issue).
+
+Acceptance: the pull request lists the audit's entries, each removed or owned; the documents
+describe the code at Step 7's head, and the pages kept as history until Step 7
+(`docs/architecture.md`, `docs/data-model.md`, `docs/rate-limit-handling.md`,
+`docs/github-api-quirks.md`) are removed or rewritten.
 
 ## 7. Evidence
 
