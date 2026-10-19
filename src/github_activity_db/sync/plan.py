@@ -51,7 +51,7 @@ class Reason(StrEnum):
     LINK_TOTAL = "closing-link totalCount differs from closing_issues_total"
     LINK_NOT_STORED = "an indexed closing link is not stored"
     LINK_NOT_INDEXED = "a stored closing link is not indexed"
-    LINK_REPEATED = "fewer distinct closing links than min(totalCount, 10)"
+    LINK_REPEATED = f"fewer distinct closing links than min(totalCount, {INDEX_CLOSING_LINKS})"
     FAILED = "has a sync_failures row"
 
 
@@ -76,7 +76,7 @@ class StateContradictsDates(PlannerFailure):
 
 
 class NumberStoredUnderAnotherId(PlannerFailure):
-    """The index lists a number the database stores under another ``github_id``; the stored
+    """An in-coverage index entry's number is stored under another ``github_id``; the stored
     row leaves through step 7."""
 
     def __init__(self, number: int, indexed_github_id: int, stored_github_id: int) -> None:

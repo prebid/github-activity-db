@@ -43,8 +43,8 @@ def parse_allow_deletions(value: str, config: TrackingConfig) -> DeletionApprova
     """Read ``owner/name=N``; the name matches a configured repository ignoring case.
 
     Raises:
-        AllowDeletionsError: the value has another form, N is below 1, or no configured
-            repository has the name.
+        AllowDeletionsError: the value has another form, N is below 1 or has more digits than
+            ``int()`` converts, or no configured repository has the name.
     """
     match = _APPROVAL.fullmatch(value)
     if match is None:
@@ -70,8 +70,9 @@ def guard_limit(stored_rows: int, config: SyncConfig) -> int:
     """The most deletions the guard lets through: max(min rows, percent of the stored rows).
 
     The percentage is read as the shortest decimal that gives back the configured float
-    (``str()`` of it), which is the decimal ``tracking.toml`` writes when it has at most 15
-    significant digits, so 2.0% of 1,310 rows is exactly 26.2 and lets 26 through.
+    (``str()`` of it). For a value written with at most 15 significant digits and not below
+    2.2250738585072014e-308 (the smallest normal float) that is the decimal ``tracking.toml``
+    writes, so 2.0% of 1,310 rows is exactly 26.2 and lets 26 through.
     """
     share = Fraction(str(config.delete_guard_percent)) * stored_rows / 100
     return int(max(Fraction(config.delete_guard_min_rows), share))
