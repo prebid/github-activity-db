@@ -1600,7 +1600,9 @@ whose item did not fail reported, one case per exit condition in 5.3 step 8, wit
 leaves coverage, also under a deletion halt, `last_index_started_at` left unwritten for a failed,
 incompletely indexed, or gone-during-hydration repository and written for a time-limited one, an
 in-process interrupt closing the run as `aborted` with `last_outcome = failed` for each attempted
-repository and `last_index_started_at` unchanged, view rows after a sync.
+repository and `last_index_started_at` unchanged, a run fatal and one interrupted after step 7
+writing step 7's halt and its clearing to `halt_reason` beside `last_outcome = failed`, view rows
+after a sync.
 
 Acceptance: an adversarial review of the change, by reviewers who did not write it, finds no
 invariant check without a test that targets it; CI passes on the exact PR head.

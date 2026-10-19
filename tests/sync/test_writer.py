@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
-from dataclasses import replace
+from dataclasses import fields, replace
 from datetime import timedelta
 from pathlib import Path
 from typing import Any
@@ -18,7 +18,9 @@ from github_activity_db.source.records import (
     LinkedClosingIssue,
     Milestone,
     OrganizationProfile,
+    PullRequestRecord,
     RepositoryLabel,
+    RepositoryRecord,
     Stack,
     StackEntry,
     UserProfile,
@@ -83,6 +85,7 @@ CAROL = account("carol", 103)
 DAVE = account("dave", 104)
 DEPENDABOT = account("dependabot", 49699333, "Bot", node_id="MDM6Qm90NDk2OTkzMzM=")
 JS = repository()
+TRACKED_JS = TrackedRepository(owner="prebid", name="Prebid.js", group="Client")
 
 
 def _url(database: Path) -> str:
@@ -256,6 +259,33 @@ async def test_a_repository_is_written_tracked_with_its_group_and_labels(w: Writ
             "updated_at": None,
         },
     ]
+
+
+def _flags(record_type: type) -> tuple[str, ...]:
+    return tuple(field.name for field in fields(record_type) if "bool" in str(field.type))
+
+
+def _bit(code: int, record: int) -> int:
+    return (code >> record) & 1
+
+
+async def test_each_repository_flag_is_written_to_its_own_column(w: Writer) -> None:
+    """Five repositories; flag i holds the bits of i + 1 across them, a pattern no other flag
+    has, so a flag written to another flag's column fails."""
+    flags = _flags(RepositoryRecord)
+    assert len(flags) == 17
+    for record in range(5):
+        values: dict[str, Any] = {
+            flag: bool(_bit(code, record)) for code, flag in enumerate(flags, start=1)
+        }
+        await w.repository(
+            repository(11 + record, f"prebid/r{record}", node_id=f"R_{record}", **values)
+        )
+    rows = w.rows("SELECT * FROM repositories ORDER BY github_id")
+    assert {flag: tuple(row[flag] for row in rows) for flag in flags} == {
+        flag: tuple(_bit(code, record) for record in range(5))
+        for code, flag in enumerate(flags, start=1)
+    }
 
 
 async def test_a_repository_update_keeps_its_row_and_replaces_its_labels(w: Writer) -> None:
@@ -764,6 +794,24 @@ async def test_a_first_write_stores_every_column(w: Writer) -> None:
         )
     ]
     assert set(written.inserted_accounts) == {"N_alice", "N_bob", "N_carol", "N_dave"}
+
+
+async def test_each_pull_request_flag_is_written_to_its_own_column(w: Writer) -> None:
+    """Three pull requests; flag i holds the bits of i + 1 across them, a pattern no other flag
+    has, so a flag written to another flag's column fails."""
+    await w.repository()
+    flags = _flags(PullRequestRecord)
+    assert len(flags) == 5
+    for record in range(3):
+        values: dict[str, Any] = {
+            flag: bool(_bit(code, record)) for code, flag in enumerate(flags, start=1)
+        }
+        await w.item(pull_request(record + 1, (record + 1) * 10, **values))
+    rows = w.rows("SELECT * FROM pull_requests ORDER BY number")
+    assert {flag: tuple(row[flag] for row in rows) for flag in flags} == {
+        flag: tuple(_bit(code, record) for record in range(3))
+        for code, flag in enumerate(flags, start=1)
+    }
 
 
 async def test_a_closed_pull_request_and_its_reopening(w: Writer) -> None:
@@ -1644,6 +1692,7 @@ def _deletions(
             candidates=len(candidates), stored_rows=100, limit=limit, approved_limit=approved
         ),
         failures_removed=(("pull_request", 8),),
+        approval=None if approved is None else DeletionApproval(TRACKED_JS, approved),
     )
 
 
@@ -1684,36 +1733,16 @@ async def test_an_approval_is_recorded_with_the_deletion(w: Writer, runs: bool) 
     approval is recorded in the deletion's own transaction."""
     first, second = await _two_items_and_failures(w)
     limit = 2 if runs else 1
-    approval = DeletionApproval(
-        TrackedRepository(owner="prebid", name="Prebid.js", group="Client"), limit
-    )
     deletions = _deletions((first, second), (10, 20), runs=False, approved=limit)
     assert deletions.decision.runs is runs
     async with open_writer(_url(w.database)) as writer:
-        deleted = await apply_item_deletions(writer, w.run_id, deletions, approval=approval)
+        deleted = await apply_item_deletions(writer, w.run_id, deletions)
     assert deleted == (2 if runs else 0)
     (row,) = w.rows("SELECT deletions_approved FROM sync_runs")
     assert row["deletions_approved"] == (
         f'{{"allow_deletions":{{"approved":{limit},"github_id":11,"repository":"prebid/Prebid.js",'
         f'"sets":{{"items":{{"candidates":2,"deleted":{"true" if runs else "false"}}}}}}}}}'
     )
-
-
-async def test_an_approval_whose_n_is_not_the_guard_s_is_refused(w: Writer) -> None:
-    first, second = await _two_items_and_failures(w)
-    approval = DeletionApproval(
-        TrackedRepository(owner="prebid", name="Prebid.js", group="Client"), 3
-    )
-    before = w.dump()
-    with pytest.raises(ValueError, match="approval N 3 is not the guard's 2 for repository 11"):
-        async with open_writer(_url(w.database)) as writer:
-            await apply_item_deletions(
-                writer,
-                w.run_id,
-                _deletions((first, second), (10, 20), runs=False, approved=2),
-                approval=approval,
-            )
-    assert w.dump() == before
 
 
 async def test_one_run_records_its_approval_and_every_prune(w: Writer) -> None:
@@ -1725,9 +1754,6 @@ async def test_one_run_records_its_approval_and_every_prune(w: Writer) -> None:
     await w.item(pull_request(1, 110, repository="prebid/gone-a"), repo=12)
     await w.item(pull_request(1, 130, repository="prebid/gone-b"), repo=13)
     await w.item(pull_request(2, 131, repository="prebid/gone-b"), repo=13)
-    approval = DeletionApproval(
-        TrackedRepository(owner="prebid", name="Prebid.js", group="Client"), 2
-    )
     async with open_writer(_url(w.database)) as writer:
         await mark_untracked(writer, w.run_id, [12, 13])
         assert await prune_repositories(writer, w.run_id, [13]) == (Pruned(13, "prebid/gone-b", 2),)
@@ -1735,7 +1761,6 @@ async def test_one_run_records_its_approval_and_every_prune(w: Writer) -> None:
             writer,
             w.run_id,
             _deletions((first, second), (10, 20), runs=False, approved=2),
-            approval=approval,
         )
         assert deleted == 2
         assert await prune_repositories(writer, w.run_id, [12]) == (Pruned(12, "prebid/gone-a", 1),)

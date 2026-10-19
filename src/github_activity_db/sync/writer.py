@@ -50,7 +50,7 @@ from github_activity_db.source.records import (
     UserProfile,
 )
 from github_activity_db.sync.connection import transaction
-from github_activity_db.sync.deletions import DeletionApproval, Deletions
+from github_activity_db.sync.deletions import Deletions
 from github_activity_db.sync.plan import InPlaceUpdate
 
 # An account is due for the refresh when its refreshed_at is more than this far behind (5.2).
@@ -1178,26 +1178,17 @@ async def apply_item_deletions(
     connection: AsyncConnection,
     run_id: int,
     deletions: Deletions,
-    *,
-    approval: DeletionApproval | None = None,
 ) -> int:
     """Step 7 for one repository's items, in one transaction (5.3 step 7).
 
     When the guard lets them through, the candidates are deleted (their child rows and
     ``pr_user_tags`` by cascade); the ``sync_failures`` rows of items absent from the in-coverage
-    set are deleted either way. The deleted rows add to ``sync_runs.items_deleted``, and an
-    ``--allow-deletions`` approval naming this repository is recorded in ``deletions_approved``,
-    in the same transaction. Returns the number of item rows deleted.
-
-    Raises:
-        ValueError: the approval's N is not the N the guard decided with; nothing is written.
+    set are deleted either way. The deleted rows add to ``sync_runs.items_deleted``, and the
+    ``--allow-deletions`` approval the deletions carry (``Deletions.approval``) is recorded in
+    ``deletions_approved``, in the same transaction. Returns the number of item rows deleted.
     """
     decision = deletions.decision
-    if approval is not None and decision.approved_limit not in (None, approval.limit):
-        raise ValueError(
-            f"approval N {approval.limit} is not the guard's {decision.approved_limit} for "
-            f"repository {deletions.repository_github_id}"
-        )
+    approval = deletions.approval
     async with transaction(connection, run_id):
         repository_id = (
             await connection.execute(
@@ -1230,7 +1221,7 @@ async def apply_item_deletions(
                 .where(SyncRun.id == run_id)
                 .values(items_deleted=SyncRun.items_deleted + deleted)
             )
-        if approval is not None and decision.approved_limit is not None:
+        if approval is not None:
             await _merge_approval(
                 connection,
                 run_id,

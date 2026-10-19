@@ -169,7 +169,8 @@ async def test_candidates_are_the_stored_items_absent_from_coverage(
         failed_during_hydration=False,
         stored_rows_before_run=5,
         config=DEFAULT,
-        approved_limit=None,
+        repository=JS,
+        approval=None,
     )
     assert result == Deletions(
         repository_github_id=JS_ID,
@@ -187,7 +188,8 @@ async def test_no_candidates_when_every_stored_item_is_covered(migrated_database
         failed_during_hydration=False,
         stored_rows_before_run=3,
         config=DEFAULT,
-        approved_limit=None,
+        repository=JS,
+        approval=None,
     )
     assert result is not None
     assert (result.candidates, result.decision.runs) == ((), True)
@@ -202,7 +204,8 @@ async def test_a_repository_with_nothing_stored(migrated_database: Path) -> None
         failed_during_hydration=False,
         stored_rows_before_run=0,
         config=DEFAULT,
-        approved_limit=None,
+        repository=JS,
+        approval=None,
     )
     assert result == Deletions(
         repository_github_id=JS_ID,
@@ -221,7 +224,8 @@ async def test_the_guard_counts_the_rows_before_the_run(migrated_database: Path)
         failed_during_hydration=False,
         stored_rows_before_run=100,
         config=DEFAULT,
-        approved_limit=None,
+        repository=JS,
+        approval=None,
     )
     assert result is not None
     assert result.candidates == _candidates(stored, range(1, 27))
@@ -243,7 +247,8 @@ async def test_failure_rows_absent_from_coverage_are_removed_under_a_halt_too(
         failed_during_hydration=False,
         stored_rows_before_run=130,
         config=DEFAULT,
-        approved_limit=approved,
+        repository=JS,
+        approval=None if approved is None else DeletionApproval(JS, approved),
     )
     assert result is not None
     assert result.candidates == _candidates(stored, range(101, 131))
@@ -266,7 +271,8 @@ async def test_step_7_skips_a_repository(
         failed_during_hydration=failed,
         stored_rows_before_run=3,
         config=DEFAULT,
-        approved_limit=None,
+        repository=JS,
+        approval=None,
     )
     assert result is None
 
@@ -281,7 +287,75 @@ async def test_only_pull_request_coverage_is_read(migrated_database: Path) -> No
             failed_during_hydration=False,
             stored_rows_before_run=1,
             config=DEFAULT,
-            approved_limit=None,
+            repository=JS,
+            approval=None,
+        )
+
+
+async def test_an_approval_naming_this_repository_travels_with_the_deletions(
+    migrated_database: Path,
+) -> None:
+    """It names the configured repository ignoring case; its N decides, and the writer records
+    the approval the result carries."""
+    stored = await _seeded(migrated_database, 130)
+    approval = DeletionApproval(
+        TrackedRepository(owner="PREBID", name="prebid.JS", group="Client"), 30
+    )
+    result = item_deletions(
+        stored,
+        _coverage(range(1, 101)),
+        repository=JS,
+        failed_during_hydration=False,
+        stored_rows_before_run=130,
+        config=DEFAULT,
+        approval=approval,
+    )
+    assert result is not None
+    assert (result.approval, result.decision.approved_limit, result.decision.runs) == (
+        approval,
+        30,
+        True,
+    )
+
+
+async def test_an_approval_naming_another_repository_does_not_apply(
+    migrated_database: Path,
+) -> None:
+    stored = await _seeded(migrated_database, 130)
+    result = item_deletions(
+        stored,
+        _coverage(range(1, 101)),
+        repository=JS,
+        failed_during_hydration=False,
+        stored_rows_before_run=130,
+        config=DEFAULT,
+        approval=DeletionApproval(SERVER, 30),
+    )
+    assert result is not None
+    assert (result.approval, result.decision.approved_limit, result.decision.runs) == (
+        None,
+        None,
+        False,
+    )
+
+
+@pytest.mark.parametrize(
+    ("approved_limit", "approval_limit"),
+    [(2, None), (None, 2), (2, 3)],
+    ids=["a-guard-n-without-an-approval", "an-approval-the-guard-did-not-use", "another-n"],
+)
+def test_deletions_refuse_an_approval_the_guard_did_not_decide_with(
+    approved_limit: int | None, approval_limit: int | None
+) -> None:
+    with pytest.raises(ValueError, match="the guard decided with N"):
+        Deletions(
+            repository_github_id=JS_ID,
+            candidates=(),
+            decision=GuardDecision(
+                candidates=3, stored_rows=100, limit=1, approved_limit=approved_limit
+            ),
+            failures_removed=(),
+            approval=None if approval_limit is None else DeletionApproval(JS, approval_limit),
         )
 
 
@@ -294,7 +368,8 @@ async def test_the_control_for_skipping_lists_candidates(migrated_database: Path
         failed_during_hydration=False,
         stored_rows_before_run=3,
         config=DEFAULT,
-        approved_limit=None,
+        repository=JS,
+        approval=None,
     )
     assert result is not None
     assert result.candidates == _candidates(stored, [2, 3])
@@ -325,7 +400,8 @@ async def test_candidates_from_the_planner_and_a_snapshot(migrated_database: Pat
         failed_during_hydration=False,
         stored_rows_before_run=4,
         config=DEFAULT,
-        approved_limit=None,
+        repository=JS,
+        approval=None,
     )
     assert deletions is not None
     assert deletions.candidates == (

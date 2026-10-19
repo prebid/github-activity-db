@@ -24,6 +24,7 @@ from github_activity_db.sync.runs import (
     CloseResult,
     HeadCheckError,
     IndexState,
+    LastOutcome,
     RepositoryOutcome,
     RunCounters,
     RunStatus,
@@ -698,7 +699,17 @@ async def test_a_failed_close_keeps_step_7_s_result(migrated_database: Path) -> 
                 ),
                 {"r": ids[github_id], "run": previous},
             )
+            connection.execute(
+                text(
+                    "INSERT INTO sync_pending (repository_id, item_kind, number, run_id) VALUES "
+                    "(:r, 'pull_request', 4, :run), (:r, 'issue', 4, :run)"
+                ),
+                {"r": ids[github_id], "run": previous},
+            )
         connection.execute(text("UPDATE sync_runs SET status = 'complete'"))
+    pending = "SELECT * FROM sync_pending ORDER BY repository_id, item_kind"
+    before = fetch(migrated_database, pending)
+    assert len(before) == 4
     run_id = await _claim(migrated_database, started_at=T0 + timedelta(hours=1))
     result = await _close(
         migrated_database,
@@ -725,6 +736,37 @@ async def test_a_failed_close_keeps_step_7_s_result(migrated_database: Path) -> 
         }
         for github_id, halt_reason in ((11, "40 candidates"), (12, None))
     ]
+    assert fetch(migrated_database, pending) == before
+
+
+@pytest.mark.parametrize("outcome", ["complete", "time_limited", "halted"])
+async def test_a_completely_indexed_repository_writes_its_index_and_pending_items(
+    migrated_database: Path, outcome: LastOutcome
+) -> None:
+    ids = _repositories(migrated_database, 11)
+    run_id = await _claim(migrated_database)
+    index = IndexState(started_at=T0 + timedelta(minutes=5), pr_total=9)
+    status: RunStatus = "time_limited" if outcome == "time_limited" else "complete"
+    await _close(
+        migrated_database,
+        run_id,
+        RepositoryOutcome(11, outcome, index=index, pending=(6,)),
+        status=status,
+        exit_code=2,
+    )
+    assert fetch(
+        migrated_database,
+        "SELECT last_index_started_at, index_pr_total, last_outcome FROM repo_sync_state",
+    ) == [
+        {
+            "last_index_started_at": ts(index.started_at),
+            "index_pr_total": 9,
+            "last_outcome": outcome,
+        }
+    ]
+    assert fetch(migrated_database, "SELECT repository_id, number, run_id FROM sync_pending") == [
+        {"repository_id": ids[11], "number": 6, "run_id": run_id}
+    ]
 
 
 @pytest.mark.parametrize(
@@ -738,6 +780,9 @@ async def test_a_failed_close_keeps_step_7_s_result(migrated_database: Path) -> 
         ("aborted", (RepositoryOutcome(11, "failed", pending=(4,)),)),
         ("aborted", (RepositoryOutcome(11, "failed", pending=()),)),
         ("failed", (RepositoryOutcome(11, "complete", succeeded=True),)),
+        ("complete", (RepositoryOutcome(11, "failed", index=IndexState(T0, 5)),)),
+        ("time_limited", (RepositoryOutcome(11, "incomplete_index", pending=(4,)),)),
+        ("complete", (RepositoryOutcome(11, "untracked", pending=()),)),
     ],
     ids=[
         "success-without-complete",
@@ -748,6 +793,9 @@ async def test_a_failed_close_keeps_step_7_s_result(migrated_database: Path) -> 
         "aborted-close-pending",
         "aborted-close-no-pending",
         "failed-close-success",
+        "failed-with-an-index",
+        "incomplete-index-with-pending",
+        "untracked-with-no-pending",
     ],
 )
 async def test_invalid_outcomes_are_refused_before_writing(

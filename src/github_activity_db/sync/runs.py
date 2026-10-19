@@ -277,6 +277,10 @@ class _NotRunning(Exception):
     pass
 
 
+# The outcomes of a repository whose index completed and that did not fail later in the run.
+_INDEXED: frozenset[LastOutcome] = frozenset({"complete", "time_limited", "halted"})
+
+
 async def close_run(
     connection: AsyncConnection,
     run_id: int,
@@ -290,15 +294,18 @@ async def close_run(
     """Step 8 and the close in one transaction, written only while the row is ``running``.
 
     Each outcome writes ``last_run_id`` and ``last_outcome`` and the columns it carries for a
-    repository still stored. A fatal or interrupted close passes ``failed`` outcomes carrying at
-    most step 7's result, so ``last_index_started_at``, ``index_pr_total``, ``sync_pending``, and
-    ``last_success_at`` stay as they were, while a halt step 7 reached, or its clearing, is kept
-    beside the deletions that step committed (plan 5.1 ``halt_reason``, 5.3 step 8).
+    repository still stored. Only a ``complete``, ``time_limited``, or ``halted`` repository
+    carries an index and pending items: one that failed, was not completely indexed, or is
+    untracked leaves ``last_index_started_at``, ``index_pr_total``, and ``sync_pending`` as they
+    were (plan 5.1). A fatal or interrupted close passes ``failed`` outcomes carrying at most
+    step 7's result, so a halt step 7 reached, or its clearing, is kept beside the deletions that
+    step committed (plan 5.1 ``halt_reason``, 5.3 step 8).
 
     Raises:
-        ValueError: an outcome marks success without ``complete`` or names a repository twice, or
-            a ``failed`` or ``aborted`` close carries an outcome other than ``failed``, or an
-            index, pending items, or success.
+        ValueError: an outcome names a repository twice, marks success without ``complete``,
+            or carries an index or pending items with an outcome other than ``complete``,
+            ``time_limited``, or ``halted``; or a ``failed`` or ``aborted`` close carries an
+            outcome other than ``failed``.
     """
     ids = [outcome.repository_github_id for outcome in outcomes]
     if len(set(ids)) != len(ids):
@@ -308,15 +315,17 @@ async def close_run(
             raise ValueError(
                 f"repository {outcome.repository_github_id}: success needs last_outcome complete"
             )
-        if status in ("failed", "aborted") and (
-            outcome.last_outcome != "failed"
-            or outcome.index is not None
-            or outcome.pending is not None
-            or outcome.succeeded
-        ):
+        if (
+            outcome.index is not None or outcome.pending is not None
+        ) and outcome.last_outcome not in _INDEXED:
+            raise ValueError(
+                f"repository {outcome.repository_github_id}: a {outcome.last_outcome} repository "
+                "writes no index and no pending items (plan 5.1)"
+            )
+        if status in ("failed", "aborted") and outcome.last_outcome != "failed":
             raise ValueError(
                 f"repository {outcome.repository_github_id}: a {status} close writes "
-                "last_outcome failed and at most step 7's result (plan 5.3 step 8)"
+                "last_outcome failed (plan 5.3 step 8)"
             )
     try:
         async with transaction(connection):
