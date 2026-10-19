@@ -93,9 +93,10 @@ A migration changes the models (`db/models.py`), the chain, and the documents to
 - Add the revision id to `MIGRATION_REVISIONS` in `db/schema.py`: code that must refuse a
   database not at head reads the chain from there (Step 3b's head check, gap 74).
 - Update `docs/data-dictionary.md` and `tests/schema_versions.json`: the consumer columns, and
-  the SHA-256 of each view's frozen SQL. A removed, renamed, or redefined consumer column, and a
-  view whose rows or derivation change (a new column on an existing view included), needs a new
-  `SCHEMA_VERSION`, set by the migration as `PRAGMA user_version`.
+  the SHA-256 of each view's frozen SQL, exactly as the migration embeds it. A removed, renamed,
+  or redefined consumer column, and any change to a view's frozen SQL (a new column on an
+  existing view, and a change of layout alone, included), needs a new `SCHEMA_VERSION`, set by
+  the migration as `PRAGMA user_version`.
 - A migration that adds or redefines a GitHub-derived column of a table that may hold rows
   bumps that kind's hydration version (plan 5.1).
 

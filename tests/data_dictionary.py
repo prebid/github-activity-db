@@ -138,8 +138,10 @@ def lock_views(entry: LockEntry) -> dict[str, str]:
 
 
 def view_digest(sql: str) -> str:
-    """SHA-256 of a view's frozen SQL, whitespace runs collapsed as the view comparison does."""
-    return hashlib.sha256(" ".join(sql.split()).encode()).hexdigest()
+    """SHA-256 of a view's frozen SQL exactly as the migration embeds it. Nothing is normalized:
+    whitespace inside a literal, or the line break that ends a ``--`` comment, can change a view's
+    rows."""
+    return hashlib.sha256(sql.encode()).hexdigest()
 
 
 def lock_differences(entry: list[list[str]], consumer: list[list[str]]) -> list[str]:

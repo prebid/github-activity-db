@@ -470,7 +470,8 @@ renamed, or changes meaning, or a consumer view's rows or derivation change (gap
 changes (a new table column, table, or view) do not bump it, while a new column on an existing
 view changes its frozen SQL, a change of derivation that bumps it. A lock file maps each `schema_version` to its
 consumer (table or view, column) pairs and, from Step 3b-1, to the SHA-256 of each consumer view's
-frozen SQL. A test fails when the current version's entry differs from the consumer pairs the data
+frozen SQL, its exact text: whitespace inside a literal or at the end of a comment can change a
+view's rows, so nothing is normalized, and a change of layout alone also needs a new version. A test fails when the current version's entry differs from the consumer pairs the data
 dictionary marks at head (a listed pair missing at head, or a consumer pair at head not listed) or
 from the frozen SQL of the views at head, and on pull requests the CI lock step (Step 2) also fails
 when a pull request deletes an entry, or removes a pair or changes a view digest in one, that

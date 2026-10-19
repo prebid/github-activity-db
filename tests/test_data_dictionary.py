@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import sqlite3
 from contextlib import closing
 from pathlib import Path
@@ -13,6 +15,7 @@ from github_activity_db.db.schema import SCHEMA_VERSION
 from tests.data_dictionary import (
     DICTIONARY,
     DictionaryError,
+    LockEntry,
     consumer_pairs,
     database_columns,
     differences,
@@ -286,10 +289,45 @@ class TestSchemaLock:
     def test_the_lock_reads_without_repeated_keys(self) -> None:
         assert parse_lock('{"1": [["t", "c"]]}') == {"1": ({("t", "c")}, {})}
 
-    def test_a_changed_view_changes_its_digest(self) -> None:
+    @pytest.mark.parametrize(
+        ("before", "after"),
+        [
+            pytest.param(
+                "CREATE VIEW v AS SELECT 'a  b' AS value",
+                "CREATE VIEW v AS SELECT 'a b' AS value",
+                id="whitespace in a literal",
+            ),
+            pytest.param(
+                "CREATE VIEW v AS SELECT 1 AS value -- explanation\nWHERE 0",
+                "CREATE VIEW v AS SELECT 1 AS value -- explanation WHERE 0",
+                id="the end of a line comment",
+            ),
+        ],
+    )
+    def test_a_view_returning_other_rows_fails_the_lock(self, before: str, after: str) -> None:
+        """Two definitions that differ only in whitespace but return different rows get different
+        digests, so the checker reports the view as changed."""
+
+        def rows(sql: str) -> list[tuple[object, ...]]:
+            with closing(sqlite3.connect(":memory:")) as connection:
+                connection.execute(sql)
+                return connection.execute("SELECT * FROM v").fetchall()
+
+        def entry(sql: str) -> dict[str, LockEntry]:
+            return parse_lock(
+                json.dumps({"2": {"columns": [["v", "value"]], "views": {"v": view_digest(sql)}}})
+            )
+
+        assert rows(before) != rows(after)
+        assert lock_checker().schema_problems(entry(before), entry(after)) == [
+            "schema version 2 changed view v; a change to a view's rows or derivation needs a "
+            "new schema version"
+        ]
+
+    def test_the_digest_is_of_the_exact_sql(self) -> None:
         sql = "CREATE VIEW v AS SELECT a FROM t"
-        assert view_digest(sql) == view_digest("CREATE VIEW v AS\n  SELECT a\nFROM t")
-        assert view_digest(sql) != view_digest("CREATE VIEW v AS SELECT a FROM t WHERE a")
+        assert view_digest(sql) == hashlib.sha256(sql.encode()).hexdigest()
+        assert view_digest(sql) != view_digest("CREATE VIEW v AS\n  SELECT a\nFROM t")
 
     def test_a_listed_pair_that_is_not_consumer_at_head_is_reported(self) -> None:
         consumer = consumer_pairs(read_dictionary(ENTRY))
