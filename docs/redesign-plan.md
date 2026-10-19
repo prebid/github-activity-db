@@ -466,17 +466,19 @@ without one (a label, commit, file, or closing link) by its pull request's `gith
 key; (`full_name`, `number`) identifies a pull request among tracked repositories within one file
 and changes with a rename. Views carry no row ids. `PRAGMA user_version` holds `schema_version`, set by
 migrations (1 from Step 3a, 2 from Step 3b-1) and bumped when an interface column is removed,
-renamed, or changes meaning, or a consumer view's rows or derivation change (gap 87); additive
-changes (a new table column, table, or view) do not bump it, while a new column on an existing
-view changes its frozen SQL, a change of derivation that bumps it. A lock file maps each `schema_version` to its
-consumer (table or view, column) pairs and, from Step 3b-1, to the SHA-256 of each consumer view's
-frozen SQL, its exact text: whitespace inside a literal or at the end of a comment can change a
-view's rows, so nothing is normalized, and a change of layout alone also needs a new version. A test fails when the current version's entry differs from the consumer pairs the data
-dictionary marks at head (a listed pair missing at head, or a consumer pair at head not listed) or
-from the frozen SQL of the views at head, and on pull requests the CI lock step (Step 2) also fails
-when a pull request deletes an entry, or removes a pair or changes a view digest in one, that
-exists at the base commit; an additive change adds its consumer pairs and new views to the current
-entry. A change of meaning in a column is left to review. The manifest (5.6) carries the same number.
+renamed, or changes meaning, or a consumer view's frozen SQL changes, which covers a change to its
+rows or derivation (gap 87); additive changes (a new table column, table, or view) do not bump it,
+while a new column on an existing view changes its frozen SQL and bumps it. A lock file maps each
+`schema_version` to its consumer (table or view, column) pairs and, from Step 3b-1, to the SHA-256
+of each consumer view's frozen SQL, its exact text: whitespace inside a literal or at the end of a
+comment can change a view's rows, so nothing is normalized, and a change of layout alone also
+needs a new version. A test fails when the current version's entry differs from the consumer pairs
+the data dictionary marks at head (a listed pair missing at head, or a consumer pair at head not
+listed) or from the frozen SQL of the views at head, and on pull requests the CI lock step (Step 2)
+also fails when a pull request deletes an entry, or removes a pair or changes a view digest in one,
+that exists at the base commit; an additive change adds its consumer pairs and new views to the
+current entry. A change of meaning in a column is left to review. The manifest (5.6) carries the
+same number.
 
 ### 5.2 Identity and automation
 
