@@ -1006,6 +1006,32 @@ async def test_d28_keeps_references_github_returns_as_null(w: Writer) -> None:
     ]
 
 
+async def test_each_reported_flag_follows_its_own_reference(w: Writer) -> None:
+    """A re-hydration that returns the author but not the merger, then the reverse: each
+    `*_reported` column follows its own reference, and the null one keeps the stored account
+    (D28)."""
+    await w.repository()
+    merged: dict[str, Any] = {"state": "MERGED", "merged_at": T0, "closed_at": T0}
+    await w.item(pull_request(1, 10, author=ALICE, merged_by=BOB, **merged))
+    alice, bob = w.account_row("alice")["id"], w.account_row("bob")["id"]
+    columns = ("author_id", "author_reported", "merged_by_id", "merged_by_reported")
+    for author, merger, expected in (
+        (ALICE, None, (alice, 1, bob, 0)),
+        (None, BOB, (alice, 0, bob, 1)),
+    ):
+        await w.item(
+            pull_request(
+                1,
+                10,
+                author=author,
+                merged_by=merger,
+                hydrated_at=HYDRATED + timedelta(days=1),
+                **merged,
+            )
+        )
+        assert tuple(w.pr(1)[column] for column in columns) == expected
+
+
 async def test_d28_keeps_a_reference_only_from_the_same_review_comment_or_commit(
     w: Writer,
 ) -> None:
@@ -1566,8 +1592,19 @@ async def test_a_not_found_lookup_of_an_account_never_stored_writes_nothing(w: W
         ("N_x", account("x", 8, node_id="N_x"), 7, "returned github_id 8, expected 7"),
         ("N_x", account("y", 7, node_id="N_y"), None, "answered for node N_y"),
         ("N_z", account("z", 9, node_id="N_z"), None, "node N_z is stored under github_id 7"),
+        (
+            "N_x",
+            account("ent", None, "EnterpriseUserAccount", node_id="N_x"),
+            None,
+            "node N_x is stored as github_id 7, not as an EnterpriseUserAccount",
+        ),
     ],
-    ids=["another-database-id", "another-node", "a-node-stored-under-another-id"],
+    ids=[
+        "another-database-id",
+        "another-node",
+        "a-node-stored-under-another-id",
+        "an-enterprise-account-for-a-node-stored-with-an-id",
+    ],
 )
 async def test_a_lookup_that_disagrees_with_the_database_is_refused(
     w: Writer, node_id: str, answer: Any, expected: int | None, message: str
@@ -1899,15 +1936,20 @@ async def test_a_recorded_pull_request_is_written_with_every_child_row(w: Writer
     ]
 
 
-async def test_every_item_write_runs_on_the_writer_s_one_connection(
+async def test_every_write_runs_on_the_writer_s_one_connection(
     w: Writer, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Counted at the writer engine's connect hook and at the one every application engine
-    registers (db.engine), so a write that opened any other engine would show."""
+    """Five item writes and then one call to each writer function, counted at the writer
+    engine's connect hook and at the one every application engine registers (db.engine), so a
+    write that opened any other engine would show."""
     from github_activity_db.db import engine as engine_module
     from github_activity_db.sync import connection as connection_module
 
     await w.repository()
+    await w.repository(repository(github_id=12, full_name="prebid/gone", node_id="R_12"))
+    pr = (await w.item(pull_request(1, 10, author=ALICE))).row_id
+    async with open_writer(_url(w.database)) as writer:
+        await mark_untracked(writer, w.run_id, [12])
     opened: list[object] = []
     connected: list[object] = []
     original = connection_module._writer_connect
@@ -1944,6 +1986,11 @@ async def test_every_item_write_runs_on_the_writer_s_one_connection(
             failed_at=T0,
             run_started_at=T0,
         )
+        for call in GUARDED.values():
+            await call(writer, w.run_id, pr)
     assert len(opened) == 1
     assert connected == opened
-    assert w.rows("SELECT count(*) AS n FROM pull_requests") == [{"n": 5}]
+    assert w.rows("SELECT number FROM pull_requests ORDER BY number") == [
+        {"number": number} for number in (2, 3, 4, 5)
+    ]
+    assert w.rows("SELECT github_id FROM repositories") == [{"github_id": 11}]

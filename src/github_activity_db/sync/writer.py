@@ -440,22 +440,27 @@ class _Accounts:
             )
         ).first()
 
+    def _refuse_enterprise_over_id(self, account: Account, row: Any) -> None:
+        """An ``EnterpriseUserAccount`` for a node stored with a ``databaseId``: the row's type
+        cannot change to one, since only that type has a null ``github_id``."""
+        if account.type == _ENTERPRISE and row.github_id is not None:
+            raise self._conflict(
+                f"node {account.node_id} is stored as github_id {row.github_id}, not as an "
+                "EnterpriseUserAccount"
+            )
+
     async def sighted(self, account: Account, seen_at: datetime) -> int:
         """An actor sighting: insert it when not stored, and clear ``not_found_at`` (D28)."""
         if account.node_id in self.rows:
             return self.rows[account.node_id]
         row = await self._row(account)
         if row is not None:
+            self._refuse_enterprise_over_id(account, row)
             if row.node_id != account.node_id:
                 await self._check_node_free(account)
                 assert account.github_id is not None
                 self.second_node_ids.append(
                     SecondNodeId(account.github_id, row.node_id, account.node_id)
-                )
-            elif account.type == _ENTERPRISE and row.github_id is not None:
-                raise self._conflict(
-                    f"node {account.node_id} is stored as github_id {row.github_id}, not as an "
-                    "EnterpriseUserAccount"
                 )
             await self.connection.execute(
                 update(GitHubUser).where(GitHubUser.id == row.id).values(not_found_at=None)
@@ -492,6 +497,8 @@ class _Accounts:
         profile, ``refreshed_at``, and ``not_found_at`` cleared (5.2, D31)."""
         account = looked.account
         row = await self._row(account)
+        if row is not None:
+            self._refuse_enterprise_over_id(account, row)
         holder = await self._node_holder(account.node_id)
         if holder is not None and (row is None or holder.id != row.id):
             raise self._conflict(
@@ -588,7 +595,7 @@ async def write_lookup(
     Raises:
         LookupConflict: the lookup answered for another node id, its ``databaseId`` is not
             ``expected_github_id``, or the database stores the node under another
-            ``databaseId``.
+            ``databaseId``, or with one when the lookup returned an ``EnterpriseUserAccount``.
     """
     async with transaction(connection, run_id):
         if isinstance(result, NotFound):
