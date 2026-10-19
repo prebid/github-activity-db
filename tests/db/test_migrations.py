@@ -416,9 +416,9 @@ class TestStep3b1Migration:
 
 
 def table_definitions(database: Path) -> dict[str, str]:
-    """Each table's CREATE statement, whitespace collapsed, alembic's own table excluded."""
+    """Each table's CREATE statement as SQLite stores it, alembic's own table excluded."""
     return {
-        str(name): " ".join(str(sql).split())
+        str(name): str(sql)
         for name, sql in query(
             database,
             "SELECT name, sql FROM sqlite_master WHERE type = 'table' "

@@ -13,7 +13,7 @@ import sqlite3
 from collections.abc import Callable
 from contextlib import closing
 from pathlib import Path
-from typing import get_args
+from typing import Any, get_args
 
 import pytest
 from sqlalchemy import create_engine, insert, pool
@@ -458,6 +458,34 @@ class TestPlanRules:
             {("pr_reviews", "editor_id", "CASCADE")},
             OUTSIDE_THE_DELETE_RULE,
         )
+
+    @pytest.mark.parametrize("kind", ["check", "index", "trigger"])
+    def test_whitespace_inside_a_literal_is_a_difference(
+        self, head_template: Path, tmp_path: Path, kind: str
+    ) -> None:
+        """Two schemas whose SQL differs only in a literal's whitespace read differently."""
+
+        def read(literal: str, name: str) -> dict[str, Any]:
+            statements: tuple[str, ...]
+            if kind == "check":
+                statements = _redefined(
+                    head_template,
+                    "pr_files",
+                    "path TEXT NOT NULL",
+                    f"path TEXT NOT NULL CHECK (path != {literal})",
+                )
+            elif kind == "index":
+                statements = (f"CREATE INDEX ix_probe ON pr_files (path) WHERE path != {literal}",)
+            else:
+                statements = (
+                    "CREATE TRIGGER tr_probe BEFORE INSERT ON pr_files "
+                    f"BEGIN SELECT RAISE(ABORT, {literal}); END",
+                )
+            tampered = _tampered(head_template, tmp_path / f"{name}.db", *statements)
+            return schema_of(tampered)["pr_files"]
+
+        assert read("'a b'", "one") == read("'a b'", "again")
+        assert read("'a  b'", "two") != read("'a b'", "one")
 
     def test_the_cascade_exceptions_are_the_primary_key_references(
         self, head_template: Path

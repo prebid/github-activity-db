@@ -434,7 +434,7 @@ migration keeps producing its own revision's view. Views are not declared in `Ba
 metadata table for a view makes `alembic check` report `add_table`). `alembic check` compares
 neither views nor CHECK constraints, so a test compares a database migrated to head with the head
 models built by `metadata.create_all`, structurally (`PRAGMA table_xinfo`, `index_xinfo`, and
-`foreign_key_list`, and CHECK constraints by name and whitespace-normalized text), and each view
+`foreign_key_list`, and CHECK constraints by name and exact text), and each view
 with the frozen SQL of the newest migration that creates or replaces it, found by walking the
 revision chain. View, constraint, and sync tests run on databases built by `alembic upgrade head`.
 
