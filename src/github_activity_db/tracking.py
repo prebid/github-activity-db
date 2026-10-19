@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 import tomllib
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from importlib import resources
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Final
 
 from pydantic import (
     AwareDatetime,
@@ -26,6 +26,10 @@ class TrackingConfigError(ValueError):
     """The tracking configuration file is missing or invalid."""
 
 
+# The most minutes a timedelta holds, so the planner can build any window the loader accepts.
+MAX_UNSETTLED_MINUTES: Final = timedelta.max // timedelta(minutes=1)
+
+
 class CoverageConfig(BaseModel):
     """``[coverage]``: the floor of the coverage rule (redesign plan section 3).
 
@@ -40,7 +44,11 @@ class CoverageConfig(BaseModel):
     @field_validator("floor")
     @classmethod
     def _in_utc(cls, value: datetime) -> datetime:
-        return value.astimezone(UTC)
+        try:
+            return value.astimezone(UTC)
+        except OverflowError as e:
+            # pydantic reports a ValueError as a validation error; an OverflowError escapes it.
+            raise ValueError(f"{value.isoformat()} is outside the range of a UTC datetime") from e
 
 
 class SyncConfig(BaseModel):
@@ -49,7 +57,7 @@ class SyncConfig(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
 
     # An item is re-hydrated while hydrated_at - github_updated_at is below this (plan 5.3 step 3).
-    unsettled_minutes: int = Field(default=10, ge=1)
+    unsettled_minutes: int = Field(default=10, ge=1, le=MAX_UNSETTLED_MINUTES)
     # Step 7 halts a repository's deletions above max(delete_guard_min_rows, delete_guard_percent
     # of its stored rows).
     delete_guard_min_rows: int = Field(default=25, ge=0)

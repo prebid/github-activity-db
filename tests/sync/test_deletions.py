@@ -384,6 +384,7 @@ def test_parse_allow_deletions(value: str, repository: TrackedRepository, limit:
         ("=3", "takes owner/name=N"),
         ("", "takes owner/name=N"),
         ("prebid/Prebid.js=3=4", "takes owner/name=N"),
+        ("prebid/Prebid.js=" + "9" * 5000, r"N has too many digits \(5000\)"),
         (" prebid/Prebid.js=3", "which tracking.toml does not list"),
         ("prebid/go-gdpr=3", "which tracking.toml does not list"),
         ("Prebid.js=3", "which tracking.toml does not list"),
@@ -397,4 +398,7 @@ def test_parse_allow_deletions_refuses(value: str, message: str) -> None:
 def test_an_approval_applies_to_its_repository_only() -> None:
     approval = parse_allow_deletions("prebid/prebid.js=4", TWO_REPOSITORIES)
     assert approval.limit_for(JS) == 4
+    assert (
+        approval.limit_for(TrackedRepository(owner="PREBID", name="PREBID.JS", group="Client")) == 4
+    )
     assert approval.limit_for(SERVER) is None

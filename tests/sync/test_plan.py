@@ -26,7 +26,7 @@ from github_activity_db.sync.plan import (
     batches,
     plan,
 )
-from github_activity_db.tracking import TrackingConfig
+from github_activity_db.tracking import MAX_UNSETTLED_MINUTES, TrackingConfig
 from tests.db.seed import Seed, connect
 from tests.source.conftest import FakeClock
 from tests.source.replay import Replay
@@ -258,7 +258,9 @@ async def test_each_condition_alone(
         (1, timedelta(seconds=60), set()),
         (30, timedelta(minutes=29, seconds=59), {Reason.UNSETTLED}),
         (30, timedelta(minutes=30), set()),
+        (MAX_UNSETTLED_MINUTES, timedelta(days=36500), {Reason.UNSETTLED}),
     ],
+    ids=["1-inside", "1-at", "30-inside", "30-at", "the-longest-window"],
 )
 async def test_the_unsettled_window_comes_from_the_configuration(
     migrated_database: Path, minutes: int, hydrated_after: timedelta, reasons: set[Reason]
@@ -488,8 +490,15 @@ def test_the_contradiction_message() -> None:
 
 
 async def test_a_number_stored_under_another_github_id(migrated_database: Path) -> None:
-    _js(migrated_database, lambda seed, repo: stored_pr(seed, repo, 5, 50, is_draft=True))
-    result = await plan_of(migrated_database, attempted(entry(5, 51)))
+    """The entry's own github_id is stored too, under #6 and not a draft: the failure writes
+    nothing for it, so the index's draft flag is no in-place update."""
+
+    def build(seed: Seed, repo: int) -> None:
+        stored_pr(seed, repo, 5, 50)
+        stored_pr(seed, repo, 6, 51)
+
+    _js(migrated_database, build)
+    result = await plan_of(migrated_database, attempted(entry(5, 51, is_draft=True)))
     assert (result.queue, result.in_place_updates) == ((), ())
     (failure,) = result.failures
     assert isinstance(failure.error, NumberStoredUnderAnotherId)

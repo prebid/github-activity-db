@@ -7,7 +7,12 @@ import pytest
 from pydantic import ValidationError
 
 from github_activity_db.config import Settings
-from github_activity_db.tracking import SyncConfig, TrackingConfigError, load_tracking_config
+from github_activity_db.tracking import (
+    MAX_UNSETTLED_MINUTES,
+    SyncConfig,
+    TrackingConfigError,
+    load_tracking_config,
+)
 
 # The list the hardcoded Settings.tracked_repos returned before tracking.toml.
 EXPECTED_REPOS = [
@@ -214,6 +219,19 @@ class TestCoverage:
         body = f"[coverage]\nfloor = {spelling}\n" + ONE_REPO
         assert _errors(tmp_path, body) == [("coverage.floor", error)]
 
+    @pytest.mark.parametrize("spelling", ["0001-01-01T00:00:00+01:00", "9999-12-31T23:30:00-01:00"])
+    def test_a_floor_outside_the_utc_range(self, tmp_path: Path, spelling: str) -> None:
+        body = f"[coverage]\nfloor = {spelling}\n" + ONE_REPO
+        assert _errors(tmp_path, body) == [("coverage.floor", "value_error")]
+        with pytest.raises(TrackingConfigError, match="outside the range of a UTC datetime"):
+            load_tracking_config(tmp_path / "tracking.toml")
+
+    @pytest.mark.parametrize("spelling", ["0001-01-01T00:00:00Z", "9999-12-31T23:59:59Z"])
+    def test_a_floor_at_the_ends_of_the_utc_range(self, tmp_path: Path, spelling: str) -> None:
+        body = f"[coverage]\nfloor = {spelling}\n" + ONE_REPO
+        floor = load_tracking_config(_write(tmp_path, body)).coverage.floor
+        assert floor.isoformat() == spelling.replace("Z", "+00:00")
+
     def test_an_unknown_coverage_key(self, tmp_path: Path) -> None:
         body = COVERAGE + "flor = 2023-01-01T00:00:00Z\n" + ONE_REPO
         assert _errors(tmp_path, body) == [("coverage.flor", "extra_forbidden")]
@@ -261,6 +279,7 @@ class TestSyncSettings:
             ("unsettled_minutes", "10.0", "int_type"),
             ("unsettled_minutes", "true", "int_type"),
             ("unsettled_minutes", '"10"', "int_type"),
+            ("unsettled_minutes", "1440000000000", "less_than_equal"),
             ("delete_guard_min_rows", "-1", "greater_than_equal"),
             ("delete_guard_min_rows", "25.0", "int_type"),
             ("delete_guard_min_rows", "false", "int_type"),
@@ -279,6 +298,13 @@ class TestSyncSettings:
     def test_an_invalid_value(self, tmp_path: Path, key: str, value: str, error: str) -> None:
         body = COVERAGE + f"[sync]\n{key} = {value}\n" + ONE_REPO
         assert _errors(tmp_path, body) == [(f"sync.{key}", error)]
+
+    def test_the_longest_unsettled_window(self, tmp_path: Path) -> None:
+        """The most minutes a timedelta holds, so the planner can build the window."""
+        assert MAX_UNSETTLED_MINUTES == 1_439_999_999_999
+        body = COVERAGE + f"[sync]\nunsettled_minutes = {MAX_UNSETTLED_MINUTES}\n" + ONE_REPO
+        sync = load_tracking_config(_write(tmp_path, body)).sync
+        assert sync.unsettled_minutes == MAX_UNSETTLED_MINUTES
 
     def test_an_unknown_sync_key(self, tmp_path: Path) -> None:
         body = COVERAGE + "[sync]\nunsettled_minute = 5\n" + ONE_REPO

@@ -49,7 +49,12 @@ def parse_allow_deletions(value: str, config: TrackingConfig) -> DeletionApprova
     match = _APPROVAL.fullmatch(value)
     if match is None:
         raise AllowDeletionsError(f"--allow-deletions takes owner/name=N, not {value!r}")
-    limit = int(match["limit"])
+    try:
+        limit = int(match["limit"])
+    except ValueError as e:  # past Python's limit on the digits int() converts
+        raise AllowDeletionsError(
+            f"--allow-deletions N has too many digits ({len(match['limit'])})"
+        ) from e
     if limit < 1:
         raise AllowDeletionsError(f"--allow-deletions needs N of at least 1, not {limit}")
     name = match["repository"].lower()
@@ -64,8 +69,9 @@ def parse_allow_deletions(value: str, config: TrackingConfig) -> DeletionApprova
 def guard_limit(stored_rows: int, config: SyncConfig) -> int:
     """The most deletions the guard lets through: max(min rows, percent of the stored rows).
 
-    The percentage is taken as the decimal ``tracking.toml`` writes, so 2.0% of 1,310 rows is
-    exactly 26.2 and lets 26 through.
+    The percentage is read as the shortest decimal that gives back the configured float
+    (``str()`` of it), which is the decimal ``tracking.toml`` writes when it has at most 15
+    significant digits, so 2.0% of 1,310 rows is exactly 26.2 and lets 26 through.
     """
     share = Fraction(str(config.delete_guard_percent)) * stored_rows / 100
     return int(max(Fraction(config.delete_guard_min_rows), share))

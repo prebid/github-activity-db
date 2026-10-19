@@ -6,7 +6,9 @@ cursor leaves a result half-read. The scan flags, in every ``.py`` file under ``
 of an attribute named ``stream``, ``stream_scalars``, or ``yield_per``; a ``stream_results``
 keyword whose value is not the constant ``False``; a ``yield_per`` keyword; and a dict literal
 with a ``"stream_results"`` or ``"yield_per"`` key. Out of scope: ``getattr`` with a string, a
-method rebound to another name, and options built at run time.
+method rebound to another name, options built at run time, and reads through a raw DBAPI cursor
+(``sqlite3``, ``.connection.cursor()``, ``driver_connection``), whose half-read results block a
+commit as well.
 """
 
 from __future__ import annotations
