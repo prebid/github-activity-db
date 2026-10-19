@@ -35,13 +35,16 @@ JS_ID = 11
 
 
 async def _seeded(
-    database: Path, count: int, failures: Iterable[tuple[str, int]] = ()
+    database: Path,
+    count: int,
+    failures: Iterable[tuple[str, int]] = (),
+    full_name: str = "prebid/Prebid.js",
 ) -> StoredRepository:
     """Prebid.js stored with PRs #1 to #count (github_id 1000 + number) and the failure rows,
     as ``read_snapshot`` reads them back."""
     with connect(database) as connection:
         seed = Seed(connection)
-        repo = seed.repository("prebid/Prebid.js", github_id=JS_ID)
+        repo = seed.repository(full_name, github_id=JS_ID)
         for number in range(1, count + 1):
             stored_pr(seed, repo, number, 1000 + number)
         for kind, number in failures:
@@ -292,13 +295,18 @@ async def test_only_pull_request_coverage_is_read(migrated_database: Path) -> No
         )
 
 
+@pytest.mark.parametrize(
+    "stored_name", ["prebid/Prebid.js", "prebid/Prebid-js"], ids=["snapshot", "after-step-1"]
+)
 async def test_an_approval_naming_this_repository_travels_with_the_deletions(
-    migrated_database: Path,
+    migrated_database: Path, stored_name: str
 ) -> None:
     """It names the configured repository ignoring case, after a rename too; its N decides, and
     the result carries the configured repository, as tracking.toml spells it, for the writer to
-    record."""
-    stored = await _seeded(migrated_database, 130)
+    record. The stored rows match the attempt by github_id: a dry run's snapshot still has the
+    old name, and the engine's read after step 1 has GitHub's new one."""
+    stored = await _seeded(migrated_database, 130, full_name=stored_name)
+    assert stored.full_name == stored_name
     approval = DeletionApproval(
         TrackedRepository(owner="PREBID", name="prebid.JS", group="Client"), 30
     )

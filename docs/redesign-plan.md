@@ -1560,9 +1560,11 @@ test clock. A test parses every recorded pull-request, index, user-lookup, and o
 the model, re-renders it, and requires exact JSON equality with the recording's data and errors
 (headers differ by construction: the model's `Date` comes from the test clock). Cases: first sync,
 update, merge, close (stored as `CLOSED`), reopen, mass-delete halt and its override,
-incomplete-index halt, two repositories over the guard with `--allow-deletions` naming one by its
-configured name after a rename and the other halting (`deletions_approved` naming only the first,
-with its `github_id`), an unresolvable repository, untracked repository and prune (including no
+incomplete-index halt, `tracking.toml` listing an unresolvable repository, then one over the guard
+that `--allow-deletions` names by its configured name after a rename, then another over the guard
+that halts (`deletions_approved` naming only the approved repository, with its `github_id`, and the
+halting one keeping its candidates and recording its halt), an unresolvable repository, untracked
+repository and prune (including no
 marking under `--repo`, a re-added repository re-tracked and not pruned, and a refused prune
 deleting nothing with exit 2, and the prune listed in `deletions_approved`), crash mid-run then
 resume with committed items intact, by cancelling the engine in-process, time-limited run and the
