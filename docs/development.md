@@ -275,7 +275,7 @@ src/github_activity_db/
 ├── config.py            # Settings (pydantic-settings)
 ├── logging.py           # loguru setup
 ├── tracking.py          # tracking.toml loading and validation
-├── tracking.toml        # Tracked repositories, shipped in the package (D21)
+├── tracking.toml        # Tracked repositories, coverage floor, sync settings; packaged (D21)
 ├── cli/
 │   ├── app.py           # Typer application, global flags, exit codes
 │   ├── common.py        # Shared helpers (consoles, token, repository argument)
@@ -285,7 +285,8 @@ src/github_activity_db/
 │   ├── models.py        # SQLAlchemy models of the head schema
 │   ├── schema.py        # SCHEMA_VERSION and the migration revision ids
 │   └── types.py         # UtcDateTime
-└── source/              # GitHub source layer: the only package that imports githubkit
+├── source/              # GitHub source layer: the only package that imports githubkit
+└── sync/                # Snapshot reader, planner, and step 7's deletion functions
 
 alembic/
 ├── env.py               # One transaction per upgrade; refusals (docs/database.md)
@@ -295,6 +296,7 @@ tests/
 ├── conftest.py          # Session template database built by `alembic upgrade head`
 ├── db/                  # Migrations, schema comparison, views, timestamp type, tracked file
 ├── source/              # Source layer against recorded GitHub responses
+├── sync/                # Planner and deletion functions over seeded databases
 ├── fixtures/source/     # Recorded and synthetic GitHub responses
 ├── data_dictionary.py   # Reader for docs/data-dictionary.md
 ├── query_versions.json  # Hydration-version lock

@@ -31,7 +31,7 @@ issue totals) are dated; regenerate them with `ghactivity verify` once Step 3b-2
 |------|-------|--------|
 | 1 | Guardrails | done (PR #5) |
 | 2 | GitHub source layer | done (PR #7) |
-| 3 | New schema, PR sync engine, cutover (pull requests 3a, 3b-1, 3b-2a-1, 3b-2a-2, and 3b-2b) | in progress: 3a done (PR #11), 3b-1 done (PR #14) |
+| 3 | New schema, PR sync engine, cutover (pull requests 3a, 3b-1, 3b-2a-1, 3b-2a-2, and 3b-2b) | in progress: 3a done (PR #11), 3b-1 done (PR #14), 3b-2a-1 done (PR #19) |
 | 4 | Issues, closing-issue links, and default-branch activity (pull requests 4a and 4b) | not started |
 | 5 | Full bootstrap and verification | not started |
 | 6 | Scheduled sync and publication | not started |
@@ -616,10 +616,12 @@ engine, never through alembic, whose commands take the write lock; it exits 1 ot
    order, up to that kind's batch size (25 PRs or 100 issues, step 4). The
    in-place updates of every completely indexed repository are applied even when the deadline stops
    a later repository's index. `sync_pending` only orders the queue: a pending item none of the
-   conditions above selects is not hydrated. An index entry whose number is stored under a different
-   `github_id` is an item failure; the stored row then leaves through step 7. An index entry whose
-   state its dates contradict is an item failure and is not hydrated, whatever the conditions above
-   say; its stored row stays (section 3).
+   conditions above selects is not hydrated. An in-coverage index entry whose number is stored under
+   a different `github_id` is an item failure; the stored row then leaves through step 7 (an entry
+   outside coverage is not hydrated, so its number is no failure). An index entry whose state its
+   dates contradict is an item failure and is not hydrated, whatever the conditions above say; its
+   stored row stays (section 3). Neither failure is an in-place update: an item failure writes
+   nothing for the item (step 4).
    A failure the engine detects itself (these two, a hydrated `github_id` other than the index's, a
    review or comment id
    stored under another PR, a lookup `databaseId` other than the commit link's) is recorded at once,
@@ -716,8 +718,9 @@ engine, never through alembic, whose commands take the write lock; it exits 1 ot
    candidate count in `repo_sync_state.halt_reason`; the `sync_failures` rows of items absent from
    the in-coverage set are removed even then. `ghactivity sync --allow-deletions owner/name=N` (given at
    most once, N at least 1, naming a configured repository)
-   deletes all of that repository's candidates when there are at most N, otherwise halts as without
-   the flag, applying N to each guarded set separately (the items here, and from Step 4b the
+   deletes all of that repository's candidates when there are at most N; otherwise the guard decides
+   as without the flag, so a count within max(25, 2%) is still deleted. It applies N to each guarded
+   set separately (the items here, and from Step 4b the
    repository's activity events and default-branch commits), and records the approval in
    `sync_runs.deletions_approved`. `--prune-untracked` deletes
    the repositories that were untracked when the run started and are still untracked after step 1
@@ -850,7 +853,9 @@ string `"2023-01-01T00:00:00Z"` and the integer 1672531200 (section 7, "Lax date
 strictly typed throughout: an account `github_id` is at least 1, and `login`, `email`, and every
 `reason` are non-empty; automation account ids and emails are unique, emails compared lowercase
 and ASCII only (5.1);
-`unsettled_minutes` is an integer of at least 1, `delete_guard_min_rows` an integer of at least 0,
+`unsettled_minutes` is an integer of at least 1 and at most 1,439,999,999,999 (the most minutes a
+Python `timedelta` holds, so the planner can build the window), `delete_guard_min_rows` an integer
+of at least 0,
 and `delete_guard_percent` a number above 0 and at most 100; an `accepted_failures` entry has a
 `number` of at least 1, is unique by repository and number, must name a configured repository, and
 matches by that entry and the number, so a rename does not unhook it; an entry whose item did not
@@ -1425,15 +1430,14 @@ loader; its "Order is the sync order" comment changes to the resolve and index o
 its group comment calls a group a maintainer-assigned name stored as `repositories.repo_group`
 (gap 89). In `sync/`: the snapshot reader, which reads the stored rows the planner needs without a
 server-side cursor (gap 77), and the planner of 5.3 step 3, a pure function over those snapshots,
-step 1's resolved repositories (each one's `github_id` and current label names, which a dry run does
-not write), the fresh index, and the configuration. It applies the coverage rule (section 3) and the
-hydration
-conditions, `hydration_version` compared by inequality, unsettled re-hydration, the label-set
-check, the link conditions, and a `sync_failures` row among them. It returns the item failures it
-detects itself (an index entry whose number is stored under another `github_id`, and one whose
-state its dates contradict), which 3b-2a-2's engine records at once, and derives the in-place
-updates, the queue order with
-`sync_pending`, and the batches. Step 7's deletion candidates, the guard (max(25, 2%) of the
+step 1's resolved repositories (each one's `github_id` and current labels by id and name, which a
+dry run does not write), the fresh index, and the configuration. It applies the coverage rule
+(section 3) and the hydration conditions, `hydration_version` compared by inequality, unsettled
+re-hydration, the label-set check, the link conditions, and a `sync_failures` row among them. It
+returns the item failures it detects itself (an in-coverage index entry whose number is stored
+under another `github_id`, and one whose state its dates contradict), which 3b-2a-2's engine
+records at once, and derives the in-place updates, the queue order with `sync_pending`, and the
+batches. Step 7's deletion candidates, the guard (max(25, 2%) of the
 pre-run snapshot), and `--allow-deletions N` are functions 3b-2a-2's engine calls. Nothing in this
 pull request writes the database or sends a request.
 
@@ -1449,8 +1453,9 @@ head` and seeded rows, with a fresh index built from recorded or synthetic index
 - the coverage rule on each side of the floor for each state, a `CLOSED` PR's `closedAt` included;
 - an index entry whose state its dates contradict returned as a failure, not planned even when
   another condition selects it, and never a deletion candidate;
-- an index entry whose number is stored under another `github_id` returned as a failure and not
-  planned, the stored row of that number a step 7 candidate;
+- an in-coverage index entry whose number is stored under another `github_id` returned as a
+  failure and not planned, the stored row of that number a step 7 candidate, and such an entry
+  outside coverage no failure;
 - a repository whose index is incomplete (a count mismatch after the rescan, or the deadline during
   its index) given no hydrations, in-place updates, or deletion candidates while a completely
   indexed repository's are planned, and a repository failed during hydration given no candidates;

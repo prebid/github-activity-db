@@ -1,11 +1,18 @@
 """Tests for the tracked-repository configuration."""
 
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
+from pydantic import ValidationError
 
 from github_activity_db.config import Settings
-from github_activity_db.tracking import TrackingConfigError, load_tracking_config
+from github_activity_db.tracking import (
+    MAX_UNSETTLED_MINUTES,
+    SyncConfig,
+    TrackingConfigError,
+    load_tracking_config,
+)
 
 # The list the hardcoded Settings.tracked_repos returned before tracking.toml.
 EXPECTED_REPOS = [
@@ -48,6 +55,21 @@ def _write(tmp_path: Path, body: str) -> Path:
 
 
 REPO = '[[repositories]]\nowner = "prebid"\nname = "{name}"\ngroup = "{group}"\n'
+COVERAGE = "[coverage]\nfloor = 2023-01-01T00:00:00Z\n"
+ONE_REPO = REPO.format(name="a", group="Tools")
+
+
+def _errors(tmp_path: Path, body: str) -> list[tuple[str, str]]:
+    """Each validation error the loader reports for the file, as (location, error type)."""
+    with pytest.raises(TrackingConfigError) as error:
+        load_tracking_config(_write(tmp_path, body))
+    cause = error.value.__cause__
+    assert isinstance(cause, ValidationError), error.value
+    return [(".".join(str(part) for part in e["loc"]), e["type"]) for e in cause.errors()]
+
+
+# pydantic reports a failed repository entry and then the tuple left without it.
+NO_REPOSITORY = ("repositories", "too_short")
 
 
 class TestPackagedConfig:
@@ -83,7 +105,7 @@ class TestPackagedConfig:
         assert settings.tracked_repos == EXPECTED_REPOS
 
     def test_settings_reads_the_configured_path(self, tmp_path: Path, monkeypatch) -> None:
-        path = _write(tmp_path, REPO.format(name="only-repo", group="Tools"))
+        path = _write(tmp_path, COVERAGE + REPO.format(name="only-repo", group="Tools"))
         monkeypatch.setenv("TRACKING_CONFIG_PATH", str(path))
         assert Settings(_env_file=None).tracked_repos == ["prebid/only-repo"]
 
@@ -110,40 +132,180 @@ class TestValidation:
             load_tracking_config(path)
 
     def test_empty_repository_list(self, tmp_path: Path) -> None:
-        with pytest.raises(TrackingConfigError, match="repositories"):
-            load_tracking_config(_write(tmp_path, "repositories = []\n"))
+        assert _errors(tmp_path, "repositories = []\n" + COVERAGE) == [NO_REPOSITORY]
 
     def test_unknown_key_is_rejected(self, tmp_path: Path) -> None:
-        body = REPO.format(name="a", group="Tools") + 'gropu = "typo"\n'
-        with pytest.raises(TrackingConfigError, match="gropu"):
-            load_tracking_config(_write(tmp_path, body))
+        body = COVERAGE + ONE_REPO + 'gropu = "typo"\n'
+        assert _errors(tmp_path, body) == [
+            ("repositories.0.gropu", "extra_forbidden"),
+            NO_REPOSITORY,
+        ]
 
     def test_unknown_top_level_key_is_rejected(self, tmp_path: Path) -> None:
-        body = "extra_setting = 1\n" + REPO.format(name="a", group="Tools")
-        with pytest.raises(TrackingConfigError, match="extra_setting"):
-            load_tracking_config(_write(tmp_path, body))
+        body = "extra_setting = 1\n" + COVERAGE + ONE_REPO
+        assert _errors(tmp_path, body) == [("extra_setting", "extra_forbidden")]
 
     @pytest.mark.parametrize("field", ["owner", "name", "group"])
     def test_empty_value_is_rejected(self, tmp_path: Path, field: str) -> None:
         values = {"owner": "prebid", "name": "a", "group": "Tools", field: ""}
         body = "[[repositories]]\n" + "".join(f'{k} = "{v}"\n' for k, v in values.items())
-        with pytest.raises(TrackingConfigError, match="at least 1 character") as error:
-            load_tracking_config(_write(tmp_path, body))
-        assert f"repositories.0.{field}" in str(error.value)
+        assert _errors(tmp_path, COVERAGE + body) == [
+            (f"repositories.0.{field}", "string_too_short"),
+            NO_REPOSITORY,
+        ]
 
     def test_missing_group_is_rejected(self, tmp_path: Path) -> None:
-        body = '[[repositories]]\nowner = "prebid"\nname = "a"\n'
-        with pytest.raises(TrackingConfigError, match="group"):
-            load_tracking_config(_write(tmp_path, body))
+        body = COVERAGE + '[[repositories]]\nowner = "prebid"\nname = "a"\n'
+        assert _errors(tmp_path, body) == [("repositories.0.group", "missing"), NO_REPOSITORY]
 
     def test_duplicate_repository_ignores_case(self, tmp_path: Path) -> None:
         body = REPO.format(name="Prebid.js", group="Client") + REPO.format(
             name="prebid.js", group="Client"
         )
-        with pytest.raises(TrackingConfigError, match="more than once"):
-            load_tracking_config(_write(tmp_path, body))
+        assert _errors(tmp_path, COVERAGE + body) == [("", "value_error")]
+        with pytest.raises(TrackingConfigError, match=r"listed more than once: prebid/prebid\.js"):
+            load_tracking_config(tmp_path / "tracking.toml")
 
     @pytest.mark.parametrize("name", ["owner/repo", "has space", " leading"])
     def test_name_must_be_one_path_segment(self, tmp_path: Path, name: str) -> None:
+        body = COVERAGE + REPO.format(name=name, group="Tools")
+        assert _errors(tmp_path, body) == [("repositories.0.name", "value_error"), NO_REPOSITORY]
         with pytest.raises(TrackingConfigError, match="single path segment"):
-            load_tracking_config(_write(tmp_path, REPO.format(name=name, group="Tools")))
+            load_tracking_config(tmp_path / "tracking.toml")
+
+
+FLOOR = datetime(2023, 1, 1, tzinfo=UTC)
+
+
+class TestCoverage:
+    def test_the_packaged_floor(self) -> None:
+        assert load_tracking_config().coverage.floor == FLOOR
+
+    def test_a_utc_floor(self, tmp_path: Path) -> None:
+        floor = load_tracking_config(_write(tmp_path, COVERAGE + ONE_REPO)).coverage.floor
+        assert floor == FLOOR
+        assert floor.tzinfo is UTC
+
+    @pytest.mark.parametrize("spelling", ["2023-01-01T02:00:00+02:00", "2022-12-31T19:00:00-05:00"])
+    def test_a_floor_with_another_offset_is_converted_to_utc(
+        self, tmp_path: Path, spelling: str
+    ) -> None:
+        body = f"[coverage]\nfloor = {spelling}\n" + ONE_REPO
+        floor = load_tracking_config(_write(tmp_path, body)).coverage.floor
+        assert floor.tzinfo is UTC
+        assert floor.isoformat() == "2023-01-01T00:00:00+00:00"
+
+    def test_a_missing_coverage_table(self, tmp_path: Path) -> None:
+        assert _errors(tmp_path, ONE_REPO) == [("coverage", "missing")]
+
+    def test_a_missing_floor(self, tmp_path: Path) -> None:
+        assert _errors(tmp_path, "[coverage]\n" + ONE_REPO) == [("coverage.floor", "missing")]
+
+    @pytest.mark.parametrize(
+        ("spelling", "error"),
+        [
+            ('"2023-01-01T00:00:00Z"', "datetime_type"),
+            ("1672531200", "datetime_type"),
+            ("2023-01-01T00:00:00", "timezone_aware"),
+            ("2023-01-01", "datetime_type"),
+            ("00:00:00", "datetime_type"),
+            ("true", "datetime_type"),
+        ],
+        ids=["string", "integer", "local-date-time", "local-date", "local-time", "boolean"],
+    )
+    def test_a_floor_that_is_not_an_offset_date_time(
+        self, tmp_path: Path, spelling: str, error: str
+    ) -> None:
+        body = f"[coverage]\nfloor = {spelling}\n" + ONE_REPO
+        assert _errors(tmp_path, body) == [("coverage.floor", error)]
+
+    @pytest.mark.parametrize("spelling", ["0001-01-01T00:00:00+01:00", "9999-12-31T23:30:00-01:00"])
+    def test_a_floor_outside_the_utc_range(self, tmp_path: Path, spelling: str) -> None:
+        body = f"[coverage]\nfloor = {spelling}\n" + ONE_REPO
+        assert _errors(tmp_path, body) == [("coverage.floor", "value_error")]
+        with pytest.raises(TrackingConfigError, match="outside the range of a UTC datetime"):
+            load_tracking_config(tmp_path / "tracking.toml")
+
+    @pytest.mark.parametrize("spelling", ["0001-01-01T00:00:00Z", "9999-12-31T23:59:59Z"])
+    def test_a_floor_at_the_ends_of_the_utc_range(self, tmp_path: Path, spelling: str) -> None:
+        body = f"[coverage]\nfloor = {spelling}\n" + ONE_REPO
+        floor = load_tracking_config(_write(tmp_path, body)).coverage.floor
+        assert floor.isoformat() == spelling.replace("Z", "+00:00")
+
+    def test_an_unknown_coverage_key(self, tmp_path: Path) -> None:
+        body = COVERAGE + "flor = 2023-01-01T00:00:00Z\n" + ONE_REPO
+        assert _errors(tmp_path, body) == [("coverage.flor", "extra_forbidden")]
+
+
+DEFAULTS = SyncConfig(unsettled_minutes=10, delete_guard_min_rows=25, delete_guard_percent=2.0)
+
+
+class TestSyncSettings:
+    def test_the_packaged_values(self) -> None:
+        assert load_tracking_config().sync == DEFAULTS
+
+    def test_defaults_without_a_sync_table(self, tmp_path: Path) -> None:
+        assert load_tracking_config(_write(tmp_path, COVERAGE + ONE_REPO)).sync == DEFAULTS
+
+    def test_defaults_with_an_empty_sync_table(self, tmp_path: Path) -> None:
+        body = COVERAGE + "[sync]\n" + ONE_REPO
+        assert load_tracking_config(_write(tmp_path, body)).sync == DEFAULTS
+
+    def test_given_values(self, tmp_path: Path) -> None:
+        body = (
+            COVERAGE
+            + "[sync]\nunsettled_minutes = 1\ndelete_guard_min_rows = 0\n"
+            + "delete_guard_percent = 100\n"
+            + ONE_REPO
+        )
+        sync = load_tracking_config(_write(tmp_path, body)).sync
+        assert (sync.unsettled_minutes, sync.delete_guard_min_rows) == (1, 0)
+        assert sync.delete_guard_percent == 100.0
+        assert type(sync.delete_guard_percent) is float
+
+    def test_one_value_given_and_the_others_default(self, tmp_path: Path) -> None:
+        body = COVERAGE + "[sync]\ndelete_guard_percent = 0.5\n" + ONE_REPO
+        sync = load_tracking_config(_write(tmp_path, body)).sync
+        assert sync == SyncConfig(
+            unsettled_minutes=10, delete_guard_min_rows=25, delete_guard_percent=0.5
+        )
+
+    @pytest.mark.parametrize(
+        ("key", "value", "error"),
+        [
+            ("unsettled_minutes", "0", "greater_than_equal"),
+            ("unsettled_minutes", "-1", "greater_than_equal"),
+            ("unsettled_minutes", "1.5", "int_type"),
+            ("unsettled_minutes", "10.0", "int_type"),
+            ("unsettled_minutes", "true", "int_type"),
+            ("unsettled_minutes", '"10"', "int_type"),
+            ("unsettled_minutes", "1440000000000", "less_than_equal"),
+            ("delete_guard_min_rows", "-1", "greater_than_equal"),
+            ("delete_guard_min_rows", "25.0", "int_type"),
+            ("delete_guard_min_rows", "false", "int_type"),
+            ("delete_guard_min_rows", '"25"', "int_type"),
+            ("delete_guard_percent", "0", "greater_than"),
+            ("delete_guard_percent", "0.0", "greater_than"),
+            ("delete_guard_percent", "-2.0", "greater_than"),
+            ("delete_guard_percent", "100.000001", "less_than_equal"),
+            ("delete_guard_percent", "101", "less_than_equal"),
+            ("delete_guard_percent", "nan", "finite_number"),
+            ("delete_guard_percent", "inf", "finite_number"),
+            ("delete_guard_percent", "true", "float_type"),
+            ("delete_guard_percent", '"2.0"', "float_type"),
+        ],
+    )
+    def test_an_invalid_value(self, tmp_path: Path, key: str, value: str, error: str) -> None:
+        body = COVERAGE + f"[sync]\n{key} = {value}\n" + ONE_REPO
+        assert _errors(tmp_path, body) == [(f"sync.{key}", error)]
+
+    def test_the_longest_unsettled_window(self, tmp_path: Path) -> None:
+        """The most minutes a timedelta holds, so the planner can build the window."""
+        assert MAX_UNSETTLED_MINUTES == 1_439_999_999_999
+        body = COVERAGE + f"[sync]\nunsettled_minutes = {MAX_UNSETTLED_MINUTES}\n" + ONE_REPO
+        sync = load_tracking_config(_write(tmp_path, body)).sync
+        assert sync.unsettled_minutes == MAX_UNSETTLED_MINUTES
+
+    def test_an_unknown_sync_key(self, tmp_path: Path) -> None:
+        body = COVERAGE + "[sync]\nunsettled_minute = 5\n" + ONE_REPO
+        assert _errors(tmp_path, body) == [("sync.unsettled_minute", "extra_forbidden")]
