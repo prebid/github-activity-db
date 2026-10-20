@@ -2676,3 +2676,46 @@ async def test_an_interrupted_close_that_does_not_land_leaves_the_row_running(
     ]
     with pytest.raises(ClaimRefused):
         await world.sync()
+
+
+async def test_a_deadline_inside_a_batchs_requests_leaves_the_whole_batch_pending(
+    world: World,
+) -> None:
+    """The hydrator delivers a batch's outcomes together, so a deadline before #2's solo retry
+    writes none of the batch: all three wait in sync_pending, without a failure, and the next run
+    writes them (5.3 step 6)."""
+    scenario = world.scenario
+    repository, _ = project(world, pulls=3)
+
+    def alias_error_then_deadline(body: dict[str, Any]) -> None:
+        body["data"]["repository"]["p1"] = None
+        body["errors"] = [
+            {
+                "type": "FORBIDDEN",
+                "message": "Resource not accessible by integration",
+                "path": ["repository", "p1"],
+            }
+        ]
+        scenario.clock.advance(120)
+
+    scenario.replay.modify(
+        alias_error_then_deadline, when=lambda seen: seen.operation == "PullRequestBatch"
+    )
+
+    limited = await world.sync(max_minutes=1)
+
+    assert batches(scenario) == [[1, 2, 3]]
+    assert world.numbers(repository) == []
+    assert world.pending(repository) == [1, 2, 3]
+    assert world.failures() == []
+    assert ended(world, limited) == ("time_limited", 0, {"prebid/Prebid.js": "time_limited"})
+
+    finished = await world.sync()
+    assert [(item.number, item.pending) for item in finished.planned] == [
+        (1, True),
+        (2, True),
+        (3, True),
+    ]
+    assert world.numbers(repository) == [1, 2, 3]
+    assert world.pending(repository) == []
+    assert ended(world, finished) == ("complete", 0, {"prebid/Prebid.js": "complete"})

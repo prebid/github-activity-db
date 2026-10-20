@@ -728,7 +728,10 @@ an interrupt, which is re-raised.
 6. Write: one batch at a time, on the writer's one connection. The run hydrates a batch, checks it
    (step 5), looks up its accounts (5.2), and writes each of its items before it requests the next
    batch; at the deadline it writes the fetched items whose accounts it has and records the rest in
-   `sync_pending`. Each item is one transaction: upsert by `github_id` with
+   `sync_pending`. The hydrator delivers a batch's outcomes together (Step 2), so a deadline inside
+   the batch's own requests (a split half, a solo retry, an overflow or compare page) writes none
+   of its items: all of them wait in `sync_pending`, and the next run hydrates them first. Each
+   item is one transaction: upsert by `github_id` with
    `INSERT ... ON CONFLICT (github_id) DO UPDATE`, which keeps the row id (never
    `INSERT OR REPLACE`, which deletes the row and cascades); replace the hydrated child rows
    (`pr_labels`, `pr_reviews`, `pr_comments`, `pr_commits`, `pr_files`, `pr_closing_issues`,
