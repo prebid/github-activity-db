@@ -216,14 +216,17 @@ async def test_new_nodes_have_their_own_identity(scenario: Scenario) -> None:
     pull.add("reviewRequests", scenario.node("reviewRequests", by=author))
 
     record = hydrated(await hydrate(scenario, "example", "project", 1))
-    assert len({commit.sha for commit in record.commits}) == 4
+    # The two files came with a commit of their own, between the two pairs.
+    assert len({commit.sha for commit in record.commits}) == 5
     assert [commit.author.login if commit.author else None for commit in record.commits] == [
         "alice",
         "alice",
         None,
         None,
+        None,
     ]
-    assert len({commit.author_email for commit in record.commits}) == 3
+    assert len({commit.author_email for commit in record.commits}) == 4
+    assert record.head_ref_oid == record.commits[-1].sha
     (review,) = record.reviews
     assert (review.created_at, review.submitted_at) == (scenario.clock.now(), scenario.clock.now())
     assert review.reviewer is not None and review.reviewer.login == "alice"
@@ -704,6 +707,7 @@ async def test_a_push_during_hydration_is_read_again(scenario: Scenario) -> None
         node["path"] for node in pull.node["files"]["nodes"]
     ]
     assert record.head_ref_oid == pull.node["headRefOid"] != head
+    assert pull.node["headRefOid"] == pull.node["commits"]["nodes"][-1]["commit"]["oid"]
 
 
 async def test_a_pull_request_above_250_commits_reads_its_compare(scenario: Scenario) -> None:
@@ -833,20 +837,54 @@ async def test_a_push_while_its_compare_is_read_keeps_the_old_head(scenario: Sce
     assert len(pull.node["commits"]["nodes"]) == 252
 
 
-async def test_commits_pushed_to_a_recorded_compare() -> None:
+async def test_a_recorded_compare_refuses_a_push() -> None:
+    """Prebid.js#8858's commits are recorded twice, 100 on GraphQL's first page and 254 on
+    compare's pages, in different orders: no change keeps them together, so a push is refused
+    before anything changes."""
     model = Scenario.from_recordings(FakeClock())
     pull = model.repositories["prebid/prebid.js"].pulls[8858]
-    model.add_account(login="pusher")
-    pusher = next(i for i, data in model.accounts.items() if data and data["login"] == "pusher")
-    pushed = model.node("commits", by=pusher)
-    pull.add("commits", pushed)
+    assert pull.compare is not None
+    before = (pull.node["headRefOid"], len(pull.node["commits"]["nodes"]), len(pull.compare))
+    tail = {commit["sha"] for commit in pull.compare[-5:]}
+    for push in (
+        lambda: pull.add("commits", model.node("commits")),
+        lambda: pull.remove("commits", lambda node: node["commit"]["oid"] in tail),
+        lambda: pull.add("files", model.node("files")),
+    ):
+        with pytest.raises(ScenarioError, match="recorded in two orders"):
+            push()
+    assert (
+        pull.node["headRefOid"],
+        len(pull.node["commits"]["nodes"]),
+        len(pull.compare),
+    ) == before
     record = hydrated(await hydrate(model, "prebid", "Prebid.js", 8858))
-    assert (record.commits_source, len(record.commits)) == ("compare", 255)
-    assert record.commits[-1].sha == pushed["commit"]["oid"] == pull.node["headRefOid"]
-    pull.remove("commits", lambda node: node["commit"]["oid"] == pushed["commit"]["oid"])
-    record = hydrated(await hydrate(model, "prebid", "Prebid.js", 8858))
-    assert len(record.commits) == 254
+    assert (record.commits_source, len(record.commits)) == ("compare", 254)
     assert unanswered(model.replay) == []
+
+
+async def test_a_commit_removed_while_its_compare_is_read(scenario: Scenario) -> None:
+    """Removing an interior commit rewrites every later one, as a force push does: the head
+    moves, the read in flight finishes on the old head, and the next read sees the rewrite."""
+    repository, author = project(scenario)
+    pull = repository.pulls[1]
+    pull.add("commits", *(scenario.node("commits", by=author) for _ in range(301)))
+    head = pull.node["headRefOid"]
+    before = [node["commit"]["oid"] for node in pull.node["commits"]["nodes"]]
+    removed = before[150]
+    scenario.after(
+        "PullRequestBatch",
+        lambda: pull.remove("commits", lambda node: node["commit"]["oid"] == removed),
+    )
+    record = hydrated(await hydrate(scenario, "example", "project", 1))
+    assert (record.head_ref_oid, [commit.sha for commit in record.commits]) == (head, before)
+
+    after = [node["commit"]["oid"] for node in pull.node["commits"]["nodes"]]
+    assert after[:150] == before[:150]
+    assert not set(after[150:]) & set(before)
+    assert pull.node["headRefOid"] == after[-1] != head
+    record = hydrated(await hydrate(scenario, "example", "project", 1))
+    assert (record.head_ref_oid, [commit.sha for commit in record.commits]) == (after[-1], after)
 
 
 def test_a_recorded_issue_keeps_its_recorded_id() -> None:

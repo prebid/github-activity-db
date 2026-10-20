@@ -66,7 +66,7 @@ ORDERS: dict[str, Callable[[Node], tuple[Any, ...]]] = {
     "reviews": lambda node: (node["createdAt"], int(node["fullDatabaseId"])),
     "reviewRequests": lambda node: (node["databaseId"],),
 }
-# The connections a push changes: changing them moves ``headRefOid``.
+# The connections a push changes: a change to them is a push (``PullRequest._change``).
 PUSHED = ("commits", "files")
 # The kinds the model renders; its stamp for each is the one the recordings of that kind carry.
 RENDERED = ("resolve", "repository_labels", "index", "pull_request", "overflow", "user", "compare")
@@ -234,8 +234,8 @@ class PullRequest:
     world: Scenario
     node: Node
     cursors: dict[str, Cursors] = field(default_factory=dict)
-    # REST compare's commits as recorded, for a pull request above 250 commits; without a
-    # recording they are made from the commit nodes.
+    # REST compare's commits as recorded, for a pull request above 250 commits, which no push
+    # changes (``_change``); without a recording they are made from the commit nodes.
     compare: list[Node] | None = None
     # The compare each earlier head still answers, by (base, head): commits never change.
     heads: dict[tuple[str, str], list[Node]] = field(default_factory=dict)
@@ -288,26 +288,23 @@ class PullRequest:
 
     def add(self, connection: str, *nodes: Node, at: datetime | None = None) -> None:
         """Add nodes, which moves ``updatedAt`` as a comment, a label, or a review request does;
-        commits and files come with a push (``_push``)."""
-
-        def added() -> None:
-            self._add(connection, nodes)
-            if connection == "commits" and self.compare is not None:
-                self.compare.extend(rest_commit(node) for node in nodes)
-
-        self._change(connection, added, at)
+        commits and files come with a push (``_change``)."""
+        self._change(connection, lambda: self._add(connection, nodes), at)
 
     def remove(
         self, connection: str, matches: Callable[[Node], bool], at: datetime | None = None
     ) -> None:
-        """Remove the nodes ``matches`` selects, which moves ``updatedAt``; commits and files
-        go with a push (``_push``)."""
+        """Remove the nodes ``matches`` selects, which moves ``updatedAt``; commits and files go
+        with a push (``_change``). Removing a commit rewrites every later one, as a force push
+        does, so each gets a new oid."""
 
         def removed() -> None:
-            if connection == "commits" and self.compare is not None:
-                oids = {n["commit"]["oid"] for n in self.node["commits"]["nodes"] if matches(n)}
-                self.compare = [c for c in self.compare if c["sha"] not in oids]
+            listed = self.node[connection]["nodes"]
+            first = next((i for i, node in enumerate(listed) if matches(node)), len(listed))
             self._remove(connection, matches)
+            if connection == "commits":
+                for node in self.node["commits"]["nodes"][first:]:
+                    node["commit"]["oid"] = self.world.new_oid()
 
         self._change(connection, removed, at)
 
@@ -345,19 +342,27 @@ class PullRequest:
         return [rest_commit(node) for node in self.node["commits"]["nodes"]]
 
     def _change(self, connection: str, apply: Callable[[], None], at: datetime | None) -> None:
-        """Apply a change and move ``updatedAt``. A change to commits or files is a push: the
-        head moves to the last commit (to a new oid when only files changed), and the old head's
-        compare still answers, since commits never change."""
-        pushed = connection in PUSHED
-        if pushed:
-            old = (self.node["baseRefOid"], self.node["headRefOid"])
-            self.heads[old] = copy.deepcopy(self.compare_commits())
+        """Apply a change and move ``updatedAt``. A change to commits or files is a push: files
+        change with a new commit, and the head is always the last commit. Every earlier head's
+        compare still answers, since its commits never change. A pull request whose compare was
+        recorded refuses a push before changing anything: its commits are recorded in two
+        orders, GraphQL's first page and compare's pages, that no change can keep together."""
+        if connection not in PUSHED:
+            apply()
+            self.touch(at)
+            return
+        if self.compare is not None:
+            raise ScenarioError(
+                f"#{self.number}'s commits are recorded in two orders: push to a pull request "
+                "the model made"
+            )
+        self.heads[(self.node["baseRefOid"], self.node["headRefOid"])] = self.compare_commits()
         apply()
+        if connection == "files":
+            self._add("commits", [self.world.node("commits")])
         self.touch(at)
-        if pushed:
-            commits = self.compare_commits()
-            last = commits[-1]["sha"] if connection == "commits" and commits else None
-            self.node["headRefOid"] = last or self.world.new_oid()
+        commits = self.node["commits"]["nodes"]
+        self.node["headRefOid"] = commits[-1]["commit"]["oid"] if commits else self.world.new_oid()
 
     def _add(self, connection: str, nodes: Any) -> None:
         listed = self.node[connection]

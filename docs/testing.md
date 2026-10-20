@@ -165,18 +165,20 @@ next run must see GitHub as the test left it.
 - **Changes**: `add_repository`, `add_account`, and `open_pull_request` copy recorded objects with
   fresh ids; `add_label` returns the `{id, name}` a pull request carries; and
   `node(connection, by=account)` copies a recorded node, made now, with its own ids, oid, git
-  author, or path and the account it names (a bot's commit link reads `<login>[bot]`, as
-  recorded). A pull request's `merge`, `close`, `reopen`, and `touch` move its times; `add` and
-  `remove` change a connection and move `updatedAt`; a change to commits or files is a push,
-  which moves `headRefOid` to the last commit, while the old head's compare still answers; `set`, `link`, `unlink`, and `rename_label` do not move `updatedAt`, as plan
-  section 7 ("Change signal") measured for closing links, label renames, and author associations
-  and plan 5.3 step 3 for marking a draft ready (converting to a draft moves it: `set` then
-  `touch`). An issue keeps one id across the pull requests that link it. REST compare lists a
-  pull request's commit nodes (its recorded pages for Prebid.js#8858). `rename_repository`
-  renames within the owner and keeps the old name resolving. `delete_account` makes lookups
-  answer `NOT_FOUND` and nulls or drops every reference to the account and its forks; afterwards
-  only a commit can name it (gap 90), and `restore_account` makes lookups find it again. `gone`
-  removes a pull request or a repository.
+  author, or path and the account it names (a bot's commit link reads `<login>[bot]`, as recorded).
+  A pull request's `merge`, `close`, `reopen`, and `touch` move its times; `add` and `remove` change
+  a connection and move `updatedAt`. A change to commits or files is a push: files change with a new
+  commit, removing a commit rewrites every later one (as a force push does), the head is always the
+  last commit, and every earlier head's compare still answers. `set`, `link`, `unlink`, and
+  `rename_label` do not move `updatedAt`, as plan section 7 ("Change signal") measured for closing
+  links, label renames, and author associations and plan 5.3 step 3 for marking a draft ready
+  (converting to a draft moves it: `set` then `touch`). An issue keeps one id across the pull
+  requests that link it. REST compare lists a pull request's commit nodes; Prebid.js#8858's recorded
+  compare pages and GraphQL page hold its commits in two orders, so it refuses a push.
+  `rename_repository` renames within the owner and keeps the old name resolving. `delete_account`
+  makes lookups answer `NOT_FOUND` and nulls or drops every reference to the account and its forks;
+  afterwards only a commit can name it (gap 90), and `restore_account` makes lookups find it again.
+  `gone` removes a pull request or a repository.
 - **During a run**: `scenario.after(operation, change)` applies a change right after the replay
   answers the next request of that operation. It is a one-shot fault, so a change that never runs
   fails the test, and one that raises is the replay's problem; the first matching fault serves a
