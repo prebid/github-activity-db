@@ -214,8 +214,10 @@ async def sync(options: SyncOptions, *, open_source: OpenSource, clock: Clock) -
             code_version=options.code_version,
         )
         run = _Sync(options, clock, deadline, connection, claim)
-        # An interrupt during the steps or during either close closes the row aborted: a close
-        # it cut short rolled back, and the interrupted close writes only a row still running.
+        # An interrupt during the steps or during either close closes the row aborted while it
+        # is still running; a statement it cut short rolled back. A KeyboardInterrupt at a writer
+        # transaction's COMMIT leaves SQLite's transaction open, so the interrupted close cannot
+        # begin and the row stays running; under asyncio.run only a second SIGINT is one (5.3).
         try:
             try:
                 async with open_source(deadline) as source:

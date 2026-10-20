@@ -2534,7 +2534,7 @@ async def test_stamps_come_from_each_responses_date(world: World) -> None:
 async def test_an_interrupt_during_the_close_closes_the_row_aborted(
     world: World, closing: str, interrupt: str
 ) -> None:
-    """The first interrupt during the normal or the fatal close: that close rolls back, the
+    """An interrupt at the normal or the fatal close's update: that close rolls back, the
     interrupted close writes aborted with 130, and the next run claims normally (5.3)."""
     scenario = world.scenario
     repository, _ = project(world, pulls=2)
@@ -2632,3 +2632,47 @@ async def test_the_refresh_reads_every_lookup_group(world: World, stopped: bool)
     assert lookups() == [100, 6]
     assert renamed() == 206
     assert ended(world, recovered) == ("complete", 0, {"prebid/Prebid.js": "complete"})
+
+
+@pytest.mark.parametrize("cleanup", ["second interrupt", "database error"])
+async def test_an_interrupted_close_that_does_not_land_leaves_the_row_running(
+    world: World, cleanup: str
+) -> None:
+    """A second interrupt stops the interrupted close, and a database error in it is not raised
+    over the interrupt; either way the row stays running for the stale-row rule or
+    --break-lock (5.3)."""
+    project(world)
+    if cleanup == "database error":
+        world.execute(
+            "CREATE TRIGGER refuse_abort BEFORE UPDATE OF status ON sync_runs "
+            "WHEN NEW.status = 'aborted' BEGIN SELECT RAISE(ABORT, 'refused by the test'); END"
+        )
+    interrupted: list[object] = []
+
+    def interrupt(
+        connection: Any, cursor: Any, statement: str, parameters: Any, *args: Any
+    ) -> None:
+        if not statement.startswith("UPDATE sync_runs SET finished_at"):
+            return
+        status = "complete" if not interrupted else "aborted"
+        if status not in parameters or (status == "aborted" and cleanup != "second interrupt"):
+            return
+        interrupted.append(status)
+        raise KeyboardInterrupt(status)
+
+    event.listen(Engine, "before_cursor_execute", interrupt)
+    try:
+        with pytest.raises(KeyboardInterrupt) as raised:
+            await world.sync()
+    finally:
+        event.remove(Engine, "before_cursor_execute", interrupt)
+
+    expected = ["complete", "aborted"] if cleanup == "second interrupt" else ["complete"]
+    assert interrupted == expected
+    # The interrupt re-raised is the latest one delivered.
+    assert raised.value.args == (expected[-1],)
+    assert world.rows("SELECT status, exit_code FROM sync_runs") == [
+        {"status": "running", "exit_code": None}
+    ]
+    with pytest.raises(ClaimRefused):
+        await world.sync()
