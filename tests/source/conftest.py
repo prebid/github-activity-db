@@ -17,13 +17,14 @@ from github_activity_db.source import (
     RepositoryRecord,
     UserLookupFailed,
 )
-from tests.source.replay import Replay, unused_faults
+from tests.source.replay import Replay, unanswered
 
 START = datetime(2026, 10, 17, 12, 0, tzinfo=UTC)
 
 
 class FakeClock:
-    """Time that moves only when the code under test sleeps; jitter is zero."""
+    """Time that moves only when the code under test sleeps or a test advances it; jitter is
+    zero."""
 
     def __init__(self, start: datetime = START) -> None:
         self._now = start
@@ -31,6 +32,10 @@ class FakeClock:
 
     def now(self) -> datetime:
         return self._now
+
+    def advance(self, seconds: float) -> None:
+        """Time passing between a test's steps, which ``sleeps`` does not record."""
+        self._now += timedelta(seconds=seconds)
 
     async def sleep(self, seconds: float) -> None:
         self.sleeps.append(seconds)
@@ -55,13 +60,11 @@ def clock() -> FakeClock:
 def replay() -> Iterator[Replay]:
     replay = Replay.from_fixtures()
     yield replay
-    assert replay.problems == [], "\n".join(replay.problems)
-    assert unused_faults(replay) == [], "a fault's predicate never matched as the test assumes"
+    assert unanswered(replay) == []
 
 
-@pytest.fixture
-def open_source(replay: Replay, clock: FakeClock) -> OpenSource:
-    """``async with open_source(deadline=...) as source`` over the replay and the fake clock."""
+def opened_over(replay: Replay, clock: FakeClock) -> OpenSource:
+    """``async with opened(deadline=...) as source``: the real source over ``replay``."""
 
     @asynccontextmanager
     async def opened(deadline: datetime | None = None) -> AsyncIterator[GitHubSource]:
@@ -72,6 +75,12 @@ def open_source(replay: Replay, clock: FakeClock) -> OpenSource:
             yield source
 
     return opened
+
+
+@pytest.fixture
+def open_source(replay: Replay, clock: FakeClock) -> OpenSource:
+    """``async with open_source(deadline=...) as source`` over the replay and the fake clock."""
+    return opened_over(replay, clock)
 
 
 async def all_outcomes(

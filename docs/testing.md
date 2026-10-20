@@ -28,7 +28,7 @@ How the test suite is built and what it counts as evidence. The plan of record i
 
 ```
 tests/
-├── conftest.py              # The session template database and its per-test copies
+├── conftest.py              # The session template database and its copies; the scenario fixture
 ├── db/
 │   ├── alembic_support.py   # Running the real migrations; test-only revisions after head
 │   ├── schema_support.py    # Structural schema readings for the model comparison
@@ -41,6 +41,7 @@ tests/
 ├── source/                  # GitHub source layer (redesign plan Step 2)
 │   ├── recordings.py        # Unit format, shared by the recorder and the replay
 │   ├── replay.py            # httpx transport answering from units, with fault injection
+│   ├── scenario.py          # A model of GitHub the replay asks at request time (the engine's tests)
 │   ├── recorder.py          # Recording scenarios and the recording transport
 │   └── test_*.py
 ├── fixtures/source/
@@ -136,6 +137,77 @@ repository has more than 100.
   version's entry; on pull requests, CI runs the base commit's copy of
   `scripts/check_query_lock.py` (the pull request's own copy where the base has none), which
   rejects an edited or removed entry, so a document change needs a new version.
+
+---
+
+## Sync Engine Tests: The Scenario Model
+
+The engine's tests (redesign plan Step 3b-2a-2b) run the real source over a model of GitHub,
+`tests/source/scenario.py`, instead of fixed recordings: a sync changes what it stores, so the next
+run must see GitHub as the test left it.
+
+- **State is GitHub's JSON**: each repository, pull request, and account is held as the JSON GitHub
+  returns for it, every connection's nodes joined across pages. The replay asks the model for each
+  unit when a request arrives (`Replay.provider`), so a response shows the state at that moment, and
+  its `Date` is the test clock's reading. A repository, pull request, or node the model does not
+  hold is answered `NOT_FOUND` (a missing repository makes an index or batch response's `repository`
+  null), and so is an account it deleted or recorded as `NOT_FOUND`. What the model cannot say goes
+  unanswered: an account it never held, a pull request it knows only from an index recording, a
+  compare of a head no pull request has had or in a repository now gone, and the rate-limit
+  readings. Every GraphQL response carries the replay's fixed `rateLimit` reading, so budget waits
+  come only from faults: a primary-limit fault (an error of type `RATE_LIMITED`, or
+  `x-ratelimit-remaining: 0`) with neither `retry-after` nor a reset header, after a response that
+  carried the reading, waits for its `resetAt` (13:00 on the clock's default start day) while the
+  clock reads earlier; any other rate-limit fault waits for its `retry-after` or the transport's
+  fallback.
+- **Pages follow GitHub's cursors**: the index's, comments', reviews', and review requests' name the
+  page's last node, so a pull request gone between index pages makes the count disagree and the
+  source rescan, as on GitHub; the other connections' name a position. A cursor the model neither
+  recorded nor served names no page.
+- **Changes**: `add_repository`, `add_account`, and `open_pull_request` copy recorded objects with
+  fresh ids; `add_label` returns the `{id, name}` a pull request carries; and
+  `node(connection, by=account)` copies a recorded node, made now, with its own ids, oid, git
+  author, or path and the account it names (a bot's commit link reads `<login>[bot]`, as recorded).
+  A pull request's `merge`, `close`, `reopen`, and `touch` move its times; `add` and `remove` change
+  a connection and move `updatedAt`. A change to commits or files is a push: files change with a new
+  commit, removing a commit rewrites every later one (as a force push does), the head is always the
+  last commit, and every earlier head's compare still answers. `set`, `link`, `unlink`, and
+  `rename_label` do not move `updatedAt`, as plan section 7 ("Change signal") measured for closing
+  links, label renames, and author associations and plan 5.3 step 3 for marking a draft ready
+  (converting to a draft moves it: `set` then `touch`). An issue keeps one id across the pull
+  requests that link it. REST compare lists a pull request's commit nodes; Prebid.js#8858's recorded
+  compare pages and GraphQL page hold its commits in two orders, so it refuses a push.
+  `rename_repository` renames within the owner and keeps the old name resolving. `delete_account`
+  makes lookups answer `NOT_FOUND` and nulls or drops every reference to the account and its forks;
+  afterwards only a commit can name it (gap 90), and `restore_account` makes lookups find it again.
+  `gone` removes a pull request or a repository. `open_pull_request` with a number the repository
+  holds replaces that pull request, which is how a test builds a number stored under another
+  `github_id`; a change made later through the replaced object reaches nothing.
+- **A change GitHub refuses is refused**: a merge of a pull request that is not open or is a draft,
+  a close of one that is not open, a reopen of one that is not closed, a repository added or renamed
+  onto a name a live one has, and a `remove`, `unlink`, or `rename_label` that matches nothing each
+  raise `ScenarioError` and change nothing. `set` takes any field, for a state a test builds on
+  purpose.
+- **During a run**: `scenario.after(operation, change, when=...)` applies a change right after the
+  replay answers the next request of that operation that `when` also selects (one repository's
+  request, a first page). The operations are `Resolve`, `RepositoryLabels`, `PullRequestIndex`,
+  `PullRequestBatch`, `Overflow`, `UserLookup`, `RateLimit`, and `rest` for every REST request. It
+  is a one-shot fault, so a change that never runs fails the test, and one that raises is the
+  replay's problem; the first matching fault serves a request, so a change meant to follow a faulted
+  response belongs in that fault's `respond`. Faults stack on the model as on the recordings.
+- **Checked against the recordings**: `test_scenario.py` loads every recorded unit except the
+  rate-limit readings into one model and requires each to re-render exactly (compare pages as the
+  source's `ComparePage` reads them), and the source to read the model as it reads the recordings.
+  Rendered units carry the recordings' stamps, so a changed document is refused until the recordings
+  are made again and the model renders them. A continuation no recording covers (labels, closing
+  issues, user-linked closing issues, review requests, assignees) goes unanswered.
+- **Fixture**: `scenario` (`tests/conftest.py`) is an empty model on its own `FakeClock`, whose
+  `advance` moves time between a test's steps; `async with scenario.source() as source` opens the
+  real source over it, as `open_source` does over the recordings. Like the `replay` fixture, it
+  fails a test with anything in `unanswered(replay)`: a request the replay could not answer (the
+  model's own errors included) or a fault never used up. Objects and changes are made at the clock's
+  reading, so an item hydrated less than `[sync].unsettled_minutes` after its last change is planned
+  again by the next run; a test that checks a later plan advances the clock past that window first.
 
 ---
 
