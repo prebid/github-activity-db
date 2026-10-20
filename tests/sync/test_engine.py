@@ -15,7 +15,7 @@ import sqlite3
 from collections.abc import Iterator
 from datetime import timedelta
 from pathlib import Path
-from typing import Any
+from typing import Any, Final
 
 import pytest
 from sqlalchemy import event
@@ -2678,37 +2678,108 @@ async def test_an_interrupted_close_that_does_not_land_leaves_the_row_running(
         await world.sync()
 
 
-async def test_a_deadline_inside_a_batchs_requests_leaves_the_whole_batch_pending(
-    world: World,
-) -> None:
-    """The hydrator delivers a batch's outcomes together, so a deadline before #2's solo retry
-    writes none of the batch: all three wait in sync_pending, without a failure, and the next run
-    writes them (5.3 step 6)."""
-    scenario = world.scenario
-    repository, _ = project(world, pulls=3)
+def alias_error(alias: str) -> Any:
+    """A batch response change: ``alias`` is null with an error of its own, an item error the
+    hydrator retries alone."""
 
-    def alias_error_then_deadline(body: dict[str, Any]) -> None:
-        body["data"]["repository"]["p1"] = None
-        body["errors"] = [
+    def change(body: dict[str, Any]) -> None:
+        body["data"]["repository"][alias] = None
+        body.setdefault("errors", []).append(
             {
                 "type": "FORBIDDEN",
                 "message": "Resource not accessible by integration",
-                "path": ["repository", "p1"],
+                "path": ["repository", alias],
             }
-        ]
-        scenario.clock.advance(120)
+        )
 
-    scenario.replay.modify(
-        alias_error_then_deadline, when=lambda seen: seen.operation == "PullRequestBatch"
-    )
+    return change
 
-    limited = await world.sync(max_minutes=1)
 
-    assert batches(scenario) == [[1, 2, 3]]
+def after_index(scenario: Scenario) -> list[tuple[str, list[int]]]:
+    """The requests sent after the last index page, with a batch's numbers."""
+    seen = scenario.replay.seen
+    last = max(i for i, request in enumerate(seen) if request.operation == "PullRequestIndex")
+    return [(request.operation, request.numbers) for request in seen[last + 1 :]]
+
+
+# Where in batch [1, 2, 3] the deadline lands: the requests sent before it, and the request it
+# refuses, which a run without the deadline sends next.
+INSIDE_A_BATCH: Final = {
+    "split half": ([("PullRequestBatch", [1, 2, 3])], ("PullRequestBatch", [1])),
+    "solo retry": ([("PullRequestBatch", [1, 2, 3])], ("PullRequestBatch", [2])),
+    "overflow page": ([("PullRequestBatch", [1, 2, 3])], ("Overflow", [])),
+    "compare page": ([("PullRequestBatch", [1, 2, 3])], ("rest", [])),
+    "after an item failed": (
+        [("PullRequestBatch", [1, 2, 3]), ("PullRequestBatch", [1])],
+        ("PullRequestBatch", [3]),
+    ),
+}
+
+
+@pytest.mark.parametrize("deadline", [False, True], ids=["next-request", "deadline"])
+@pytest.mark.parametrize("place", list(INSIDE_A_BATCH))
+async def test_a_deadline_inside_a_batchs_requests_leaves_the_whole_batch_pending(
+    world: World, place: str, deadline: bool
+) -> None:
+    """The hydrator delivers a batch's outcomes together, so a deadline at any of the batch's
+    own requests writes none of it, and records no failure the batch computed: all three wait in
+    sync_pending, and the next run writes them (5.3 step 6). Without the deadline, the run sends
+    the request the deadline refuses."""
+    scenario = world.scenario
+    repository, author = project(world, pulls=3)
+
+    def passes() -> None:
+        if deadline:
+            scenario.clock.advance(120)
+
+    def batch(numbers: list[int]) -> Any:
+        return lambda seen: seen.operation == "PullRequestBatch" and seen.numbers == numbers
+
+    if place == "split half":
+        # A 502 is GitHub's timeout answer: a batch of more than one item splits at once.
+        def timed_out(request: Any) -> Any:
+            passes()
+            return synthetic("bad_gateway")
+
+        scenario.replay.fault(timed_out, when=batch([1, 2, 3]))
+    elif place == "solo retry":
+
+        def failed_alias(body: dict[str, Any]) -> None:
+            alias_error("p1")(body)
+            passes()
+
+        scenario.replay.modify(failed_alias, when=batch([1, 2, 3]))
+    elif place in ("overflow page", "compare page"):
+        if place == "overflow page":
+            nodes = [scenario.node("comments", by=author) for _ in range(101)]
+            repository.pulls[1].add("comments", *nodes)
+        else:
+            repository.pulls[1].add("commits", *(scenario.node("commits") for _ in range(251)))
+        scenario.after("PullRequestBatch", passes, when=batch([1, 2, 3]))
+    else:
+
+        def two_failed(body: dict[str, Any]) -> None:
+            alias_error("p0")(body)
+            alias_error("p2")(body)
+
+        def failed_again(body: dict[str, Any]) -> None:
+            alias_error("p0")(body)
+            passes()
+
+        scenario.replay.modify(two_failed, when=batch([1, 2, 3]))
+        scenario.replay.modify(failed_again, when=batch([1]))
+
+    sent, refused = INSIDE_A_BATCH[place]
+    report = await world.sync(max_minutes=1)
+
+    if not deadline:
+        assert after_index(scenario)[: len(sent) + 1] == [*sent, refused]
+        return
+    assert after_index(scenario) == sent
     assert world.numbers(repository) == []
     assert world.pending(repository) == [1, 2, 3]
-    assert world.failures() == []
-    assert ended(world, limited) == ("time_limited", 0, {"prebid/Prebid.js": "time_limited"})
+    assert (report.failures, world.failures()) == ((), [])
+    assert ended(world, report) == ("time_limited", 0, {"prebid/Prebid.js": "time_limited"})
 
     finished = await world.sync()
     assert [(item.number, item.pending) for item in finished.planned] == [
