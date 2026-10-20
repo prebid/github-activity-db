@@ -3,10 +3,11 @@
 Every read is one statement whose rows are all fetched before the next one starts, never a
 server-side cursor (``stream``, ``stream_scalars``, ``stream_results``, ``yield_per``): in
 rollback-journal mode a read left half-consumed holds a lock that blocks a running sync's commit
-until the busy timeout (gap 77). The reads are separate statements, not one read transaction, so
-none holds a lock between them. Under a run's claim (Step 3b-2a-2) the run is the only writer the
-code allows, so its reads see one state; a ``--dry-run`` beside a running sync can see that sync's
-commits land between them.
+until the busy timeout (gap 77). Give it a reader connection (``sync.connection.open_reader``):
+there the reads are separate statements and none holds a lock between them. Under a run's claim
+the run is the only writer the code allows, so its reads see one state; a ``--dry-run`` beside a
+running sync can see that sync's commits land between them. On the writer connection a bare read
+would take the write lock, so the writer never reads a snapshot.
 """
 
 from __future__ import annotations

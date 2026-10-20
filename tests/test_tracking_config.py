@@ -10,6 +10,7 @@ from github_activity_db.config import Settings
 from github_activity_db.tracking import (
     MAX_UNSETTLED_MINUTES,
     SyncConfig,
+    TrackedRepository,
     TrackingConfigError,
     load_tracking_config,
 )
@@ -309,3 +310,202 @@ class TestSyncSettings:
     def test_an_unknown_sync_key(self, tmp_path: Path) -> None:
         body = COVERAGE + "[sync]\nunsettled_minute = 5\n" + ONE_REPO
         assert _errors(tmp_path, body) == [("sync.unsettled_minute", "extra_forbidden")]
+
+
+ACCOUNT = '{ github_id = 5, login = "bot", reason = "r" }'
+EMAIL = '{ email = "bot@example.com", reason = "r" }'
+
+
+def _automation(accounts: str = "", emails: str = "") -> str:
+    return COVERAGE + ONE_REPO + f"[automation]\naccounts = [{accounts}]\nemails = [{emails}]\n"
+
+
+class TestAutomation:
+    def test_the_packaged_entries(self) -> None:
+        automation = load_tracking_config().automation
+        assert [(a.github_id, a.login, a.reason) for a in automation.accounts] == [
+            (99054218, "prebidjs-release", "release automation"),
+            (81847, "claude", "receives commits authored as noreply@anthropic.com"),
+        ]
+        assert [(e.email, e.reason) for e in automation.emails] == [
+            ("noreply@anthropic.com", "Claude commits without a linked account")
+        ]
+
+    def test_defaults_without_an_automation_table(self, tmp_path: Path) -> None:
+        automation = load_tracking_config(_write(tmp_path, COVERAGE + ONE_REPO)).automation
+        assert (automation.accounts, automation.emails) == ((), ())
+
+    def test_an_email_is_stored_lowercase(self, tmp_path: Path) -> None:
+        body = _automation(emails='{ email = "Bot@Example.COM", reason = "r" }')
+        (entry,) = load_tracking_config(_write(tmp_path, body)).automation.emails
+        assert entry.email == "bot@example.com"
+
+    @pytest.mark.parametrize(
+        ("entry", "location", "error"),
+        [
+            ('{ github_id = 0, login = "bot", reason = "r" }', "github_id", "greater_than_equal"),
+            ('{ github_id = true, login = "bot", reason = "r" }', "github_id", "int_type"),
+            ('{ github_id = "5", login = "bot", reason = "r" }', "github_id", "int_type"),
+            ('{ github_id = 5, login = "", reason = "r" }', "login", "string_too_short"),
+            ('{ github_id = 5, login = "bot", reason = "" }', "reason", "string_too_short"),
+            ('{ github_id = 5, login = "bot" }', "reason", "missing"),
+            (
+                '{ github_id = 5, login = "bot", reason = "r", note = "x" }',
+                "note",
+                "extra_forbidden",
+            ),
+        ],
+    )
+    def test_an_invalid_account(
+        self, tmp_path: Path, entry: str, location: str, error: str
+    ) -> None:
+        assert _errors(tmp_path, _automation(accounts=entry)) == [
+            (f"automation.accounts.0.{location}", error)
+        ]
+
+    @pytest.mark.parametrize(
+        ("email", "error"),
+        [
+            ('""', "string_too_short"),
+            ('"bot@exämple.com"', "value_error"),
+            ('"a\\tb@example.com"', "value_error"),
+            ('"a\\u007fb@example.com"', "value_error"),
+            ('"\\u0000@example.com"', "value_error"),
+        ],
+        ids=["empty", "non-ascii", "tab", "del", "nul"],
+    )
+    def test_an_email_outside_printable_ascii(self, tmp_path: Path, email: str, error: str) -> None:
+        body = _automation(emails=f'{{ email = {email}, reason = "r" }}')
+        assert _errors(tmp_path, body) == [("automation.emails.0.email", error)]
+
+    def test_a_space_is_printable(self, tmp_path: Path) -> None:
+        body = _automation(emails='{ email = "a b@example.com", reason = "r" }')
+        (entry,) = load_tracking_config(_write(tmp_path, body)).automation.emails
+        assert entry.email == "a b@example.com"
+
+    def test_an_account_listed_twice(self, tmp_path: Path) -> None:
+        body = _automation(
+            accounts=f'{ACCOUNT}, {{ github_id = 5, login = "other", reason = "r" }}'
+        )
+        assert _errors(tmp_path, body) == [("automation", "value_error")]
+        with pytest.raises(TrackingConfigError, match=r"github_id listed more than once: \[5\]"):
+            load_tracking_config(tmp_path / "tracking.toml")
+
+    def test_an_email_listed_twice_ignoring_case(self, tmp_path: Path) -> None:
+        body = _automation(emails=f'{EMAIL}, {{ email = "BOT@example.com", reason = "r" }}')
+        assert _errors(tmp_path, body) == [("automation", "value_error")]
+        with pytest.raises(TrackingConfigError, match=r"bot@example\.com"):
+            load_tracking_config(tmp_path / "tracking.toml")
+
+    def test_an_unknown_automation_key(self, tmp_path: Path) -> None:
+        body = COVERAGE + ONE_REPO + "[automation]\nlogins = []\n"
+        assert _errors(tmp_path, body) == [("automation.logins", "extra_forbidden")]
+
+
+FAILURE = '{ repository = "prebid/a", number = 5, reason = "a permanent GitHub error" }'
+
+
+def _accepted(*entries: str) -> str:
+    return COVERAGE + f"[sync]\naccepted_failures = [{', '.join(entries)}]\n" + ONE_REPO
+
+
+class TestAcceptedFailures:
+    def test_the_packaged_list_is_empty(self) -> None:
+        assert load_tracking_config().sync.accepted_failures == ()
+
+    def test_an_entry_matches_its_configured_repository_and_number(self, tmp_path: Path) -> None:
+        body = _accepted('{ repository = "PREBID/A", number = 5, reason = "r" }')
+        config = load_tracking_config(_write(tmp_path, body))
+        (repo,) = config.repositories
+        entry = config.accepted_failure(repo, 5)
+        assert entry is not None and (entry.repository, entry.number, entry.reason) == (
+            "PREBID/A",
+            5,
+            "r",
+        )
+        assert config.accepted_failure(repo, 6) is None
+        other = TrackedRepository(owner="prebid", name="b", group="Tools")
+        assert config.accepted_failure(other, 5) is None
+
+    def test_a_repository_that_is_not_configured(self, tmp_path: Path) -> None:
+        body = _accepted('{ repository = "prebid/zzz", number = 5, reason = "r" }')
+        assert _errors(tmp_path, body) == [("", "value_error")]
+        with pytest.raises(TrackingConfigError, match="prebid/zzz, which is not a configured"):
+            load_tracking_config(tmp_path / "tracking.toml")
+
+    def test_an_entry_listed_twice_ignoring_case(self, tmp_path: Path) -> None:
+        body = _accepted(FAILURE, '{ repository = "Prebid/A", number = 5, reason = "again" }')
+        assert _errors(tmp_path, body) == [("", "value_error")]
+        with pytest.raises(TrackingConfigError, match="listed more than once: Prebid/A#5"):
+            load_tracking_config(tmp_path / "tracking.toml")
+
+    def test_two_numbers_of_one_repository(self, tmp_path: Path) -> None:
+        body = _accepted(FAILURE, '{ repository = "prebid/a", number = 6, reason = "r" }')
+        assert len(load_tracking_config(_write(tmp_path, body)).sync.accepted_failures) == 2
+
+    @pytest.mark.parametrize(
+        ("entry", "location", "error"),
+        [
+            (
+                '{ repository = "prebid/a", number = 0, reason = "r" }',
+                "number",
+                "greater_than_equal",
+            ),
+            ('{ repository = "prebid/a", number = true, reason = "r" }', "number", "int_type"),
+            ('{ repository = "prebid/a", number = "5", reason = "r" }', "number", "int_type"),
+            ('{ repository = "prebid/a", number = 5, reason = "" }', "reason", "string_too_short"),
+            ('{ repository = "", number = 5, reason = "r" }', "repository", "string_too_short"),
+            ('{ repository = "prebid/a", number = 5 }', "reason", "missing"),
+            (
+                '{ repository = "prebid/a", number = 5, reason = "r", x = 1 }',
+                "x",
+                "extra_forbidden",
+            ),
+        ],
+    )
+    def test_an_invalid_entry(self, tmp_path: Path, entry: str, location: str, error: str) -> None:
+        assert _errors(tmp_path, _accepted(entry)) == [
+            (f"sync.accepted_failures.0.{location}", error)
+        ]
+
+
+class TestReadTrackingConfig:
+    def test_the_packaged_source_and_digest(self) -> None:
+        import hashlib
+
+        from github_activity_db.tracking import read_tracking_config
+
+        packaged = (
+            Path(__file__).resolve().parents[1] / "src" / "github_activity_db" / "tracking.toml"
+        )
+        loaded = read_tracking_config()
+        assert loaded.source == "packaged"
+        assert loaded.sha256 == hashlib.sha256(packaged.read_bytes()).hexdigest()
+
+    def test_a_named_file_s_absolute_source_and_digest(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import hashlib
+
+        from github_activity_db.tracking import read_tracking_config
+
+        path = _write(tmp_path, COVERAGE + ONE_REPO)
+        monkeypatch.chdir(tmp_path)
+        loaded = read_tracking_config(Path("tracking.toml"))
+        assert loaded.source == str(Path.cwd() / "tracking.toml")
+        assert loaded.sha256 == hashlib.sha256(path.read_bytes()).hexdigest()
+
+    def test_a_symlink_is_recorded_as_configured_not_as_its_target(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """5.1: config_source is the TRACKING_CONFIG_PATH path, made absolute."""
+        import hashlib
+
+        from github_activity_db.tracking import read_tracking_config
+
+        target = _write(tmp_path, COVERAGE + ONE_REPO)
+        (tmp_path / "link.toml").symlink_to(target)
+        monkeypatch.chdir(tmp_path)
+        loaded = read_tracking_config(Path("link.toml"))
+        assert loaded.source == str(Path.cwd() / "link.toml")
+        assert loaded.sha256 == hashlib.sha256(target.read_bytes()).hexdigest()

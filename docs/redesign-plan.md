@@ -31,7 +31,7 @@ issue totals) are dated; regenerate them with `ghactivity verify` once Step 3b-2
 |------|-------|--------|
 | 1 | Guardrails | done (PR #5) |
 | 2 | GitHub source layer | done (PR #7) |
-| 3 | New schema, PR sync engine, cutover (pull requests 3a, 3b-1, 3b-2a-1, 3b-2a-2a, 3b-2a-2b, 3b-2a-2c, and 3b-2b) | in progress: 3a done (PR #11), 3b-1 done (PR #14), 3b-2a-1 done (PR #19) |
+| 3 | New schema, PR sync engine, cutover (pull requests 3a, 3b-1, 3b-2a-1, 3b-2a-2a, 3b-2a-2b, 3b-2a-2c, and 3b-2b) | in progress: 3a done (PR #11), 3b-1 done (PR #14), 3b-2a-1 done (PR #19), 3b-2a-2a done (PR #21) |
 | 4 | Issues, closing-issue links, and default-branch activity (pull requests 4a and 4b) | not started |
 | 5 | Full bootstrap and verification | not started |
 | 6 | Scheduled sync and publication | not started |
@@ -294,7 +294,7 @@ and `color`, `pr_user_tags.created_at`).
 |-------|---------|----------------------|
 | `repositories` | `github_id`, `node_id`, `owner`, `name`, `full_name`, `repo_group`, `is_private`, `is_archived`, `default_branch`, `labels_total`, `is_tracked`, `resolved_at`, and one column for each further field the resolve selects (5.8), named in snake case (`stargazerCount` as `stargazer_count`; an object's field as `primary_language`, `license_spdx_id`, `plan_features_codeowners`, `plan_features_team_review_requests`, and `plan_features_maximum_manual_review_requests`) | `github_id` unique; `node_id` unique; the GitHub fields as the latest complete resolve read them (5.8), nullable as GitHub's are, and `resolved_at` the GitHub `Date` header of that resolve's first response, written only with them; names take GitHub's spelling; `full_name` indexed, not unique (the consumer key (`full_name`, `number`) is unique among `is_tracked` rows); `is_tracked` set by 5.3 step 1 (D27); `repo_group` as `tracking.toml` assigned it at the last resolve |
 | `repo_labels` | `repository_id`, `node_id`, `name`, `color`, `description`, `is_default`, `created_at`, `updated_at` | PK (`repository_id`, `node_id`); the repository's labels as the latest complete resolve read them (D8); `description`, `created_at`, and `updated_at` nullable as GitHub's are |
-| `github_users` | `github_id`, `node_id`, `login`, `type`, `name`, `created_at`, `updated_at`, `linked_user_github_id`, `claimant_github_id`, `refreshed_at`, `not_found_at` | `github_id` unique, null only for type `EnterpriseUserAccount`, which has no `databaseId` (5.2); `node_id` unique; `type` and `login` not null, from GraphQL only (5.2); `type` in (`User`, `Bot`, `Organization`, `Mannequin`, `EnterpriseUserAccount`); `name`, `created_at`, `updated_at`, and `claimant_github_id` as GitHub reports them, null until the account's first lookup (`Bot` has no `name`); `linked_user_github_id` is an `EnterpriseUserAccount`'s `user.databaseId` and `claimant_github_id` a `Mannequin`'s `claimant.databaseId`, null for another type or when GitHub returns none; `refreshed_at` is the GitHub `Date` header of the response that last set login and type (5.2); `not_found_at` (named `deleted_at` at `6fedb05`) is when a lookup returned `NOT_FOUND`, null otherwise, and no reference reads it (D28); profile fields are in `account_profiles` (D31) |
+| `github_users` | `github_id`, `node_id`, `login`, `type`, `name`, `created_at`, `updated_at`, `linked_user_github_id`, `claimant_github_id`, `refreshed_at`, `not_found_at` | `github_id` unique, null only for type `EnterpriseUserAccount`, which has no `databaseId` (5.2); `node_id` unique; `type` and `login` not null, from GraphQL only (5.2); `type` in (`User`, `Bot`, `Organization`, `Mannequin`, `EnterpriseUserAccount`); `name`, `created_at`, `updated_at`, and `claimant_github_id` as GitHub reports them, null until the account's first lookup (`Bot` has no `name`); `linked_user_github_id` is an `EnterpriseUserAccount`'s `user.databaseId` and `claimant_github_id` a `Mannequin`'s `claimant.databaseId`, null for another type or when GitHub returns none; `refreshed_at` is the GitHub `Date` header of the response that inserted the row or of its latest lookup that returned the account (5.2); `not_found_at` (named `deleted_at` at `6fedb05`) is the `Date` header of the first lookup that returned `NOT_FOUND` since the account was last seen, null otherwise, and no reference reads it (D28); profile fields are in `account_profiles` (D31) |
 | `pull_requests` | `repository_id`, `number`, `github_id`, `node_id`, `state`, `is_draft`, `title`, `body`, `author_id`, `author_reported`, `author_association`, `created_at`, `merged_at`, `closed_at`, `published_at`, `last_edited_at`, `editor_id`, `includes_created_edit`, `maintainer_can_modify`, `merged_by_id`, `merged_by_reported`, `base_ref`, `base_ref_oid`, `head_ref_name`, `head_ref_oid`, `head_repo_github_id`, `head_repo_full_name`, `head_repo_owner_node_id`, `head_repo_owner_login`, `merge_commit_oid`, `targets_default_branch`, `is_cross_repository`, `milestone_number`, `milestone_title`, `review_decision`, `mergeable`, `merge_state_status`, `can_be_rebased`, `potential_merge_commit_oid`, `stack_node_id`, `stack_number`, `stack_size`, `stack_base_ref_name`, `stack_entry_node_id`, `stack_position`, `additions`, `deletions`, `changed_files`, `total_comments_count`, `commits_total`, `files_total`, `reviews_total`, `comments_total`, `labels_total`, `closing_issues_total`, `user_linked_closing_issues_total`, `review_requests_total`, `assignees_total`, `github_updated_at`, `hydrated_at`, `hydration_version` | unique (`repository_id`, `number`); `github_id` unique; `state` in (`OPEN`, `CLOSED`, `MERGED`), GitHub's `PullRequestState`; `merged_at` set iff `MERGED`; author, merger, and editor nullable; `closed_at`, `published_at`, `last_edited_at`, `merge_commit_oid`, the head repository and its owner, the milestone, and `review_decision` nullable as GitHub's are (the head repository is null when GitHub returns none, as for a deleted fork); the milestone is GitHub's reference to it (number and title), not a stored milestone; the merge state and stack columns are nullable as GitHub's are, `stack_node_id`, `stack_number`, `stack_size`, and `stack_base_ref_name` null when GitHub returns no stack, and `stack_entry_node_id` and `stack_position` when it returns no stack entry; a stack is identified within its repository by `stack_number`, and `stack_position` is GitHub's position, 1 closest to the base branch |
 | `pr_labels` | `pr_id`, `name`, `label_node_id` | PK (`pr_id`, `name`) |
 | `pr_reviews` | `github_id`, `node_id`, `pr_id`, `reviewer_id`, `reviewer_reported`, `state`, `created_at`, `submitted_at`, `published_at`, `updated_at`, `last_edited_at`, `editor_id`, `includes_created_edit`, `commit_oid`, `author_association`, `author_can_push_to_repository`, `inline_comments_total` | `github_id` unique; reviewer and editor nullable; `state` in (`APPROVED`, `CHANGES_REQUESTED`, `COMMENTED`, `DISMISSED`); `submitted_at`, `published_at`, `last_edited_at`, and `commit_oid` nullable as GitHub's are; `inline_comments_total` is GitHub's `comments.totalCount` for the review (D5); no review text (D24) |
@@ -315,8 +315,8 @@ and `color`, `pr_user_tags.created_at`).
 | `automation_accounts` | `github_id`, `login`, `reason`, `run_id` | integer primary key; `github_id` unique; replaced from `tracking.toml` at the start of every run, `run_id` naming that run (a reference to `sync_runs`) |
 | `account_profiles` | `account_id`, `company`, `location`, `website_url`, and an organization's `description`, `email`, `twitter_username`, `is_verified`, `archived_at`, `has_sponsors_listing`, and `pinned_items_remaining`, `refreshed_at` | PK `account_id`, a reference to `github_users` (`ON DELETE CASCADE`); rows only for a `User` or an `Organization` (D31); each lookup that returns the account replaces the whole row with the profile it returned, through the writer and in the transaction that writes `github_users`' login and type, so no earlier value survives a field GitHub now returns as null or a change of type; a lookup that returns `NOT_FOUND` leaves the row unchanged, marked by `github_users.not_found_at` (D28); every field nullable as GitHub's is, the organization fields null for a user and `company` null for an organization; `refreshed_at` as on `github_users` |
 | `automation_emails` | `email`, `reason`, `run_id` | integer primary key; `email` unique, stored lowercase ASCII (SQLite's `lower()`, which the views apply to commit emails, folds only ASCII letters); replaced the same way |
-| `sync_runs` | `started_at`, `deadline_at`, `finished_at`, `status`, `exit_code`, `trigger`, `code_version`, `config_source`, `config_sha256`, `graphql_points`, `rest_calls`, `items_planned`, `items_hydrated`, `items_deleted`, `failures`, `deletions_approved` | `status` in (`running`, `complete`, `time_limited`, `failed`, `aborted`), set as 5.3 step 8 says; `deadline_at` is `started_at` plus `--max-minutes`, null without it; `trigger` is `schedule` or `workflow_dispatch` from `GITHUB_EVENT_NAME`, else `manual`; `code_version` is `GITHUB_SHA`, else the commit of the checkout the package runs from (marked when its tree has changes), else the package version; `config_source` is `packaged` or the `TRACKING_CONFIG_PATH` path, and `config_sha256` the digest of the `tracking.toml` bytes the run read (gap 88); `items_planned` counts the distinct items planned for hydration (in-place updates excluded), `items_hydrated` the hydrated items written, and `items_deleted` the item rows step 7 and the prune deleted; `failures` counts this run's item failures, accepted ones included; `deletions_approved` is null or JSON with `allow_deletions` (the repository, the approved N, and for each guarded set, step 7's items and from Step 4b the activity events and the default-branch commits, its candidate count and whether its deletion ran) and `prune_untracked` (each pruned repository's `github_id`, `full_name`, and items deleted); every column is consumer except the run counters (5.1, consumer interface) |
-| `repo_sync_state` | `repository_id`, `last_index_started_at`, `index_pr_total`, `index_issue_total`, `last_success_at`, `last_run_id`, `last_outcome`, `halt_reason`, and from Step 4b `activity_read_at`, `activity_last_outcome`, `activity_halt_reason`, `history_read_at`, and `default_branch_commits_total` | PK `repository_id`; `activity_read_at` is the GitHub `Date` header of the first page of the latest activity-log read that completed and was written; `history_read_at` and `default_branch_commits_total` are the first page's `Date` header and the `totalCount` of the latest history read that replaced the rows, written only with that replace; `activity_last_outcome` in (`complete`, `time_limited`, `failed`, `halted`); `activity_halt_reason` holds a Step 4b deletion halt's reason and candidate counts and is cleared by a run whose Step 4b did not halt (Step 4b); `last_run_id` is the latest run that attempted the repository, or found it untracked, and `last_outcome` its result, in (`complete`, `time_limited`, `failed`, `incomplete_index`, `halted`, `untracked`), both written by step 8, or by the close of a fatal or interrupted run (5.3 step 8); `last_index_started_at` is written only when that index completed and the repository did not fail later in the run, a time-limited repository included (its unreached items are in `sync_pending`), and never by the close of a fatal or interrupted run; `last_success_at` is the run's `finished_at` when `last_outcome` is `complete` and no item failed outside `[sync].accepted_failures`; `halt_reason` holds step 7's halt and is cleared by a run whose step 7 did not halt |
+| `sync_runs` | `started_at`, `deadline_at`, `finished_at`, `status`, `exit_code`, `trigger`, `code_version`, `config_source`, `config_sha256`, `graphql_points`, `rest_calls`, `items_planned`, `items_hydrated`, `items_deleted`, `failures`, `deletions_approved` | `status` in (`running`, `complete`, `time_limited`, `failed`, `aborted`), set as 5.3 step 8 says; `deadline_at` is `started_at` plus `--max-minutes`, null without it; `trigger` is `schedule` or `workflow_dispatch` from `GITHUB_EVENT_NAME`, else `manual`; `code_version` is `GITHUB_SHA`, else the commit of the checkout the package runs from (with `-dirty` appended when its tracked files have changes; the package runs from a checkout when git tracks its `__init__.py`), else the package version; `config_source` is `packaged` or the `TRACKING_CONFIG_PATH` path made absolute (symlinks not followed), and `config_sha256` the digest of the `tracking.toml` bytes the run read (gap 88); `items_planned` counts the distinct items planned for hydration (in-place updates excluded), `items_hydrated` the hydrated items written, and `items_deleted` the item rows step 7 and the prune deleted; `failures` counts this run's item failures, accepted ones included; `deletions_approved` is null or JSON with `allow_deletions` (the repository, the approved N, and for each guarded set, step 7's items and from Step 4b the activity events and the default-branch commits, its candidate count and whether its deletion ran) and `prune_untracked` (each pruned repository's `github_id`, `full_name`, and items deleted), written as `{"allow_deletions": {"repository", "github_id", "approved", "sets": {"items": {"candidates", "deleted"}}}, "prune_untracked": [{"github_id", "full_name", "items_deleted"}]}` with sorted keys, in the transaction of the deletion it records, as `items_deleted` is; every column is consumer except the run counters (5.1, consumer interface) |
+| `repo_sync_state` | `repository_id`, `last_index_started_at`, `index_pr_total`, `index_issue_total`, `last_success_at`, `last_run_id`, `last_outcome`, `halt_reason`, and from Step 4b `activity_read_at`, `activity_last_outcome`, `activity_halt_reason`, `history_read_at`, and `default_branch_commits_total` | PK `repository_id`; `activity_read_at` is the GitHub `Date` header of the first page of the latest activity-log read that completed and was written; `history_read_at` and `default_branch_commits_total` are the first page's `Date` header and the `totalCount` of the latest history read that replaced the rows, written only with that replace; `activity_last_outcome` in (`complete`, `time_limited`, `failed`, `halted`); `activity_halt_reason` holds a Step 4b deletion halt's reason and candidate counts and is cleared by a run whose Step 4b did not halt (Step 4b); `last_run_id` is the latest run that attempted the repository, or found it untracked, and `last_outcome` its result, in (`complete`, `time_limited`, `failed`, `incomplete_index`, `halted`, `untracked`), both written by step 8, or by the close of a fatal or interrupted run (5.3 step 8); `last_index_started_at` is written only when that index completed and the repository did not fail later in the run, a time-limited repository included (its unreached items are in `sync_pending`), and never by the close of a fatal or interrupted run; `last_success_at` is the run's `finished_at` when `last_outcome` is `complete` and no item of the repository failed outside `[sync].accepted_failures`; `halt_reason` holds step 7's halt and is cleared by a run whose step 7 ran for the repository and did not halt, a run whose step 7 did not run for it leaving it |
 | `sync_pending` | `repository_id`, `item_kind`, `number`, `run_id` | PK (`repository_id`, `item_kind`, `number`); `item_kind` in (`pull_request`, `issue`); items a time-limited run planned but did not reach; step 8 replaces the rows of each completely indexed repository that did not fail later in the run (a repository gone during hydration keeps its rows, 5.3 step 4) with this run's unreached items, so a run that reached them all leaves none; consumer, so an in-coverage item not yet hydrated is told apart from one outside coverage |
 | `sync_failures` | `repository_id`, `item_kind`, `number`, `attempts`, `last_error`, `first_failed_at`, `last_failed_at`, `last_run_id` | unique (`repository_id`, `item_kind`, `number`); `item_kind` in (`pull_request`, `issue`); `attempts` counts the runs in which the item failed: `last_run_id` is the latest such run, and a failure adds one only when its run is another, whatever the runs' clocks read; `last_error` is the error's class and message; row deleted on success, or by step 7 when its repository's in-coverage set no longer lists the item |
 | `user_tags`, `pr_user_tags` | unchanged except `created_at`, which uses the 5.1 timestamp type with a `datetime.now(UTC)` default | FK to new `pull_requests` |
@@ -498,7 +498,11 @@ same number.
 - One account comes back in more than one shape. dependabot (49699333) is `Bot`/`dependabot` as a PR
   author and `dependabot[bot]` as a commit's `GitActor.user`, whose declared type is `User`; REST uses
   `dependabot[bot]`. `copilot-pull-request-reviewer[bot]` and `Copilot` share id 175728472. Identity
-  never joins on login.
+  never joins on login. A sighting or lookup whose `databaseId` is stored under another node id
+  refers to the stored row, which keeps its node id, and the run reports the second one; one whose
+  node id is stored under another `databaseId` fails the item, or the lookup, as does an item whose
+  sightings and lookups report one node under two `databaseId` values, a second node id never
+  stored included. A commit link resolves by its `databaseId` alone.
 - Type and login come only from GraphQL: actor sightings (PR author, merger, review author, comment
   author, editor, requested reviewer, assignee), which carry `__typename`,
   and `nodes(ids:)` lookups. A commit-linked account (GraphQL `GitActor.user` or the REST compare
@@ -508,8 +512,10 @@ same number.
   stored values stores the commit without a linked account, `linked_github_id` keeping the id GitHub
   linked (D28). Lookups run after each hydration batch, for the commit-linked accounts that are
   neither stored, nor written or looked up earlier in the run, nor sighted in the same batch; each
-  record reaches the writer with the accounts its links need, so its own transaction inserts any
-  account row it needs. An item whose lookup failed gets one more lookup holding only its own ids,
+  record reaches the writer with the accounts its links need (a lookup's answer, or an actor
+  sighting in the record or in another record of its batch), so its own transaction inserts any
+  account row it needs; the writer refuses, writing nothing, a link to an account it has neither
+  stored nor been given. An item whose lookup failed gets one more lookup holding only its own ids,
   unless the failed request held only those (5.3 step 4). A looked-up account whose `databaseId`
   differs from the commit link's fails the items waiting on it (gap 78). Each run also refreshes
   users last refreshed more than 24 hours ago and without `not_found_at`, so renamed logins
@@ -523,8 +529,9 @@ same number.
   which the 24-hour refresh keeps current. An actor sighting inserts an account not
   yet stored and clears `not_found_at`, but leaves login and type to the refresh, so an account seen
   in two shapes (175728472) does not change login with the order items are written. `refreshed_at`
-  is the GitHub `Date` header of the response that inserted the row or of its latest lookup, the
-  same clock as `hydrated_at`. The refresh runs after the last hydration
+  is the GitHub `Date` header of the response that inserted the row or of its latest lookup that
+  returned the account, the same clock as `hydrated_at`; a `NOT_FOUND` lookup sets `not_found_at`
+  from its own `Date` header and leaves `refreshed_at`. The refresh runs after the last hydration
   write and before step 7, oldest `refreshed_at` first, and stops at the deadline; in it, a
   `databaseId` that differs from the stored `github_id` is a failed refresh. Accounts that no stored
   row references any more stay stored and refreshed: within one file, `github_users` holds every
@@ -706,6 +713,12 @@ engine, never through alembic, whose commands take the write lock; it exits 1 ot
    takes the stored link of this PR's row with the same SHA, and a null PR or issue author or merger
    keeps the stored one (D28), each with its `*_reported` column false (`linked_github_id` null for a
    commit); store the validated totals; set `hydrated_at`. Fetchers never touch the database.
+   Every writer transaction is one `BEGIN IMMEDIATE`. One that writes for the run first checks the
+   run's row is still `running`, and the close updates the row only while it is `running`, so a run
+   another process aborted writes nothing more; the claim, which has no row yet, and the writer's
+   reads, which write nothing, do not check it. A database error invalidates
+   the writer's connection before the close, because a `COMMIT` that failed on a lock leaves
+   SQLite's transaction open on it.
    The writer holds one connection for the run and binds its session to it: the engine's `NullPool`
    gives a session bound to the engine a new connection, with the connect listener rerun, for every
    committed transaction, so `get_session()`'s pattern would open one connection per item.
@@ -756,13 +769,14 @@ engine, never through alembic, whose commands take the write lock; it exits 1 ot
    `halted`, `time_limited` (planned items left unreached), and `complete`; step 8 also writes
    `last_outcome = untracked` and `last_run_id` for every stored repository it finds untracked. The
    close of a fatal or interrupted run also writes `last_run_id` and `last_outcome = failed` for
-   every repository it attempted, never `last_index_started_at`, because its committed writes are in
-   the file. A deadline before any repository resolves makes the run `time_limited`, not fatal. A
-   run that never starts exits 1 before any `sync_runs` row: a usage error (click's own code for it
-   is 2, the code D25 publishes on; gap 69), an invalid `tracking.toml`, missing credentials, a
-   missing database file or one not at head, or a refused claim. `--repo` and the `--allow-deletions` repository must
-   each name a configured repository, ignoring case; a single-valued option given twice (click keeps
-   the last value silently) and `--dry-run` with `--break-lock` are usage errors.
+   every repository it attempted, and step 7's `halt_reason` for one whose step 7 ran, never
+   `last_index_started_at`, because its committed writes are in the file. A deadline before any
+   repository resolves makes the run `time_limited`, not fatal. A run that never starts exits 1
+   before any `sync_runs` row: a usage error (click's own code for it is 2, the code D25 publishes
+   on; gap 69), an invalid `tracking.toml`, missing credentials, a missing database file or one not
+   at head, or a refused claim. `--repo` and the `--allow-deletions` repository must each name a
+   configured repository, ignoring case; a single-valued option given twice (click keeps the last
+   value silently) and `--dry-run` with `--break-lock` are usage errors.
 
 ### 5.4 Verification
 
@@ -853,8 +867,8 @@ rejected and missing optional values take defaults. `TRACKING_CONFIG_PATH` names
 `[coverage].floor` is required and validated in strict mode, because lax mode accepts the TOML
 string `"2023-01-01T00:00:00Z"` and the integer 1672531200 (section 7, "Lax datetimes"). Values are
 strictly typed throughout: an account `github_id` is at least 1, and `login`, `email`, and every
-`reason` are non-empty; automation account ids and emails are unique, emails compared lowercase
-and ASCII only (5.1);
+`reason` are non-empty; automation account ids and emails are unique, emails printable ASCII
+(space to tilde, the column's CHECK), stored lowercase, and compared lowercase (5.1);
 `unsettled_minutes` is an integer of at least 1 and at most 1,439,999,999,999 (the most minutes a
 Python `timedelta` holds, so the planner can build the window), `delete_guard_min_rows` an integer
 of at least 0,
@@ -1516,17 +1530,17 @@ replaced, an `EnterpriseUserAccount` actor stored, a default-branch change recom
 `targets_default_branch`, an account seen in two shapes keeping its login until a lookup, a review
 or comment id stored under another PR refused before anything is written, run lock and
 `--break-lock` (the lock held by a separate `sqlite3` connection; a stale `running` row reclaimed
-as `aborted`; a refused claim exiting 1 with no row; a run whose row another process aborted
-exiting 1 without overwriting `aborted`), the head check refusing an older revision and an empty
-file and a missing path without creating a file, `config_sha256` equal to the read file's digest
-with and without `TRACKING_CONFIG_PATH`, a `User` profile and an `Organization` profile written
-from a lookup, a refresh replacing a changed profile field with null, no profile row for a `Bot`,
-`Mannequin`, or `EnterpriseUserAccount`, a `NOT_FOUND` lookup leaving the profile unchanged, an
-automation-list change with no hydration changing the views, config loading for `[automation]` and
-`accepted_failures` (an accepted failure naming no configured repository, a non-ASCII automation
-email), step 1 keeping two `is_tracked` repositories from sharing a `full_name`, ignoring case,
-which 5.1 states and no constraint holds (a unique index would make a rename swap a database
-error).
+as `aborted`; a refused claim inserting no row and leaving the stale rows it found; the close of a
+run whose row another process aborted leaving `aborted` and writing no outcome), the head check
+refusing an older revision and an empty file and a missing path without creating a file,
+`config_sha256` equal to the read file's digest with and without `TRACKING_CONFIG_PATH`, a `User`
+profile and an `Organization` profile written from a lookup, a refresh replacing a changed profile
+field with null, no profile row for a `Bot`, `Mannequin`, or `EnterpriseUserAccount`, a `NOT_FOUND`
+lookup leaving the profile unchanged, an automation-list change with no hydration changing the
+views, config loading for `[automation]` and `accepted_failures` (an accepted failure naming no
+configured repository, a non-ASCII automation email), step 1 keeping two `is_tracked` repositories
+from sharing a `full_name`, ignoring case, which 5.1 states and no constraint holds (a unique index
+would make a rename swap a database error).
 
 Acceptance: an adversarial review of the change, by reviewers who did not write it, finds no
 invariant check without a test that targets it, and no write rule of 5.1, 5.2, or 5.3 steps 6-8
@@ -1551,7 +1565,11 @@ test clock. A test parses every recorded pull-request, index, user-lookup, and o
 the model, re-renders it, and requires exact JSON equality with the recording's data and errors
 (headers differ by construction: the model's `Date` comes from the test clock). Cases: first sync,
 update, merge, close (stored as `CLOSED`), reopen, mass-delete halt and its override,
-incomplete-index halt, an unresolvable repository, untracked repository and prune (including no
+incomplete-index halt, `tracking.toml` listing an unresolvable repository, then one over the guard
+that `--allow-deletions` names by its configured name after a rename, then another over the guard
+that halts (`deletions_approved` naming only the approved repository, with its `github_id`, and the
+halting one keeping its candidates and recording its halt), an unresolvable repository, untracked
+repository and prune (including no
 marking under `--repo`, a re-added repository re-tracked and not pruned, and a refused prune
 deleting nothing with exit 2, and the prune listed in `deletions_approved`), crash mid-run then
 resume with committed items intact, by cancelling the engine in-process, time-limited run and the
@@ -1570,8 +1588,9 @@ label id), a duplicate repository label id failing the repository, a bot seen fi
 and a failed user lookup (its solo lookup succeeding, and failing), identity conflicts (a lookup
 `databaseId` differing from the commit link's, a review id stored under another PR, a PR number
 stored under another `github_id`), a repository gone during hydration, a database error in the
-writer exiting 1, a `--dry-run` started during a sync, reading beside the sync's item commits
-without blocking them (gap 77), an account the scenario deletes after it was stored (`not_found_at`
+writer exiting 1, a run whose row another process aborted exiting 1 without overwriting
+`aborted`, a `--dry-run` started during a sync, reading beside the sync's item commits without
+blocking them (gap 77), an account the scenario deletes after it was stored (`not_found_at`
 set by a lookup; its PR author, merger, review, comment, and commit references kept through a
 re-hydration that returns it as null, each with its `*_reported` false and the commit's
 `linked_github_id` null) and then seen again, an account the scenario deletes before it was stored
@@ -1590,7 +1609,9 @@ whose item did not fail reported, one case per exit condition in 5.3 step 8, wit
 leaves coverage, also under a deletion halt, `last_index_started_at` left unwritten for a failed,
 incompletely indexed, or gone-during-hydration repository and written for a time-limited one, an
 in-process interrupt closing the run as `aborted` with `last_outcome = failed` for each attempted
-repository and `last_index_started_at` unchanged, view rows after a sync.
+repository and `last_index_started_at` unchanged, a run fatal and one interrupted after step 7
+writing step 7's halt and its clearing to `halt_reason` beside `last_outcome = failed`, view rows
+after a sync.
 
 Acceptance: an adversarial review of the change, by reviewers who did not write it, finds no
 invariant check without a test that targets it; CI passes on the exact PR head.
@@ -1605,14 +1626,15 @@ returns, and the report a dry run prints. The seeded scenario runs below, and re
 
 Tests: `ghactivity sync` exiting 2 through a child interpreter that runs the installed package
 (`python -I -c`, the Step 3a pattern) with the replay patched in, while a usage error still exits
-1; crash mid-run then resume with committed items intact, by a child process that sends itself
-SIGKILL at a planted point under `subprocess.run(timeout=...)`, which leaves its row `running`. One
-test runs a first sync of go-gdpr from recordings made for it, without the model, and checks exit 0
-and each stored item's child rows against the recording's totals and node lists. A few fixed seeds
-each drive several runs over random GitHub changes, and after each run the database equals an
-expected state computed separately from the scenario model, compared on every column except row
-ids, the times the sync stamps from `Date` headers, and the run counters; the expected state applies
-D28's kept references and the refresh from the model's own history, not from the writer's code.
+1, as a refused claim does with no `sync_runs` row; crash mid-run then resume with committed
+items intact, by a child process that sends itself SIGKILL at a planted point under
+`subprocess.run(timeout=...)`, which leaves its row `running`. One test runs a first sync of go-gdpr
+from recordings made for it, without the model, and checks exit 0 and each stored item's child rows
+against the recording's totals and node lists. A few fixed seeds each drive several runs over random
+GitHub changes, and after each run the database equals an expected state computed separately from
+the scenario model, compared on every column except row ids, the times the sync stamps from `Date`
+headers, and the run counters; the expected state applies D28's kept references and the refresh from
+the model's own history, not from the writer's code.
 
 Acceptance: `sync --repo` on Prebid.js, salesagent, and prebid-server, from a fresh database at an
 explicit path, with `GITHUB_TOKEN="$(gh auth token)"` and the token never printed; it reads
@@ -1975,7 +1997,7 @@ Measured 2026-10-16 unless noted. "Index" means the created-order enumeration in
 | Whether the scheduled App token can read every resolve field the token used here read (`diskUsage`, `webCommitSignoffRequired`, `hasVulnerabilityAlertsEnabled`, and `planFeatures` included) | Step 6b's first manual run; a field it cannot read is an error 5.3 step 4 classifies |
 | A `DisconnectedEvent`'s `source` and `subject` (none in the 300 PRs read for section 7, "Closing-link timeline events"; GitHub's schema gives it `ConnectedEvent`'s fields) | Step 3b-2b tests a synthetic one; a live one is recorded when seen |
 | Whether a closing-keyword link can change without the PR's `updatedAt` changing (an issue transfer or deletion, a body edit, a base-ref or default-branch change); 5.4 then reports the difference as an error | Step 3b-2b's acceptance lists each such error with its PR and link; Step 5 reports any |
-| Whether a pending `reviewRequests` entry for Copilot carries `BOT_kgDOCnlnWA` (the review-request events and the reviews do; no pending request was seen, section 7, "Copilot review requests") | Step 3b-2a-2c's acceptance reports any Copilot request row; a second node id for `databaseId` 175728472 would need a writer rule before Step 5 |
+| Whether a pending `reviewRequests` entry for Copilot carries `BOT_kgDOCnlnWA` (the review-request events and the reviews do; no pending request was seen, section 7, "Copilot review requests") | Step 3b-2a-2c's acceptance reports any Copilot request row; for a `databaseId` reported under a second node id, the writer keeps the stored node id and the run reports the second (5.2) |
 | Whether GitHub changes a PR's `updatedAt` when it recomputes the merge state (not measured; the stored merge state is as of `hydrated_at` either way, 5.1) | Passive observation in Step 3b-2a-2c's acceptance: an open PR's `updatedAt` and `mergeStateStatus` read before and after a merge to its base branch that someone else made |
 | Whether to collect a `Mannequin`'s `email` ("The mannequin's email on the source instance"; the maintainer's profile decision named users and organizations only, and no mannequin was available to read, so whether GitHub requires a scope for it is unmeasured) | The maintainer decides; a live read on a mannequin comes first |
 | Whether GitHub returns an `EnterpriseUserAccount`'s `enterprise` to the tokens used (an `Enterprise` object; no tracked repository has such an actor) | Not selected until a live occurrence is read |

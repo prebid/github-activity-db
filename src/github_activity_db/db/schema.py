@@ -21,5 +21,6 @@ MIGRATION_REVISIONS: Final = (
     "b3c4d5e6f7g8",
     "33f8570f6540",
     "94a52e4f1d57",
+    "2d2ba76b177c",
 )
 HEAD_REVISION: Final = MIGRATION_REVISIONS[-1]

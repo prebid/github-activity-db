@@ -45,13 +45,17 @@ uv run pytest                      # CI also runs Python 3.12, `alembic check`, 
 - GitHub source layer (`src/github_activity_db/source/`, redesign plan Step 2): resolve, PR index,
   batch hydration, user lookup, and rate-limit readings, with typed records of every field
   Step 3b-1 collects (`hydration_version` 2)
-- The Step 3 schema (plan 5.1, without issues): migrations `33f8570f6540` and `94a52e4f1d57`
-  (Step 3b-1, `schema_version` 2), the row-level `v_*` consumer views, the data dictionary, and
-  the schema-version lock with view digests
+- The Step 3 schema (plan 5.1, without issues): migrations `33f8570f6540`, `94a52e4f1d57`
+  (Step 3b-1, `schema_version` 2), and `2d2ba76b177c` (Step 3b-2a-2a: `sync_failures.last_run_id`),
+  the row-level `v_*` consumer views, the data dictionary, and the schema-version lock with view
+  digests
 - CLI commands: `ghactivity github rate-limit` and `ghactivity github test`
 - Sync planning (`src/github_activity_db/sync/`, Step 3b-2a-1): the snapshot reader, the planner
   of plan 5.3 step 3, and step 7's deletion functions, with `tracking.toml`'s `[coverage]` floor
-  and `[sync]` settings; no command calls them yet
+  and `[sync]` settings
+- The writer and run records (Step 3b-2a-2a): every write the sync makes, the run claim and lock,
+  the close, and the head check, with `[automation]` and `[sync].accepted_failures`; no command
+  calls them yet
 
 **Not implemented yet:** nothing writes the new tables until the `sync` command (Step
 3b-2a-2c), which runs the engine (3b-2a-2b) over the planner and the writer (3b-2a-2a);
@@ -100,6 +104,12 @@ The only package that imports githubkit, and it imports neither SQLAlchemy nor `
   index), and `TrackingConfig`; returns the queue, batches, in-place updates, planner failures,
   and each completely indexed repository's in-coverage set
 - `deletions.py`: step 7's candidates, the delete guard, and `--allow-deletions owner/name=N`
+- `connection.py`: the writer's one connection, on which every statement runs inside
+  `transaction()` (one `BEGIN IMMEDIATE`; given the run's id, it first checks the row is still
+  `running`); a bare statement there would autobegin and keep the write lock. `open_reader` for
+  reads that take no lock
+- `writer.py`: repositories, in-place updates, items with D28's kept references, accounts and
+  lookups, failures, step 7's deletions, and the prune; `runs.py`: the head check, claim, and close
 
 ### Database (`db/`, `alembic/`)
 - Databases are built only by `alembic upgrade head`; tests copy one session template

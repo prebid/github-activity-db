@@ -139,8 +139,8 @@ Every account the database has stored, kept after a lookup answers `NOT_FOUND` f
 | `updated_at` | consumer | GitHub's `updatedAt`; null until the account's first lookup |
 | `linked_user_github_id` | consumer | An `EnterpriseUserAccount`'s `user.databaseId`; null for another type or when GitHub returns none |
 | `claimant_github_id` | consumer | A `Mannequin`'s `claimant.databaseId`; null until the account's first lookup, for another type, and when GitHub returns none |
-| `refreshed_at` | consumer | GitHub's `Date` header of the response that inserted the row or of its latest lookup |
-| `not_found_at` | consumer | When a lookup answered `NOT_FOUND` for the account; null otherwise. No reference reads it |
+| `refreshed_at` | consumer | GitHub's `Date` header of the response that inserted the row or of its latest lookup that returned the account; a `NOT_FOUND` lookup leaves it |
+| `not_found_at` | consumer | GitHub's `Date` header of the first lookup that answered `NOT_FOUND` since the account was last seen; null otherwise. No reference reads it |
 
 ### `account_profiles`
 
@@ -392,12 +392,12 @@ One row per sync run.
 | `id` | consumer | Row id |
 | `started_at` | consumer | When the run started |
 | `deadline_at` | consumer | `started_at` plus `--max-minutes`; null without it |
-| `finished_at` | consumer | When the run closed; null while it runs |
+| `finished_at` | consumer | When the run closed; null while it runs, and on a row another process marked `aborted` |
 | `status` | consumer | `running`, `complete`, `time_limited`, `failed`, or `aborted` |
-| `exit_code` | consumer | The run's exit code; null while it runs |
+| `exit_code` | consumer | The run's exit code; null while it runs, and on a row another process marked `aborted` |
 | `trigger` | consumer | `schedule` or `workflow_dispatch` from the Actions event, else `manual` |
-| `code_version` | consumer | Commit or package version of the code that ran |
-| `config_source` | consumer | `packaged`, or the `TRACKING_CONFIG_PATH` path the run read |
+| `code_version` | consumer | `GITHUB_SHA`; else the commit of the git checkout the package ran from, with `-dirty` when its tracked files had changes; else the package version |
+| `config_source` | consumer | `packaged`, or the `TRACKING_CONFIG_PATH` path the run read, made absolute without following symlinks |
 | `config_sha256` | consumer | SHA-256 of the `tracking.toml` bytes the run read |
 | `graphql_points` | internal | GraphQL rate-limit points spent |
 | `rest_calls` | internal | REST requests sent |
@@ -405,7 +405,7 @@ One row per sync run.
 | `items_hydrated` | internal | Hydrated items written |
 | `items_deleted` | internal | Item rows deleted |
 | `failures` | internal | Item failures in the run, accepted ones included |
-| `deletions_approved` | consumer | JSON text: the deletions an operator approved, per guarded set, and the repositories pruned; null when none was approved |
+| `deletions_approved` | consumer | JSON text, keys sorted: `allow_deletions` (`repository` as configured, its `github_id`, `approved` N, and `sets` with `items`' `candidates` and whether they were `deleted`) and `prune_untracked` (each pruned repository's `github_id`, `full_name`, and `items_deleted`), each written with the deletion it records; null when neither applied |
 
 ### `repo_sync_state`
 
@@ -417,10 +417,10 @@ Per-repository sync state, written as each run closes.
 | `last_index_started_at` | consumer | Start of the last complete index the run did not later fail: the as-of time of everything the index wrote |
 | `index_pr_total` | consumer | Pull requests that index counted |
 | `index_issue_total` | consumer | Issues that index counted; null until issues are indexed |
-| `last_success_at` | consumer | When the last fully successful run finished |
+| `last_success_at` | consumer | `finished_at` of the latest run in which the repository's outcome was `complete` and none of its items failed outside `[sync].accepted_failures` |
 | `last_run_id` | consumer | Row id of the latest run that attempted the repository |
 | `last_outcome` | consumer | That run's result for the repository |
-| `halt_reason` | consumer | Why deletions halted in the latest run that halted them; cleared by a run that did not halt |
+| `halt_reason` | consumer | Why deletions halted in the latest run that halted them, with the candidate count; cleared by a run whose step 7 ran for the repository without halting, and left by one whose step 7 did not run for it |
 
 ### `sync_pending`
 
@@ -449,6 +449,7 @@ written, or when the item leaves coverage.
 | `last_error` | consumer | The last error's class and message |
 | `first_failed_at` | consumer | When the item first failed |
 | `last_failed_at` | consumer | When the item last failed |
+| `last_run_id` | consumer | Row id of the latest run in which the item failed; `attempts` adds one only for a failure in another run |
 
 ### `user_tags`
 
@@ -503,8 +504,8 @@ One row per stored account.
 | `updated_at` | consumer | GitHub's `updatedAt`; null until the first lookup |
 | `linked_user_github_id` | consumer | An `EnterpriseUserAccount`'s user id |
 | `claimant_github_id` | consumer | A `Mannequin`'s claimant id |
-| `refreshed_at` | consumer | GitHub's `Date` header of the response that inserted the row or of its latest lookup |
-| `not_found_at` | consumer | When a lookup answered `NOT_FOUND` for the account; null otherwise |
+| `refreshed_at` | consumer | GitHub's `Date` header of the response that inserted the row or of its latest lookup that returned the account; a `NOT_FOUND` lookup leaves it |
+| `not_found_at` | consumer | GitHub's `Date` header of the first lookup that answered `NOT_FOUND` since the account was last seen; null otherwise |
 | `automation_reason` | consumer | Classification: the reason of the `automation_accounts` entry for the account's `github_id`; null when none lists it |
 
 ### `v_account_profiles`

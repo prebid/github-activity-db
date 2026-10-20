@@ -115,6 +115,7 @@ dictionary and the schema-version lock. CI also runs `alembic check`.
 | `b3c4d5e6f7g8` | Renames `pull_requests.filenames` to `file_changes` |
 | `33f8570f6540` | Step 3 schema: drops the first schema's tables except `user_tags`, creates the 5.1 tables and views, sets `user_version` 1 |
 | `94a52e4f1d57` | Step 3b-1 collection schema: refuses a file holding rows in a table it adds columns to, recreates those tables with the 5.1 columns, adds `repo_labels`, `pr_review_requests`, `pr_assignees`, and `account_profiles`, replaces the views with the row-level views, sets `user_version` 2 |
+| `2d2ba76b177c` | Adds `sync_failures.last_run_id`, the latest run in which the item failed, by which `attempts` counts runs: refuses a file holding a `sync_failures` row and recreates the table; `user_version` stays 2 |
 
 ## Querying
 

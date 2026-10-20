@@ -441,26 +441,20 @@ UNIQUE: dict[str, set[tuple[str, tuple[str, ...]]]] = {
     "pr_user_tags": {("pk", ("pr_id", "user_tag_id"))},
 }
 # References to repositories, pull_requests, and issues cascade; references to github_users are
-# set null, except those in a primary key, which cascade (5.1, D3, D28).
+# set null, except those in a primary key, which cascade; references to sync_runs take SQLite's
+# default, no action (5.1, D3, D28).
 DELETE_ACTIONS = {
     "repositories": "CASCADE",
     "pull_requests": "CASCADE",
     "issues": "CASCADE",
     "github_users": "SET NULL",
+    "sync_runs": "NO ACTION",
 }
 GITHUB_USERS_IN_A_PRIMARY_KEY = frozenset(
     {("pr_assignees", "account_id"), ("account_profiles", "account_id")}
 )
-# References to other tables, which the rule does not cover: sync_runs takes the default.
-OUTSIDE_THE_DELETE_RULE = frozenset(
-    {
-        ("repo_sync_state", "last_run_id"),
-        ("sync_pending", "run_id"),
-        ("automation_accounts", "run_id"),
-        ("automation_emails", "run_id"),
-        ("pr_user_tags", "user_tag_id"),
-    }
-)
+# References to other tables, which the rule does not cover.
+OUTSIDE_THE_DELETE_RULE = frozenset({("pr_user_tags", "user_tag_id")})
 
 
 def delete_rule_problems(
@@ -508,11 +502,17 @@ class TestPlanRules:
                 "CONSTRAINT uq_pr_reviews_github_id UNIQUE (github_id)",
                 "REFERENCES github_users (id) ON DELETE CASCADE",
             ),
+            *_redefined(
+                head_template,
+                "sync_failures",
+                "REFERENCES sync_runs (id), \n\tCONSTRAINT uq_sync_failures",
+                "REFERENCES sync_runs (id) ON DELETE CASCADE, \n\tCONSTRAINT uq_sync_failures",
+            ),
         )
         assert nullable_columns(tampered) - NULLABLE == {("pr_files", "path")}
         assert unique_sets(tampered)["pr_reviews"] == set()
         assert delete_rule_problems(tampered) == (
-            {("pr_reviews", "editor_id", "CASCADE")},
+            {("pr_reviews", "editor_id", "CASCADE"), ("sync_failures", "last_run_id", "CASCADE")},
             OUTSIDE_THE_DELETE_RULE,
         )
 
@@ -636,6 +636,7 @@ def _sync_failure(seed: Seed, kind: str) -> None:
             last_error="e",
             first_failed_at=T0,
             last_failed_at=T0,
+            last_run_id=seed.run_id(),
         )
     )
 

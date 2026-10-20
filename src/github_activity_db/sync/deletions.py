@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from fractions import Fraction
 
 from github_activity_db.source.documents import PULL_REQUEST_KIND
-from github_activity_db.sync.plan import Coverage
+from github_activity_db.sync.plan import AttemptedRepository, Coverage
 from github_activity_db.sync.snapshot import ItemKey, StoredRepository
 from github_activity_db.tracking import SyncConfig, TrackedRepository, TrackingConfig
 
@@ -147,38 +147,66 @@ class Deletions:
 
     ``candidates`` are deleted when ``decision.runs``; ``failures_removed``, the
     ``sync_failures`` rows of items absent from the in-coverage set, are removed even under a
-    halt.
+    halt. ``approval`` is the ``--allow-deletions`` approval naming this repository, with the
+    configured repository and the N the guard decided with, which the writer records; None
+    without one.
+
+    Raises:
+        ValueError: ``approval`` and ``decision.approved_limit`` name different Ns.
     """
 
     repository_github_id: int
     candidates: tuple[Candidate, ...]
     decision: GuardDecision
     failures_removed: tuple[ItemKey, ...]
+    approval: DeletionApproval | None = None
+
+    def __post_init__(self) -> None:
+        approved = None if self.approval is None else self.approval.limit
+        if self.decision.approved_limit != approved:
+            raise ValueError(
+                f"repository {self.repository_github_id}: the guard decided with N "
+                f"{self.decision.approved_limit}, the approval carries {approved}"
+            )
 
 
 def item_deletions(
     stored: StoredRepository | None,
     coverage: Coverage | None,
     *,
+    attempted: AttemptedRepository,
     failed_during_hydration: bool,
     stored_rows_before_run: int,
     config: SyncConfig,
-    approved_limit: int | None,
+    approval: DeletionApproval | None,
 ) -> Deletions | None:
     """Step 7 for a repository's items, or None when step 7 skips the repository.
 
     It skips a repository whose index did not complete (no in-coverage set) and one that failed
     during hydration. ``stored`` is the repository's stored rows as they are now, after the run's
     writes; None when nothing is stored. The guard counts ``stored_rows_before_run``, taken from
-    the planner's snapshot.
+    the planner's snapshot. ``attempted`` is the repository as step 1 resolved it, which pairs
+    the configured repository with its ``github_id``; ``approval`` is the run's
+    ``--allow-deletions``, which applies only when it names that configured repository, and then
+    travels with the result to the writer as the configured repository and N.
 
     Raises:
-        ValueError: ``coverage`` is not of pull requests, the only items stored before Step 4.
+        ValueError: ``coverage`` is not of pull requests, the only items stored before Step 4, or
+            ``coverage`` or ``stored`` is of another repository than ``attempted``.
     """
     if coverage is None or failed_during_hydration:
         return None
     if coverage.kind != PULL_REQUEST_KIND:
         raise ValueError(f"no stored {coverage.kind} rows are read before Step 4")
+    for given, github_id in (
+        ("coverage", coverage.repository_github_id),
+        ("stored rows", None if stored is None else stored.github_id),
+    ):
+        if github_id is not None and github_id != attempted.github_id:
+            raise ValueError(
+                f"{given} of repository {github_id}, not of {attempted.configured.full_name} "
+                f"({attempted.github_id})"
+            )
     rows = stored.pull_requests if stored is not None else ()
     candidates = tuple(
         Candidate(kind=coverage.kind, row_id=row.row_id, github_id=row.github_id, number=row.number)
@@ -193,9 +221,20 @@ def item_deletions(
             if kind == coverage.kind and number not in coverage.numbers
         )
     )
+    applied = (
+        DeletionApproval(attempted.configured, approval.limit)
+        if approval is not None and approval.limit_for(attempted.configured) is not None
+        else None
+    )
     return Deletions(
         repository_github_id=coverage.repository_github_id,
         candidates=candidates,
-        decision=guard(len(candidates), stored_rows_before_run, config, approved_limit),
+        decision=guard(
+            len(candidates),
+            stored_rows_before_run,
+            config,
+            None if applied is None else applied.limit,
+        ),
         failures_removed=removed,
+        approval=applied,
     )

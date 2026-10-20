@@ -31,7 +31,7 @@ from github_activity_db.sync.snapshot import (
     StoredPullRequest,
     StoredRepository,
 )
-from github_activity_db.tracking import TrackingConfig
+from github_activity_db.tracking import TrackedRepository, TrackingConfig
 
 # Items per hydration batch, by kind (plan 5.3 step 4); issues join in Step 4.
 BATCH_SIZES: Final = {PULL_REQUEST_KIND: PR_BATCH_SIZE}
@@ -93,11 +93,15 @@ class NumberStoredUnderAnotherId(PlannerFailure):
 class AttemptedRepository:
     """A repository the run attempts, after steps 1 and 2.
 
-    ``labels`` are its labels as step 1's resolve read them, which a dry run does not write.
-    ``index`` is None when the index did not complete (a fetch that still failed, a count
-    mismatch after the rescan, or the deadline during it).
+    ``configured`` is the ``tracking.toml`` entry step 1 resolved to ``github_id``, carried with
+    it so that step 7 does not pair them again: an ``--allow-deletions`` approval names the
+    configured repository, which after a rename differs from GitHub's ``full_name``. ``labels``
+    are its labels as step 1's resolve read them, which a dry run does not write. ``index`` is
+    None when the index did not complete (a fetch that still failed, a count mismatch after the
+    rescan, or the deadline during it).
     """
 
+    configured: TrackedRepository
     github_id: int
     full_name: str
     labels: frozenset[LabelKey]
@@ -105,9 +109,13 @@ class AttemptedRepository:
 
     @classmethod
     def resolved(
-        cls, record: RepositoryRecord, index: PullRequestIndex | None
+        cls,
+        configured: TrackedRepository,
+        record: RepositoryRecord,
+        index: PullRequestIndex | None,
     ) -> AttemptedRepository:
         return cls(
+            configured=configured,
             github_id=record.github_id,
             full_name=record.full_name,
             labels=frozenset((label.node_id, label.name) for label in record.labels),
