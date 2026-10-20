@@ -1827,6 +1827,107 @@ async def test_attempts_count_runs_by_their_id_and_the_first_failure_stays(
     ]
 
 
+async def test_an_item_s_first_failure_in_a_later_run_is_recorded_under_that_run(
+    migrated_database: Path,
+) -> None:
+    """Run 1, claimed and closed, records another item's failure and none for #5; run 2 inserts
+    #5's first failure under run 2, and a second failure of #5 in run 2 keeps its count and run
+    (5.1, D34)."""
+    from github_activity_db.sync.runs import RunCounters, claim_run, close_run
+    from github_activity_db.tracking import read_tracking_config
+
+    config = read_tracking_config()
+    counters = RunCounters(
+        graphql_points=0, rest_calls=0, items_planned=0, items_hydrated=0, failures=1
+    )
+    columns = (
+        "SELECT repository_id, item_kind, number, attempts, last_error, first_failed_at, "
+        "last_failed_at, last_run_id FROM sync_failures ORDER BY number"
+    )
+
+    def failure(number: int, attempts: int, message: str, first: Any, last: Any, run: int) -> Any:
+        return {
+            "repository_id": repository_id,
+            "item_kind": "pull_request",
+            "number": number,
+            "attempts": attempts,
+            "last_error": f"ValueError: {message}",
+            "first_failed_at": ts(first),
+            "last_failed_at": ts(last),
+            "last_run_id": run,
+        }
+
+    async with open_writer(_url(migrated_database)) as writer:
+
+        async def claim(started: Any) -> int:
+            claimed = await claim_run(
+                writer,
+                started_at=started,
+                deadline_at=None,
+                break_lock=False,
+                config=config,
+                trigger="manual",
+                code_version="test",
+            )
+            return claimed.run_id
+
+        async def fail(run_id: int, number: int, at: Any, message: str) -> None:
+            await record_failure(
+                writer,
+                run_id,
+                repository_github_id=11,
+                number=number,
+                error=ValueError(message),
+                failed_at=at,
+            )
+
+        first_run = await claim(T0)
+        repository_id = (await write_repository(writer, first_run, JS, group="Client")).row_id
+        await fail(first_run, 4, T0 + timedelta(seconds=1), "another item")
+        closed = await close_run(
+            writer,
+            first_run,
+            status="complete",
+            exit_code=2,
+            finished_at=T0 + timedelta(seconds=2),
+            counters=counters,
+            outcomes=(),
+        )
+        assert closed.closed
+        later = T0 + timedelta(hours=1)
+        second_run = await claim(later)
+        assert second_run != first_run
+        other = failure(
+            4, 1, "another item", T0 + timedelta(seconds=1), T0 + timedelta(seconds=1), first_run
+        )
+
+        await fail(second_run, 5, later + timedelta(seconds=1), "first")
+        assert fetch(migrated_database, columns) == [
+            other,
+            failure(
+                5,
+                1,
+                "first",
+                later + timedelta(seconds=1),
+                later + timedelta(seconds=1),
+                second_run,
+            ),
+        ]
+
+        await fail(second_run, 5, later + timedelta(seconds=2), "again")
+        assert fetch(migrated_database, columns) == [
+            other,
+            failure(
+                5,
+                1,
+                "again",
+                later + timedelta(seconds=1),
+                later + timedelta(seconds=2),
+                second_run,
+            ),
+        ]
+
+
 # --------------------------------------------------------------------------------------------
 # Step 7 and the prune
 # --------------------------------------------------------------------------------------------
