@@ -214,21 +214,26 @@ async def sync(options: SyncOptions, *, open_source: OpenSource, clock: Clock) -
             code_version=options.code_version,
         )
         run = _Sync(options, clock, deadline, connection, claim)
+        # An interrupt during the steps or during either close closes the row aborted: a close
+        # it cut short rolled back, and the interrupted close writes only a row still running.
         try:
-            async with open_source(deadline) as source:
-                await run.steps(source)
-            await run.delete(await run.read_snapshot())
-            await run.prune()
+            try:
+                async with open_source(deadline) as source:
+                    await run.steps(source)
+                await run.delete(await run.read_snapshot())
+                await run.prune()
+            except Exception as error:
+                return await run.close(
+                    "failed", EXIT_FATAL, run.failed_outcomes(), error_text(error)
+                )
+            return await run.close(
+                "time_limited" if run.deadline_reached else "complete",
+                run.exit_code(),
+                run.outcomes(),
+            )
         except (KeyboardInterrupt, asyncio.CancelledError):
             await run.close_interrupted()
             raise
-        except Exception as error:
-            return await run.close("failed", EXIT_FATAL, run.failed_outcomes(), error_text(error))
-        return await run.close(
-            "time_limited" if run.deadline_reached else "complete",
-            run.exit_code(),
-            run.outcomes(),
-        )
 
 
 @dataclass(eq=False)

@@ -18,6 +18,8 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from sqlalchemy import event
+from sqlalchemy.engine import Engine
 
 from github_activity_db.source import PULL_REQUEST_HYDRATION_VERSION
 from github_activity_db.sync import writer
@@ -2149,21 +2151,33 @@ async def test_an_item_gone_between_index_and_hydration_is_not_written(world: Wo
     assert ended(world, report) == ("complete", 0, {"prebid/Prebid.js": "complete"})
 
 
+@pytest.mark.parametrize("first", ["sighting", "commit"])
 async def test_an_account_sighted_in_another_item_of_the_batch_needs_no_lookup(
-    world: World,
+    world: World, first: str
 ) -> None:
+    """Either item is written first: with the commit first, the account is not yet stored when
+    that item reaches the writer, so the batch's sighting must come with it (5.2)."""
     scenario = world.scenario
     repository, _ = project(world, pulls=2)
     reviewer = scenario.add_account()
-    repository.pulls[1].add("reviews", scenario.node("reviews", by=reviewer))
-    repository.pulls[2].add("commits", scenario.node("commits", by=reviewer))
+    sighting, commit = (1, 2) if first == "sighting" else (2, 1)
+    repository.pulls[sighting].add("reviews", scenario.node("reviews", by=reviewer))
+    repository.pulls[commit].add("commits", scenario.node("commits", by=reviewer))
 
     report = await world.sync()
 
+    assert batches(scenario) == [[1, 2]]
     assert "UserLookup" not in operations(scenario)
+    assert world.numbers(repository) == [1, 2]
+    reviewer_id = scenario.account(reviewer)["databaseId"]
     assert world.rows(
-        "SELECT u.node_id FROM pr_commits c JOIN github_users u ON u.id = c.author_id"
-    ) == [{"node_id": reviewer}]
+        "SELECT p.number, u.node_id, c.linked_github_id FROM pr_commits c "
+        "JOIN pull_requests p ON p.id = c.pr_id JOIN github_users u ON u.id = c.author_id"
+    ) == [{"number": commit, "node_id": reviewer, "linked_github_id": reviewer_id}]
+    assert world.rows("SELECT node_id FROM github_users WHERE github_id = ?", reviewer_id) == [
+        {"node_id": reviewer}
+    ]
+    assert report.failures == ()
     assert ended(world, report) == ("complete", 0, {"prebid/Prebid.js": "complete"})
 
 
@@ -2297,27 +2311,51 @@ async def test_a_duplicate_entrys_stored_row_fails_when_the_earlier_entry_failed
     assert [r.outcome for r in report.repositories] == ["failed", "failed", "complete"]
 
 
-async def test_a_dry_run_checks_names_after_the_earlier_entries_renames(world: World) -> None:
+@pytest.mark.parametrize("order", ["baz-first", "old2-first"])
+async def test_a_dry_run_checks_names_after_the_earlier_entries_renames(
+    world: World, order: str
+) -> None:
+    """With baz first, Y's rename frees the name Z then takes; with old2 first, Y still holds
+    it, so the writer refuses Z, and the dry run must refuse it too."""
     scenario = world.scenario
     y, z = renamed_chain(world)
     await world.sync()
     scenario.rename_repository(y, "baz")
     scenario.rename_repository(z, "bar")
     world.tracked[0]["name"] = "baz"
+    if order == "old2-first":
+        world.tracked.reverse()
+    before = digest(world.database)
 
     dry = await world.sync(dry_run=True)
+    assert digest(world.database) == before
     run = await world.sync()
 
-    assert [(r.outcome, r.reason) for r in dry.repositories] == [
-        ("complete", None),
-        ("complete", None),
-    ]
-    assert (dry.exit_code, run.exit_code) == (0, 0)
-    assert ended(world, run) == (
-        "complete",
-        0,
-        {"prebid/bar": "complete", "prebid/baz": "complete"},
-    )
+    expected: list[tuple[str, str, str | None]]
+    if order == "baz-first":
+        expected = [("prebid/baz", "complete", None), ("prebid/old2", "complete", None)]
+        assert (dry.exit_code, run.exit_code) == (0, 0)
+        assert ended(world, run) == (
+            "complete",
+            0,
+            {"prebid/bar": "complete", "prebid/baz": "complete"},
+        )
+    else:
+        conflict = (
+            f"RepositoryConflict: prebid/bar (github_id {z.data['databaseId']}): the tracked "
+            f"repository with github_id {y.data['databaseId']} holds that name"
+        )
+        expected = [("prebid/old2", "failed", conflict), ("prebid/baz", "complete", None)]
+        assert (dry.exit_code, run.exit_code) == (2, 2)
+        assert ended(world, run) == (
+            "complete",
+            2,
+            {"prebid/baz": "complete", "prebid/old2": "failed"},
+        )
+    for report in (dry, run):
+        assert [(r.configured.full_name, r.outcome, r.reason) for r in report.repositories] == (
+            expected
+        )
 
 
 @pytest.mark.parametrize("unresolved", ["failed", "deadline"])
@@ -2486,3 +2524,111 @@ async def test_stamps_come_from_each_responses_date(world: World) -> None:
     )
     assert world.run(report.run_id)["started_at"] == start.strftime(stamp)
     assert world.numbers(repository) == [1]
+
+
+# --------------------------------------------------------------------------------------------
+# Review on b9395e7
+# --------------------------------------------------------------------------------------------
+@pytest.mark.parametrize("closing", ["complete", "failed"])
+@pytest.mark.parametrize("interrupt", ["keyboard", "cancel"])
+async def test_an_interrupt_during_the_close_closes_the_row_aborted(
+    world: World, closing: str, interrupt: str
+) -> None:
+    """The first interrupt during the normal or the fatal close: that close rolls back, the
+    interrupted close writes aborted with 130, and the next run claims normally (5.3)."""
+    scenario = world.scenario
+    repository, _ = project(world, pulls=2)
+    if closing == "failed":
+        scenario.replay.fault(
+            lambda request: synthetic("unauthorized"),
+            when=lambda seen: seen.operation == "PullRequestBatch",
+        )
+    interrupted: list[str] = []
+    run: asyncio.Task[Any] | None = None
+
+    def interrupt_the_close(
+        connection: Any, cursor: Any, statement: str, parameters: Any, *args: Any
+    ) -> None:
+        # close_run's update, the only one setting finished_at; this fires once, on the close
+        # being tested, never on the interrupted close's (status aborted).
+        if interrupted or not statement.startswith("UPDATE sync_runs SET finished_at"):
+            return
+        if closing not in parameters:
+            return
+        interrupted.append(statement)
+        if interrupt == "keyboard":
+            raise KeyboardInterrupt
+        assert run is not None
+        run.cancel()
+
+    event.listen(Engine, "before_cursor_execute", interrupt_the_close)
+    try:
+        if interrupt == "keyboard":
+            with pytest.raises(KeyboardInterrupt):
+                await world.sync()
+        else:
+            run = asyncio.create_task(world.sync())
+            with pytest.raises(asyncio.CancelledError):
+                await run
+    finally:
+        event.remove(Engine, "before_cursor_execute", interrupt_the_close)
+
+    assert len(interrupted) == 1
+    (row,) = world.rows("SELECT id, status, exit_code, finished_at FROM sync_runs")
+    assert (row["status"], row["exit_code"], row["finished_at"] is not None) == (
+        "aborted",
+        130,
+        True,
+    )
+    assert outcomes(world, row["id"]) == {"prebid/Prebid.js": "failed"}
+    assert world.numbers(repository) == ([1, 2] if closing == "complete" else [])
+
+    resumed = await world.sync()
+    assert ended(world, resumed) == ("complete", 0, {"prebid/Prebid.js": "complete"})
+    assert world.numbers(repository) == [1, 2]
+
+
+@pytest.mark.parametrize("stopped", [False, True])
+async def test_the_refresh_reads_every_lookup_group(world: World, stopped: bool) -> None:
+    """206 accounts are three lookup requests (100, 100, 6); a deadline after the first leaves
+    the rest to the next run (5.2, 5.3 step 4)."""
+    scenario = world.scenario
+    repository, author = project(world)
+    commenters = [scenario.add_account() for _ in range(205)]
+    repository.pulls[1].add("comments", *(scenario.node("comments", by=c) for c in commenters))
+    await world.sync()
+    accounts = [author, *commenters]
+    assert world.value("SELECT count(*) FROM github_users") == 206
+    scenario.clock.advance(25 * 3600)
+    for node_id in accounts:
+        scenario.account(node_id)["login"] = f"renamed-{node_id}"
+    before = len(scenario.replay.seen)
+
+    def renamed() -> int:
+        return int(world.value("SELECT count(*) FROM github_users WHERE login LIKE 'renamed-%'"))
+
+    def lookups() -> list[int]:
+        return [
+            len(s.variables["ids"])
+            for s in scenario.replay.seen[before:]
+            if s.operation == "UserLookup"
+        ]
+
+    if not stopped:
+        report = await world.sync()
+        assert lookups() == [100, 100, 6]
+        assert renamed() == 206
+        assert ended(world, report) == ("complete", 0, {"prebid/Prebid.js": "complete"})
+        return
+
+    deadline_after(scenario, "UserLookup")
+    limited = await world.sync(max_minutes=1)
+    assert lookups() == [100]
+    assert renamed() == 100
+    assert ended(world, limited) == ("time_limited", 0, {"prebid/Prebid.js": "complete"})
+
+    before = len(scenario.replay.seen)
+    recovered = await world.sync()
+    assert lookups() == [100, 6]
+    assert renamed() == 206
+    assert ended(world, recovered) == ("complete", 0, {"prebid/Prebid.js": "complete"})
