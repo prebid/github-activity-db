@@ -153,18 +153,22 @@ next run must see GitHub as the test left it.
   the model does not hold is answered `NOT_FOUND` (a missing repository makes an index or batch
   response's `repository` null). A compare it does not hold and a pull request it knows only from
   an index recording go unanswered, and it serves no rate-limit reading: every GraphQL response
-  carries the replay's fixed `rateLimit` reading, so budget waits come only from faults.
+  carries the replay's fixed `rateLimit` reading, so budget waits come only from faults (a
+  rate-limit fault without a reset header waits for that reading's `resetAt`, an hour after the
+  clock's start).
 - **Pages follow GitHub's cursors**: the index's, comments', reviews', and review requests' name
   the page's last node, so a pull request gone between index pages makes the count disagree and
   the source rescan, as on GitHub; the other connections' name a position.
 - **Changes**: `add_repository`, `add_label`, `add_account`, and `open_pull_request` copy recorded
-  objects with fresh ids, and `node(connection, by=account)` a recorded node with its own ids, oid,
-  or path and the account it names. A pull request's `merge`, `close`, `reopen`, and `touch` move
-  its times; `add` and `remove` change a connection and move `updatedAt`; `set`, `link`, `unlink`,
-  and `rename_label` do not, as plan section 7 ("Change signal") measured for draft toggles,
-  author associations, closing links, and label renames. `rename_repository` keeps the old name
+  objects with fresh ids, and `node(connection, by=account)` a recorded node made now, with its own
+  ids, oid, or path and the account it names (labels and closing links come from `add_label` and
+  `link`). A pull request's `merge`, `close`, `reopen`, and `touch` move its times; `add` and
+  `remove` change a connection and move `updatedAt`; `set`, `link`, `unlink`, and `rename_label` do
+  not, as plan section 7 ("Change signal") measured for closing links, label renames, and author
+  associations and plan 5.3 step 3 for marking a draft ready (converting to a draft moves it:
+  `set` then `touch`). `rename_repository` renames within the owner and keeps the old name
   resolving. `delete_account` makes lookups answer `NOT_FOUND` and nulls or drops every reference
-  that exists then; a reference added afterwards names the account, as GitHub can (gap 90), and
+  to the account and its forks; afterwards only a commit can name it (gap 90), and
   `restore_account` makes lookups find it again. `gone` removes a pull request or a repository. A
   test changes the model between requests, or during a run through `replay.wrap`; faults stack on
   the model as on the recordings.

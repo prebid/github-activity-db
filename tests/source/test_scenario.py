@@ -32,7 +32,14 @@ from github_activity_db.source.errors import (
 from tests.source.conftest import START, FakeClock, all_lookups, all_outcomes
 from tests.source.recordings import Unit
 from tests.source.replay import Replay, loaded_units, synthetic, unanswered
-from tests.source.scenario import RENDERED, Repository, Scenario, read_commit, recorded_units
+from tests.source.scenario import (
+    RENDERED,
+    Repository,
+    Scenario,
+    ScenarioError,
+    read_commit,
+    recorded_units,
+)
 
 EPOCH = datetime(1970, 1, 1, tzinfo=UTC)
 
@@ -241,6 +248,18 @@ async def test_new_nodes_have_their_own_identity(scenario: Scenario) -> None:
     ] == ["alice"]
 
 
+def test_nodes_that_come_from_elsewhere_are_refused(scenario: Scenario) -> None:
+    author = scenario.add_account()
+    for connection in ("labels", "closingIssuesReferences", "userLinkedClosingIssues"):
+        with pytest.raises(ScenarioError, match=r"add_label and PullRequest\.link"):
+            scenario.node(connection)
+    with pytest.raises(ScenarioError, match="an assignee is an account"):
+        scenario.node("assignedActors")
+    scenario.delete_account(author)
+    with pytest.raises(ScenarioError, match="only a commit links it"):
+        scenario.node("comments", by=author)
+
+
 async def test_merge_close_and_reopen(scenario: Scenario) -> None:
     repository, _ = project(scenario, pulls=2)
     merged, closed = repository.pulls[1], repository.pulls[2]
@@ -269,25 +288,29 @@ async def test_merge_close_and_reopen(scenario: Scenario) -> None:
 
 
 async def test_set_leaves_updated_at_and_touch_moves_it(scenario: Scenario) -> None:
-    repository, _ = project(scenario, pulls=2)
+    repository, author = project(scenario)
+    scenario.open_pull_request(repository, author, isDraft=True)
     scenario.clock.advance(60)
-    repository.pulls[1].set(isDraft=True, authorAssociation="MEMBER")
+    repository.pulls[1].set(authorAssociation="MEMBER")
+    repository.pulls[2].set(isDraft=False)
+    repository.pulls[2].touch()
     repository.pulls[2].touch()
     async with scenario.source() as source:
         index = await source.index_pull_requests(await source.resolve("example", "project"))
     first, second = index.entries
-    assert (first.is_draft, first.author_association, first.updated_at) == (True, "MEMBER", START)
-    assert second.updated_at == scenario.clock.now()
+    assert (first.author_association, first.updated_at) == ("MEMBER", START)
+    assert (second.is_draft, second.updated_at) == (False, scenario.clock.now())
 
 
 async def test_the_index_is_in_creation_order(scenario: Scenario) -> None:
     repository, author = project(scenario, pulls=2)
     scenario.open_pull_request(repository, author, createdAt="2026-01-01T00:00:00Z")
-    scenario.open_pull_request(repository, author)
+    first_id = int(repository.pulls[1].node["fullDatabaseId"])
+    repository.pulls[2].set(fullDatabaseId=str(first_id - 1))
     async with scenario.source() as source:
         index = await source.index_pull_requests(await source.resolve("example", "project"))
-    # Pull requests 1, 2, and 4 share a creation time; GitHub orders those by id.
-    assert [entry.number for entry in index.entries] == [3, 1, 2, 4]
+    # Pull requests 1 and 2 share a creation time; GitHub orders those by id.
+    assert [entry.number for entry in index.entries] == [3, 2, 1]
 
 
 async def test_a_pull_request_gone_during_an_index_scan_is_rescanned(
@@ -307,21 +330,45 @@ async def test_a_pull_request_gone_during_an_index_scan_is_rescanned(
     assert [entry.number for entry in index.entries] == [n for n in range(1, 151) if n != 5]
 
 
-async def test_a_comment_removed_during_hydration_is_read_again(scenario: Scenario) -> None:
+async def test_a_comment_replaced_during_hydration_is_read_again(scenario: Scenario) -> None:
+    """One comment removed and one added in the same second leave the total and ``updatedAt``
+    as they were; the continuation starts after the first page's last comment, as GitHub's
+    does, so the count disagrees and the source reads the pull request again."""
     repository, author = project(scenario)
     pull = repository.pulls[1]
     pull.add("comments", *(scenario.node("comments", by=author) for _ in range(101)))
     removed = pull.node["comments"]["nodes"][5]["id"]
-    after_first(
-        scenario,
-        "PullRequestBatch",
-        lambda: pull.remove("comments", lambda node: node["id"] == removed),
-    )
+
+    def replace_one() -> None:
+        pull.remove("comments", lambda node: node["id"] == removed)
+        pull.add("comments", scenario.node("comments", by=author))
+
+    after_first(scenario, "PullRequestBatch", replace_one)
     record = hydrated(await hydrate(scenario, "example", "project", 1))
     assert [comment.node_id for comment in record.comments] == [
         node["id"] for node in pull.node["comments"]["nodes"]
     ]
-    assert len(record.comments) == 100
+    assert [seen.operation for seen in scenario.replay.seen].count("PullRequestBatch") == 2
+
+
+async def test_which_changes_move_updated_at(scenario: Scenario) -> None:
+    issues = scenario.add_repository("example", "issues")
+    repository, author = project(scenario, pulls=5)
+    pulls = repository.pulls
+    label = scenario.add_label(repository, "bug")
+    pulls[2].add("comments", scenario.node("comments", by=author))
+    pulls[4].link(1, issues)
+    pulls[5].add("labels", {"id": label["id"], "name": label["name"]})
+    scenario.clock.advance(60)
+    pulls[1].add("comments", scenario.node("comments", by=author))
+    pulls[2].remove("comments", lambda node: True)
+    pulls[3].link(1, issues)
+    pulls[4].unlink(1, issues)
+    scenario.rename_label(repository, label["id"], "defect")
+    async with scenario.source() as source:
+        index = await source.index_pull_requests(await source.resolve("example", "project"))
+    now = scenario.clock.now()
+    assert [entry.updated_at for entry in index.entries] == [now, now, START, START, START]
 
 
 async def test_a_pull_request_gone_between_its_pages_is_gone(scenario: Scenario) -> None:
@@ -369,20 +416,22 @@ async def test_a_deleted_account(scenario: Scenario) -> None:
         scenario.node("assignedActors", by=kept),
     )
     scenario.delete_account(leaving)
-    later = scenario.open_pull_request(repository, leaving)
+    # A commit can still link the account a lookup no longer finds (gap 90).
+    pull.add("commits", scenario.node("commits", by=leaving))
 
     async with scenario.source() as source:
         resolved = await source.resolve("example", "project")
-        outcomes = await all_outcomes(source, resolved, [pull.number, later.number])
+        (outcome,) = await all_outcomes(source, resolved, [pull.number])
         accounts, failed = await all_lookups(source, [leaving])
-    record, added_later = (hydrated(outcome) for outcome in outcomes)
+    record = hydrated(outcome)
     assert (record.author, record.comments[0].author) == (None, None)
+    assert record.head_repository is None
     assert (record.commits[0].author, record.commits[0].author_name) == (None, "leaving")
     assert [request.account for request in record.review_requests] == [None]
     assert [assignee.login for assignee in record.assignees] == ["kept"]
     assert record.totals.assignees == 1
-    # A reference made after the deletion names the account its lookup no longer finds (gap 90).
-    assert added_later.author is not None and added_later.author.login == "leaving"
+    linked = record.commits[1].author
+    assert linked is not None and (linked.node_id, linked.login) == (leaving, "leaving")
     assert (accounts, failed) == ({leaving: None}, {})
 
     scenario.restore_account(leaving)
@@ -390,7 +439,7 @@ async def test_a_deleted_account(scenario: Scenario) -> None:
         accounts, _ = await all_lookups(source, [leaving])
     found = accounts[leaving]
     assert found is not None and found.account.login == "leaving"
-    assert pull.node["author"] is None
+    assert hydrated(await hydrate(scenario, "example", "project", pull.number)).author is None
 
 
 async def test_a_deleted_account_leaves_its_compare_commits() -> None:
@@ -459,7 +508,7 @@ async def test_a_renamed_repository_is_followed(scenario: Scenario) -> None:
         }
     )
     repository.pulls[1].link(7, repository)
-    scenario.rename_repository(repository, "example", "renamed")
+    scenario.rename_repository(repository, "renamed")
 
     async with scenario.source() as source:
         resolved = await source.resolve("example", "project")
@@ -482,10 +531,12 @@ async def test_a_renamed_repository_is_followed(scenario: Scenario) -> None:
 
 async def test_closing_links_beyond_the_index_cap(scenario: Scenario) -> None:
     issues = scenario.add_repository("example", "issues")
+    other = scenario.add_repository("example", "other")
     repository, _ = project(scenario)
     pull = repository.pulls[1]
-    for number in range(1, 12):
+    for number in range(1, 11):
         pull.link(number, issues, user_linked=number == 1)
+    pull.link(1, other)
     async with scenario.source() as source:
         resolved = await source.resolve("example", "project")
         (entry,) = (await source.index_pull_requests(resolved)).entries
@@ -496,7 +547,8 @@ async def test_closing_links_beyond_the_index_cap(scenario: Scenario) -> None:
         START,
     )
     assert [(link.number, link.user_linked) for link in hydrated(outcome).closing_issues] == [
-        (number, number == 1) for number in range(1, 12)
+        *((number, number == 1) for number in range(1, 11)),
+        (1, False),
     ]
 
     pull.unlink(1, issues)
@@ -505,8 +557,10 @@ async def test_closing_links_beyond_the_index_cap(scenario: Scenario) -> None:
         (entry,) = (await source.index_pull_requests(resolved)).entries
         (outcome,) = await all_outcomes(source, resolved, [1])
     assert (entry.closing_issues_total, len(entry.closing_issues)) == (10, 10)
-    assert [(link.number, link.user_linked) for link in hydrated(outcome).closing_issues] == [
-        (number, False) for number in range(2, 12)
+    links = hydrated(outcome).closing_issues
+    assert [(link.repo_full_name, link.number, link.user_linked) for link in links] == [
+        *(("example/issues", number, False) for number in range(2, 11)),
+        ("example/other", 1, False),
     ]
 
 
@@ -547,10 +601,16 @@ def test_a_missing_repository_is_answered_only_for_a_checked_document() -> None:
     answered = post(world, documents.PULL_REQUEST_INDEX, variables)
     assert (answered.status_code, answered.json()["data"]["repository"]) == (200, None)
     assert post(world, changed, variables).status_code == 418
-    key = {"owner": "example", "name": "absent", "for": "index"}
+    batch = documents.pull_request_batch(1)
+    changed_batch = batch.replace("additions deletions", "additions")
+    assert changed_batch != batch
+    numbered = {"owner": "example", "name": "absent", "n0": 1}
+    assert post(world, batch, numbered).json()["data"]["repository"] is None
+    assert post(world, changed_batch, numbered).status_code == 418
     assert world.replay.problems == [
-        f"index unit {key} was recorded for another query document: re-record with "
-        "scripts/record_fixtures.py"
+        f"{kind} unit {{'owner': 'example', 'name': 'absent', 'for': '{kind}'}} was recorded for "
+        "another query document: re-record with scripts/record_fixtures.py"
+        for kind in ("index", "pull_request")
     ]
 
 
@@ -592,3 +652,10 @@ async def test_a_cursor_the_model_never_served_is_reported() -> None:
         f"the provider failed on overflow {key}: ScenarioError(\"cursor 'unserved' names no "
         'page the model served")'
     ]
+
+
+def test_unanswered_lists_problems_then_unused_faults() -> None:
+    replay = Replay()
+    replay.fault(lambda request: synthetic("server_error"))
+    replay.problems.append("no unit")
+    assert unanswered(replay) == ["no unit", "fault 0: served 0, 1 left"]

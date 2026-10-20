@@ -58,8 +58,9 @@ def _index_order(node: Node) -> tuple[Any, ...]:
     return (node["createdAt"], int(node["fullDatabaseId"]))
 
 
-# The order of the connections whose cursors name a node: what each recorded cursor encodes
-# (``cursor:v2:`` and the node's key), and the order every recorded list is in.
+# The connections whose cursors name a node: the order every recorded list of them is in, and the
+# key a cursor names the page's last node by. GitHub's recorded cursors name it by a key too
+# (``cursor:v2:`` and the key; a review's holds two times, equal in every recording).
 ORDERS: dict[str, Callable[[Node], tuple[Any, ...]]] = {
     "comments": lambda node: (int(node["fullDatabaseId"]),),
     "reviews": lambda node: (node["createdAt"], int(node["fullDatabaseId"])),
@@ -128,7 +129,8 @@ def forget(value: Any, node_id: str) -> None:
 class Cursors:
     """A connection's page cursors: each names a node (by ``order``) or a position. GitHub's
     recorded cursors are kept; for other page ends the model makes its own, which the source never
-    decodes (a position in GitHub's offset form, base64 of the number)."""
+    decodes: ``scenario:`` and the node's key, or a position in GitHub's offset form (base64 of
+    the number)."""
 
     order: Callable[[Node], tuple[Any, ...]] | None = None
     recorded: dict[str, Any] = field(default_factory=dict)  # cursor -> the key or position
@@ -156,15 +158,18 @@ class Cursors:
         """Where the page after ``cursor`` starts in ``nodes`` as they are now."""
         if cursor is None:
             return 0
+        unserved = ScenarioError(f"cursor {cursor!r} names no page the model served")
         if cursor in self.recorded:
             mark = self.recorded[cursor]
-        elif self.order is not None and cursor.startswith("scenario:"):
+        elif self.order is not None:
+            if not cursor.startswith("scenario:"):
+                raise unserved
             mark = tuple(json.loads(cursor.removeprefix("scenario:")))
         else:
             try:
                 mark = int(base64.b64decode(cursor + "=" * (-len(cursor) % 4)).decode())
             except (binascii.Error, UnicodeDecodeError, ValueError) as error:
-                raise ScenarioError(f"cursor {cursor!r} names no page the model served") from error
+                raise unserved from error
         if self.order is None:
             position: int = mark
             return position
@@ -226,8 +231,9 @@ class PullRequest:
         return iso(at or self.world.clock.now())
 
     def set(self, **fields: Any) -> None:
-        """Change fields without a new ``updatedAt``, as a draft toggle or an author-association
-        change does (plan section 7, "Change signal")."""
+        """Change fields without a new ``updatedAt``, as marking a draft ready for review (0 of
+        151, plan 5.3 step 3) and an author-association change do (plan section 7, "Change
+        signal"). Converting to a draft moves it, so follow that with ``touch``."""
         self.node.update(fields)
 
     def touch(self, at: datetime | None = None) -> None:
@@ -419,9 +425,11 @@ class Scenario:
         return node_id
 
     def actor(self, node_id: str) -> Node:
-        """How a pull request names an account (the ``Actor`` fragment). A deleted account can be
-        named too: GitHub can still link one a lookup no longer finds (gap 90)."""
-        data = self.accounts.get(node_id) or self._deleted[node_id]
+        """How a pull request names an account (the ``Actor`` fragment). A deleted account is
+        named only by a commit link (gap 90), through ``node("commits", by=...)``."""
+        data = self.accounts.get(node_id)
+        if data is None:
+            raise ScenarioError(f"{node_id} is deleted: only a commit links it (gap 90)")
         return {k: data[k] for k in ("__typename", "login", "id", "databaseId")}
 
     def add_repository(self, owner: str, name: str, **fields: Any) -> Repository:
@@ -513,40 +521,50 @@ class Scenario:
         return pull
 
     def node(self, connection: str, by: str | None = None, **fields: Any) -> Node:
-        """A new node of ``connection``, copied from a recorded one with its own identity: fresh
-        ids, a commit's own oid, a file's own path, and the account ``by`` (a node id) wherever
-        the node names one (none when ``by`` is None; an assignee is the account itself). A label
-        is the ``{id, name}`` of a repository label (``add_label``); a closing link comes from
-        ``PullRequest.link``."""
+        """A new node of ``connection``, made now and copied from a recorded one with its own
+        identity: fresh ids, a commit's own oid, a file's own path, and the account ``by`` (a node
+        id) wherever the node names one, or none. An assignee is the account ``by`` itself. A
+        label comes from ``add_label`` and a closing link from ``PullRequest.link``."""
+        if connection in ("labels", "closingIssuesReferences", "userLinkedClosingIssues"):
+            raise ScenarioError(f"{connection} come from add_label and PullRequest.link")
         if connection == "assignedActors":
-            return {**self.actor(by or ""), **fields}
+            if by is None:
+                raise ScenarioError("an assignee is an account: pass by")
+            return {**self.actor(by), **fields}
         node = copy.deepcopy(_templates().nodes[connection])
         number = self.new_id()
+        moment = iso(self.clock.now())
         fresh = {"id": f"N_scenario{number}", "fullDatabaseId": str(number), "databaseId": number}
         node.update({key: value for key, value in fresh.items() if key in node})
-        actor = self.actor(by) if by is not None else None
         match connection:
             case "comments" | "reviews":
-                node.update(author=actor, editor=None)
+                actor = self.actor(by) if by is not None else None
+                node.update(author=actor, editor=None, lastEditedAt=None)
+                times = ("createdAt", "updatedAt", "publishedAt", "submittedAt")
+                node.update({key: moment for key in times if key in node})
             case "commits":
                 author = node["commit"]["author"]
                 author["user"] = None
-                if actor is not None:
-                    author.update(name=actor["login"], email=f"{actor['login']}@example.com")
-                    author["user"] = {k: actor[k] for k in ("id", "databaseId", "login")}
-                node["commit"]["oid"] = self.new_oid()
+                if by is not None:
+                    # A commit can link an account a lookup no longer finds (gap 90).
+                    data = self.accounts.get(by) or self._deleted[by]
+                    login = data["login"]
+                    author.update(name=login, email=f"{login}@example.com")
+                    author["user"] = {k: data[k] for k in ("id", "databaseId", "login")}
+                node["commit"].update(oid=self.new_oid(), authoredDate=moment)
             case "files":
                 node["path"] = f"file-{number}"
             case "reviewRequests":
-                node["requestedReviewer"] = actor
+                node["requestedReviewer"] = self.actor(by) if by is not None else None
         node.update(fields)
         return node
 
     # -- changes ----------------------------------------------------------------------------
-    def rename_repository(self, repository: Repository, owner: str, name: str) -> None:
-        """Rename; the old name still resolves to it, and every link to it and every pull
-        request from it show the new name."""
-        repository.data.update(name=name, owner={"login": owner}, nameWithOwner=f"{owner}/{name}")
+    def rename_repository(self, repository: Repository, name: str) -> None:
+        """Rename within its owner; the old name still resolves to it, and every link to it and
+        every pull request from it show the new name."""
+        owner = repository.data["owner"]["login"]
+        repository.data.update(name=name, nameWithOwner=f"{owner}/{name}")
         self.repositories[repository.full_name.lower()] = repository
         for pull in self.pulls():
             for obj in dicts(pull.node):
@@ -568,14 +586,16 @@ class Scenario:
                     label["name"] = name
 
     def delete_account(self, node_id: str) -> None:
-        """Lookups answer NOT_FOUND, and every reference to the account that exists now is null
-        or gone, its REST compare commits' included. A reference added afterwards names it, as
-        GitHub can link an account a lookup no longer finds (gap 90)."""
+        """Lookups answer NOT_FOUND, and every reference to the account is null or gone, its
+        REST compare commits' included, and so are its forks as head repositories. Only a commit
+        added afterwards can name it (gap 90)."""
         data = self.accounts.get(node_id)
         if data is not None:
             self._deleted[node_id] = data
         self.accounts[node_id] = None
         for pull in self.pulls():
+            if names(pull.node.get("headRepositoryOwner"), node_id):
+                pull.node["headRepository"] = None
             forget(pull.node, node_id)
             forget(pull.compare, node_id)
 
