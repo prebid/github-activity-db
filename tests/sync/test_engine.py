@@ -24,6 +24,7 @@ from github_activity_db.sync import writer
 from github_activity_db.sync.deletions import DeletionApproval, parse_allow_deletions
 from github_activity_db.sync.plan import Reason
 from github_activity_db.sync.runs import ClaimRefused, HeadCheckError
+from github_activity_db.sync.writer import Pruned
 from tests.source.replay import synthetic
 from tests.source.scenario import Scenario
 from tests.sync.engine_support import World, ended, outcomes, planned, project
@@ -169,8 +170,12 @@ async def test_a_renamed_repository_is_followed_under_its_configured_name(world:
     assert world.rows("SELECT id, full_name, name, is_tracked FROM repositories") == [
         {"id": row_id, "full_name": "prebid/Prebid2.js", "name": "Prebid2.js", "is_tracked": 1}
     ]
-    assert report.repositories[0].stored_full_name == "prebid/Prebid.js"
-    assert report.repositories[0].full_name == "prebid/Prebid2.js"
+    (entry,) = report.repositories
+    assert entry.stored is not None and entry.record is not None
+    assert (entry.stored.full_name, entry.record.full_name) == (
+        "prebid/Prebid.js",
+        "prebid/Prebid2.js",
+    )
     assert world.numbers(repository) == [1]
 
 
@@ -410,7 +415,7 @@ async def test_an_unresolvable_repository_fails_while_the_others_sync(world: Wor
     assert ended(world, report) == ("complete", 2, {"prebid/Prebid.js": "complete"})
     assert world.numbers(repository) == [1]
     missing = report.repositories[1]
-    assert (missing.github_id, missing.outcome) == (None, None)
+    assert (missing.record, missing.stored, missing.outcome) == (None, None, None)
     assert missing.reason == "RepositoryNotFound: prebid/missing: repository not found"
     assert world.value("SELECT count(*) FROM repositories") == 1
 
@@ -641,6 +646,17 @@ async def test_a_mass_delete_halts_until_allowed(world: World) -> None:
     }
     assert len(world.numbers(repository)) == 30
     assert world.run(halted.run_id)["deletions_approved"] is None
+    reason = halt_reasons(world)
+
+    # A run whose step 7 does not run for the repository keeps its halt_reason.
+    world.scenario.replay.modify(
+        lambda body: body["data"]["repository"]["pullRequests"].update(totalCount=99),
+        when=lambda seen: seen.operation == "PullRequestIndex",
+        times=2,
+    )
+    skipped = await world.sync()
+    assert ended(world, skipped) == ("complete", 2, {"prebid/Prebid.js": "incomplete_index"})
+    assert halt_reasons(world) == reason
 
     allowed = await world.sync(allow_deletions=approve(world, "prebid/Prebid.js=27"))
     assert ended(world, allowed) == ("complete", 0, {"prebid/Prebid.js": "complete"})
@@ -1628,7 +1644,8 @@ async def test_a_dry_run_writes_nothing_and_reports_the_plan(world: World) -> No
     assert digest(world.database) == before
     assert (dry.dry_run, dry.run_id, dry.status, dry.exit_code) == (True, None, None, 0)
     (entry,) = dry.repositories
-    assert (entry.stored_full_name, entry.full_name, entry.outcome) == (
+    assert entry.stored is not None and entry.record is not None
+    assert (entry.stored.full_name, entry.record.full_name, entry.outcome) == (
         "prebid/Prebid.js",
         "prebid/Prebid2.js",
         "complete",
@@ -1844,3 +1861,383 @@ async def test_a_cancelled_run_closes_aborted_and_re_raises(world: World) -> Non
     (row,) = world.rows("SELECT id, status, exit_code FROM sync_runs")
     assert (row["status"], row["exit_code"]) == ("aborted", 130)
     assert outcomes(world, row["id"]) == {"prebid/Prebid.js": "failed"}
+
+
+# --------------------------------------------------------------------------------------------
+# Review follow-ups: rules each case shows directly
+# --------------------------------------------------------------------------------------------
+def bad_gateway(request: Any) -> Any:
+    return synthetic("bad_gateway")
+
+
+async def test_a_repository_resolving_to_another_id_than_its_stored_row_fails(
+    world: World,
+) -> None:
+    scenario = world.scenario
+    old, _ = project(world, pulls=2)
+    project(world, name="other")
+    await world.sync()
+    old.gone = True
+    recreated = scenario.add_repository("prebid", "Prebid.js")
+    scenario.open_pull_request(recreated, scenario.add_account())
+
+    report = await world.sync()
+
+    assert ended(world, report) == (
+        "complete",
+        2,
+        {"prebid/Prebid.js": "failed", "prebid/other": "complete"},
+    )
+    assert report.repositories[0].reason == (
+        f"prebid/Prebid.js resolves to github_id {recreated.data['databaseId']}; the stored "
+        f"repository prebid/Prebid.js has github_id {old.data['databaseId']}"
+    )
+    assert world.numbers(old) == [1, 2]
+    assert world.numbers(recreated) == []
+    assert world.value("SELECT count(*) FROM repositories") == 2
+
+
+async def test_an_index_listing_a_number_twice_fails_the_repository(world: World) -> None:
+    scenario = world.scenario
+    repository, _ = project(world, pulls=2)
+    project(world, name="other")
+    await world.sync()
+    repository.pulls[2].gone = True
+
+    def listed_twice(body: dict[str, Any]) -> None:
+        nodes = body["data"]["repository"]["pullRequests"]["nodes"]
+        nodes.append(copy.deepcopy(nodes[0]))
+
+    scenario.replay.modify(
+        listed_twice,
+        when=lambda seen: seen.operation == "PullRequestIndex"
+        and seen.variables["name"] == "Prebid.js",
+    )
+
+    report = await world.sync()
+
+    assert ended(world, report) == (
+        "complete",
+        2,
+        {"prebid/Prebid.js": "failed", "prebid/other": "complete"},
+    )
+    assert report.repositories[0].reason == (
+        "IndexOrderViolation: prebid/Prebid.js: pullRequests index: #1 listed twice"
+    )
+    assert world.numbers(repository) == [1, 2]
+
+
+def lookups_by_number(scenario: Scenario, repository: Any) -> None:
+    """#2 and #3 of ``repository`` each get a commit by an account the database does not hold."""
+    for number in (2, 3):
+        committer = scenario.add_account()
+        repository.pulls[number].add("commits", scenario.node("commits", by=committer))
+
+
+async def test_a_deadline_before_a_batchs_lookups_pends_the_items_waiting_on_them(
+    world: World,
+) -> None:
+    scenario = world.scenario
+    repository, _ = project(world, pulls=3)
+    lookups_by_number(scenario, repository)
+    deadline_after(scenario, "PullRequestBatch")
+
+    report = await world.sync(max_minutes=1)
+
+    assert "UserLookup" not in operations(scenario)
+    assert world.numbers(repository) == [1]
+    assert world.pending(repository) == [2, 3]
+    assert world.failures() == []
+    assert ended(world, report) == ("time_limited", 0, {"prebid/Prebid.js": "time_limited"})
+
+
+async def test_a_deadline_before_the_solo_lookups_pends_the_items_waiting_on_them(
+    world: World,
+) -> None:
+    scenario = world.scenario
+    repository, _ = project(world, pulls=3)
+    lookups_by_number(scenario, repository)
+    attempts = 0
+
+    def failing_until_the_deadline(request: Any) -> Any:
+        nonlocal attempts
+        attempts += 1
+        if attempts == 4:
+            scenario.clock.advance(120)
+        return synthetic("bad_gateway")
+
+    scenario.replay.fault(
+        failing_until_the_deadline,
+        when=lambda seen: seen.operation == "UserLookup",
+        times=4,
+    )
+
+    report = await world.sync(max_minutes=1)
+
+    # The batch's lookup failed for both; the deadline stopped the solo lookups, so neither item
+    # failed: both wait in sync_pending.
+    assert requests(scenario, "UserLookup") == 4
+    assert world.numbers(repository) == [1]
+    assert world.pending(repository) == [2, 3]
+    assert world.failures() == []
+    assert ended(world, report) == ("time_limited", 0, {"prebid/Prebid.js": "time_limited"})
+
+
+@pytest.mark.parametrize("order", ["a-first", "b-first"])
+async def test_a_later_entry_resolving_to_an_earlier_entrys_id_writes_nothing(
+    world: World, order: str
+) -> None:
+    scenario = world.scenario
+    stored, author = project(world, name="b")
+    project(world, name="other")
+    await world.sync()
+    stored.gone = True
+    moved = scenario.add_repository("prebid", "b")
+    scenario.open_pull_request(moved, author)
+    scenario.rename_repository(moved, "a")
+    world.untrack("prebid/b")
+    for name in ("a", "b") if order == "a-first" else ("b", "a"):
+        world.track(f"prebid/{name}")
+    moved_id = moved.data["databaseId"]
+
+    report = await world.sync()
+
+    reasons = {r.configured.full_name: (r.outcome, r.reason) for r in report.repositories}
+    if order == "a-first":
+        # prebid/b resolves to a's repository: a duplicate, which counts as an entry that failed
+        # to resolve, so its own stored row takes failed.
+        assert ended(world, report) == (
+            "complete",
+            2,
+            {"prebid/a": "complete", "prebid/b": "failed", "prebid/other": "complete"},
+        )
+        assert reasons["prebid/b"] == (
+            "failed",
+            f"prebid/b resolves to github_id {moved_id}, as prebid/a does",
+        )
+    else:
+        # prebid/b fails its stored row's check first; prebid/a, resolving to the same
+        # repository later, is the duplicate and writes nothing.
+        assert ended(world, report) == (
+            "complete",
+            2,
+            {"prebid/b": "failed", "prebid/other": "complete"},
+        )
+        assert reasons["prebid/a"] == (
+            None,
+            f"prebid/a resolves to github_id {moved_id}, as prebid/b does",
+        )
+        assert world.value("SELECT count(*) FROM repositories") == 2
+
+
+async def test_a_repository_another_entry_resolves_takes_that_entrys_outcome(
+    world: World,
+) -> None:
+    scenario = world.scenario
+    repository, _ = project(world)
+    await world.sync()
+    scenario.rename_repository(repository, "Prebid2.js")
+    world.track("prebid/Prebid2.js")
+    scenario.replay.fault(
+        bad_gateway,
+        when=lambda seen: seen.operation == "Resolve" and seen.variables["name"] == "Prebid.js",
+        times=4,
+    )
+
+    report = await world.sync()
+
+    assert ended(world, report) == ("complete", 2, {"prebid/Prebid2.js": "complete"})
+    assert [(r.configured.full_name, r.outcome) for r in report.repositories] == [
+        ("prebid/Prebid.js", None),
+        ("prebid/Prebid2.js", "complete"),
+    ]
+
+
+async def test_a_dry_run_exits_1_as_the_run_does_on_a_fatal_condition(world: World) -> None:
+    world.track("prebid/missing")
+
+    dry = await world.sync(dry_run=True)
+    run = await world.sync()
+
+    assert (dry.exit_code, dry.error) == (
+        1,
+        "NoRepositoryResolved: no configured repository resolved",
+    )
+    assert (run.exit_code, run.error) == (dry.exit_code, dry.error)
+
+
+async def test_a_dry_run_lists_what_the_prune_would_delete(world: World) -> None:
+    project(world)
+    dropped, _ = project(world, name="dropped")
+    await world.sync()
+    world.untrack("prebid/dropped")
+    await world.sync()
+    before = digest(world.database)
+
+    dry = await world.sync(dry_run=True, prune_untracked=True)
+    assert digest(world.database) == before
+    run = await world.sync(prune_untracked=True)
+
+    expected = (Pruned(dropped.data["databaseId"], "prebid/dropped", 1),)
+    assert (dry.pruned, dry.untracked, dry.exit_code) == (expected, (), 0)
+    assert (run.pruned, run.untracked, run.exit_code) == (expected, (), 0)
+
+
+async def test_the_repository_group_comes_from_the_configured_entry(world: World) -> None:
+    repository = world.scenario.add_repository("prebid", "Prebid.js")
+    world.track(repository, group="Server")
+    await world.sync()
+    assert world.value("SELECT repo_group FROM repositories") == "Server"
+
+    world.tracked[0]["group"] = "Client"
+    report = await world.sync()
+
+    assert world.value("SELECT repo_group FROM repositories") == "Client"
+    assert ended(world, report) == ("complete", 0, {"prebid/Prebid.js": "complete"})
+
+
+async def test_one_node_linked_under_two_ids_fails_the_item(world: World) -> None:
+    scenario = world.scenario
+    repository, _ = project(world)
+    first, second = scenario.add_account(), scenario.add_account()
+    commit = scenario.node("commits", by=first)
+    other = scenario.node("commits", by=second)
+    other["commit"]["author"]["user"]["id"] = first
+    repository.pulls[1].add("commits", commit, other)
+
+    report = await world.sync()
+
+    lookups = [s.variables["ids"] for s in scenario.replay.seen if s.operation == "UserLookup"]
+    assert lookups == [[first]]
+    assert world.failures() == [("prebid/Prebid.js", 1, "ItemConflict")]
+    assert world.numbers(repository) == []
+    assert ended(world, report) == ("complete", 2, {"prebid/Prebid.js": "complete"})
+
+
+async def test_an_item_gone_between_index_and_hydration_is_not_written(world: World) -> None:
+    scenario = world.scenario
+    repository, _ = project(world)
+    scenario.after("PullRequestIndex", lambda: setattr(repository.pulls[1], "gone", True))
+
+    report = await world.sync()
+
+    assert planned(report) == [1]
+    assert world.numbers(repository) == []
+    assert report.failures == ()
+    assert world.run(report.run_id)["items_hydrated"] == 0
+    assert ended(world, report) == ("complete", 0, {"prebid/Prebid.js": "complete"})
+
+
+async def test_an_account_sighted_in_another_item_of_the_batch_needs_no_lookup(
+    world: World,
+) -> None:
+    scenario = world.scenario
+    repository, _ = project(world, pulls=2)
+    reviewer = scenario.add_account()
+    repository.pulls[1].add("reviews", scenario.node("reviews", by=reviewer))
+    repository.pulls[2].add("commits", scenario.node("commits", by=reviewer))
+
+    report = await world.sync()
+
+    assert "UserLookup" not in operations(scenario)
+    assert world.rows(
+        "SELECT u.node_id FROM pr_commits c JOIN github_users u ON u.id = c.author_id"
+    ) == [{"node_id": reviewer}]
+    assert ended(world, report) == ("complete", 0, {"prebid/Prebid.js": "complete"})
+
+
+async def test_a_lookup_answer_is_reused_by_a_later_batch(world: World) -> None:
+    scenario = world.scenario
+    repository, _ = project(world, pulls=26)
+    gone = scenario.add_account()
+    gone_id = scenario.account(gone)["databaseId"]
+    scenario.delete_account(gone)
+    for number in (1, 26):
+        repository.pulls[number].add("commits", scenario.node("commits", by=gone))
+
+    report = await world.sync()
+
+    assert batches(scenario) == [list(range(1, 26)), [26]]
+    assert requests(scenario, "UserLookup") == 1
+    assert (
+        world.rows("SELECT author_id, linked_github_id FROM pr_commits")
+        == [{"author_id": None, "linked_github_id": gone_id}] * 2
+    )
+    assert ended(world, report) == ("complete", 0, {"prebid/Prebid.js": "complete"})
+
+
+async def test_the_refresh_looks_up_the_oldest_first(world: World) -> None:
+    scenario = world.scenario
+    repository, author = project(world)
+    reviewer = scenario.add_account()
+    repository.pulls[1].add("reviews", scenario.node("reviews", by=reviewer))
+    await world.sync()
+    world.execute(
+        "UPDATE github_users SET refreshed_at = '2026-10-10 00:00:00.000000' WHERE node_id = ?",
+        author,
+    )
+    world.execute(
+        "UPDATE github_users SET refreshed_at = '2026-10-09 00:00:00.000000' WHERE node_id = ?",
+        reviewer,
+    )
+
+    report = await world.sync()
+
+    assert scenario.replay.seen[-1].variables["ids"] == [reviewer, author]
+    assert ended(world, report) == ("complete", 0, {"prebid/Prebid.js": "complete"})
+
+
+async def test_a_close_that_fails_leaves_the_row_running_and_exits_1(world: World) -> None:
+    project(world)
+    world.execute(
+        "CREATE TRIGGER refuse_close BEFORE UPDATE OF status ON sync_runs "
+        "BEGIN SELECT RAISE(ABORT, 'close refused by the test'); END"
+    )
+
+    report = await world.sync()
+
+    run = world.run(report.run_id)
+    assert (run["status"], run["exit_code"]) == ("running", None)
+    assert (report.status, report.exit_code) == ("running", 1)
+    assert report.error == (
+        f"the close failed, so run {report.run_id} stays running: LocalDatabaseError: "
+        "IntegrityError: close refused by the test"
+    )
+
+
+async def test_halted_comes_before_time_limited(world: World) -> None:
+    scenario = world.scenario
+    repository, _ = project(world, pulls=30)
+    await world.sync()
+    for number in range(1, 28):
+        repository.pulls[number].gone = True
+    for number in (28, 29, 30):
+        repository.pulls[number].touch()
+    deadline_after(scenario, "PullRequestIndex")
+
+    report = await world.sync(max_minutes=1)
+
+    assert ended(world, report) == ("time_limited", 2, {"prebid/Prebid.js": "halted"})
+    assert world.pending(repository) == [28, 29, 30]
+    assert index_started(world)["prebid/Prebid.js"] is not None
+
+
+async def test_an_interrupt_is_re_raised_when_another_process_aborted_the_row(
+    world: World,
+) -> None:
+    scenario = world.scenario
+    project(world)
+
+    def aborted_then_interrupted(request: Any) -> Any:
+        world.execute("UPDATE sync_runs SET status = 'aborted' WHERE status = 'running'")
+        raise KeyboardInterrupt
+
+    scenario.replay.fault(
+        aborted_then_interrupted, when=lambda seen: seen.operation == "PullRequestBatch"
+    )
+
+    with pytest.raises(KeyboardInterrupt):
+        await world.sync()
+
+    (row,) = world.rows("SELECT status, exit_code FROM sync_runs")
+    assert row == {"status": "aborted", "exit_code": None}
