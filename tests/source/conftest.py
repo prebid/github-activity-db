@@ -23,7 +23,8 @@ START = datetime(2026, 10, 17, 12, 0, tzinfo=UTC)
 
 
 class FakeClock:
-    """Time that moves only when the code under test sleeps; jitter is zero."""
+    """Time that moves only when the code under test sleeps or a test advances it; jitter is
+    zero."""
 
     def __init__(self, start: datetime = START) -> None:
         self._now = start
@@ -31,6 +32,10 @@ class FakeClock:
 
     def now(self) -> datetime:
         return self._now
+
+    def advance(self, seconds: float) -> None:
+        """Time passing between a test's steps, which ``sleeps`` does not record."""
+        self._now += timedelta(seconds=seconds)
 
     async def sleep(self, seconds: float) -> None:
         self.sleeps.append(seconds)

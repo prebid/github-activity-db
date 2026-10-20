@@ -83,11 +83,16 @@ class Replay:
     faults: list[Fault] = field(default_factory=list)
     # Wraps the handler, for a test that needs to observe requests as they run.
     wrap: Callable[[Callable[[httpx.Request], httpx.Response]], Any] | None = None
+    # Answers each unit when its request arrives, before ``units`` (a scenario model,
+    # tests/source/scenario.py); ``None`` from it leaves the unit to ``units``. It is also asked
+    # for a ``repository`` unit before an index or batch request: one means the repository is
+    # null, with that unit's errors.
+    provider: Callable[[str, dict[str, Any]], Unit | None] | None = None
 
     @classmethod
     def from_fixtures(cls) -> Replay:
         replay = cls()
-        for unit in _loaded_units():
+        for unit in loaded_units():
             replay.add(copy.deepcopy(unit))
         return replay
 
@@ -176,7 +181,9 @@ class Replay:
         return Seen(operation="rest", variables={}, query="", path=str(request.url))
 
     def _lookup(self, kind: str, key: dict[str, Any], stamp: str | None = None) -> Unit:
-        unit = self.units.get((kind, _key(key)))
+        unit = self.provider(kind, key) if self.provider is not None else None
+        if unit is None:
+            unit = self.units.get((kind, _key(key)))
         if unit is None:
             raise _Miss(f"no {kind} unit for {key}: record it with scripts/record_fixtures.py")
         if stamp is not None and unit.document_sha256 != stamp:
@@ -206,6 +213,8 @@ class Replay:
                 )
                 return _graphql_response(seen, [unit], {"node": unit.data}, [(unit, ["node"])])
             case "PullRequestIndex":
+                if (absent := self._absent_repository(seen)) is not None:
+                    return absent
                 key = {
                     "owner": variables["owner"],
                     "name": variables["name"],
@@ -220,6 +229,8 @@ class Replay:
                 )
             case "PullRequestBatch":
                 _check_batch_bindings(seen)
+                if (absent := self._absent_repository(seen)) is not None:
+                    return absent
                 stamp = pull_request_stamp(seen.query)
                 container: dict[str, Any] = {}
                 units: list[tuple[Unit, list[Any]]] = []
@@ -265,6 +276,16 @@ class Replay:
                     units.append((unit, ["nodes", position]))
                 return _graphql_response(seen, [unit for unit, _ in units], {"nodes": nodes}, units)
         raise _Miss(f"no replay for GraphQL operation {seen.operation}")
+
+    def _absent_repository(self, seen: Seen) -> httpx.Response | None:
+        """A null ``repository`` when the provider says it does not exist."""
+        if self.provider is None:
+            return None
+        key = {"owner": seen.variables["owner"], "name": seen.variables["name"]}
+        unit = self.provider("repository", key)
+        if unit is None:
+            return None
+        return _graphql_response(seen, [unit], {"repository": None}, [(unit, ["repository"])])
 
     def _rest(self, request: httpx.Request) -> httpx.Response:
         if is_rest_rate_limit(str(request.url)):
@@ -356,7 +377,8 @@ def _key(key: dict[str, Any]) -> str:
 _CACHE: list[Unit] | None = None
 
 
-def _loaded_units() -> list[Unit]:
+def loaded_units() -> list[Unit]:
+    """Every recorded unit, read once; copy one before changing it."""
     global _CACHE
     if _CACHE is None:
         _CACHE = [Unit.load(path) for path in sorted(RECORDED.rglob("*.json"))]

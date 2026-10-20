@@ -28,7 +28,7 @@ How the test suite is built and what it counts as evidence. The plan of record i
 
 ```
 tests/
-├── conftest.py              # The session template database and its per-test copies
+├── conftest.py              # The session template database and its copies; the scenario fixture
 ├── db/
 │   ├── alembic_support.py   # Running the real migrations; test-only revisions after head
 │   ├── schema_support.py    # Structural schema readings for the model comparison
@@ -41,6 +41,7 @@ tests/
 ├── source/                  # GitHub source layer (redesign plan Step 2)
 │   ├── recordings.py        # Unit format, shared by the recorder and the replay
 │   ├── replay.py            # httpx transport answering from units, with fault injection
+│   ├── scenario.py          # A model of GitHub the replay asks at request time (the engine's tests)
 │   ├── recorder.py          # Recording scenarios and the recording transport
 │   └── test_*.py
 ├── fixtures/source/
@@ -136,6 +137,37 @@ repository has more than 100.
   version's entry; on pull requests, CI runs the base commit's copy of
   `scripts/check_query_lock.py` (the pull request's own copy where the base has none), which
   rejects an edited or removed entry, so a document change needs a new version.
+
+---
+
+## Sync Engine Tests: The Scenario Model
+
+The engine's tests (redesign plan Step 3b-2a-2b) run the real source over a model of GitHub,
+`tests/source/scenario.py`, instead of fixed recordings: a sync changes what it stores, so the
+next run must see GitHub as the test left it.
+
+- **State is GitHub's JSON**: each repository, pull request, and account is held as the JSON
+  GitHub returns for it, every connection's nodes joined across pages. The replay asks the model
+  for each unit when a request arrives (`Replay.provider`), so a response shows the state at that
+  moment, and its `Date` is the test clock's reading. Anything the model does not hold is
+  answered `NOT_FOUND`, a repository it cannot find with a null `repository`.
+- **Changes**: `add_repository`, `add_label`, `add_account`, and `open_pull_request` copy
+  recorded objects with fresh ids; a pull request's `merge`, `close`, `reopen`, and `touch` move
+  its times, `set` changes fields without `updatedAt` (a draft toggle, an author association),
+  and `add`, `remove`, `link`, and `unlink` change its connections. The model renames labels and
+  repositories (the old name still resolves), deletes an account (lookups answer `NOT_FOUND` and
+  no response names it), and finds one again; `gone` removes a pull request or a repository.
+  `node(connection)` copies a recorded node of that connection for a test to adjust.
+- **Checked against the recordings**: `test_scenario.py` loads every recorded unit into one model
+  and requires each to re-render exactly (compare pages on the fields the source reads), and the
+  source to read the model as it reads the recordings. Rendered units carry the recordings'
+  stamps, so a changed document is refused until the recordings are made again and the model
+  renders them. Connections no recording covers (label and closing-issue continuations) have no
+  stamp, and the model refuses to render them.
+- **Fixture**: `scenario` (`tests/conftest.py`) is an empty model on its own `FakeClock`, whose
+  `advance` moves time between a test's steps; `async with scenario.source() as source` opens the
+  real source over it. The fixture fails a test whose request the replay could not answer, or
+  whose fault was never used up; faults stack on the model as on the recordings.
 
 ---
 
