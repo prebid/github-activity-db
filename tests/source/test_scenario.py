@@ -831,10 +831,15 @@ async def test_a_push_while_its_compare_is_read_keeps_the_old_head(scenario: Sce
     pull = repository.pulls[1]
     pull.add("commits", *(scenario.node("commits", by=author) for _ in range(251)))
     head = pull.node["headRefOid"]
+    before = [node["commit"]["oid"] for node in pull.node["commits"]["nodes"]]
     scenario.after("PullRequestBatch", lambda: pull.add("commits", scenario.node("commits")))
     record = hydrated(await hydrate(scenario, "example", "project", 1))
-    assert (record.head_ref_oid, len(record.commits)) == (head, 251)
-    assert len(pull.node["commits"]["nodes"]) == 252
+    assert (record.head_ref_oid, [commit.sha for commit in record.commits]) == (head, before)
+
+    after = [node["commit"]["oid"] for node in pull.node["commits"]["nodes"]]
+    assert (len(after), after[:251], pull.node["headRefOid"]) == (252, before, after[-1])
+    record = hydrated(await hydrate(scenario, "example", "project", 1))
+    assert (record.head_ref_oid, [commit.sha for commit in record.commits]) == (after[-1], after)
 
 
 async def test_a_recorded_compare_refuses_a_push() -> None:
