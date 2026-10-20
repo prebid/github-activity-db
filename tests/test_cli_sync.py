@@ -1,0 +1,399 @@
+"""`ghactivity sync` over the engine, from go-gdpr's first-sync recordings (redesign plan 5.3
+step 8, 5.7; Step 3b-2a-2c).
+
+In process through CliRunner, and through the installed package in a child interpreter
+(``python -I -c``) with the replay patched in: a run that never starts exits 1 before any
+``sync_runs`` row, a run that starts exits with the engine's code, and a run killed mid-run leaves
+its row ``running`` with its committed items for a resume.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import os
+import re
+import signal
+import sqlite3
+import subprocess
+import sys
+from collections.abc import Iterator
+from pathlib import Path
+from typing import Any
+
+import pytest
+from rich.console import Console
+from typer.testing import CliRunner
+
+from github_activity_db.cli import common
+from github_activity_db.cli import sync as sync_cli
+from github_activity_db.cli.app import app
+from github_activity_db.config import get_settings
+from github_activity_db.source import GitHubSource
+from tests.source.conftest import FakeClock
+from tests.source.recorder import FIRST_SYNC_REPOSITORY
+from tests.source.recordings import FIRST_SYNC
+from tests.source.replay import Replay, unanswered
+from tests.sync.records import fetch
+
+ROOT = Path(__file__).resolve().parent.parent
+runner = CliRunner()
+_ANSI_ESCAPE = re.compile(r"\x1b\[[0-9;?]*[ -/]*[@-~]")
+_BOX_DRAWING = re.compile(r"[─-╿]")
+OWNER, NAME = FIRST_SYNC_REPOSITORY
+TRACKING = f"""\
+[coverage]
+floor = 2023-01-01T00:00:00Z
+
+[[repositories]]
+owner = "{OWNER}"
+name = "{NAME}"
+group = "Server"
+"""
+
+
+def _plain(text: str) -> str:
+    return " ".join(_BOX_DRAWING.sub(" ", _ANSI_ESCAPE.sub("", text)).split())
+
+
+def _alias_error(body: dict[str, Any]) -> None:
+    """The first pull request of a batch answers an error of its own: an item failure."""
+    body["data"]["repository"]["p0"] = None
+    body["errors"] = [
+        {
+            "type": "FORBIDDEN",
+            "message": "Resource not accessible by integration",
+            "path": ["repository", "p0"],
+        }
+    ]
+
+
+def _runs(database: Path) -> list[dict[str, Any]]:
+    return fetch(database, "SELECT id, status, exit_code FROM sync_runs ORDER BY id")
+
+
+def _execute(database: Path, sql: str) -> None:
+    connection = sqlite3.connect(database)
+    try:
+        with connection:
+            connection.execute(sql)
+    finally:
+        connection.close()
+
+
+def _digest(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+@pytest.fixture
+def tracking(tmp_path: Path) -> Path:
+    path = tmp_path / "tracking.toml"
+    path.write_text(TRACKING)
+    return path
+
+
+@pytest.fixture
+def replay(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, migrated_database: Path, tracking: Path
+) -> Iterator[Replay]:
+    """``ghactivity sync`` reads GitHub through go-gdpr's first-sync recordings, on the fake clock,
+    into a migrated database; the replay must answer every request it gets."""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("GITHUB_TOKEN", "test-token")
+    monkeypatch.setenv("DATABASE_URL", f"sqlite+aiosqlite:///{migrated_database}")
+    monkeypatch.setenv("TRACKING_CONFIG_PATH", str(tracking))
+    monkeypatch.setattr(sync_cli, "console", Console(width=200))
+    get_settings.cache_clear()
+    recorded = Replay.from_directory(FIRST_SYNC)
+    clock = FakeClock()
+    monkeypatch.setattr(common, "clock", lambda: clock)
+    monkeypatch.setattr(
+        common,
+        "open_source",
+        lambda token, *, deadline=None, clock=None: GitHubSource(
+            token, http_transport=recorded.transport(), clock=clock, deadline=deadline
+        ),
+    )
+    yield recorded
+    get_settings.cache_clear()
+    assert unanswered(recorded) == []
+
+
+def _sync(*args: str) -> Any:
+    return runner.invoke(app, ["sync", *args])
+
+
+# --------------------------------------------------------------------------------------------
+# Runs that never start
+# --------------------------------------------------------------------------------------------
+USAGE_ERRORS = [
+    pytest.param(
+        ["--max-minutes", "1", "--max-minutes", "2"],
+        "--max-minutes is given more than once",
+        id="max-minutes twice",
+    ),
+    pytest.param(
+        ["--allow-deletions", f"{OWNER}/{NAME}=1", "--allow-deletions", f"{OWNER}/{NAME}=2"],
+        "--allow-deletions is given more than once",
+        id="allow-deletions twice",
+    ),
+    pytest.param(
+        ["--dry-run", "--break-lock"], "--break-lock does not apply", id="dry run with break lock"
+    ),
+    pytest.param(["--repo", "prebid/nope"], "which tracking.toml does not list", id="unknown repo"),
+    pytest.param(
+        ["--repo", "prebid/g\u043e-gdpr"], "--repo takes an ASCII owner/name", id="non-ASCII repo"
+    ),
+    pytest.param(
+        ["--allow-deletions", "prebid/nope=3"],
+        "which tracking.toml does not list",
+        id="unknown approval",
+    ),
+    pytest.param(["--allow-deletions", f"{OWNER}/{NAME}=0"], "N of at least 1", id="approval of 0"),
+    pytest.param(["--max-minutes", "0"], "0 is not in the range x>=1", id="max-minutes 0"),
+    pytest.param(["--unknown"], "No such option: --unknown", id="unknown option"),
+]
+
+
+@pytest.mark.parametrize(("args", "message"), USAGE_ERRORS)
+def test_a_usage_error_exits_1_before_any_request_or_row(
+    replay: Replay, migrated_database: Path, args: list[str], message: str
+) -> None:
+    before = _digest(migrated_database)
+
+    result = _sync(*args)
+
+    assert result.exit_code == 1, result.output
+    assert message in _plain(result.output)
+    assert replay.seen == []
+    assert _digest(migrated_database) == before
+
+
+def test_a_missing_token_exits_1(replay: Replay, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("GITHUB_TOKEN")
+    get_settings.cache_clear()
+
+    result = _sync()
+
+    assert result.exit_code == 1
+    assert "GITHUB_TOKEN is not set" in _plain(result.output)
+    assert replay.seen == []
+
+
+def test_a_missing_database_file_exits_1_and_creates_none(
+    replay: Replay, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    missing = tmp_path / "missing.db"
+    monkeypatch.setenv("DATABASE_URL", f"sqlite+aiosqlite:///{missing}")
+    get_settings.cache_clear()
+
+    for args in ([], ["--dry-run"]):
+        result = _sync(*args)
+        assert result.exit_code == 1, result.output
+        assert "Sync did not start: database file not found" in _plain(result.output)
+
+    assert not missing.exists()
+    assert replay.seen == []
+
+
+def test_a_database_not_at_head_exits_1(replay: Replay, migrated_database: Path) -> None:
+    _execute(migrated_database, "UPDATE alembic_version SET version_num = 'older'")
+
+    result = _sync()
+
+    assert result.exit_code == 1
+    assert "not the code's head" in _plain(result.output)
+    assert _runs(migrated_database) == []
+    assert replay.seen == []
+
+
+def test_a_refused_claim_exits_1_without_a_row(replay: Replay, migrated_database: Path) -> None:
+    _execute(
+        migrated_database,
+        "INSERT INTO sync_runs (started_at, status, trigger, code_version, config_source, "
+        "config_sha256, graphql_points, rest_calls, items_planned, items_hydrated, "
+        "items_deleted, failures) VALUES ('2026-10-17', 'running', 'manual', 'x', 'test', "
+        "'0', 0, 0, 0, 0, 0, 0)",
+    )
+
+    result = _sync()
+
+    assert result.exit_code == 1
+    assert "Sync did not start: run 1 is running; --break-lock marks it aborted" in _plain(
+        result.output
+    )
+    assert _runs(migrated_database) == [{"id": 1, "status": "running", "exit_code": None}]
+    assert replay.seen == []
+
+
+# --------------------------------------------------------------------------------------------
+# Runs that start
+# --------------------------------------------------------------------------------------------
+def test_a_first_sync_exits_0_and_prints_its_report(
+    replay: Replay, migrated_database: Path
+) -> None:
+    result = _sync()
+
+    assert result.exit_code == 0, result.output
+    output = _plain(result.output)
+    assert "Run 1: complete, exit 0" in output
+    assert f"{OWNER}/{NAME}: complete (new) planned 11, in-place updates 0" in output
+    assert "Hydrated 11 items; GraphQL points" in output
+    assert _runs(migrated_database) == [{"id": 1, "status": "complete", "exit_code": 0}]
+    assert fetch(migrated_database, "SELECT count(*) AS n FROM pull_requests") == [{"n": 11}]
+
+
+def test_an_item_failure_exits_2_and_is_reported(replay: Replay, migrated_database: Path) -> None:
+    replay.modify(_alias_error, when=lambda seen: seen.operation == "PullRequestBatch", times=2)
+
+    result = _sync()
+
+    assert result.exit_code == 2, result.output
+    output = _plain(result.output)
+    assert "Run 1: complete, exit 2" in output
+    assert re.search(rf"Failed: {OWNER}/{NAME}#\d+: AliasError: ", output), output
+    assert _runs(migrated_database) == [{"id": 1, "status": "complete", "exit_code": 2}]
+
+
+def test_a_dry_run_prints_its_plan_and_writes_nothing(
+    replay: Replay, migrated_database: Path
+) -> None:
+    before = _digest(migrated_database)
+
+    result = _sync("--dry-run")
+
+    assert result.exit_code == 0, result.output
+    output = _plain(result.output)
+    assert "Dry run: the run would exit 0" in output
+    assert len(re.findall(r"hydrate #\d+: not stored", output)) == 11
+    assert _digest(migrated_database) == before
+
+
+def test_repo_names_a_configured_repository_ignoring_case(
+    replay: Replay, migrated_database: Path
+) -> None:
+    result = _sync("--repo", f"{OWNER.upper()}/{NAME.upper()}")
+
+    assert result.exit_code == 0, result.output
+    assert f"{OWNER}/{NAME}: complete" in _plain(result.output)
+
+
+# --------------------------------------------------------------------------------------------
+# Through the installed package
+# --------------------------------------------------------------------------------------------
+CHILD = """\
+import sys
+sys.path.insert(0, {root!r})
+from github_activity_db.cli import common
+from github_activity_db.source import GitHubSource
+from tests.source.conftest import FakeClock
+from tests.source.recordings import FIRST_SYNC
+from tests.source.replay import Replay
+replay = Replay.from_directory(FIRST_SYNC)
+clock = FakeClock()
+common.clock = lambda: clock
+common.open_source = lambda token, *, deadline=None, clock=None: GitHubSource(
+    token, http_transport=replay.transport(), clock=clock, deadline=deadline
+)
+{plant}
+from github_activity_db.cli.app import app
+app({args!r}, prog_name="ghactivity")
+"""
+
+FAIL_ONE_ITEM = """\
+from tests.test_cli_sync import _alias_error
+replay.modify(_alias_error, when=lambda seen: seen.operation == "PullRequestBatch", times=2)
+"""
+
+# The writer commits each item in its own transaction; the child kills itself right after the
+# third commit returns, as a crash or SIGKILL would.
+KILL_AFTER_THIRD_ITEM = """\
+import os, signal
+from github_activity_db.sync import writer
+written = writer.write_pull_request
+count = 0
+async def write_then_crash(*args, **kwargs):
+    global count
+    result = await written(*args, **kwargs)
+    count += 1
+    if count == 3:
+        os.kill(os.getpid(), signal.SIGKILL)
+    return result
+writer.write_pull_request = write_then_crash
+"""
+
+
+def _child(
+    args: list[str], *, database: Path, tracking: Path, cwd: Path, plant: str = ""
+) -> subprocess.CompletedProcess[str]:
+    """Run the installed package in an isolated interpreter (``-I``: no user site, no
+    PYTHONPATH, no working directory on the path), over the recordings."""
+    base = {key: value for key, value in os.environ.items() if key in ("PATH", "HOME")}
+    env = {
+        **base,
+        "GITHUB_TOKEN": "test-token",
+        "DATABASE_URL": f"sqlite+aiosqlite:///{database}",
+        "TRACKING_CONFIG_PATH": str(tracking),
+    }
+    script = CHILD.format(root=str(ROOT), plant=plant, args=["sync", *args])
+    return subprocess.run(
+        [sys.executable, "-I", "-c", script],
+        capture_output=True,
+        text=True,
+        env=env,
+        cwd=cwd,
+        timeout=120,
+        check=False,
+    )
+
+
+def test_the_installed_command_exits_with_the_engines_code(
+    migrated_database: Path, tracking: Path, tmp_path: Path
+) -> None:
+    failed = _child(
+        [], database=migrated_database, tracking=tracking, cwd=tmp_path, plant=FAIL_ONE_ITEM
+    )
+    assert failed.returncode == 2, failed.stderr
+    assert "Run 1: complete, exit 2" in _plain(failed.stdout)
+
+    usage = _child(
+        ["--dry-run", "--break-lock"], database=migrated_database, tracking=tracking, cwd=tmp_path
+    )
+    assert usage.returncode == 1, usage.stderr
+    assert "--break-lock does not apply" in _plain(usage.stderr)
+    assert _runs(migrated_database) == [{"id": 1, "status": "complete", "exit_code": 2}]
+
+
+def test_a_killed_run_stays_running_and_a_resume_keeps_its_writes(
+    migrated_database: Path, tracking: Path, tmp_path: Path
+) -> None:
+    killed = _child(
+        [], database=migrated_database, tracking=tracking, cwd=tmp_path, plant=KILL_AFTER_THIRD_ITEM
+    )
+    assert killed.returncode == -signal.SIGKILL, killed.stderr
+    assert _runs(migrated_database) == [{"id": 1, "status": "running", "exit_code": None}]
+    committed = fetch(
+        migrated_database, "SELECT id, number, hydrated_at FROM pull_requests ORDER BY number"
+    )
+    assert len(committed) == 3
+
+    # The row still holds the lock: a plain run never starts and adds no row.
+    refused = _child([], database=migrated_database, tracking=tracking, cwd=tmp_path)
+    assert refused.returncode == 1, refused.stderr
+    assert "run 1 is running; --break-lock marks it aborted" in _plain(
+        refused.stdout + refused.stderr
+    )
+    assert len(_runs(migrated_database)) == 1
+
+    resumed = _child(["--break-lock"], database=migrated_database, tracking=tracking, cwd=tmp_path)
+    assert resumed.returncode == 0, resumed.stdout + resumed.stderr
+    assert "--break-lock marked run 1 aborted" in _plain(resumed.stdout)
+    assert _runs(migrated_database) == [
+        {"id": 1, "status": "aborted", "exit_code": None},
+        {"id": 2, "status": "complete", "exit_code": 0},
+    ]
+    rows = fetch(
+        migrated_database, "SELECT id, number, hydrated_at FROM pull_requests ORDER BY number"
+    )
+    assert len(rows) == 11
+    # The three items the killed run committed are the same rows, not rewritten.
+    assert [row for row in rows if row["number"] in {r["number"] for r in committed}] == committed

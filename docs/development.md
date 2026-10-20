@@ -90,11 +90,23 @@ uv run ghactivity github rate-limit           # GraphQL reading and the core and
 uv run ghactivity github rate-limit --all     # Every REST pool
 uv run ghactivity github test --pr 13481 --repo prebid/Prebid.js  # Resolve and hydrate one PR
 uv run ghactivity github test --pr 4343       # The first repository in tracking.toml
+
+# Sync into DATABASE_URL (build it first with `uv run alembic upgrade head`)
+uv run ghactivity sync --dry-run              # Resolve, index, and plan; write nothing
+uv run ghactivity sync --repo prebid/go-gdpr  # Only this configured repository (repeatable)
+uv run ghactivity sync --max-minutes 30       # Stop issuing requests after 30 minutes
+uv run ghactivity sync --allow-deletions prebid/Prebid.js=40  # Past the delete guard, up to 40
+uv run ghactivity sync --prune-untracked      # Delete repositories already untracked
+uv run ghactivity sync --break-lock           # Mark a running sync aborted and claim the run
 ```
 
-There is no `sync` command until Step 3b of the [redesign plan](redesign-plan.md). A command
-line that never starts its work (a usage error, an invalid `tracking.toml` or setting, a log
-file that cannot be opened, a missing token) exits 1; an interrupt (Ctrl-C) exits 130.
+`ghactivity sync` follows [redesign plan](redesign-plan.md) 5.3: it exits 0 when every repository
+indexed completely and nothing failed, 2 when something needs attention (an item or a repository
+failed, an index was incomplete, deletions halted, a stored repository is untracked, or a prune
+was refused), and 1 on a fatal error. A command line that never starts its work (a usage error,
+an invalid `tracking.toml` or setting, a log file that cannot be opened, a missing token, a
+missing or unmigrated database file, or another sync holding the lock) exits 1, before any
+`sync_runs` row; an interrupt (Ctrl-C) closes the run `aborted` and exits 130.
 
 ### Code Quality
 

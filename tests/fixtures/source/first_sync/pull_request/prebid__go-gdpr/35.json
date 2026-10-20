@@ -1,0 +1,264 @@
+{
+  "data": {
+    "additions": 73,
+    "assignedActors": {
+      "nodes": [
+        {
+          "__typename": "User",
+          "databaseId": 4790765,
+          "id": "MDQ6VXNlcjQ3OTA3NjU=",
+          "login": "VeronikaSolovei9"
+        },
+        {
+          "__typename": "User",
+          "databaseId": 31041505,
+          "id": "MDQ6VXNlcjMxMDQxNTA1",
+          "login": "hhhjort"
+        }
+      ],
+      "pageInfo": {
+        "endCursor": "Mg",
+        "hasNextPage": false
+      },
+      "totalCount": 2
+    },
+    "author": {
+      "__typename": "User",
+      "databaseId": 1168933,
+      "id": "MDQ6VXNlcjExNjg5MzM=",
+      "login": "bsardo"
+    },
+    "authorAssociation": "MEMBER",
+    "baseRefName": "master",
+    "baseRefOid": "29f461037790957f775acab24098cc483abcaf34",
+    "body": "This change is driven by [PBS Issue 2697](.com/prebid/prebid-server/issues/2697)",
+    "canBeRebased": false,
+    "changedFiles": 4,
+    "closedAt": "2023-06-14T17:18:00Z",
+    "closingIssuesReferences": {
+      "nodes": [],
+      "pageInfo": {
+        "endCursor": null,
+        "hasNextPage": false
+      },
+      "totalCount": 0
+    },
+    "comments": {
+      "nodes": [],
+      "pageInfo": {
+        "endCursor": null,
+        "hasNextPage": false
+      },
+      "totalCount": 0
+    },
+    "commits": {
+      "nodes": [
+        {
+          "commit": {
+            "author": {
+              "email": "1168933+bsardo@users.noreply.github.com",
+              "name": "bsardo",
+              "user": {
+                "databaseId": 1168933,
+                "id": "MDQ6VXNlcjExNjg5MzM=",
+                "login": "bsardo"
+              }
+            },
+            "authoredDate": "2023-06-09T15:28:23Z",
+            "oid": "a904c09398f778a32f54e6e3dbbcd112124f1c52"
+          }
+        }
+      ],
+      "pageInfo": {
+        "endCursor": "MQ",
+        "hasNextPage": false
+      },
+      "totalCount": 1
+    },
+    "createdAt": "2023-06-09T15:29:00Z",
+    "deletions": 0,
+    "editor": {
+      "__typename": "User",
+      "databaseId": 1168933,
+      "id": "MDQ6VXNlcjExNjg5MzM=",
+      "login": "bsardo"
+    },
+    "files": {
+      "nodes": [
+        {
+          "additions": 3,
+          "changeType": "MODIFIED",
+          "deletions": 0,
+          "path": "api/consent.go"
+        },
+        {
+          "additions": 5,
+          "changeType": "MODIFIED",
+          "deletions": 0,
+          "path": "vendorconsent/tcf1/metadata.go"
+        },
+        {
+          "additions": 6,
+          "changeType": "MODIFIED",
+          "deletions": 0,
+          "path": "vendorconsent/tcf2/metadata.go"
+        },
+        {
+          "additions": 59,
+          "changeType": "MODIFIED",
+          "deletions": 0,
+          "path": "vendorconsent/tcf2/metadata_test.go"
+        }
+      ],
+      "pageInfo": {
+        "endCursor": "NA",
+        "hasNextPage": false
+      },
+      "totalCount": 4
+    },
+    "fullDatabaseId": "1386382145",
+    "headRefName": "add-tcf-policy-version-function",
+    "headRefOid": "a904c09398f778a32f54e6e3dbbcd112124f1c52",
+    "headRepository": {
+      "databaseId": 370525860,
+      "nameWithOwner": "bsardo/go-gdpr"
+    },
+    "headRepositoryOwner": {
+      "id": "MDQ6VXNlcjExNjg5MzM=",
+      "login": "bsardo"
+    },
+    "id": "PR_kwDOB-wgI85SooNB",
+    "includesCreatedEdit": true,
+    "isCrossRepository": true,
+    "isDraft": false,
+    "labels": {
+      "nodes": [],
+      "pageInfo": {
+        "endCursor": null,
+        "hasNextPage": false
+      },
+      "totalCount": 0
+    },
+    "lastEditedAt": "2023-06-12T17:31:07Z",
+    "maintainerCanModify": false,
+    "mergeCommit": {
+      "oid": "ca19899a57211bc39457d9b4a047b61f8ff9e190"
+    },
+    "mergeStateStatus": "UNKNOWN",
+    "mergeable": "UNKNOWN",
+    "mergedAt": "2023-06-14T17:18:00Z",
+    "mergedBy": {
+      "__typename": "User",
+      "databaseId": 1168933,
+      "id": "MDQ6VXNlcjExNjg5MzM=",
+      "login": "bsardo"
+    },
+    "milestone": null,
+    "number": 35,
+    "potentialMergeCommit": null,
+    "publishedAt": "2023-06-09T15:29:00Z",
+    "reviewDecision": "APPROVED",
+    "reviewRequests": {
+      "nodes": [],
+      "pageInfo": {
+        "endCursor": null,
+        "hasNextPage": false
+      },
+      "totalCount": 0
+    },
+    "reviews": {
+      "nodes": [
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 31041505,
+            "id": "MDQ6VXNlcjMxMDQxNTA1",
+            "login": "hhhjort"
+          },
+          "authorAssociation": "MEMBER",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 0
+          },
+          "commit": {
+            "oid": "a904c09398f778a32f54e6e3dbbcd112124f1c52"
+          },
+          "createdAt": "2023-06-12T18:36:39Z",
+          "editor": null,
+          "fullDatabaseId": "1475573465",
+          "id": "PRR_kwDOB-wgI85X83bZ",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2023-06-12T18:36:39Z",
+          "state": "APPROVED",
+          "submittedAt": "2023-06-12T18:36:39Z",
+          "updatedAt": "2023-06-12T18:36:39Z"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 4790765,
+            "id": "MDQ6VXNlcjQ3OTA3NjU=",
+            "login": "VeronikaSolovei9"
+          },
+          "authorAssociation": "MEMBER",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 0
+          },
+          "commit": {
+            "oid": "a904c09398f778a32f54e6e3dbbcd112124f1c52"
+          },
+          "createdAt": "2023-06-13T04:42:19Z",
+          "editor": null,
+          "fullDatabaseId": "1476239760",
+          "id": "PRR_kwDOB-wgI85X_aGQ",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2023-06-13T04:42:19Z",
+          "state": "APPROVED",
+          "submittedAt": "2023-06-13T04:42:19Z",
+          "updatedAt": "2023-06-13T04:42:19Z"
+        }
+      ],
+      "pageInfo": {
+        "endCursor": "Y3Vyc29yOnYyOpO0MjAyMy0wNi0xM1QwNDo0MjoxOVq0MjAyMy0wNi0xM1QwNDo0MjoxOVrOV_2hkA==",
+        "hasNextPage": false
+      },
+      "totalCount": 2
+    },
+    "stack": null,
+    "stackEntry": null,
+    "state": "MERGED",
+    "title": "Add function to get TCF policy version from consent string",
+    "totalCommentsCount": 1,
+    "updatedAt": "2023-06-14T17:18:01Z",
+    "userLinkedClosingIssues": {
+      "nodes": [],
+      "pageInfo": {
+        "endCursor": null,
+        "hasNextPage": false
+      },
+      "totalCount": 0
+    }
+  },
+  "document_sha256": "3527b3fa77b23d4166d3a8a063506be04f20c8bec7cee75e2bf801d0d608c26c",
+  "errors": [],
+  "extra": {},
+  "headers": {
+    "date": "Tue, 20 Oct 2026 23:36:35 GMT",
+    "x-ratelimit-limit": "5000",
+    "x-ratelimit-remaining": "4975",
+    "x-ratelimit-reset": "1792541966",
+    "x-ratelimit-resource": "graphql",
+    "x-ratelimit-used": "25"
+  },
+  "key": {
+    "name": "go-gdpr",
+    "number": 35,
+    "owner": "prebid"
+  },
+  "kind": "pull_request",
+  "recorded_at": "2026-10-20T23:36:30Z",
+  "source": "live"
+}

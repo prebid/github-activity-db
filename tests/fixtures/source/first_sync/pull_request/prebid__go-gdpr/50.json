@@ -1,0 +1,192 @@
+{
+  "data": {
+    "additions": 3,
+    "assignedActors": {
+      "nodes": [
+        {
+          "__typename": "User",
+          "databaseId": 1168933,
+          "id": "MDQ6VXNlcjExNjg5MzM=",
+          "login": "bsardo"
+        }
+      ],
+      "pageInfo": {
+        "endCursor": "MQ",
+        "hasNextPage": false
+      },
+      "totalCount": 1
+    },
+    "author": {
+      "__typename": "Bot",
+      "databaseId": 49699333,
+      "id": "MDM6Qm90NDk2OTkzMzM=",
+      "login": "dependabot"
+    },
+    "authorAssociation": "NONE",
+    "baseRefName": "master",
+    "baseRefOid": "a2e2d15c3427af846a74de197200646656f57710",
+    "body": "Bumps [github.com/buger/jsonparser](https://github.com/buger/jsonparser) from 1.1.1 to 1.1.2.\n<details>\n<summary>Release notes</summary>\n<p><em>Sourced from <a href=\"https://github.com/buger/jsonparser/releases\">github.com/buger/jsonparser's releases</a>.</em></p>\n<blockquote>\n<h2>v1.1.2</h2>\n<h2>What's Changed</h2>\n<ul>\n<li>Updated travis to build for 1.13 to 1.15 by <a href=\"https://github.com/janreggie\"><code>@​janreggie</code></a> in <a href=\"https://redirect.github.com/buger/jsonparser/pull/225\">buger/jsonparser#225</a></li>\n<li>\n<ul>\n<li>eliminate 2 allocations in EachKey() by <a href=\"https://github.com/Villenny\"><code>@​Villenny</code></a> in <a href=\"https://redirect.github.com/buger/jsonparser/pull/223\">buger/jsonparser#223</a></li>\n</ul>\n</li>\n<li>fix issue <a href=\"https://redirect.github.com/buger/jsonparser/issues/150\">#150</a> (in deleting case) by <a href=\"https://github.com/daria-kay\"><code>@​daria-kay</code></a> in <a href=\"https://redirect.github.com/buger/jsonparser/pull/226\">buger/jsonparser#226</a></li>\n<li>fixing the oss-fuzz issue by <a href=\"https://github.com/daria-kay\"><code>@​daria-kay</code></a> in <a href=\"https://redirect.github.com/buger/jsonparser/pull/227\">buger/jsonparser#227</a></li>\n<li>Fix parseInt overflow check false negative by <a href=\"https://github.com/carsonip\"><code>@​carsonip</code></a> in <a href=\"https://redirect.github.com/buger/jsonparser/pull/231\">buger/jsonparser#231</a></li>\n<li>Added bespoke error for null cases by <a href=\"https://github.com/jonomacd\"><code>@​jonomacd</code></a> in <a href=\"https://redirect.github.com/buger/jsonparser/pull/228\">buger/jsonparser#228</a></li>\n<li>Fuzzing: Add CIFuzz by <a href=\"https://github.com/AdamKorcz\"><code>@​AdamKorcz</code></a> in <a href=\"https://redirect.github.com/buger/jsonparser/pull/239\">buger/jsonparser#239</a></li>\n<li>Added latest versions of go to tests by <a href=\"https://github.com/moredure\"><code>@​moredure</code></a> in <a href=\"https://redirect.github.com/buger/jsonparser/pull/244\">buger/jsonparser#244</a></li>\n<li>fix EachKey pIdxFlags allocation by <a href=\"https://github.com/unxcepted\"><code>@​unxcepted</code></a> in <a href=\"https://redirect.github.com/buger/jsonparser/pull/241\">buger/jsonparser#241</a></li>\n<li>fix: prevent panic on negative slice index in Delete with malformed JSON (GO-2026-4514) by <a href=\"https://github.com/dbarrosop\"><code>@​dbarrosop</code></a> in <a href=\"https://redirect.github.com/buger/jsonparser/pull/276\">buger/jsonparser#276</a></li>\n</ul>\n<h2>New Contributors</h2>\n<ul>\n<li><a href=\"https://github.com/janreggie\"><code>@​janreggie</code></a> made their first contribution in <a href=\"https://redirect.github.com/buger/jsonparser/pull/225\">buger/jsonparser#225</a></li>\n<li><a href=\"https://github.com/Villenny\"><code>@​Villenny</code></a> made their first contribution in <a href=\"https://redirect.github.com/buger/jsonparser/pull/223\">buger/jsonparser#223</a></li>\n<li><a href=\"https://github.com/daria-kay\"><code>@​daria-kay</code></a> made their first contribution in <a href=\"https://redirect.github.com/buger/jsonparser/pull/226\">buger/jsonparser#226</a></li>\n<li><a href=\"https://github.com/carsonip\"><code>@​carsonip</code></a> made their first contribution in <a href=\"https://redirect.github.com/buger/jsonparser/pull/231\">buger/jsonparser#231</a></li>\n<li><a href=\"https://github.com/jonomacd\"><code>@​jonomacd</code></a> made their first contribution in <a href=\"https://redirect.github.com/buger/jsonparser/pull/228\">buger/jsonparser#228</a></li>\n<li><a href=\"https://github.com/moredure\"><code>@​moredure</code></a> made their first contribution in <a href=\"https://redirect.github.com/buger/jsonparser/pull/244\">buger/jsonparser#244</a></li>\n<li><a href=\"https://github.com/unxcepted\"><code>@​unxcepted</code></a> made their first contribution in <a href=\"https://redirect.github.com/buger/jsonparser/pull/241\">buger/jsonparser#241</a></li>\n<li><a href=\"https://github.com/dbarrosop\"><code>@​dbarrosop</code></a> made their first contribution in <a href=\"https://redirect.github.com/buger/jsonparser/pull/276\">buger/jsonparser#276</a></li>\n</ul>\n<p><strong>Full Changelog</strong>: <a href=\"https://github.com/buger/jsonparser/compare/v1.1.1...v1.1.2\">https://github.com/buger/jsonparser/compare/v1.1.1...v1.1.2</a></p>\n</blockquote>\n</details>\n<details>\n<summary>Commits</summary>\n<ul>\n<li><a href=\"https://github.com/buger/jsonparser/commit/a69e7e01cd4ad67bdfd3ac2c080b9212af16f4b0\"><code>a69e7e0</code></a> Merge pull request <a href=\"https://redirect.github.com/buger/jsonparser/issues/276\">#276</a> from dbarrosop/master</li>\n<li><a href=\"https://github.com/buger/jsonparser/commit/d3eacc0bab779d6cf98221f5268828fff287876e\"><code>d3eacc0</code></a> fix: prevent panic on negative slice index in Delete with malformed JSON (GO-...</li>\n<li><a href=\"https://github.com/buger/jsonparser/commit/61b32cfdfa0f5d368ef7c7daef28ce12d538740f\"><code>61b32cf</code></a> Merge pull request <a href=\"https://redirect.github.com/buger/jsonparser/issues/241\">#241</a> from unxcepted/master</li>\n<li><a href=\"https://github.com/buger/jsonparser/commit/2181e8398f18397c9cacbaea9889314bb585e868\"><code>2181e83</code></a> Merge pull request <a href=\"https://redirect.github.com/buger/jsonparser/issues/244\">#244</a> from ScaleChamp/patch-2</li>\n<li><a href=\"https://github.com/buger/jsonparser/commit/1510b5194182fc2fb898f28cdbceb42fd7258bfa\"><code>1510b51</code></a> Added latest versions of go to tests</li>\n<li><a href=\"https://github.com/buger/jsonparser/commit/6fc2e488ed3cc4f1f1debec3b0c70715bd7be6fd\"><code>6fc2e48</code></a> fix: eachkey allocation</li>\n<li><a href=\"https://github.com/buger/jsonparser/commit/a6f867eb7787e4ec54536b77b5d628ddf5c4f73d\"><code>a6f867e</code></a> Merge pull request <a href=\"https://redirect.github.com/buger/jsonparser/issues/239\">#239</a> from AdamKorcz/cifuzz1</li>\n<li><a href=\"https://github.com/buger/jsonparser/commit/cbc01fdbbe131706e89eeaaf0cd917760d8d3949\"><code>cbc01fd</code></a> Fuzzing: Add CIFuzz</li>\n<li><a href=\"https://github.com/buger/jsonparser/commit/dc92d6932a1272b4d8f485f798a88c3a75106256\"><code>dc92d69</code></a> Merge pull request <a href=\"https://redirect.github.com/buger/jsonparser/issues/228\">#228</a> from jonomacd/null-handling</li>\n<li><a href=\"https://github.com/buger/jsonparser/commit/2d9d6343e8621ddc18c70749663f74bc584c0de4\"><code>2d9d634</code></a> Merge pull request <a href=\"https://redirect.github.com/buger/jsonparser/issues/231\">#231</a> from carsonip/fix-parseint-overflow-check</li>\n<li>Additional commits viewable in <a href=\"https://github.com/buger/jsonparser/compare/v1.1.1...v1.1.2\">compare view</a></li>\n</ul>\n</details>\n<br />\n\n\n[![Dependabot compatibility score](https://dependabot-badges.githubapp.com/badges/compatibility_score?dependency-name=github.com/buger/jsonparser&package-manager=go_modules&previous-version=1.1.1&new-version=1.1.2)](https://docs.github.com/en/github/managing-security-vulnerabilities/about-dependabot-security-updates#about-compatibility-scores)\n\nDependabot will resolve any conflicts with this PR as long as you don't alter it yourself. You can also trigger a rebase manually by commenting `@dependabot rebase`.\n\n[//]: # (dependabot-automerge-start)\n[//]: # (dependabot-automerge-end)\n\n---\n\n<details>\n<summary>Dependabot commands and options</summary>\n<br />\n\nYou can trigger Dependabot actions by commenting on this PR:\n- `@dependabot rebase` will rebase this PR\n- `@dependabot recreate` will recreate this PR, overwriting any edits that have been made to it\n- `@dependabot show <dependency name> ignore conditions` will show all of the ignore conditions of the specified dependency\n- `@dependabot ignore this major version` will close this PR and stop Dependabot creating any more for this major version (unless you reopen the PR or upgrade to it yourself)\n- `@dependabot ignore this minor version` will close this PR and stop Dependabot creating any more for this minor version (unless you reopen the PR or upgrade to it yourself)\n- `@dependabot ignore this dependency` will close this PR and stop Dependabot creating any more for this dependency (unless you reopen the PR or upgrade to it yourself)\nYou can disable automated security fix PRs for this repo from the [Security Alerts page](https://github.com/prebid/go-gdpr/network/alerts).\n\n</details>",
+    "canBeRebased": false,
+    "changedFiles": 2,
+    "closedAt": null,
+    "closingIssuesReferences": {
+      "nodes": [],
+      "pageInfo": {
+        "endCursor": null,
+        "hasNextPage": false
+      },
+      "totalCount": 0
+    },
+    "comments": {
+      "nodes": [],
+      "pageInfo": {
+        "endCursor": null,
+        "hasNextPage": false
+      },
+      "totalCount": 0
+    },
+    "commits": {
+      "nodes": [
+        {
+          "commit": {
+            "author": {
+              "email": "49699333+dependabot[bot]@users.noreply.github.com",
+              "name": "dependabot[bot]",
+              "user": {
+                "databaseId": 49699333,
+                "id": "MDM6Qm90NDk2OTkzMzM=",
+                "login": "dependabot[bot]"
+              }
+            },
+            "authoredDate": "2026-09-14T07:12:56Z",
+            "oid": "b96d8f34101d9b9e133eb82bbbfb844968bbf370"
+          }
+        }
+      ],
+      "pageInfo": {
+        "endCursor": "MQ",
+        "hasNextPage": false
+      },
+      "totalCount": 1
+    },
+    "createdAt": "2026-09-14T07:12:57Z",
+    "deletions": 3,
+    "editor": null,
+    "files": {
+      "nodes": [
+        {
+          "additions": 1,
+          "changeType": "MODIFIED",
+          "deletions": 1,
+          "path": "go.mod"
+        },
+        {
+          "additions": 2,
+          "changeType": "MODIFIED",
+          "deletions": 2,
+          "path": "go.sum"
+        }
+      ],
+      "pageInfo": {
+        "endCursor": "Mg",
+        "hasNextPage": false
+      },
+      "totalCount": 2
+    },
+    "fullDatabaseId": "4523847083",
+    "headRefName": "dependabot/go_modules/github.com/buger/jsonparser-1.1.2",
+    "headRefOid": "b96d8f34101d9b9e133eb82bbbfb844968bbf370",
+    "headRepository": {
+      "databaseId": 132915235,
+      "nameWithOwner": "prebid/go-gdpr"
+    },
+    "headRepositoryOwner": {
+      "id": "MDEyOk9yZ2FuaXphdGlvbjEzMjQyNzYw",
+      "login": "prebid"
+    },
+    "id": "PR_kwDOB-wgI88AAAABDaRtqw",
+    "includesCreatedEdit": false,
+    "isCrossRepository": false,
+    "isDraft": false,
+    "labels": {
+      "nodes": [
+        {
+          "id": "LA_kwDOB-wgI88AAAAC1mLtlA",
+          "name": "dependencies"
+        },
+        {
+          "id": "LA_kwDOB-wgI88AAAAC1mLtmw",
+          "name": "go"
+        }
+      ],
+      "pageInfo": {
+        "endCursor": "Mg",
+        "hasNextPage": false
+      },
+      "totalCount": 2
+    },
+    "lastEditedAt": null,
+    "maintainerCanModify": false,
+    "mergeCommit": null,
+    "mergeStateStatus": "BLOCKED",
+    "mergeable": "MERGEABLE",
+    "mergedAt": null,
+    "mergedBy": null,
+    "milestone": null,
+    "number": 50,
+    "potentialMergeCommit": {
+      "oid": "9623756770c07343d59f1935d2c9a535348497b8"
+    },
+    "publishedAt": "2026-09-14T07:12:57Z",
+    "reviewDecision": "REVIEW_REQUIRED",
+    "reviewRequests": {
+      "nodes": [],
+      "pageInfo": {
+        "endCursor": null,
+        "hasNextPage": false
+      },
+      "totalCount": 0
+    },
+    "reviews": {
+      "nodes": [],
+      "pageInfo": {
+        "endCursor": null,
+        "hasNextPage": false
+      },
+      "totalCount": 0
+    },
+    "stack": null,
+    "stackEntry": null,
+    "state": "OPEN",
+    "title": "Bump github.com/buger/jsonparser from 1.1.1 to 1.1.2",
+    "totalCommentsCount": 0,
+    "updatedAt": "2026-10-02T14:18:33Z",
+    "userLinkedClosingIssues": {
+      "nodes": [],
+      "pageInfo": {
+        "endCursor": null,
+        "hasNextPage": false
+      },
+      "totalCount": 0
+    }
+  },
+  "document_sha256": "3527b3fa77b23d4166d3a8a063506be04f20c8bec7cee75e2bf801d0d608c26c",
+  "errors": [],
+  "extra": {},
+  "headers": {
+    "date": "Tue, 20 Oct 2026 23:36:35 GMT",
+    "x-ratelimit-limit": "5000",
+    "x-ratelimit-remaining": "4975",
+    "x-ratelimit-reset": "1792541966",
+    "x-ratelimit-resource": "graphql",
+    "x-ratelimit-used": "25"
+  },
+  "key": {
+    "name": "go-gdpr",
+    "number": 50,
+    "owner": "prebid"
+  },
+  "kind": "pull_request",
+  "recorded_at": "2026-10-20T23:36:30Z",
+  "source": "live"
+}

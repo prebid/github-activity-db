@@ -29,6 +29,8 @@ from github_activity_db.source import documents
 FIXTURES = Path(__file__).resolve().parent.parent / "fixtures" / "source"
 RECORDED = FIXTURES / "recorded"
 SYNTHETIC = FIXTURES / "synthetic"
+# Every unit one repository's first sync asks for, recorded together (redesign plan Step 3b-2a-2c).
+FIRST_SYNC = FIXTURES / "first_sync"
 
 KEPT_HEADERS = ("date", "retry-after")
 KEPT_HEADER_PREFIX = "x-ratelimit-"

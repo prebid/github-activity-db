@@ -1,0 +1,507 @@
+{
+  "data": {
+    "additions": 306,
+    "assignedActors": {
+      "nodes": [],
+      "pageInfo": {
+        "endCursor": null,
+        "hasNextPage": false
+      },
+      "totalCount": 0
+    },
+    "author": {
+      "__typename": "User",
+      "databaseId": 59438,
+      "id": "MDQ6VXNlcjU5NDM4",
+      "login": "peczenyj"
+    },
+    "authorAssociation": "CONTRIBUTOR",
+    "baseRefName": "master",
+    "baseRefOid": "b00a67a67032c09e47f5d8d0d82d9518fa152ba0",
+    "body": "some improvements in format, imports and fix some lint issues",
+    "canBeRebased": false,
+    "changedFiles": 30,
+    "closedAt": "2026-09-14T07:11:16Z",
+    "closingIssuesReferences": {
+      "nodes": [],
+      "pageInfo": {
+        "endCursor": null,
+        "hasNextPage": false
+      },
+      "totalCount": 0
+    },
+    "comments": {
+      "nodes": [],
+      "pageInfo": {
+        "endCursor": null,
+        "hasNextPage": false
+      },
+      "totalCount": 0
+    },
+    "commits": {
+      "nodes": [
+        {
+          "commit": {
+            "author": {
+              "email": "tpeczenyj@weborama.com",
+              "name": "Tiago Peczenyj",
+              "user": {
+                "databaseId": 59438,
+                "id": "MDQ6VXNlcjU5NDM4",
+                "login": "peczenyj"
+              }
+            },
+            "authoredDate": "2025-04-21T22:58:50Z",
+            "oid": "978c21a2ff12d1c5b12fd5ad60b70a67b9194042"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "tpeczenyj@weborama.com",
+              "name": "Tiago Peczenyj",
+              "user": {
+                "databaseId": 59438,
+                "id": "MDQ6VXNlcjU5NDM4",
+                "login": "peczenyj"
+              }
+            },
+            "authoredDate": "2025-04-21T22:59:06Z",
+            "oid": "902c852ba2e6d443c45102a7e2671714acf9aee0"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "tpeczenyj@weborama.com",
+              "name": "Tiago Peczenyj",
+              "user": {
+                "databaseId": 59438,
+                "id": "MDQ6VXNlcjU5NDM4",
+                "login": "peczenyj"
+              }
+            },
+            "authoredDate": "2025-04-21T22:59:34Z",
+            "oid": "c4a3c1733ec70ed916ee444806313fd2d28f7d65"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "tpeczenyj@weborama.com",
+              "name": "Tiago Peczenyj",
+              "user": {
+                "databaseId": 59438,
+                "id": "MDQ6VXNlcjU5NDM4",
+                "login": "peczenyj"
+              }
+            },
+            "authoredDate": "2025-04-21T23:01:35Z",
+            "oid": "91c87109e7bd7adeecd8ccd062eab66d2d8ac3b1"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "tpeczenyj@weborama.com",
+              "name": "Tiago Peczenyj",
+              "user": {
+                "databaseId": 59438,
+                "id": "MDQ6VXNlcjU5NDM4",
+                "login": "peczenyj"
+              }
+            },
+            "authoredDate": "2025-04-21T23:04:20Z",
+            "oid": "e13e58565a014ce434b3895a984a2935c8f2abaa"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "tpeczenyj@weborama.com",
+              "name": "Tiago Peczenyj",
+              "user": {
+                "databaseId": 59438,
+                "id": "MDQ6VXNlcjU5NDM4",
+                "login": "peczenyj"
+              }
+            },
+            "authoredDate": "2025-04-21T23:08:20Z",
+            "oid": "cde13e90c8740085609de18b37499fbd6a71cbe8"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "tpeczenyj@weborama.com",
+              "name": "Tiago Peczenyj",
+              "user": {
+                "databaseId": 59438,
+                "id": "MDQ6VXNlcjU5NDM4",
+                "login": "peczenyj"
+              }
+            },
+            "authoredDate": "2025-04-21T23:08:43Z",
+            "oid": "994e0287bad436498601a7f470e01d6f3086a077"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "tpeczenyj@weborama.com",
+              "name": "Tiago Peczenyj",
+              "user": {
+                "databaseId": 59438,
+                "id": "MDQ6VXNlcjU5NDM4",
+                "login": "peczenyj"
+              }
+            },
+            "authoredDate": "2025-04-21T23:12:36Z",
+            "oid": "45168a0cff74902025f43a0de7fec80a73db937e"
+          }
+        }
+      ],
+      "pageInfo": {
+        "endCursor": "OA",
+        "hasNextPage": false
+      },
+      "totalCount": 8
+    },
+    "createdAt": "2025-04-21T23:13:32Z",
+    "deletions": 113,
+    "editor": null,
+    "files": {
+      "nodes": [
+        {
+          "additions": 16,
+          "changeType": "MODIFIED",
+          "deletions": 0,
+          "path": "bitutils/bitutils.go"
+        },
+        {
+          "additions": 12,
+          "changeType": "MODIFIED",
+          "deletions": 6,
+          "path": "bitutils/bitutils_test.go"
+        },
+        {
+          "additions": 2,
+          "changeType": "MODIFIED",
+          "deletions": 4,
+          "path": "consentconstants/errors.go"
+        },
+        {
+          "additions": 3,
+          "changeType": "MODIFIED",
+          "deletions": 3,
+          "path": "consentconstants/features.go"
+        },
+        {
+          "additions": 2,
+          "changeType": "MODIFIED",
+          "deletions": 2,
+          "path": "consentconstants/purposes.go"
+        },
+        {
+          "additions": 23,
+          "changeType": "MODIFIED",
+          "deletions": 11,
+          "path": "vendorconsent/benchmark_test.go"
+        },
+        {
+          "additions": 3,
+          "changeType": "MODIFIED",
+          "deletions": 1,
+          "path": "vendorconsent/consent20_test.go"
+        },
+        {
+          "additions": 18,
+          "changeType": "MODIFIED",
+          "deletions": 10,
+          "path": "vendorconsent/consent_test.go"
+        },
+        {
+          "additions": 3,
+          "changeType": "MODIFIED",
+          "deletions": 1,
+          "path": "vendorconsent/tcf1/bitfield.go"
+        },
+        {
+          "additions": 2,
+          "changeType": "MODIFIED",
+          "deletions": 0,
+          "path": "vendorconsent/tcf1/consent.go"
+        },
+        {
+          "additions": 13,
+          "changeType": "MODIFIED",
+          "deletions": 4,
+          "path": "vendorconsent/tcf1/metadata.go"
+        },
+        {
+          "additions": 2,
+          "changeType": "MODIFIED",
+          "deletions": 0,
+          "path": "vendorconsent/tcf1/metadata_test.go"
+        },
+        {
+          "additions": 17,
+          "changeType": "MODIFIED",
+          "deletions": 2,
+          "path": "vendorconsent/tcf1/rangesection.go"
+        },
+        {
+          "additions": 3,
+          "changeType": "MODIFIED",
+          "deletions": 1,
+          "path": "vendorconsent/tcf1/rangesection_test.go"
+        },
+        {
+          "additions": 16,
+          "changeType": "MODIFIED",
+          "deletions": 6,
+          "path": "vendorconsent/tcf1/test_utils.go"
+        },
+        {
+          "additions": 8,
+          "changeType": "MODIFIED",
+          "deletions": 1,
+          "path": "vendorconsent/tcf2/consent.go"
+        },
+        {
+          "additions": 20,
+          "changeType": "MODIFIED",
+          "deletions": 7,
+          "path": "vendorconsent/tcf2/metadata.go"
+        },
+        {
+          "additions": 33,
+          "changeType": "MODIFIED",
+          "deletions": 29,
+          "path": "vendorconsent/tcf2/metadata_test.go"
+        },
+        {
+          "additions": 16,
+          "changeType": "MODIFIED",
+          "deletions": 5,
+          "path": "vendorconsent/tcf2/pubrestrict.go"
+        },
+        {
+          "additions": 2,
+          "changeType": "MODIFIED",
+          "deletions": 0,
+          "path": "vendorconsent/tcf2/pubrestrict_test.go"
+        },
+        {
+          "additions": 12,
+          "changeType": "MODIFIED",
+          "deletions": 1,
+          "path": "vendorconsent/tcf2/rangesection.go"
+        },
+        {
+          "additions": 5,
+          "changeType": "MODIFIED",
+          "deletions": 0,
+          "path": "vendorconsent/tcf2/rangesection_test.go"
+        },
+        {
+          "additions": 16,
+          "changeType": "MODIFIED",
+          "deletions": 6,
+          "path": "vendorconsent/tcf2/test_utils.go"
+        },
+        {
+          "additions": 16,
+          "changeType": "MODIFIED",
+          "deletions": 7,
+          "path": "vendorlist/eager-parsing.go"
+        },
+        {
+          "additions": 1,
+          "changeType": "MODIFIED",
+          "deletions": 0,
+          "path": "vendorlist/eager-parsing_test.go"
+        },
+        {
+          "additions": 9,
+          "changeType": "MODIFIED",
+          "deletions": 2,
+          "path": "vendorlist/lazy-parsing.go"
+        },
+        {
+          "additions": 6,
+          "changeType": "MODIFIED",
+          "deletions": 2,
+          "path": "vendorlist/shared_test.go"
+        },
+        {
+          "additions": 13,
+          "changeType": "MODIFIED",
+          "deletions": 0,
+          "path": "vendorlist2/eager-parsing.go"
+        },
+        {
+          "additions": 8,
+          "changeType": "MODIFIED",
+          "deletions": 0,
+          "path": "vendorlist2/lazy-parsing.go"
+        },
+        {
+          "additions": 6,
+          "changeType": "MODIFIED",
+          "deletions": 2,
+          "path": "vendorlist2/shared_test.go"
+        }
+      ],
+      "pageInfo": {
+        "endCursor": "MzA",
+        "hasNextPage": false
+      },
+      "totalCount": 30
+    },
+    "fullDatabaseId": "2472199814",
+    "headRefName": "run-gofumpt-and-goimport",
+    "headRefOid": "45168a0cff74902025f43a0de7fec80a73db937e",
+    "headRepository": {
+      "databaseId": 263343620,
+      "nameWithOwner": "peczenyj/go-gdpr"
+    },
+    "headRepositoryOwner": {
+      "id": "MDQ6VXNlcjU5NDM4",
+      "login": "peczenyj"
+    },
+    "id": "PR_kwDOB-wgI86TWsaG",
+    "includesCreatedEdit": false,
+    "isCrossRepository": true,
+    "isDraft": false,
+    "labels": {
+      "nodes": [],
+      "pageInfo": {
+        "endCursor": null,
+        "hasNextPage": false
+      },
+      "totalCount": 0
+    },
+    "lastEditedAt": null,
+    "maintainerCanModify": false,
+    "mergeCommit": {
+      "oid": "a2e2d15c3427af846a74de197200646656f57710"
+    },
+    "mergeStateStatus": "UNKNOWN",
+    "mergeable": "UNKNOWN",
+    "mergedAt": "2026-09-14T07:11:16Z",
+    "mergedBy": {
+      "__typename": "User",
+      "databaseId": 37686606,
+      "id": "MDQ6VXNlcjM3Njg2NjA2",
+      "login": "karwaankit32"
+    },
+    "milestone": null,
+    "number": 44,
+    "potentialMergeCommit": null,
+    "publishedAt": "2025-04-21T23:13:32Z",
+    "reviewDecision": "APPROVED",
+    "reviewRequests": {
+      "nodes": [],
+      "pageInfo": {
+        "endCursor": null,
+        "hasNextPage": false
+      },
+      "totalCount": 0
+    },
+    "reviews": {
+      "nodes": [
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 37686606,
+            "id": "MDQ6VXNlcjM3Njg2NjA2",
+            "login": "karwaankit32"
+          },
+          "authorAssociation": "MEMBER",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 0
+          },
+          "commit": {
+            "oid": "45168a0cff74902025f43a0de7fec80a73db937e"
+          },
+          "createdAt": "2026-07-06T06:27:43Z",
+          "editor": null,
+          "fullDatabaseId": "4633334592",
+          "id": "PRR_kwDOB-wgI88AAAABFCsTQA",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-07-06T06:27:43Z",
+          "state": "APPROVED",
+          "submittedAt": "2026-07-06T06:27:43Z",
+          "updatedAt": "2026-07-06T06:27:43Z"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 122366082,
+            "id": "U_kgDOB0sogg",
+            "login": "anishb-ms"
+          },
+          "authorAssociation": "MEMBER",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 0
+          },
+          "commit": {
+            "oid": "45168a0cff74902025f43a0de7fec80a73db937e"
+          },
+          "createdAt": "2026-07-06T11:36:25Z",
+          "editor": null,
+          "fullDatabaseId": "4635437343",
+          "id": "PRR_kwDOB-wgI88AAAABFEspHw",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-07-06T11:36:25Z",
+          "state": "APPROVED",
+          "submittedAt": "2026-07-06T11:36:25Z",
+          "updatedAt": "2026-07-06T11:36:25Z"
+        }
+      ],
+      "pageInfo": {
+        "endCursor": "Y3Vyc29yOnYyOpO0MjAyNi0wNy0wNlQxMTozNjoyNVq0MjAyNi0wNy0wNlQxMTozNjoyNVrPAAAAARRLKR8=",
+        "hasNextPage": false
+      },
+      "totalCount": 2
+    },
+    "stack": null,
+    "stackEntry": null,
+    "state": "MERGED",
+    "title": "Run gofumpt and goimport and fix some linter issues",
+    "totalCommentsCount": 0,
+    "updatedAt": "2026-09-14T07:11:17Z",
+    "userLinkedClosingIssues": {
+      "nodes": [],
+      "pageInfo": {
+        "endCursor": null,
+        "hasNextPage": false
+      },
+      "totalCount": 0
+    }
+  },
+  "document_sha256": "3527b3fa77b23d4166d3a8a063506be04f20c8bec7cee75e2bf801d0d608c26c",
+  "errors": [],
+  "extra": {},
+  "headers": {
+    "date": "Tue, 20 Oct 2026 23:36:35 GMT",
+    "x-ratelimit-limit": "5000",
+    "x-ratelimit-remaining": "4975",
+    "x-ratelimit-reset": "1792541966",
+    "x-ratelimit-resource": "graphql",
+    "x-ratelimit-used": "25"
+  },
+  "key": {
+    "name": "go-gdpr",
+    "number": 44,
+    "owner": "prebid"
+  },
+  "kind": "pull_request",
+  "recorded_at": "2026-10-20T23:36:30Z",
+  "source": "live"
+}

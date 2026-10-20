@@ -1,0 +1,407 @@
+{
+  "data": {
+    "additions": 89,
+    "assignedActors": {
+      "nodes": [],
+      "pageInfo": {
+        "endCursor": null,
+        "hasNextPage": false
+      },
+      "totalCount": 0
+    },
+    "author": {
+      "__typename": "User",
+      "databaseId": 59438,
+      "id": "MDQ6VXNlcjU5NDM4",
+      "login": "peczenyj"
+    },
+    "authorAssociation": "CONTRIBUTOR",
+    "baseRefName": "master",
+    "baseRefOid": "b00a67a67032c09e47f5d8d0d82d9518fa152ba0",
+    "body": "1. I note that one unit tests was failing\r\n2. since the min go version is 1.13 we can use %w to wrap error instead perform string interpolation with %s\r\n3. I fix one typo in one error message\r\n4. In one case I switch from `fmt.Errorf` to `errors.New` since the has a simple string message.",
+    "canBeRebased": false,
+    "changedFiles": 10,
+    "closedAt": "2026-09-14T07:10:59Z",
+    "closingIssuesReferences": {
+      "nodes": [],
+      "pageInfo": {
+        "endCursor": null,
+        "hasNextPage": false
+      },
+      "totalCount": 0
+    },
+    "comments": {
+      "nodes": [],
+      "pageInfo": {
+        "endCursor": null,
+        "hasNextPage": false
+      },
+      "totalCount": 0
+    },
+    "commits": {
+      "nodes": [
+        {
+          "commit": {
+            "author": {
+              "email": "tpeczenyj@weborama.com",
+              "name": "Tiago Peczenyj",
+              "user": {
+                "databaseId": 59438,
+                "id": "MDQ6VXNlcjU5NDM4",
+                "login": "peczenyj"
+              }
+            },
+            "authoredDate": "2025-04-21T22:36:20Z",
+            "oid": "fd6282ac027720e0d96b4287b85f3bc893c76a75"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "tpeczenyj@weborama.com",
+              "name": "Tiago Peczenyj",
+              "user": {
+                "databaseId": 59438,
+                "id": "MDQ6VXNlcjU5NDM4",
+                "login": "peczenyj"
+              }
+            },
+            "authoredDate": "2025-04-21T22:36:50Z",
+            "oid": "8f567fc94355276c7562a5833af8fb1c6c1e9ad8"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "tpeczenyj@weborama.com",
+              "name": "Tiago Peczenyj",
+              "user": {
+                "databaseId": 59438,
+                "id": "MDQ6VXNlcjU5NDM4",
+                "login": "peczenyj"
+              }
+            },
+            "authoredDate": "2025-04-21T22:40:16Z",
+            "oid": "4f11892d77208a9db1f1f61e496a914179b2c81d"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "tpeczenyj@weborama.com",
+              "name": "Tiago Peczenyj",
+              "user": {
+                "databaseId": 59438,
+                "id": "MDQ6VXNlcjU5NDM4",
+                "login": "peczenyj"
+              }
+            },
+            "authoredDate": "2025-04-21T22:40:35Z",
+            "oid": "097e101bee7109c6fc6f4eeb2500edb7c8f499e9"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "tpeczenyj@weborama.com",
+              "name": "Tiago Peczenyj",
+              "user": {
+                "databaseId": 59438,
+                "id": "MDQ6VXNlcjU5NDM4",
+                "login": "peczenyj"
+              }
+            },
+            "authoredDate": "2025-04-21T22:43:17Z",
+            "oid": "a5bae1a9544a61b9687a17094a89790cb5611990"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "tpeczenyj@weborama.com",
+              "name": "Tiago Peczenyj",
+              "user": {
+                "databaseId": 59438,
+                "id": "MDQ6VXNlcjU5NDM4",
+                "login": "peczenyj"
+              }
+            },
+            "authoredDate": "2025-04-22T07:11:53Z",
+            "oid": "1b4ece96c71708f9f14407fc177364fcbdfad89f"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "tpeczenyj@weborama.com",
+              "name": "Tiago Peczenyj",
+              "user": {
+                "databaseId": 59438,
+                "id": "MDQ6VXNlcjU5NDM4",
+                "login": "peczenyj"
+              }
+            },
+            "authoredDate": "2025-04-22T07:13:53Z",
+            "oid": "10cacd440e4578a530b6909785d59d9c20dcef96"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "tpeczenyj@weborama.com",
+              "name": "Tiago Peczenyj",
+              "user": {
+                "databaseId": 59438,
+                "id": "MDQ6VXNlcjU5NDM4",
+                "login": "peczenyj"
+              }
+            },
+            "authoredDate": "2025-04-22T07:19:11Z",
+            "oid": "761d8986db1ee739397032cab87c0069bce9d934"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "tpeczenyj@weborama.com",
+              "name": "Tiago Peczenyj",
+              "user": {
+                "databaseId": 59438,
+                "id": "MDQ6VXNlcjU5NDM4",
+                "login": "peczenyj"
+              }
+            },
+            "authoredDate": "2025-04-22T07:20:49Z",
+            "oid": "d902cd567319ada1348be147f5e71a851d427637"
+          }
+        }
+      ],
+      "pageInfo": {
+        "endCursor": "OQ",
+        "hasNextPage": false
+      },
+      "totalCount": 9
+    },
+    "createdAt": "2025-04-21T22:48:14Z",
+    "deletions": 16,
+    "editor": {
+      "__typename": "User",
+      "databaseId": 59438,
+      "id": "MDQ6VXNlcjU5NDM4",
+      "login": "peczenyj"
+    },
+    "files": {
+      "nodes": [
+        {
+          "additions": 29,
+          "changeType": "ADDED",
+          "deletions": 0,
+          "path": ".github/workflows/go.yml"
+        },
+        {
+          "additions": 43,
+          "changeType": "ADDED",
+          "deletions": 0,
+          "path": "Makefile"
+        },
+        {
+          "additions": 2,
+          "changeType": "MODIFIED",
+          "deletions": 0,
+          "path": "README.md"
+        },
+        {
+          "additions": 5,
+          "changeType": "MODIFIED",
+          "deletions": 5,
+          "path": "bitutils/bitutils.go"
+        },
+        {
+          "additions": 2,
+          "changeType": "MODIFIED",
+          "deletions": 2,
+          "path": "bitutils/bitutils_test.go"
+        },
+        {
+          "additions": 1,
+          "changeType": "MODIFIED",
+          "deletions": 1,
+          "path": "go.mod"
+        },
+        {
+          "additions": 1,
+          "changeType": "MODIFIED",
+          "deletions": 2,
+          "path": "go.sum"
+        },
+        {
+          "additions": 1,
+          "changeType": "MODIFIED",
+          "deletions": 1,
+          "path": "vendorconsent/consent20_test.go"
+        },
+        {
+          "additions": 2,
+          "changeType": "MODIFIED",
+          "deletions": 2,
+          "path": "vendorconsent/tcf2/consent.go"
+        },
+        {
+          "additions": 3,
+          "changeType": "MODIFIED",
+          "deletions": 3,
+          "path": "vendorconsent/tcf2/pubrestrict.go"
+        }
+      ],
+      "pageInfo": {
+        "endCursor": "MTA",
+        "hasNextPage": false
+      },
+      "totalCount": 10
+    },
+    "fullDatabaseId": "2472175545",
+    "headRefName": "small-refactor-on-errors",
+    "headRefOid": "d902cd567319ada1348be147f5e71a851d427637",
+    "headRepository": {
+      "databaseId": 263343620,
+      "nameWithOwner": "peczenyj/go-gdpr"
+    },
+    "headRepositoryOwner": {
+      "id": "MDQ6VXNlcjU5NDM4",
+      "login": "peczenyj"
+    },
+    "id": "PR_kwDOB-wgI86TWme5",
+    "includesCreatedEdit": true,
+    "isCrossRepository": true,
+    "isDraft": false,
+    "labels": {
+      "nodes": [],
+      "pageInfo": {
+        "endCursor": null,
+        "hasNextPage": false
+      },
+      "totalCount": 0
+    },
+    "lastEditedAt": "2025-04-21T22:49:23Z",
+    "maintainerCanModify": false,
+    "mergeCommit": {
+      "oid": "ae18030b09911735bb950b92b7623c72fa4fc6ba"
+    },
+    "mergeStateStatus": "UNKNOWN",
+    "mergeable": "UNKNOWN",
+    "mergedAt": "2026-09-14T07:10:59Z",
+    "mergedBy": {
+      "__typename": "User",
+      "databaseId": 37686606,
+      "id": "MDQ6VXNlcjM3Njg2NjA2",
+      "login": "karwaankit32"
+    },
+    "milestone": null,
+    "number": 43,
+    "potentialMergeCommit": null,
+    "publishedAt": "2025-04-21T22:48:14Z",
+    "reviewDecision": "APPROVED",
+    "reviewRequests": {
+      "nodes": [],
+      "pageInfo": {
+        "endCursor": null,
+        "hasNextPage": false
+      },
+      "totalCount": 0
+    },
+    "reviews": {
+      "nodes": [
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 37686606,
+            "id": "MDQ6VXNlcjM3Njg2NjA2",
+            "login": "karwaankit32"
+          },
+          "authorAssociation": "MEMBER",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 0
+          },
+          "commit": {
+            "oid": "d902cd567319ada1348be147f5e71a851d427637"
+          },
+          "createdAt": "2026-07-06T06:23:53Z",
+          "editor": null,
+          "fullDatabaseId": "4633318370",
+          "id": "PRR_kwDOB-wgI88AAAABFCrT4g",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-07-06T06:23:53Z",
+          "state": "APPROVED",
+          "submittedAt": "2026-07-06T06:23:53Z",
+          "updatedAt": "2026-07-06T06:23:53Z"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 122366082,
+            "id": "U_kgDOB0sogg",
+            "login": "anishb-ms"
+          },
+          "authorAssociation": "MEMBER",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 0
+          },
+          "commit": {
+            "oid": "d902cd567319ada1348be147f5e71a851d427637"
+          },
+          "createdAt": "2026-07-06T11:53:26Z",
+          "editor": null,
+          "fullDatabaseId": "4635543406",
+          "id": "PRR_kwDOB-wgI88AAAABFEzHbg",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-07-06T11:53:26Z",
+          "state": "APPROVED",
+          "submittedAt": "2026-07-06T11:53:26Z",
+          "updatedAt": "2026-07-06T11:53:26Z"
+        }
+      ],
+      "pageInfo": {
+        "endCursor": "Y3Vyc29yOnYyOpO0MjAyNi0wNy0wNlQxMTo1MzoyNlq0MjAyNi0wNy0wNlQxMTo1MzoyNlrPAAAAARRMx24=",
+        "hasNextPage": false
+      },
+      "totalCount": 2
+    },
+    "stack": null,
+    "stackEntry": null,
+    "state": "MERGED",
+    "title": "fix unit test and perform small refactor on other errors",
+    "totalCommentsCount": 0,
+    "updatedAt": "2026-09-14T07:10:59Z",
+    "userLinkedClosingIssues": {
+      "nodes": [],
+      "pageInfo": {
+        "endCursor": null,
+        "hasNextPage": false
+      },
+      "totalCount": 0
+    }
+  },
+  "document_sha256": "3527b3fa77b23d4166d3a8a063506be04f20c8bec7cee75e2bf801d0d608c26c",
+  "errors": [],
+  "extra": {},
+  "headers": {
+    "date": "Tue, 20 Oct 2026 23:36:35 GMT",
+    "x-ratelimit-limit": "5000",
+    "x-ratelimit-remaining": "4975",
+    "x-ratelimit-reset": "1792541966",
+    "x-ratelimit-resource": "graphql",
+    "x-ratelimit-used": "25"
+  },
+  "key": {
+    "name": "go-gdpr",
+    "number": 43,
+    "owner": "prebid"
+  },
+  "kind": "pull_request",
+  "recorded_at": "2026-10-20T23:36:30Z",
+  "source": "live"
+}

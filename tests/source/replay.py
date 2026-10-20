@@ -14,6 +14,7 @@ import json
 import re
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 import httpx
@@ -94,6 +95,14 @@ class Replay:
         replay = cls()
         for unit in loaded_units():
             replay.add(copy.deepcopy(unit))
+        return replay
+
+    @classmethod
+    def from_directory(cls, directory: Path) -> Replay:
+        """Serve only the units recorded under ``directory`` (a first sync's, for example)."""
+        replay = cls()
+        for path in sorted(directory.rglob("*.json")):
+            replay.add(Unit.load(path))
         return replay
 
     def add(self, unit: Unit) -> None:

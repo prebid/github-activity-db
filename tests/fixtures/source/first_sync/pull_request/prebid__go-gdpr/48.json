@@ -1,0 +1,439 @@
+{
+  "data": {
+    "additions": 456,
+    "assignedActors": {
+      "nodes": [],
+      "pageInfo": {
+        "endCursor": null,
+        "hasNextPage": false
+      },
+      "totalCount": 0
+    },
+    "author": {
+      "__typename": "User",
+      "databaseId": 16453882,
+      "id": "MDQ6VXNlcjE2NDUzODgy",
+      "login": "osazos"
+    },
+    "authorAssociation": "MEMBER",
+    "baseRefName": "master",
+    "baseRefOid": "b00a67a67032c09e47f5d8d0d82d9518fa152ba0",
+    "body": "This PR implements support for the TCF 2.3 Disclosed Vendors segment (https://github.com/prebid/go-gdpr/issues/46), which becomes mandatory on March 1st, 2025. Given the short timeline for compliance, I extended the existing `ConsentMetadata` structure to parse and store disclosed vendors data, reusing the established `parseBitField()` and `parseRangeSection()` patterns. The implementation fully supports both BitField and RangeSection encoding modes as specified in the TCF 2.3 standard. While this approach delivers quickly and maintains backward compatibility, future refactoring should separate segment parsing concerns for better modularity.\r\n\r\n### Changes\r\n- **API Extension**: Added `VendorDisclosed(id)`, `VendorDisclosedMaxVendorId()`, and `HasDisclosedVendors()` methods to the `VendorConsents` interface\r\n- **Segment Parsing**: Created `disclosed_vendors.go` to parse the Disclosed Vendors segment (segment type 1) with **full support for both BitField (IsRangeEncoding=0) and RangeSection (IsRangeEncoding=1) encoding modes**\r\n- **Core String Parsing**: Modified `parseWithDisclosedVendors()` to iterate through consent string segments and detect the disclosed vendors segment by type\r\n- **Metadata Storage**: Extended `ConsentMetadata` struct with `disclosedVendors` and `hasDisclosedVendors` fields\r\n- **Backward Compatibility**: TCF 2.0/2.2 consent strings without disclosed vendors segment continue to work correctly (`VendorDisclosed()` returns `false`)\r\n- **Range Section Fix**: Updated `parseRangeSection()` to calculate minimum required bytes dynamically instead of using a hardcoded 31-byte check, enabling proper segment parsing\r\n\r\n### Testing\r\n- Comprehensive test coverage in `disclosed_vendors_test.go` for BitField encoding\r\n- Tests validate segment type detection, max vendor ID parsing, and consent queries  \r\n- Multiple segments can appear in any order (tested in `TestSegmentsInAnyOrder`)\r\n- Backward compatibility tests ensure legacy consent strings behave correctly\r\n- RangeSection encoding is fully implemented and code paths are tested through existing TCF 2.0 core string tests\r\n\r\n### Technical Details\r\nSegments after the core string can appear in any order, so the parser checks each segment's type before processing. The implementation correctly handles both encoding modes by checking bit 19 and delegating to either `parseBitField()` or `parseRangeSection()` accordingly.\r\n\r\n### Future Considerations\r\nThe current implementation tightly couples segment parsing within `ConsentMetadata`. As the TCF spec evolves and additional segments are needed (e.g., Publisher TC), consider refactoring to a cleaner segment-based architecture where each segment type has its own parser and data structure.",
+    "canBeRebased": false,
+    "changedFiles": 12,
+    "closedAt": null,
+    "closingIssuesReferences": {
+      "nodes": [],
+      "pageInfo": {
+        "endCursor": null,
+        "hasNextPage": false
+      },
+      "totalCount": 0
+    },
+    "comments": {
+      "nodes": [
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 48512286,
+            "id": "MDQ6VXNlcjQ4NTEyMjg2",
+            "login": "Katarzyna-B"
+          },
+          "authorAssociation": "NONE",
+          "createdAt": "2026-02-09T09:12:34Z",
+          "createdViaEmail": false,
+          "editor": null,
+          "fullDatabaseId": "3870365804",
+          "id": "IC_kwDOB-wgI87msRhs",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-02-09T09:12:34Z",
+          "updatedAt": "2026-02-09T09:12:34Z"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 161243,
+            "id": "MDQ6VXNlcjE2MTI0Mw==",
+            "login": "arachman"
+          },
+          "authorAssociation": "NONE",
+          "createdAt": "2026-02-24T19:27:42Z",
+          "createdViaEmail": false,
+          "editor": null,
+          "fullDatabaseId": "3954270662",
+          "id": "IC_kwDOB-wgI87rsWHG",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-02-24T19:27:42Z",
+          "updatedAt": "2026-02-24T19:27:42Z"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 1168933,
+            "id": "MDQ6VXNlcjExNjg5MzM=",
+            "login": "bsardo"
+          },
+          "authorAssociation": "MEMBER",
+          "createdAt": "2026-02-25T14:58:53Z",
+          "createdViaEmail": false,
+          "editor": null,
+          "fullDatabaseId": "3959885629",
+          "id": "IC_kwDOB-wgI87sBw89",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-02-25T14:58:53Z",
+          "updatedAt": "2026-02-25T14:58:53Z"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 16453882,
+            "id": "MDQ6VXNlcjE2NDUzODgy",
+            "login": "osazos"
+          },
+          "authorAssociation": "MEMBER",
+          "createdAt": "2026-02-25T15:07:36Z",
+          "createdViaEmail": false,
+          "editor": null,
+          "fullDatabaseId": "3959953966",
+          "id": "IC_kwDOB-wgI87sCBou",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-02-25T15:07:36Z",
+          "updatedAt": "2026-02-25T15:07:36Z"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 48512286,
+            "id": "MDQ6VXNlcjQ4NTEyMjg2",
+            "login": "Katarzyna-B"
+          },
+          "authorAssociation": "NONE",
+          "createdAt": "2026-07-17T08:56:41Z",
+          "createdViaEmail": false,
+          "editor": null,
+          "fullDatabaseId": "5001020508",
+          "id": "IC_kwDOB-wgI88AAAABKhWEXA",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-07-17T08:56:41Z",
+          "updatedAt": "2026-07-17T08:56:41Z"
+        }
+      ],
+      "pageInfo": {
+        "endCursor": "Y3Vyc29yOnYyOpHPAAAAASoVhFw=",
+        "hasNextPage": false
+      },
+      "totalCount": 5
+    },
+    "commits": {
+      "nodes": [
+        {
+          "commit": {
+            "author": {
+              "email": "osazos@adagio.io",
+              "name": "Olivier Sazos",
+              "user": {
+                "databaseId": 16453882,
+                "id": "MDQ6VXNlcjE2NDUzODgy",
+                "login": "osazos"
+              }
+            },
+            "authoredDate": "2026-01-08T09:57:26Z",
+            "oid": "6414d748da407b9cb1249c30b93600335d6bef8f"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "osazos@adagio.io",
+              "name": "Olivier Sazos",
+              "user": {
+                "databaseId": 16453882,
+                "id": "MDQ6VXNlcjE2NDUzODgy",
+                "login": "osazos"
+              }
+            },
+            "authoredDate": "2026-02-12T13:49:59Z",
+            "oid": "f81eef30336c9977b2ec5a558b222606b79ef9ac"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "osazos@adagio.io",
+              "name": "Olivier Sazos",
+              "user": {
+                "databaseId": 16453882,
+                "id": "MDQ6VXNlcjE2NDUzODgy",
+                "login": "osazos"
+              }
+            },
+            "authoredDate": "2026-03-04T14:59:51Z",
+            "oid": "ecb9159fee8208992bf97a30433a2927353706bc"
+          }
+        }
+      ],
+      "pageInfo": {
+        "endCursor": "Mw",
+        "hasNextPage": false
+      },
+      "totalCount": 3
+    },
+    "createdAt": "2026-02-05T12:41:30Z",
+    "deletions": 46,
+    "editor": {
+      "__typename": "User",
+      "databaseId": 16453882,
+      "id": "MDQ6VXNlcjE2NDUzODgy",
+      "login": "osazos"
+    },
+    "files": {
+      "nodes": [
+        {
+          "additions": 22,
+          "changeType": "MODIFIED",
+          "deletions": 0,
+          "path": "api/consent.go"
+        },
+        {
+          "additions": 7,
+          "changeType": "MODIFIED",
+          "deletions": 1,
+          "path": "go.mod"
+        },
+        {
+          "additions": 1,
+          "changeType": "MODIFIED",
+          "deletions": 2,
+          "path": "go.sum"
+        },
+        {
+          "additions": 2,
+          "changeType": "MODIFIED",
+          "deletions": 2,
+          "path": "vendorconsent/consent20_test.go"
+        },
+        {
+          "additions": 13,
+          "changeType": "MODIFIED",
+          "deletions": 0,
+          "path": "vendorconsent/tcf1/metadata.go"
+        },
+        {
+          "additions": 19,
+          "changeType": "MODIFIED",
+          "deletions": 0,
+          "path": "vendorconsent/tcf1/metadata_test.go"
+        },
+        {
+          "additions": 87,
+          "changeType": "MODIFIED",
+          "deletions": 10,
+          "path": "vendorconsent/tcf2/consent.go"
+        },
+        {
+          "additions": 56,
+          "changeType": "ADDED",
+          "deletions": 0,
+          "path": "vendorconsent/tcf2/disclosed_vendors.go"
+        },
+        {
+          "additions": 153,
+          "changeType": "ADDED",
+          "deletions": 0,
+          "path": "vendorconsent/tcf2/disclosed_vendors_test.go"
+        },
+        {
+          "additions": 26,
+          "changeType": "MODIFIED",
+          "deletions": 1,
+          "path": "vendorconsent/tcf2/metadata.go"
+        },
+        {
+          "additions": 66,
+          "changeType": "MODIFIED",
+          "deletions": 28,
+          "path": "vendorconsent/tcf2/metadata_test.go"
+        },
+        {
+          "additions": 4,
+          "changeType": "MODIFIED",
+          "deletions": 2,
+          "path": "vendorconsent/tcf2/rangesection.go"
+        }
+      ],
+      "pageInfo": {
+        "endCursor": "MTI",
+        "hasNextPage": false
+      },
+      "totalCount": 12
+    },
+    "fullDatabaseId": "3250042830",
+    "headRefName": "feature/tcf-2.3",
+    "headRefOid": "ecb9159fee8208992bf97a30433a2927353706bc",
+    "headRepository": {
+      "databaseId": 1149786292,
+      "nameWithOwner": "onfocusio/go-gdpr"
+    },
+    "headRepositoryOwner": {
+      "id": "MDEyOk9yZ2FuaXphdGlvbjIwMTYyNDk0",
+      "login": "onfocusio"
+    },
+    "id": "PR_kwDOB-wgI87Bt7fO",
+    "includesCreatedEdit": true,
+    "isCrossRepository": true,
+    "isDraft": false,
+    "labels": {
+      "nodes": [],
+      "pageInfo": {
+        "endCursor": null,
+        "hasNextPage": false
+      },
+      "totalCount": 0
+    },
+    "lastEditedAt": "2026-02-05T12:45:24Z",
+    "maintainerCanModify": false,
+    "mergeCommit": null,
+    "mergeStateStatus": "DIRTY",
+    "mergeable": "CONFLICTING",
+    "mergedAt": null,
+    "mergedBy": null,
+    "milestone": null,
+    "number": 48,
+    "potentialMergeCommit": null,
+    "publishedAt": "2026-02-05T12:41:30Z",
+    "reviewDecision": "APPROVED",
+    "reviewRequests": {
+      "nodes": [],
+      "pageInfo": {
+        "endCursor": null,
+        "hasNextPage": false
+      },
+      "totalCount": 0
+    },
+    "reviews": {
+      "nodes": [
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 7191745,
+            "id": "MDQ6VXNlcjcxOTE3NDU=",
+            "login": "vladmunteanu"
+          },
+          "authorAssociation": "NONE",
+          "authorCanPushToRepository": false,
+          "comments": {
+            "totalCount": 1
+          },
+          "commit": {
+            "oid": "f3fe2611255abae617ea6a3124a9471f0b490453"
+          },
+          "createdAt": "2026-02-28T06:43:12Z",
+          "editor": null,
+          "fullDatabaseId": "3870158897",
+          "id": "PRR_kwDOB-wgI87mrfAx",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-02-28T06:43:12Z",
+          "state": "COMMENTED",
+          "submittedAt": "2026-02-28T06:43:12Z",
+          "updatedAt": "2026-02-28T06:43:12Z"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 31041505,
+            "id": "MDQ6VXNlcjMxMDQxNTA1",
+            "login": "hhhjort"
+          },
+          "authorAssociation": "MEMBER",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 0
+          },
+          "commit": {
+            "oid": "ecb9159fee8208992bf97a30433a2927353706bc"
+          },
+          "createdAt": "2026-06-29T17:25:24Z",
+          "editor": null,
+          "fullDatabaseId": "4593986506",
+          "id": "PRR_kwDOB-wgI88AAAABEdKryg",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-06-29T17:25:24Z",
+          "state": "APPROVED",
+          "submittedAt": "2026-06-29T17:25:24Z",
+          "updatedAt": "2026-06-29T17:25:24Z"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 122366082,
+            "id": "U_kgDOB0sogg",
+            "login": "anishb-ms"
+          },
+          "authorAssociation": "MEMBER",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 0
+          },
+          "commit": {
+            "oid": "ecb9159fee8208992bf97a30433a2927353706bc"
+          },
+          "createdAt": "2026-07-06T11:05:29Z",
+          "editor": null,
+          "fullDatabaseId": "4635236270",
+          "id": "PRR_kwDOB-wgI88AAAABFEgXrg",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-07-06T11:05:29Z",
+          "state": "APPROVED",
+          "submittedAt": "2026-07-06T11:05:29Z",
+          "updatedAt": "2026-07-06T11:05:29Z"
+        }
+      ],
+      "pageInfo": {
+        "endCursor": "Y3Vyc29yOnYyOpO0MjAyNi0wNy0wNlQxMTowNToyOVq0MjAyNi0wNy0wNlQxMTowNToyOVrPAAAAARRIF64=",
+        "hasNextPage": false
+      },
+      "totalCount": 3
+    },
+    "stack": null,
+    "stackEntry": null,
+    "state": "OPEN",
+    "title": "Add TCF 2.3 support",
+    "totalCommentsCount": 7,
+    "updatedAt": "2026-07-17T08:56:41Z",
+    "userLinkedClosingIssues": {
+      "nodes": [],
+      "pageInfo": {
+        "endCursor": null,
+        "hasNextPage": false
+      },
+      "totalCount": 0
+    }
+  },
+  "document_sha256": "3527b3fa77b23d4166d3a8a063506be04f20c8bec7cee75e2bf801d0d608c26c",
+  "errors": [],
+  "extra": {},
+  "headers": {
+    "date": "Tue, 20 Oct 2026 23:36:35 GMT",
+    "x-ratelimit-limit": "5000",
+    "x-ratelimit-remaining": "4975",
+    "x-ratelimit-reset": "1792541966",
+    "x-ratelimit-resource": "graphql",
+    "x-ratelimit-used": "25"
+  },
+  "key": {
+    "name": "go-gdpr",
+    "number": 48,
+    "owner": "prebid"
+  },
+  "kind": "pull_request",
+  "recorded_at": "2026-10-20T23:36:30Z",
+  "source": "live"
+}

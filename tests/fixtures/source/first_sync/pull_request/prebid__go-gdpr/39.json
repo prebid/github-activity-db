@@ -1,0 +1,270 @@
+{
+  "data": {
+    "additions": 39,
+    "assignedActors": {
+      "nodes": [
+        {
+          "__typename": "User",
+          "databaseId": 1168933,
+          "id": "MDQ6VXNlcjExNjg5MzM=",
+          "login": "bsardo"
+        },
+        {
+          "__typename": "User",
+          "databaseId": 31041505,
+          "id": "MDQ6VXNlcjMxMDQxNTA1",
+          "login": "hhhjort"
+        }
+      ],
+      "pageInfo": {
+        "endCursor": "Mg",
+        "hasNextPage": false
+      },
+      "totalCount": 2
+    },
+    "author": {
+      "__typename": "User",
+      "databaseId": 29255587,
+      "id": "MDQ6VXNlcjI5MjU1NTg3",
+      "login": "sebmil-daily"
+    },
+    "authorAssociation": "CONTRIBUTOR",
+    "baseRefName": "master",
+    "baseRefOid": "43b98940eccdb7780348ed52e82a9478460be487",
+    "body": "This PR contains 2 fixes:\r\n* The `bytesRequired` amount in `parseBitField` was incorrectly rounded down which could lead to out of bound issue\r\n* There was no test before reading at `legitIntStart+16` which can create out of bound issues with invalid consent strings\r\n\r\nIt also adds 3 tests:\r\n* Validate the correct processing of `bytesRequired` in `parseBitField`\r\n* Proof of concept that allows the previously unfixed code to crash:\r\n    * with a crafted consent string going through the initial `parseRangeSection`\r\n    * with a crafted consent string going through the initial `parseBitField`",
+    "canBeRebased": false,
+    "changedFiles": 5,
+    "closedAt": "2023-11-28T15:42:59Z",
+    "closingIssuesReferences": {
+      "nodes": [],
+      "pageInfo": {
+        "endCursor": null,
+        "hasNextPage": false
+      },
+      "totalCount": 0
+    },
+    "comments": {
+      "nodes": [],
+      "pageInfo": {
+        "endCursor": null,
+        "hasNextPage": false
+      },
+      "totalCount": 0
+    },
+    "commits": {
+      "nodes": [
+        {
+          "commit": {
+            "author": {
+              "email": "sebastien.millet@dailymotion.com",
+              "name": "Sébastien Millet",
+              "user": {
+                "databaseId": 29255587,
+                "id": "MDQ6VXNlcjI5MjU1NTg3",
+                "login": "sebmil-daily"
+              }
+            },
+            "authoredDate": "2023-11-20T16:35:46Z",
+            "oid": "b331aa2acade04fedf8cb21fd76d6600a82f9d55"
+          }
+        }
+      ],
+      "pageInfo": {
+        "endCursor": "MQ",
+        "hasNextPage": false
+      },
+      "totalCount": 1
+    },
+    "createdAt": "2023-11-20T16:36:33Z",
+    "deletions": 1,
+    "editor": {
+      "__typename": "User",
+      "databaseId": 29255587,
+      "id": "MDQ6VXNlcjI5MjU1NTg3",
+      "login": "sebmil-daily"
+    },
+    "files": {
+      "nodes": [
+        {
+          "additions": 2,
+          "changeType": "MODIFIED",
+          "deletions": 1,
+          "path": "vendorconsent/tcf2/bitfield.go"
+        },
+        {
+          "additions": 9,
+          "changeType": "MODIFIED",
+          "deletions": 0,
+          "path": "vendorconsent/tcf2/bitfield_test.go"
+        },
+        {
+          "additions": 5,
+          "changeType": "MODIFIED",
+          "deletions": 0,
+          "path": "vendorconsent/tcf2/consent.go"
+        },
+        {
+          "additions": 17,
+          "changeType": "ADDED",
+          "deletions": 0,
+          "path": "vendorconsent/tcf2/consent_test.go"
+        },
+        {
+          "additions": 6,
+          "changeType": "MODIFIED",
+          "deletions": 0,
+          "path": "vendorconsent/tcf2/test_utils.go"
+        }
+      ],
+      "pageInfo": {
+        "endCursor": "NQ",
+        "hasNextPage": false
+      },
+      "totalCount": 5
+    },
+    "fullDatabaseId": "1609456725",
+    "headRefName": "fix-vendor-out-of-bounds",
+    "headRefOid": "b331aa2acade04fedf8cb21fd76d6600a82f9d55",
+    "headRepository": {
+      "databaseId": 249728632,
+      "nameWithOwner": "dailymotion/go-gdpr"
+    },
+    "headRepositoryOwner": {
+      "id": "MDEyOk9yZ2FuaXphdGlvbjExNTMxMw==",
+      "login": "dailymotion"
+    },
+    "id": "PR_kwDOB-wgI85f7lxV",
+    "includesCreatedEdit": true,
+    "isCrossRepository": true,
+    "isDraft": false,
+    "labels": {
+      "nodes": [],
+      "pageInfo": {
+        "endCursor": null,
+        "hasNextPage": false
+      },
+      "totalCount": 0
+    },
+    "lastEditedAt": "2023-11-20T16:37:42Z",
+    "maintainerCanModify": false,
+    "mergeCommit": {
+      "oid": "b00a67a67032c09e47f5d8d0d82d9518fa152ba0"
+    },
+    "mergeStateStatus": "UNKNOWN",
+    "mergeable": "UNKNOWN",
+    "mergedAt": "2023-11-28T15:42:59Z",
+    "mergedBy": {
+      "__typename": "User",
+      "databaseId": 1168933,
+      "id": "MDQ6VXNlcjExNjg5MzM=",
+      "login": "bsardo"
+    },
+    "milestone": null,
+    "number": 39,
+    "potentialMergeCommit": null,
+    "publishedAt": "2023-11-20T16:36:33Z",
+    "reviewDecision": "APPROVED",
+    "reviewRequests": {
+      "nodes": [],
+      "pageInfo": {
+        "endCursor": null,
+        "hasNextPage": false
+      },
+      "totalCount": 0
+    },
+    "reviews": {
+      "nodes": [
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 31041505,
+            "id": "MDQ6VXNlcjMxMDQxNTA1",
+            "login": "hhhjort"
+          },
+          "authorAssociation": "MEMBER",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 0
+          },
+          "commit": {
+            "oid": "b331aa2acade04fedf8cb21fd76d6600a82f9d55"
+          },
+          "createdAt": "2023-11-20T19:10:56Z",
+          "editor": null,
+          "fullDatabaseId": "1740530939",
+          "id": "PRR_kwDOB-wgI85nvmT7",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2023-11-20T19:10:56Z",
+          "state": "APPROVED",
+          "submittedAt": "2023-11-20T19:10:56Z",
+          "updatedAt": "2023-11-20T19:10:56Z"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 1168933,
+            "id": "MDQ6VXNlcjExNjg5MzM=",
+            "login": "bsardo"
+          },
+          "authorAssociation": "MEMBER",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 0
+          },
+          "commit": {
+            "oid": "b331aa2acade04fedf8cb21fd76d6600a82f9d55"
+          },
+          "createdAt": "2023-11-28T15:38:56Z",
+          "editor": null,
+          "fullDatabaseId": "1753231766",
+          "id": "PRR_kwDOB-wgI85ogDGW",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2023-11-28T15:38:56Z",
+          "state": "APPROVED",
+          "submittedAt": "2023-11-28T15:38:56Z",
+          "updatedAt": "2023-11-28T15:38:56Z"
+        }
+      ],
+      "pageInfo": {
+        "endCursor": "Y3Vyc29yOnYyOpO0MjAyMy0xMS0yOFQxNTozODo1Nlq0MjAyMy0xMS0yOFQxNTozODo1NlrOaIAxlg==",
+        "hasNextPage": false
+      },
+      "totalCount": 2
+    },
+    "stack": null,
+    "stackEntry": null,
+    "state": "MERGED",
+    "title": "Fix: invalid consent strings missing legit interest section causes panic",
+    "totalCommentsCount": 1,
+    "updatedAt": "2023-11-28T15:43:10Z",
+    "userLinkedClosingIssues": {
+      "nodes": [],
+      "pageInfo": {
+        "endCursor": null,
+        "hasNextPage": false
+      },
+      "totalCount": 0
+    }
+  },
+  "document_sha256": "3527b3fa77b23d4166d3a8a063506be04f20c8bec7cee75e2bf801d0d608c26c",
+  "errors": [],
+  "extra": {},
+  "headers": {
+    "date": "Tue, 20 Oct 2026 23:36:35 GMT",
+    "x-ratelimit-limit": "5000",
+    "x-ratelimit-remaining": "4975",
+    "x-ratelimit-reset": "1792541966",
+    "x-ratelimit-resource": "graphql",
+    "x-ratelimit-used": "25"
+  },
+  "key": {
+    "name": "go-gdpr",
+    "number": 39,
+    "owner": "prebid"
+  },
+  "kind": "pull_request",
+  "recorded_at": "2026-10-20T23:36:30Z",
+  "source": "live"
+}

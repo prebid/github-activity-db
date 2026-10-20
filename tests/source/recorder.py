@@ -6,6 +6,10 @@ repository before writing anything. A failed item or user lookup stops the recor
 fixtures are replaced only by a complete set. Response bodies and the headers the source layer
 reads are kept; request headers, which carry the token, never are.
 
+``--only first-sync`` runs the sync engine's first sync of ``FIRST_SYNC_REPOSITORY`` into a
+scratch database through the recording transport and writes every unit it asked for under
+``tests/fixtures/source/first_sync/``, replacing that directory alone.
+
 ``--only rate-limits`` records the rate-limit readings alone and adds them to the existing
 recordings, leaving every other unit unchanged. ``--only documents`` records every scenario and
 user again for a change of the GraphQL documents and replaces those units, keeping the existing
@@ -21,13 +25,18 @@ import json
 import os
 import shutil
 import sys
+import tempfile
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from pathlib import Path
 
 import httpx
 
-from github_activity_db.source import Clock, Failed, GitHubSource
-from tests.source.recordings import RECORDED, Unit, split_graphql, split_rest
+from github_activity_db.source import Clock, Failed, GitHubSource, SystemClock
+from github_activity_db.sync.engine import SyncOptions, sync
+from github_activity_db.tracking import TrackingConfig, TrackingConfigFile, load_tracking_config
+from tests.db.alembic_support import upgrade
+from tests.source.recordings import FIRST_SYNC, RECORDED, Unit, split_graphql, split_rest
 
 MAX_FILE_BYTES = 1000 * 1024  # check-added-large-files --maxkb=1000
 PRIVATE = frozenset({"prebid/prebid-agent-skills"})
@@ -87,6 +96,10 @@ USERS = (
     "MDEyOk9yZ2FuaXphdGlvbjEzMjQyNzYw",  # prebid: an Organization profile
     "MDQ6VXNlcjk5OTk5OTk5OTk=",  # no such account: NOT_FOUND
 )
+
+# The repository whose first sync is recorded: small (one batch), with commit-linked accounts no
+# actor sighting covers, so the sync looks them up.
+FIRST_SYNC_REPOSITORY = ("prebid", "go-gdpr")
 
 # Units --only documents keeps: their REST and RateLimit requests did not change.
 KEPT_BY_DOCUMENTS = frozenset({"compare", "rate_limit", "rest_rate_limit"})
@@ -180,13 +193,78 @@ async def record(
     return recording.units
 
 
+def first_sync_config(owner: str, name: str) -> TrackingConfig:
+    """The packaged tracking.toml with only ``owner/name`` tracked: its floor and settings."""
+    packaged = load_tracking_config()
+    entry = next(r for r in packaged.repositories if (r.owner, r.name) == (owner, name))
+    return packaged.model_copy(update={"repositories": (entry,), "sync": packaged.sync})
+
+
+async def record_first_sync(
+    token: str, owner: str, name: str, *, inner: httpx.AsyncBaseTransport | None = None
+) -> list[Unit]:
+    """Run a first sync of ``owner/name`` into a scratch database through the recording
+    transport; every unit it asked for. A failed item, a run that does not exit 0, or a private
+    repository stops it."""
+    if f"{owner}/{name}" in PRIVATE:
+        raise PrivateRepository(f"{owner}/{name}")
+    recorded_at = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+    recording = RecordingTransport(inner or httpx.AsyncHTTPTransport(), recorded_at)
+    config = first_sync_config(owner, name)
+    with tempfile.TemporaryDirectory() as directory:
+        database = Path(directory) / "first-sync.db"
+        upgrade(database)
+        report = await sync(
+            SyncOptions(
+                database_url=f"sqlite+aiosqlite:///{database}",
+                config=TrackingConfigFile(config, "recorder", "0" * 64),
+                trigger="manual",
+                code_version="recorder",
+            ),
+            open_source=lambda deadline: GitHubSource(
+                token, http_transport=recording, deadline=deadline
+            ),
+            clock=SystemClock(),
+        )
+    (repository,) = report.repositories
+    if repository.record is not None and repository.record.is_private:
+        raise PrivateRepository(repository.record.full_name)
+    if report.exit_code != 0 or report.failures:
+        raise RecordingFailed(f"first sync exited {report.exit_code}: {report.failures}")
+    print(
+        f"first sync: {report.items_hydrated} items, {report.graphql_points} GraphQL points",
+        file=sys.stderr,
+    )
+    return recording.units
+
+
+def write_units(units: list[Unit], directory: Path) -> int:
+    """Write ``units`` under a fresh ``directory``, replacing it only when every unit fits."""
+    staging = directory.with_name(directory.name + ".new")
+    shutil.rmtree(staging, ignore_errors=True)
+    for unit in units:
+        path = staging / unit.path()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        text = unit.dumps()
+        if len(text.encode()) > MAX_FILE_BYTES:
+            print(f"{path} is {len(text.encode())} bytes, over {MAX_FILE_BYTES}", file=sys.stderr)
+            shutil.rmtree(staging, ignore_errors=True)
+            return 1
+        path.write_text(text)
+    shutil.rmtree(directory, ignore_errors=True)
+    staging.rename(directory)
+    print(f"wrote {len(units)} units under {directory}", file=sys.stderr)
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Record the source-layer test fixtures.")
     parser.add_argument(
         "--only",
-        choices=("rate-limits", "documents"),
+        choices=("rate-limits", "documents", "first-sync"),
         help="rate-limits: record the readings alone; documents: record every GraphQL unit "
-        "again, keeping the compare pages and rate-limit readings",
+        "again, keeping the compare pages and rate-limit readings; first-sync: record the "
+        "first sync of FIRST_SYNC_REPOSITORY under tests/fixtures/source/first_sync",
     )
     args = parser.parse_args(argv)
     token = os.environ.get("GITHUB_TOKEN")
@@ -196,6 +274,9 @@ def main(argv: list[str] | None = None) -> int:
             file=sys.stderr,
         )
         return 2
+    if args.only == "first-sync":
+        owner, name = FIRST_SYNC_REPOSITORY
+        return write_units(asyncio.run(record_first_sync(token, owner, name)), FIRST_SYNC)
     if args.only == "rate-limits":
         units = asyncio.run(record(token, scenarios=(), users=()))
     elif args.only == "documents":

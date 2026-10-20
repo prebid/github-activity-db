@@ -46,14 +46,16 @@ tests/
 │   └── test_*.py
 ├── sync/                    # Planner, deletions, writer, and run records over seeded databases
 │   ├── engine_support.py    # A migrated database and a scenario model, synced by the engine
-│   └── test_engine.py       # The engine's cases (redesign plan Step 3b-2a-2b-2)
+│   ├── test_engine.py       # The engine's cases (redesign plan Step 3b-2a-2b-2)
+│   └── test_first_sync.py   # go-gdpr's first sync from its recordings, without the model
 ├── fixtures/source/
 │   ├── recorded/            # Units recorded from public repositories (scripts/record_fixtures.py)
+│   ├── first_sync/          # Every unit go-gdpr's first sync asked for (--only first-sync)
 │   └── synthetic/           # Error responses: documented, observed, or constructed; each names which
 ├── data_dictionary.py       # Reader for docs/data-dictionary.md
 ├── query_versions.json      # hydration_version -> hash of the query documents
 ├── schema_versions.json     # schema version -> consumer (table or view, column) pairs, view digests
-├── test_cli_app.py, test_cli_github.py   # The CLI, in process and through the installed script
+├── test_cli_app.py, test_cli_github.py, test_cli_sync.py   # The CLI, in process and installed
 ├── test_data_dictionary.py  # The dictionary and the schema-version lock
 └── test_*.py                # Settings, logging, scripts, import boundaries, build inputs
 ```
@@ -124,6 +126,12 @@ repository has more than 100.
   the recordings lack. Readings differ between
   recordings, so re-recording the rate limits (a full run does too) means updating the readings
   `tests/test_cli_github.py` asserts.
+- **A first sync's recordings**: `--only first-sync` runs the engine's first sync of
+  `FIRST_SYNC_REPOSITORY` (prebid/go-gdpr) into a scratch database through the recording
+  transport and writes every unit it asked for under `tests/fixtures/source/first_sync/`,
+  replacing that directory alone; `Replay.from_directory` serves them.
+  `tests/sync/test_first_sync.py` checks the stored rows against them, and
+  `tests/test_cli_sync.py` runs `ghactivity sync` over them.
 - **Synthetic responses** (`tests/fixtures/source/synthetic/`) are error responses. Each file's
   `source` says where its shape comes from: GitHub's documentation (quoted), a live observation
   (dated), or a construction for a case GitHub does not document. A test that needs a variant of
@@ -230,7 +238,11 @@ a test that leaves a request unanswered or a fault unserved. `tests/conftest.py`
 `Settings` reads before each test, so neither a terminal size nor a setting the developer's
 shell exports changes a result.
 `tests/test_cli_app.py` also runs the installed console script (`.venv/bin/ghactivity`) in a
-subprocess, for exit codes and tracebacks outside `CliRunner`.
+subprocess, for exit codes and tracebacks outside `CliRunner`. `tests/test_cli_sync.py` runs
+`ghactivity sync` both ways: in process, and through the installed package in an isolated child
+interpreter (`python -I -c`) that puts the repository on `sys.path` to patch in the replay. A
+child that kills itself with SIGKILL after its third committed item, under
+`subprocess.run(timeout=...)`, leaves its run `running` for a `--break-lock` resume.
 
 ---
 
