@@ -278,7 +278,7 @@ class _NotRunning(Exception):
 
 
 # The outcomes of a repository whose index completed and that did not fail later in the run.
-_INDEXED: frozenset[LastOutcome] = frozenset({"complete", "time_limited", "halted"})
+INDEXED_OUTCOMES: frozenset[LastOutcome] = frozenset({"complete", "time_limited", "halted"})
 
 
 async def close_run(
@@ -317,7 +317,7 @@ async def close_run(
             )
         if (
             outcome.index is not None or outcome.pending is not None
-        ) and outcome.last_outcome not in _INDEXED:
+        ) and outcome.last_outcome not in INDEXED_OUTCOMES:
             raise ValueError(
                 f"repository {outcome.repository_github_id}: a {outcome.last_outcome} repository "
                 "writes no index and no pending items (plan 5.1)"

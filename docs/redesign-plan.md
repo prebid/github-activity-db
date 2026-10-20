@@ -31,7 +31,7 @@ issue totals) are dated; regenerate them with `ghactivity verify` once Step 3b-2
 |------|-------|--------|
 | 1 | Guardrails | done (PR #5) |
 | 2 | GitHub source layer | done (PR #7) |
-| 3 | New schema, PR sync engine, cutover (pull requests 3a, 3b-1, 3b-2a-1, 3b-2a-2a, 3b-2a-2b-1, 3b-2a-2b-2, 3b-2a-2c, and 3b-2b) | in progress: 3a done (PR #11), 3b-1 done (PR #14), 3b-2a-1 done (PR #19), 3b-2a-2a done (PR #21), 3b-2a-2b-1 done (PR #24) |
+| 3 | New schema, PR sync engine, cutover (pull requests 3a, 3b-1, 3b-2a-1, 3b-2a-2a, 3b-2a-2b-1, 3b-2a-2b-2, 3b-2a-2c, and 3b-2b) | in progress: 3a done (PR #11), 3b-1 done (PR #14), 3b-2a-1 done (PR #19), 3b-2a-2a done (PR #21), 3b-2a-2b-1 done (PR #24), 3b-2a-2b-2 done (PR #25) |
 | 4 | Issues, closing-issue links, and default-branch activity (pull requests 4a and 4b) | not started |
 | 5 | Full bootstrap and verification | not started |
 | 6 | Scheduled sync and publication | not started |
@@ -728,7 +728,11 @@ an interrupt, which is re-raised.
 6. Write: one batch at a time, on the writer's one connection. The run hydrates a batch, checks it
    (step 5), looks up its accounts (5.2), and writes each of its items before it requests the next
    batch; at the deadline it writes the fetched items whose accounts it has and records the rest in
-   `sync_pending`. Each item is one transaction: upsert by `github_id` with
+   `sync_pending`. The hydrator delivers a batch's outcomes together (Step 2), so a deadline inside
+   the batch's own requests (a split half, a solo retry, an overflow or compare page) writes none
+   of its items, and records none of the failures the batch computed: all of them wait in
+   `sync_pending`, which puts them first in the queue of the next run that indexes the repository
+   completely and selects them (step 3). Each item is one transaction: upsert by `github_id` with
    `INSERT ... ON CONFLICT (github_id) DO UPDATE`, which keeps the row id (never
    `INSERT OR REPLACE`, which deletes the row and cascades); replace the hydrated child rows
    (`pr_labels`, `pr_reviews`, `pr_comments`, `pr_commits`, `pr_files`, `pr_closing_issues`,

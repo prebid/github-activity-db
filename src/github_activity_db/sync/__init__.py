@@ -1,6 +1,7 @@
 """The sync of redesign plan 5.3: the snapshot reader, the planner, step 7's deletion
-functions, the writer, and the run records.
+functions, the writer, the run records, and the engine (``engine.sync``), which joins them over
+the source.
 
-The engine (Step 3b-2a-2b) and the ``sync`` command (3b-2a-2c) call them; nothing here sends a
-request.
+The ``sync`` command (3b-2a-2c) calls the engine; only the engine sends requests, through the
+source it is given.
 """

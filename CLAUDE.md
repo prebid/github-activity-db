@@ -54,15 +54,15 @@ uv run pytest                      # CI also runs Python 3.12, `alembic check`, 
   of plan 5.3 step 3, and step 7's deletion functions, with `tracking.toml`'s `[coverage]` floor
   and `[sync]` settings
 - The writer and run records (Step 3b-2a-2a): every write the sync makes, the run claim and lock,
-  the close, and the head check, with `[automation]` and `[sync].accepted_failures`; no command
-  calls them yet
+  the close, and the head check, with `[automation]` and `[sync].accepted_failures`
+- The sync engine (Step 3b-2a-2b-2, `sync/engine.py`): plan 5.3 steps 1-8 over the source, the
+  planner, and the writer, and `--dry-run`; no command calls it yet
 
 **Not implemented yet:** nothing writes the new tables until the `sync` command (Step
-3b-2a-2c), which runs the engine (3b-2a-2b) over the planner and the writer (3b-2a-2a);
-`verify` follows in Step 3b-2b. The tracked `github_activity.db` stays
+3b-2a-2c) calls the engine; `verify` follows in Step 3b-2b. The tracked `github_activity.db` stays
 frozen at the first schema (D26).
 
-**Planned in the redesign plan:** the sync engine and verify (Step 3b); GitHub Issues and
+**Planned in the redesign plan:** the `sync` command and verify (Step 3b); GitHub Issues and
 closing-issue links (Step 4); scheduled sync and release publication (Step 6).
 
 **Out of Scope (Future):**
@@ -110,6 +110,10 @@ The only package that imports githubkit, and it imports neither SQLAlchemy nor `
   reads that take no lock
 - `writer.py`: repositories, in-place updates, items with D28's kept references, accounts and
   lookups, failures, step 7's deletions, and the prune; `runs.py`: the head check, claim, and close
+- `engine.py`: `sync(options, open_source=, clock=)` runs 5.3 steps 1-8, or with `dry_run` steps
+  1-3 writing nothing; every repository's step-8 outcome and the exit code come from one record of
+  what happened to it, so the close, a dry run, and the report agree. A run that never starts
+  raises before any `sync_runs` row; an interrupt closes the row `aborted` with 130 and is re-raised
 
 ### Database (`db/`, `alembic/`)
 - Databases are built only by `alembic upgrade head`; tests copy one session template

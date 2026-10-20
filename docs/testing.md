@@ -44,6 +44,9 @@ tests/
 │   ├── scenario.py          # A model of GitHub the replay asks at request time (the engine's tests)
 │   ├── recorder.py          # Recording scenarios and the recording transport
 │   └── test_*.py
+├── sync/                    # Planner, deletions, writer, and run records over seeded databases
+│   ├── engine_support.py    # A migrated database and a scenario model, synced by the engine
+│   └── test_engine.py       # The engine's cases (redesign plan Step 3b-2a-2b-2)
 ├── fixtures/source/
 │   ├── recorded/            # Units recorded from public repositories (scripts/record_fixtures.py)
 │   └── synthetic/           # Error responses: documented, observed, or constructed; each names which
@@ -208,6 +211,12 @@ run must see GitHub as the test left it.
   model's own errors included) or a fault never used up. Objects and changes are made at the clock's
   reading, so an item hydrated less than `[sync].unsettled_minutes` after its last change is planned
   again by the next run; a test that checks a later plan advances the clock past that window first.
+- **Engine cases**: `tests/sync/engine_support.py`'s `World` holds the scenario, a copy of the head
+  template, and the `tracking.toml` entries a test adds; `World.sync()` runs the engine over them,
+  first moving the clock past the unsettled window (`settle=False` keeps it). Each case checks the
+  stored rows, the `sync_runs` row, the `repo_sync_state` rows the run wrote (`ended`), and the
+  exit code. The `world` fixture fails a test that leaves an `AccountMissing` failure, except the
+  one that fakes the writer's refusal.
 
 ---
 

@@ -10,7 +10,9 @@ By what the caller does next:
   never by raising.
 - ``UserLookupFailed``: the lookup of one node id failed; reported in ``UserLookup.failed``, never
   raised, and the caller fails the items waiting on that account.
-- ``DeadlineReached``: the run stops issuing requests and drains (redesign plan 5.3 step 4).
+- ``DeadlineReached``: the run issues no new requests, treats a repository whose index is
+  unfinished as incomplete, records ``sync_pending``, and runs steps 7 and 8 (redesign plan 5.3
+  step 4).
 
 ``RequestFailedError``: a request failed, after the transport's retries, or because GitHub reported
 an error outside every item of it (``UnattributedErrors``, raised by the hydrator without a retry).

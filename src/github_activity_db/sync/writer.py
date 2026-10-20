@@ -19,7 +19,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any, Final
 
-from sqlalchemy import delete, func, insert, select, update
+from sqlalchemy import and_, delete, func, insert, or_, select, update
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.ext.asyncio import AsyncConnection
 
@@ -211,18 +211,23 @@ class RefreshTarget:
 
 
 async def accounts_to_refresh(
-    connection: AsyncConnection, *, now: datetime
+    connection: AsyncConnection, *, now: datetime, not_found: Iterable[int] = ()
 ) -> tuple[RefreshTarget, ...]:
     """Accounts last refreshed more than 24 hours before ``now`` and without ``not_found_at``,
-    oldest ``refreshed_at`` first (5.2)."""
+    and the accounts among ``not_found`` (``github_id`` values a hydrated commit links) that have
+    ``not_found_at`` set (gap 90), oldest ``refreshed_at`` first (5.2)."""
+    due = and_(GitHubUser.refreshed_at < now - REFRESH_AFTER, GitHubUser.not_found_at.is_(None))
+    linked = sorted(set(not_found))
+    condition = (
+        or_(due, and_(GitHubUser.github_id.in_(linked), GitHubUser.not_found_at.is_not(None)))
+        if linked
+        else due
+    )
     async with transaction(connection):
         rows = (
             await connection.execute(
                 select(GitHubUser.node_id, GitHubUser.github_id, GitHubUser.refreshed_at)
-                .where(
-                    GitHubUser.refreshed_at < now - REFRESH_AFTER,
-                    GitHubUser.not_found_at.is_(None),
-                )
+                .where(condition)
                 .order_by(GitHubUser.refreshed_at, GitHubUser.id)
             )
         ).all()
