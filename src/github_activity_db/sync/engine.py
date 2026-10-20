@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Sequence
 from contextlib import AbstractAsyncContextManager
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
@@ -201,8 +201,8 @@ async def sync(options: SyncOptions, *, open_source: OpenSource, clock: Clock) -
             await dry.delete(dry.snapshot)
             await dry.prune()
         except Exception as error:
-            return dry.report(None, EXIT_FATAL, error_text(error))
-        return dry.report(None, dry.exit_code())
+            return dry.report(None, EXIT_FATAL, dry.failed_outcomes(), error_text(error))
+        return dry.report(None, dry.exit_code(), dry.outcomes())
     async with open_writer(options.database_url) as connection:
         claim = await claim_run(
             connection,
@@ -245,9 +245,6 @@ class _Repository:
     failed: str | None = None
     # Why its index is incomplete.
     incomplete: str | None = None
-    # The github_id an earlier entry resolved to, when this later entry resolved to it too
-    # (gap 92): it writes nothing and counts as an entry that failed to resolve.
-    duplicate_of: int | None = None
     # Planned items it did not reach before the deadline.
     pending: set[int] = field(default_factory=set)
     # Step 7's result, when step 7 ran for it.
@@ -255,13 +252,10 @@ class _Repository:
 
     @property
     def github_id(self) -> int | None:
-        """The repository step 8 records; None when no stored row takes an outcome. A duplicate
-        entry's stored row takes one unless it is the repository the earlier entry resolved."""
+        """The repository it resolved to, else its stored row; None when it has neither."""
         if self.record is not None:
             return self.record.github_id
-        if self.stored is None or self.stored.github_id == self.duplicate_of:
-            return None
-        return self.stored.github_id
+        return self.stored.github_id if self.stored is not None else None
 
     @property
     def halted(self) -> bool:
@@ -370,6 +364,9 @@ class _Sync:
         # Every entry whose resolve returned a repository, by its github_id (gap 92).
         seen: dict[int, _Repository] = {}
         resolved = 0
+        # Each stored repository's name and tracking as the run's writes so far leave them; the
+        # writer checks a name against these rows, and a dry run against this view of them.
+        names = {s.github_id: (s.full_name, s.is_tracked) for s in self.snapshot.repositories}
         for repository in self.repositories:
             configured = repository.configured
             if self.deadline_reached:
@@ -386,7 +383,7 @@ class _Sync:
                 continue
             earlier = seen.setdefault(record.github_id, repository)
             if earlier is not repository:
-                repository.duplicate_of = record.github_id
+                # It writes nothing and counts as an entry that failed to resolve.
                 repository.failed = (
                     f"{configured.full_name} resolves to github_id {record.github_id}, as "
                     f"{earlier.configured.full_name} does"
@@ -401,7 +398,7 @@ class _Sync:
                 continue
             if self.connection is None:
                 holder = writer.full_name_conflict(
-                    ((s.github_id, s.full_name, s.is_tracked) for s in self.snapshot.repositories),
+                    ((github_id, *named) for github_id, named in names.items()),
                     record.github_id,
                     record.full_name,
                 )
@@ -417,6 +414,7 @@ class _Sync:
                     repository.failed = error_text(error)
                     continue
             repository.record = record
+            names[record.github_id] = (record.full_name, True)
             resolved += 1
         if not resolved and not self.deadline_reached:
             raise NoRepositoryResolved("no configured repository resolved")
@@ -547,7 +545,11 @@ class _Sync:
         self, source: GitHubSource, repository: _Repository, records: list[PullRequestRecord]
     ) -> None:
         """Look up the accounts the batch's commits link that are neither stored, nor answered
-        earlier in the run, nor sighted in the batch; then write each item (5.2)."""
+        earlier in the run, nor sighted in the batch; then settle each item's accounts and write
+        it, in order (5.2). An item still missing an account gets one more lookup holding only
+        its own ids, unless every request that failed for it held only those (5.3 step 4), and
+        fails with that lookup's error; one the deadline leaves without its accounts waits in
+        sync_pending."""
         connection = self._writer()
         repository_github_id = repository.github_id
         assert repository_github_id is not None
@@ -562,6 +564,7 @@ class _Sync:
             for account in record.accounts()
             if account.github_id is not None
         }
+        # The batch's lookup failures, by github_id, with the ids each failed request held.
         failed: dict[int, tuple[UserLookupFailed, frozenset[int]]] = {}
         try:
             failed = await self._look_up(
@@ -574,32 +577,26 @@ class _Sync:
                     and github_id not in self.answers
                 ],
             )
-            for record in records:
-                own = _own_lookups(record, stored, sighted)
-                # One more lookup holding only its own ids, unless the failed request held only
-                # those (5.3 step 4).
-                retry = [
-                    link
-                    for link in self._unanswered(record, stored, sighted)
-                    if link.github_id in failed and not failed[link.github_id][1] <= own
-                ]
-                failed.update(await self._look_up(source, retry))
         except DeadlineReached:
             self.deadline_reached = True
         for record in records:
             missing = self._unanswered(record, stored, sighted)
-            own = _own_lookups(record, stored, sighted)
-            # Final once a request holding only its own ids failed; a solo lookup the deadline
-            # stopped leaves the item pending.
-            lookup_failed = [
-                failed[link.github_id][0]
-                for link in missing
-                if link.github_id in failed and failed[link.github_id][1] <= own
-            ]
-            if lookup_failed:
-                await self._fail(repository, record.number, lookup_failed[0])
-                continue
-            if missing and self.deadline_reached:
+            if missing and not self.deadline_reached:
+                own = _own_lookups(record, stored, sighted)
+                errors = dict(failed)
+                if any(
+                    link.github_id not in failed or not failed[link.github_id][1] <= own
+                    for link in missing
+                ):
+                    try:
+                        errors.update(await self._look_up(source, missing))
+                    except DeadlineReached:
+                        self.deadline_reached = True
+                missing = self._unanswered(record, stored, sighted)
+                if missing and not self.deadline_reached:
+                    await self._fail(repository, record.number, errors[missing[0].github_id][0])
+                    continue
+            if missing:
                 repository.pending.add(record.number)
                 continue
             given: dict[int, LinkAccount] = {}
@@ -869,12 +866,12 @@ class _Sync:
         except Exception as close_error:
             message = f"the close failed, so run {self.run_id} stays running: "
             return self.report(
-                "running", EXIT_FATAL, _joined(error, message + error_text(close_error))
+                "running", EXIT_FATAL, [], _joined(error, message + error_text(close_error))
             )
         if not closed.closed:
             message = f"run {self.run_id} is {closed.status}: another process ended it"
-            return self.report(closed.status, EXIT_FATAL, _joined(error, message))
-        return self.report(status, exit_code, error)
+            return self.report(closed.status, EXIT_FATAL, [], _joined(error, message))
+        return self.report(status, exit_code, outcomes, error)
 
     async def close_interrupted(self) -> None:
         """Close the row ``aborted`` with 130; the interrupt is re-raised whatever this finds."""
@@ -898,7 +895,11 @@ class _Sync:
             failures=len(self.failures),
         )
 
-    def _accepted_not_failed(self) -> list[AcceptedFailure]:
+    def _accepted_not_failed(
+        self, outcomes: dict[int, LastOutcome | None]
+    ) -> list[AcceptedFailure]:
+        """The entries whose item did not fail, in a repository whose recorded outcome is
+        complete, time_limited, or halted; ``outcomes`` is each entry's, by ``id()``."""
         result: list[AcceptedFailure] = []
         for entry in self.config.sync.accepted_failures:
             repository = next(
@@ -909,7 +910,7 @@ class _Sync:
                 ),
                 None,
             )
-            if repository is None or repository.outcome() not in INDEXED_OUTCOMES:
+            if repository is None or outcomes[id(repository)] not in INDEXED_OUTCOMES:
                 continue
             failed = any(
                 failure.repository_github_id == repository.github_id
@@ -920,8 +921,21 @@ class _Sync:
                 result.append(entry)
         return result
 
-    def report(self, status: str | None, exit_code: int, error: str | None = None) -> SyncReport:
+    def report(
+        self,
+        status: str | None,
+        exit_code: int,
+        outcomes: Sequence[RepositoryOutcome],
+        error: str | None = None,
+    ) -> SyncReport:
+        """The report of the close that wrote ``outcomes`` (none when it wrote nothing); a dry
+        run passes the outcomes the run would write."""
         recorded = self._recorded()
+        written = {outcome.repository_github_id: outcome.last_outcome for outcome in outcomes}
+        entry_outcomes: dict[int, LastOutcome | None] = {
+            id(r): written.get(r.github_id) if r in recorded and r.github_id is not None else None
+            for r in self.repositories
+        }
         return SyncReport(
             dry_run=self.connection is None,
             run_id=self.claim.run_id if self.claim is not None else None,
@@ -936,7 +950,7 @@ class _Sync:
                         if r.record is not None
                         else r.stored
                     ),
-                    outcome=r.outcome() if r in recorded else None,
+                    outcome=entry_outcomes[id(r)],
                     reason=r.failed or r.incomplete,
                 )
                 for r in self.repositories
@@ -948,7 +962,7 @@ class _Sync:
             pruned=self.pruned,
             prune_refused=self.prune_refused,
             failures=tuple(self.failures),
-            accepted_not_failed=tuple(self._accepted_not_failed()),
+            accepted_not_failed=tuple(self._accepted_not_failed(entry_outcomes)),
             second_node_ids=tuple(self.second_node_ids),
             refresh_failures=tuple(self.refresh_failures),
             items_hydrated=self.items_hydrated,
