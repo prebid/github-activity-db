@@ -1007,21 +1007,25 @@ async def test_a_change_after_a_request_that_never_comes_fails_the_test() -> Non
     assert unanswered(world.replay) == ["fault 0: served 0, 1 left", "fault 1: served 1, 1 left"]
 
 
-async def test_a_change_aimed_at_one_repositorys_request() -> None:
+@pytest.mark.parametrize("target", ["first", "second"])
+async def test_a_change_aimed_at_one_repositorys_request(target: str) -> None:
+    """The change runs right after the request ``when`` selects, and after no other: it records
+    the request that triggered it, checked after each repository's index."""
     world = Scenario(FakeClock())
     author = world.add_account()
     for name in ("first", "second"):
         world.open_pull_request(world.add_repository("example", name), author)
-    changed: list[str] = []
+    triggered: list[str] = []
     world.after(
         "PullRequestIndex",
-        lambda: changed.append("second"),
-        when=lambda seen: seen.variables["name"] == "second",
+        lambda: triggered.append(world.replay.seen[-1].variables["name"]),
+        when=lambda seen: seen.variables["name"] == target,
     )
     async with world.source() as source:
-        for name in ("first", "second"):
-            await source.index_pull_requests(await source.resolve("example", name))
-    assert changed == ["second"]
+        await source.index_pull_requests(await source.resolve("example", "first"))
+        assert triggered == (["first"] if target == "first" else [])
+        await source.index_pull_requests(await source.resolve("example", "second"))
+        assert triggered == [target]
     assert unanswered(world.replay) == []
 
 
