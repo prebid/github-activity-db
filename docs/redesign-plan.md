@@ -77,7 +77,7 @@ Within scope the database collects and distinguishes data and never interprets i
 | D24 | Conversation comments are stored one row per comment, its `github_id`, author, and times and never its text, so a comment by an account the database never stored is a row with a null author, never dropped (D28). Review bodies, inline review comment text, and commit messages are not stored either. |
 | D25 | A run, scheduled or manual, publishes when its starting database is valid (the downloaded snapshot passed `verify --db-only`, or `bootstrap` started from an empty database), sync exited 0 or 2, and verify exited 0 (no error, 5.4). The manifest records the sync exit code and verify's counts per class. A final job that runs whatever the others did then marks the workflow failed if sync exited 2, verify failed, or nothing was published, so a failure is visible after the data is saved. |
 | D26 | The Step 5 database is not committed; it becomes the first snapshot of release `db` (Step 6b). From Step 3 until 6c removes it, the tracked `github_activity.db` keeps its pre-Step-3 content: the default `DATABASE_URL` moves to a git-ignored file, and `scripts/check_frozen_db.py` fails when the file's SHA-256 differs from the digest it pins, as a pre-commit hook on the file (so CI's `--all-files` run checks it) and as a test; the tests also fail when git stores the file other than as one regular file, and the `tracked-db-no-sidecar` hook refuses a committed `-journal` or `-wal` file beside it, which SQLite would apply on the next open, and the `-shm` index that goes with a `-wal`. |
-| D27 | A stored repository no longer listed in `tracking.toml` is reported on every run (exit 2), and its rows stay until `ghactivity sync --prune-untracked` deletes them; the prune, on the operator's explicit flag, removes rows section 1 puts out of scope (repositories not in the tracked list) and is recorded in `sync_runs.deletions_approved` (5.1). |
+| D27 | A stored repository no longer listed in `tracking.toml` is reported, with exit 2, on every run without `--repo` (5.3 steps 1 and 8), and its rows stay until `ghactivity sync --prune-untracked` deletes them; the prune, on the operator's explicit flag, removes rows section 1 puts out of scope (repositories not in the tracked list) and is recorded in `sync_runs.deletions_approved` (5.1). |
 | D28 | The database keeps a person attached to everything it attributed to them. A stored account stays stored after a lookup returns `NOT_FOUND` for it, with its last known login and type, and every reference to it stays: when GitHub later returns that actor as null, as a re-hydration does once GitHub stops returning the account, the writer keeps the stored reference of the same object (the PR's author and merger, the issue's author, the review's reviewer or the comment's author with the same `github_id`, this PR's commit with the same SHA, and the default-branch commit with the same repository and SHA, Step 4b), and the row's `*_reported` column records that GitHub returned no actor in that hydration (5.1). Other actor references (editors, requested reviewers, event actors) take GitHub's current value, null included, and the assignees are GitHub's current `assignedActors` list. `not_found_at` (named `deleted_at` until Step 3b-1) records when a lookup returned `NOT_FOUND`; it changes no reference, the 24-hour refresh skips the account, and a later sighting of the account clears it. GitHub does not say why it returns a null actor (`Prebid.js#13769` is merged, with a null `mergedBy` and an existing author), so a null reference means only that GitHub returned no actor and the object had none stored, and an account never stored has no `github_users` row. A non-null actor GitHub returns replaces the stored one. On a commit, `linked_github_id` holds the account id GitHub linked in the latest hydration whether or not a lookup found the account, so a link whose lookup returned null is told apart from an email linked to no account. The attribution lives in the stored rows and cascades with them, so anything that re-creates a row from GitHub drops it for accounts GitHub no longer returns: a bootstrap (it starts from an empty file), a transferred issue (new `github_id`), and a repository pruned and re-added (D27). |
 | D29 | The database collects and distinguishes data; it does not interpret it. Within scope (section 1) it stores what GitHub reports about the items it holds, under GitHub's names and values. No consumer surface leaves rows out, merges several facts into one verdict or flag, reports a total GitHub did not report, attaches a value GitHub did not give, chooses, orders, or reduces rows to one value, or describes a value with a meaning GitHub does not state. Counts GitHub reports (`totalCount`) are stored; the views are row-level, so aggregation, counting included, is the consumer's. A column the database computes is allowed only as a classification: a deterministic function of stored columns in the same file (equality, existence, or membership in a `tracking.toml` list) whose rule the data dictionary states. These are `targets_default_branch` (against the repository's current default branch), `is_pr_author`, `author_also_reviewed`, `automation_reason`, and `email_automation_reason`. `pr_closing_issues.user_linked` stores GitHub's second list (`userLinkedOnly: true`) as a flag on each link of the full list, which holds every user-linked link (5.3 step 5), so the flagged links reproduce that list's members. The `ordinal` columns hold each entry's position in GitHub's list, numbered from 0, which keeps GitHub's order. A fact GitHub reports on an object the database already requests is collected when it adds no cost, unless a decision or the field rules exclude it (D5, D15, D19, D24, D31, D32; section 7, "Field dispositions" and "Empty fields"). Columns that record the database's own configuration and runs, not GitHub's data (`is_tracked`, `repo_group`, `hydration_version`, the automation tables, and the run records `sync_runs`, `repo_sync_state`, `sync_pending`, and `sync_failures`), and a view's `relationship` label naming the stored row a view row comes from, are outside these rules; the data dictionary defines each. A fact that needs further requests or connections is collected only when a decision admits it at its measured cost: D4, D5, D14, and D23 admit review requests, assignees, each review's inline-comment count, and the manually linked closing issues, which add none; section 9 lists the rest. D7's mirror is not interpretation: an overwrite with GitHub's current value, and a removal GitHub made, are GitHub's changes, and the exceptions are marked: D28's kept references (by `*_reported`, and for commits by `linked_github_id`), D28's kept accounts (by `not_found_at`), and D27's untracked repositories (by `is_tracked`). |
 | D30 | Each tracked repository's default-branch activity is stored as GitHub reports it (Step 4b): every event in GitHub's repository activity log for the default branch, with its id, type, time, actor, ref, and before and after commits; GitHub's compare of each event's before and after commits, as compare returns it (its status, counts, merge base, commits, and files); and the default branch's commit history since the floor, one row per commit with its author like `pr_commits`, its committed date, and GitHub's line and file counts for it, a default-branch commit's only time and size outside a pull request (D19). Nothing classifies an event or a commit as a direct push or as reviewed: a consumer joins a `pr_merge` event to its PR through the PR's `merge_commit_oid` (each of the 11 measured events' `after` equalled its PR's merge commit, 6 merge-commit and 5 squash merges; no rebase merge was measured), and a commit to the event that brought it through the stored compare commits. Before the log starts, the commits a rebase merge wrote match no merge commit and no event, so they join to no PR (no rebase merge was measured; section 8). GitHub's log starts on 2023-03-07 for Prebid.js and prebid-server, and `Commit.pushedDate` is deprecated as no longer supported and returned null on the history commits read, so for changes before the log starts the commit history is the only record, with the committed date in place of a push time (section 7, "Repository activity"). |
@@ -85,7 +85,7 @@ Within scope the database collects and distinguishes data and never interprets i
 | D32 | Field decisions of 2026-10-18 (the maintainer): a PR's merge state (`mergeable`, `mergeStateStatus`, `canBeRebased`, `potentialMergeCommit`) is collected as of the PR's latest hydration, and open PRs are not re-hydrated each run for it (5.1); a PR's stack and stack entry are collected; auto-merge requests, merge-queue entries, and the auto-merge and merge-queue settings are not (none of the repositories read uses them, section 7, "Merge state and stacks"); projects are not (they need the `read:project` scope and a connection); suggested reviewers and a referenced milestone's or team's own fields are not; and a field empty or identical across the measured sample is not collected, except a repository's archive and visibility status, its owner, the merge-method settings, and stacks (section 7, "Empty fields"). |
 | D33 | `prebid-agent-skills` is never queried by an agent. Commands an agent runs (sync, verify, the REST sampler, the difference report, recordings, and `ghactivity github test`) name their repositories with `--repo` and leave it out; its rows enter the database through the scheduled App's workflow (Step 6) or a run the maintainer starts. Recordings come from public repositories only (Step 2). |
 | D34 | Decision of 2026-10-20 (the maintainer): wherever stored data must tell runs apart, a run is its `sync_runs` row id, stored with the data, never a clock reading and never state the writer or the engine keeps in memory, which neither a later run nor a reader of the file can see. `sync_failures.last_run_id` names the latest run in which the item failed, and `attempts` adds one only for a failure in another run, whatever the two runs' clocks read (5.1, gap 91). |
-| D35 | Engine decisions of 2026-10-20 (the maintainer), each stated where it applies: Step 3b-2a-2b is three pull requests, the scenario model, the engine, and `--dry-run` (section 6); the engine's boundary, the interrupt close with every writer call shielded from cancellation, and what reaching the deadline means (5.3, 5.3 step 4); one batch at a time, written before the next is requested (5.3 step 6); gap 90's lookups after the last hydration write, under the refresh's rules (5.2); the snapshot read once after the claim, and step 7's one re-read (5.3 steps 3 and 7); stored repositories that did not resolve, and two entries resolving to one repository (5.3 step 1); any other exception after the claim (5.3 step 4); the exit code's further conditions and the `accepted_failures` entries reported as unused (5.3 step 8, 5.5); and the dry run's shared steps 1-3, report, and exit (5.3 step 8). |
+| D35 | Engine decisions of 2026-10-20 (the maintainer), each stated where it applies: Step 3b-2a-2b is three pull requests, the scenario model, the engine, and `--dry-run` (section 6); the engine's boundary, the interrupt close with every transaction on the writer's connection shielded from cancellation, and what reaching the deadline means (5.3, 5.3 step 4); one batch at a time, written before the next is requested (5.3 step 6); gap 90's lookups after the last hydration write, under the refresh's rules (5.2); the snapshot read once after the claim, and step 7's one re-read (5.3 steps 3 and 7); stored repositories that did not resolve, and two entries resolving to one repository (5.3 step 1); any other exception after the claim (5.3 step 4); the exit code's further conditions and the `accepted_failures` entries reported as unused (5.3 step 8, 5.5); the dry run's shared steps 1-3, report, and exit (5.3 step 8); `AccountMissing` an item failure (5.3 step 6); D27's exit 2 limited to runs without `--repo`; SIGTERM left to Step 6 (section 8); and the scenario model's round-trip scope, request-time rendering, and change history (Step 3b-2a-2b-1). |
 
 ## 3. Coverage rule
 
@@ -214,8 +214,8 @@ Every gap found in the audit, and where it is resolved.
 | 89 | Wording that gives data a meaning GitHub does not state: a null actor called a deleted account (the data dictionary, `cli/github.py`), "final verdict", a dismissal called a withdrawal, "reviewer metrics", "review activity", closing links said to close an issue (GitHub: "List of issues that may be closed by this pull request"), the `source/` docstrings that call a null actor or `NOT_FOUND` deleted, `github_users.deleted_at` itself, and `tracking.toml` groups described as "for reporting" | This plan (2026-10-18); Step 3b-1 (the data dictionary, `cli/github.py`, the docstrings in `source/convert.py`, `source/users.py`, and `source/records.py`, and `deleted_at` renamed `not_found_at`); Step 3b-2a-1 (the `tracking.toml` comment) |
 | 90 | An account a lookup returned `NOT_FOUND` for, which GitHub links again only through commits, is never looked up again, so its `not_found_at` and login stay as they were | Step 3b-2a-2b-2: a commit link to a stored account with `not_found_at` set queues it for a lookup (5.2) |
 | 91 | `sync_failures.attempts` told runs apart by comparing the stored `last_failed_at` with the run's start time, so a failure in a run that started, by its clock, at or before the previous failure did not count, and no column named the run that failed | Step 3b-2a-2a: `sync_failures.last_run_id` (migration `2d2ba76b177c`; D34, 5.1) |
-| 92 | `plan()` raises `ValueError` when two configured entries resolve to one `github_id` (an old name and the new one both listed), and nothing catches it, so the run would end as an unexpected error | Step 3b-2a-2b-2: the later entry fails for the run, naming both (5.3 step 1) |
-| 93 | A cancel that lands inside a writer transaction abandons its connection with the `BEGIN IMMEDIATE` open, so the run cannot close its own row: in a probe on a `create_all` database, not yet repeated on a migrated one, the close failed with "database is locked" after the busy timeout | Step 3b-2a-2b-2: every writer call runs shielded from cancellation (5.3), and its tests repeat the probe on a migrated database |
+| 92 | `plan()` raises `ValueError` when two configured entries resolve to one `github_id` (an old name and the new one both listed), and nothing catches it, so the run would end as an unexpected error | Step 3b-2a-2b-2: the later entry fails for the run, naming both, and makes the exit 2 (5.3 step 1) |
+| 93 | A cancel that lands inside a transaction on the writer's connection abandons the connection with its `BEGIN IMMEDIATE` open: the write lock stays held, the run's close on the same connection fails with "database is locked" after the busy timeout, and the row stays `running` (section 7, "Cancelled writer transaction") | Step 3b-2a-2b-2: every transaction on the writer's connection runs shielded from cancellation (5.3), tested by an interrupt landing inside a writer statement |
 
 ## 5. Design
 
@@ -561,29 +561,36 @@ the same transaction a `running` row whose `deadline_at` is 10 or more minutes p
 `aborted`. A refused claim inserts nothing and exits 1, naming the blocking run; `--break-lock` with
 no blocking row proceeds and says so; an interrupted run closes its row as `aborted` with
 `exit_code` 130, the code the CLI exits with on an interrupt, which D25 does not publish on. Every
-writer call runs shielded from cancellation, so an interrupt takes effect between transactions (a
-cancel inside one would leave its `BEGIN IMMEDIATE` open on an abandoned connection and the close
-waiting on it; gap 93); the run then closes and re-raises the interrupt. A second interrupt during
-the close leaves the row `running`, as a crash does, for the stale-row rules or `--break-lock`. A
-row another process marked `aborted` (`--break-lock`, or a stale reclaim) keeps a null `exit_code`,
-and every close updates its row only while it is `running`, so a run whose row was broken exits 1
-and says so instead of overwriting `aborted`, an interrupted run included; a row this run's own
-earlier close wrote keeps that close's status and code. With a deferred
-`BEGIN`, a claim racing an uncommitted one does not refuse: it reads no `running` row and its insert
-fails with "database is locked" (section 7, "Run claim"). A claimant that waits on another's
-uncommitted `BEGIN IMMEDIATE` past the 30 s busy timeout exits 1 with SQLite's "database is locked",
-without the blocking run's id, which it cannot read. Before the claim (for `--dry-run`, before
-step 1), the run checks that the database file exists (connecting to a missing path would create an
-empty file), that it is at the code's migration head, and that `user_version` equals
-`schema_version`, reading `alembic_version` and `PRAGMA user_version` through the application
-engine, never through alembic, whose commands take the write lock; it exits 1 otherwise (gap 74).
+transaction on the writer's connection (the writes, the writer's reads, the claim, and the close)
+runs shielded from cancellation, so an interrupt takes effect between transactions: a cancel inside
+one leaves its `BEGIN IMMEDIATE` open on an abandoned connection, which keeps the write lock and
+fails the close (gap 93). An interrupted run then closes its row and re-raises the interrupt, so the
+CLI exits 130. A row another process marked `aborted` (`--break-lock`, or a stale reclaim) keeps a
+null `exit_code`, and every close updates its row only while it is `running`, so a run whose row was
+broken exits 1 and says so instead of overwriting `aborted`: the engine raises `RunAborted`, which
+the command maps to exit 1, for an interrupted run too. An interrupt that arrives after this run's
+own close committed is re-raised, and the row keeps that close's status and code. When a close
+fails, the run logs both errors and exits 1 (step 4). A second interrupt during the close is
+expected to leave the row `running`, as a crash does. With a deferred `BEGIN`, a claim racing an
+uncommitted one does not refuse: it reads no `running` row and its insert fails with "database is
+locked" (section 7, "Run claim"). A claimant that waits on another's uncommitted `BEGIN IMMEDIATE`
+past the 30 s busy timeout exits 1 with SQLite's "database is locked", without the blocking run's
+id, which it cannot read. Before the claim (for `--dry-run`, before step 1), the run checks that the
+database file exists (connecting to a missing path would create an empty file), that it is at the
+code's migration head, and that `user_version` equals `schema_version`, reading `alembic_version`
+and `PRAGMA user_version` through the application engine, never through alembic, whose commands take
+the write lock; it exits 1 otherwise (gap 74).
 
-The engine (Step 3b-2a-2b) takes the run's parsed options, the `tracking.toml` file it read (5.5), a
-factory that opens `GitHubSource` with a given deadline, and a clock, which it reads once for
-`started_at`, `deadline_at`, and the source's deadline. A run that never starts ends before any
-`sync_runs` row with the head check's refusal, a refused claim, or a database error before the claim
-returns, each of which the command (Step 3b-2a-2c) maps to exit 1. The engine logs each event as it
-happens and returns a structured result, which the command prints.
+The engine (Step 3b-2a-2b-2; `--dry-run` in 3b-2a-2b-3) takes the run's parsed options, the database
+URL, the `tracking.toml` file it read (5.5), the run's `trigger` and `code_version`, which the
+command computes (5.1), a factory that opens `GitHubSource` with a given deadline, and a clock. One
+reading of the clock at the start gives `started_at`, `deadline_at`, and the source's deadline;
+`failed_at`, the refresh's `now`, and `finished_at` are later readings of the same clock. A run that
+never starts ends before any `sync_runs` row with the head check's refusal (`HeadCheckError`), a
+refused claim (`ClaimRefused`), or a database error before the claim returns (`LocalDatabaseError`),
+each of which the command (Step 3b-2a-2c) maps to exit 1. A run that starts returns a structured
+result with its exit code, except an interrupt, which is re-raised, and a broken row, which raises
+`RunAborted` (above). The engine logs each event as it happens; the command prints the result.
 
 1. Resolve each configured repository, in `tracking.toml` order, with the resolve query (5.8). `followRenames` is on by
    default, so a renamed repository resolves under its configured name. Match the stored row by
@@ -593,22 +600,23 @@ happens and returns a structured result, which the command prints.
    when the default branch changed, recompute `targets_default_branch` for its PRs. A repository that
    cannot be resolved, has no default branch, or resolves to a different `github_id` than its stored
    row (the `is_tracked` row whose `full_name` equals the configured name, ignoring case) fails for
-   this run, and nothing of it is deleted; when no configured repository resolves, the
-   run is fatal (exit 1). A stored repository that a configured entry resolves to gets
-   `is_tracked = true` and its `repo_group` from the config. A stored repository is marked
-   `is_tracked = false` and reported (D27) only when the run has no `--repo` filter, every configured
-   entry resolved to its stored `github_id` or to a new repository, and none resolved to this
-   repository's `github_id`. A run with `--repo` attempts only the repositories it names: it neither
-   marks nor reports untracked repositories, and writes no `repo_sync_state` for others. A
-   configured repository that never resolved has no `repositories` row, so it has no
-   `repo_sync_state` row either; the exit code and the log report it. A stored repository whose
-   configured entry failed to resolve gets `last_outcome = failed`, and one the deadline kept from
-   resolving gets `incomplete_index`; either makes the exit 2. Two configured entries that resolve
-   to one `github_id` (an old name and the new one both listed) fail the later entry in
-   `tracking.toml` order for the run, naming both (gap 92). The resolve query also reads
-   the repository's labels; a stored item
-   that carries a label the repository no longer has is planned for hydration, because renaming or
-   deleting a label changes no item's `updatedAt`.
+   this run, and nothing of it is deleted; when no configured repository resolves and the deadline
+   stopped none of the resolves, the run is fatal (exit 1). A stored repository that a configured
+   entry resolves to gets `is_tracked = true` and its `repo_group` from the config. A stored
+   repository is marked `is_tracked = false` and reported (D27) only when the run has no `--repo`
+   filter, every configured entry resolved to its stored `github_id` or to a new repository, and
+   none resolved to this repository's `github_id`. A run with `--repo` attempts only the
+   repositories it names: it neither marks nor reports untracked repositories, and writes no
+   `repo_sync_state` for others. A configured repository that never resolved has no `repositories`
+   row, so it has no `repo_sync_state` row either; the exit code and the log report it. A stored
+   repository whose configured entry failed to resolve gets `last_outcome = failed`, and one the
+   deadline kept from resolving gets `incomplete_index`; either makes the exit 2. Two configured
+   entries that resolve to one `github_id` (an old name and the new one both listed) fail the later
+   entry in `tracking.toml` order for the run, naming both (gap 92): it writes nothing and gets no
+   outcome, makes the exit 2, and counts as an entry that failed to resolve, so the run marks no
+   repository untracked and refuses `--prune-untracked`. The resolve query also reads the
+   repository's labels; a stored item that carries a label the repository no longer has is planned
+   for hydration, because renaming or deleting a label changes no item's `updatedAt`.
 2. Index, in the same order: enumerate every pull request and issue with
    `pullRequests|issues(first: 100, orderBy: {field: CREATED_AT, direction: ASC})` (5.8). The index
    carries each item's `fullDatabaseId`, state, and dates (`createdAt`, `updatedAt`, `mergedAt`,
@@ -655,11 +663,11 @@ happens and returns a structured result, which the command prints.
    stored row stays (section 3). Neither failure is an in-place update: an item failure writes
    nothing for the item (step 4).
    A failure the engine detects itself (these two, a hydrated `github_id` other than the index's, a
-   review or comment id
-   stored under another PR, a lookup `databaseId` other than the commit link's) is recorded at once,
-   without the solo retry, which would repeat a deterministic result. The planner is a pure
-   function over snapshots of the stored rows, which `--dry-run` reuses. The run reads its snapshot
-   once, after the claim and before step 1 (a dry run, after the head check).
+   review or comment id stored under another PR, a per-batch lookup's `databaseId` other than the
+   commit link's; gap 90's lookups are logged instead, 5.2) is recorded at once, without the solo
+   retry, which would repeat a deterministic result. The planner is a pure function over snapshots
+   of the stored rows, which `--dry-run` reuses. The run reads its snapshot once, after the claim
+   and before step 1 (a dry run, after the head check).
 4. Hydrate: GraphQL batches of 25 PRs or 100 issues of one repository via aliased
    `pullRequest(number:)` and `issue(number:)` fields (5.8). Read each alias separately. Overflow
    beyond 100 entries on any connection (reviews, comments, commits, files, labels, closing issues,
@@ -699,10 +707,11 @@ happens and returns a structured result, which the command prints.
    code. Fields that drive logic (`state`, review `state`) are closed enums in the typed models;
    descriptive enums are text (5.1).
 
-   Any other exception after the claim is fatal too. A fatal run closes as `failed` (exit 1), every
-   outcome already delivered written or recorded first (step 6), with step 7's halt reasons when
-   step 7 ran; when the close itself fails, the run logs both errors and exits 1, naming
-   `--break-lock`, and its row stays `running` for the stale-row rules.
+   Any other exception after the claim is fatal too. A fatal run stops after the transaction in
+   progress (step 6) and closes as `failed` (exit 1), with step 7's halt reasons when step 7 ran.
+   When the close itself fails, the run logs both errors and exits 1, and its row stays `running`:
+   the stale-row rules recover it when it has a `deadline_at`, and otherwise the message names
+   `--break-lock`.
 
    The `--max-minutes` deadline applies to every request. The run has reached the deadline when a
    request or a wait was refused for it, not when the clock merely passed `deadline_at`. At the
@@ -736,26 +745,28 @@ happens and returns a structured result, which the command prints.
    without a failure, before any account lookup for it, and the next index removes it.
 6. Write: one batch at a time, on the writer's one connection. The run hydrates a batch, checks it
    (step 5), looks up its accounts (5.2), and writes each of its items before it requests the next
-   batch, so a fatal error, the deadline, or an interrupt finds every delivered outcome written,
-   recorded as failed, or recorded in `sync_pending`. Each item is one transaction: upsert by
-   `github_id` with `INSERT ... ON CONFLICT (github_id) DO UPDATE`, which keeps the row id (never
+   batch. An outcome is delivered when the hydrator yields its batch. At the deadline, which only a
+   request or a wait meets, the run writes each delivered item whose accounts need no refused lookup
+   and records the rest in `sync_pending`. A fatal error or an interrupt ends the batch after the
+   transaction in progress: its unwritten items are neither written nor pended, and the next run
+   plans them again under the same conditions. Each item is one transaction: upsert by `github_id`
+   with `INSERT ... ON CONFLICT (github_id) DO UPDATE`, which keeps the row id (never
    `INSERT OR REPLACE`, which deletes the row and cascades); replace the hydrated child rows
    (`pr_labels`, `pr_reviews`, `pr_comments`, `pr_commits`, `pr_files`, `pr_closing_issues`,
    `pr_review_requests`, `pr_assignees`, `issue_labels`), where a new review or comment with a null
    author takes the stored author of the row with the same `github_id`, a commit with a null link
    takes the stored link of this PR's row with the same SHA, and a null PR or issue author or merger
-   keeps the stored one (D28), each with its `*_reported` column false (`linked_github_id` null for a
-   commit); store the validated totals; set `hydrated_at`. Fetchers never touch the database.
-   A writer refusal for a link the engine did not supply (`AccountMissing`) is an item failure.
-   Every writer transaction is one `BEGIN IMMEDIATE`. One that writes for the run first checks the
-   run's row is still `running`, and the close updates the row only while it is `running`, so a run
+   keeps the stored one (D28), each with its `*_reported` column false (`linked_github_id` null for
+   a commit); store the validated totals; set `hydrated_at`. Fetchers never touch the database. A
+   writer refusal for a link the engine did not supply (`AccountMissing`) is an item failure. Every
+   writer transaction is one `BEGIN IMMEDIATE`. One that writes for the run first checks the run's
+   row is still `running`, and the close updates the row only while it is `running`, so a run
    another process aborted writes nothing more; the claim, which has no row yet, and the writer's
-   reads, which write nothing, do not check it. A database error invalidates
-   the writer's connection before the close, because a `COMMIT` that failed on a lock leaves
-   SQLite's transaction open on it.
-   The writer holds one connection for the run and binds its session to it: the engine's `NullPool`
-   gives a session bound to the engine a new connection, with the connect listener rerun, for every
-   committed transaction, so `get_session()`'s pattern would open one connection per item.
+   reads, which write nothing, do not check it. A database error invalidates the writer's connection
+   before the close, because a `COMMIT` that failed on a lock leaves SQLite's transaction open on
+   it. The writer holds one connection for the run and binds its session to it: the engine's
+   `NullPool` gives a session bound to the engine a new connection, with the connect listener rerun,
+   for every committed transaction, so `get_session()`'s pattern would open one connection per item.
    A transferred issue arrives with a new `github_id` and number and is inserted in its new
    repository; step 7 removes the old row.
 7. Delete: after all writes, the refresh's included, for each repository with a complete index that
@@ -786,23 +797,24 @@ happens and returns a structured result, which the command prints.
    repository is untracked in a run without `--repo`, or a prune was refused (step 7); 1 on a fatal
    error. The exit code is decided after the prune. An accepted failure is still recorded and
    reported; it names the repository, number, and reason in `tracking.toml`, so a permanent failure
-   does not turn every run red. An entry is reported as not having failed only when its repository
-   was attempted and completely indexed and its item neither failed in this run nor is in
-   `sync_pending` (5.5). `--max-minutes` stops queueing new hydration, records in `sync_pending` the
-   planned items it did not reach (a repository that failed during hydration keeps its rows, step
-   4), writes or records every outcome already delivered (step 6), still runs step 7 for complete
-   repositories and step 8, and sets status `time_limited`; unreached items are not failures. A
-   deadline reached only during the refresh makes the status `time_limited` and leaves each
-   repository's outcome and the exit code as the hydration left them. Step 8 writes `last_run_id`
-   and `last_outcome` for every repository the run attempted. `--dry-run` takes no lock, inserts no
-   `sync_runs` row, and writes nothing: it runs the run's own steps 1-3, applying step 1's writes to
-   its snapshot in memory instead of the file, so it decides as the run would, and the deadline
-   applies to it. It reports, per repository, the resolve result (inserted or updated, a name
-   change, a tracking change, a conflict or failure, and the number of labels read), the planned
-   hydrations with their reasons, the in-place updates, the item failures the planner detects, and
-   the delete candidates with the guard's decision and the prune's. It exits as the run would for
-   every step-8 condition steps 1-3 can show (a failed or incompletely indexed repository, an
-   untracked stored repository, a deletion halt, a refused prune, an unaccepted item failure the
+   does not turn every run red. An entry is reported as not having failed only when the run reached
+   step 8 and the entry's repository was attempted, completely indexed, and did not fail later in
+   the run (step 4), and its item neither failed in this run nor is in this run's `sync_pending`
+   (5.5). `--max-minutes` stops queueing new hydration, records in `sync_pending` the planned items
+   it did not reach (a repository that failed during hydration keeps its rows, step 4), writes or
+   pends every outcome already delivered (step 6), still runs step 7 for complete repositories and
+   step 8, and sets status `time_limited`; unreached items are not failures. A deadline reached only
+   during the refresh makes the status `time_limited` and adds no `time_limited` outcome: each
+   repository's outcome and the exit code are as they would be without the deadline. Step 8 writes
+   `last_run_id` and `last_outcome` for every repository the run attempted. `--dry-run` takes no
+   lock, inserts no `sync_runs` row, and writes nothing: it runs the run's own steps 1-3, applying
+   step 1's writes to its snapshot in memory instead of the file, so it decides as the run would,
+   and the deadline applies to it. It reports, per repository, the resolve result (inserted or
+   updated, a name change, a tracking change, a conflict or failure, and the number of labels read),
+   the planned hydrations with their reasons, the in-place updates, the item failures the planner
+   detects, and the delete candidates with the guard's decision and the prune's. It exits as the run
+   would for every step-8 condition steps 1-3 can show (a failed or incompletely indexed repository,
+   an untracked stored repository, a deletion halt, a refused prune, an unaccepted item failure the
    planner detects), and, like every reader in `src/`, uses no server-side cursor, since a half-read
    query blocks a running sync's commit (gap 77).
 
@@ -810,18 +822,19 @@ happens and returns a structured result, which the command prints.
    without reaching the deadline; `time_limited`: it reached the deadline (step 4) at any point, the
    refresh included; `failed`: exit 1; `aborted`: `--break-lock`, a reclaimed stale row, or an
    interrupt. A repository's `last_outcome` is the first that applies of `untracked`, `failed`,
-   `incomplete_index` (a count mismatch after the rescan, or the deadline during its index),
-   `halted`, `time_limited` (planned items left unreached), and `complete`; step 8 also writes
-   `last_outcome = untracked` and `last_run_id` for every stored repository it finds untracked. The
-   close of a fatal or interrupted run also writes `last_run_id` and `last_outcome = failed` for
-   every repository it attempted, and step 7's `halt_reason` for one whose step 7 ran, never
-   `last_index_started_at`, because its committed writes are in the file. A deadline before any
-   repository resolves makes the run `time_limited`, not fatal. A run that never starts exits 1
-   before any `sync_runs` row: a usage error (click's own code for it is 2, the code D25 publishes
-   on; gap 69), an invalid `tracking.toml`, missing credentials, a missing database file or one not
-   at head, or a refused claim. `--repo` and the `--allow-deletions` repository must each name a
-   configured repository, ignoring case; a single-valued option given twice (click keeps the last
-   value silently) and `--dry-run` with `--break-lock` are usage errors.
+   `incomplete_index` (a count mismatch after the rescan, or the deadline before its resolve or
+   during its index), `halted`, `time_limited` (planned items left unreached), and `complete`; step
+   8 also writes `last_outcome = untracked` and `last_run_id` for every stored repository it finds
+   untracked. The close of a fatal or interrupted run also writes `last_run_id` and
+   `last_outcome = failed` for every repository it attempted, and step 7's `halt_reason` for one
+   whose step 7 ran, never `last_index_started_at`, because its committed writes are in the file. A
+   deadline before any repository resolves makes the run `time_limited`, not fatal. A run that never
+   starts exits 1 before any `sync_runs` row: a usage error (click's own code for it is 2, the code
+   D25 publishes on; gap 69), an invalid `tracking.toml`, missing credentials, a missing database
+   file or one not at head, a refused claim, or a database error before the claim returns (the busy
+   timeout included). `--repo` and the `--allow-deletions` repository must each name a configured
+   repository, ignoring case; a single-valued option given twice (click keeps the last value
+   silently) and `--dry-run` with `--break-lock` are usage errors.
 
 ### 5.4 Verification
 
@@ -1597,26 +1610,33 @@ without a direct test in this pull request; CI passes on the exact PR head.
 
 Prerequisite: Step 3b-2a-2a has merged.
 
-Scope: test code only. A scenario model of repositories, PRs, and accounts that renders resolve,
-repository-label, index, batch, overflow, compare, and user-lookup responses through the Step 2
-replay, which consults it when each request arrives, with each response's `Date` header from the
-test clock, which tests advance; a null repository in a batch or index response; and the GraphQL
-document stamps the model was checked against, so the replay's stamp check still refuses a document
-the model was not checked against. The model records each change a test applies (a PR opened,
-updated, merged, closed, or reopened, a label renamed, an account deleted or seen again, a
-repository renamed or gone) in a change history, from which 3b-2a-2c computes expected states and
-3b-2b renders timeline responses. The replay's fixtures move where `tests/sync/` reads them, and
-`docs/testing.md` describes the model. The engine's tests (3b-2a-2b-2 and 3b-2a-2b-3), the seeded
-runs (3b-2a-2c), and verify's tests (3b-2b) run against it.
+Scope: tests and `docs/testing.md` only; nothing under `src/`. A scenario model of repositories,
+PRs, and accounts that renders resolve, repository-label, index, batch, overflow, compare, and
+user-lookup responses through the Step 2 replay, which gains a provider it consults when each
+request arrives, so each response's `Date` header comes from the test clock; a null repository in a
+resolve, batch, or index response; and the GraphQL document stamps the model was checked against, so
+the replay's stamp check still refuses a document the model was not checked against. The model
+records each change a test applies (for example a PR opened, updated, merged, closed, reopened, or
+toggled between draft and ready, a closing link connected or disconnected, an author association
+changed, a label renamed, an account deleted or seen again, a repository renamed or gone) in a
+change history, from which 3b-2a-2c computes expected states and 3b-2b renders timeline responses.
+The replay, clock, and source pytest fixtures move from `tests/source/conftest.py` to
+`tests/conftest.py`, the test clock gains a way for tests to advance it and a sleep that suspends,
+so an interrupt can land during a rate-limit wait, and `docs/testing.md` describes the model. The
+engine's tests (3b-2a-2b-2 and 3b-2a-2b-3), the seeded runs (3b-2a-2c), and verify's tests (3b-2b)
+run against it.
 
 Tests: a test parses every recorded pull-request, index, user-lookup, overflow, resolve, and
 repository-label unit into the model, re-renders it, and requires exact JSON equality with the
 recording's data and errors, compared as serialized JSON (headers differ by construction: the
 model's `Date` comes from the test clock). The three recorded compare pages (1.47 MB) are compared
 on the fields the source reads, since exact equality would make the model hold REST fields the
-source never reads. For each response kind, a null repository, a `NOT_FOUND` item and account, and a
-change applied between two renderings, what the model renders parses through the real `GitHubSource`
-into records equal to the model's state.
+source never reads. What the model renders parses through the real `GitHubSource` into records equal
+to the model's state for each response kind, before and after a change applied between two
+renderings; a null repository in a resolve, index, or batch response raises the source's
+`RepositoryNotFound` or `RepositoryShapeError`; a `NOT_FOUND` pull request yields `Gone`, and a
+`NOT_FOUND` account yields no account. A sequence of applied changes yields the expected
+change-history entries, each with its test-clock time.
 
 Acceptance: an adversarial review of the change, by reviewers who did not write it, finds no
 invariant check without a test that targets it; CI passes on the exact PR head.
@@ -1632,7 +1652,9 @@ accepted failures (recorded and reported, kept out of exit 2, and an entry whose
 reported; 5.3 step 8, 5.5); user lookup and refresh; the lookup gap 90 queues; the engine checks of
 5.3 step 5 and gap 78; the failure classes of 5.3 step 4, a database error in the writer and any
 other exception after the claim included; and the deadline. The engine is a function
-`ghactivity sync` (3b-2a-2c) calls with the run's options; `--dry-run` is 3b-2a-2b-3's.
+`ghactivity sync` (3b-2a-2c) calls with the run's options; `--dry-run` is 3b-2a-2b-3's. The
+`DeadlineReached` docstring in `source/errors.py`, which says the run drains, follows 5.3 steps 4
+and 6.
 
 Tests through the sync service with a real SQLite file built by `alembic upgrade head` and
 3b-2a-2b-1's scenario model, with `Date` headers from the test clock. Cases: first sync, update,
@@ -1686,7 +1708,17 @@ aborted by another process exiting 1, two configured entries resolving to one `g
 repository the deadline kept from resolving and one whose resolve failed, the deadline reached in a
 middle repository's index, a deadline reached only during the refresh, a prune over two runs, any
 other exception after the claim closing the run as `failed`, every exit path's outcomes accepted by
-the close, no scenario producing `AccountMissing`, view rows after a sync.
+the close, no scenario producing `AccountMissing` (no `sync_failures.last_error` names it after any
+engine test) and an `AccountMissing` refusal recorded as an item failure (the writer replaced by a
+fake that raises it), a refused claim and a database error before the claim returns each raising
+before any row, a close that fails logging both errors and exiting 1, an interrupt after this run's
+own close committed re-raised with the row keeping that close's code, a deadline or a failed request
+in the middle of a batch's lookups (the deadline pending the items that wait on a refused lookup, a
+fatal error leaving the batch's unwritten items for the next run), gap 90's lookups stopped by the
+deadline and a failed one (a `databaseId` other than the link's included) logged with the exit
+unchanged, an `accepted_failures` entry not reported under `--repo`, for an incompletely indexed
+repository, for a repository gone during hydration, and for a pending item, the clock passing
+`deadline_at` with no refused request leaving the run `complete`, view rows after a sync.
 
 Acceptance: an adversarial review of the change, by reviewers who did not write it, finds no
 invariant check without a test that targets it; CI passes on the exact PR head.
@@ -1704,7 +1736,9 @@ step-8 condition steps 1-3 can show, a dry run exiting with the run's exit code 
 scenario, and with no halt its delete candidates equal to what the run deletes; `--dry-run` taking
 no lock while a run is `running`; a `--dry-run` started during a sync, reading beside the sync's
 item commits without blocking them (gap 77); the head check before step 1; the deadline during a dry
-run's index.
+run's index; the exact report for a scenario with a rename, a tracking change, a conflict, a failed
+resolve, two entries resolving to one repository, a planned hydration for each reason, an in-place
+update, a planner failure, and a halted and an approved deletion.
 
 Acceptance: an adversarial review of the change, by reviewers who did not write it, finds no
 invariant check without a test that targets it; CI passes on the exact PR head.
@@ -2045,6 +2079,7 @@ Measured 2026-10-16 unless noted. "Index" means the created-order enumeration in
 | Locals in tracebacks | typer 0.21.1 defaults `pretty_exceptions_show_locals` to true, and `cli/app.py` does not override it; `logging.py` sets `diagnose=True` on both stderr handlers, and its optional file handler passes none, so it takes loguru's default (`LOGURU_DIAGNOSE`, true) | installed typer signature and loguru `_defaults.py`; source at `c1f474b` |
 | Half-read queries | With a cursor that has fetched 1 of 1,000 rows on one connection, a commit on a second connection (busy timeout 0.5 s) raises "database is locked". SQLAlchemy's aiosqlite dialect fetches every row and closes the cursor inside `execute` unless the cursor is server-side | probe, Python `sqlite3`, rollback-journal mode; installed `sqlalchemy/dialects/sqlite/aiosqlite.py` |
 | Run claim | While one connection holds `BEGIN IMMEDIATE` with an uncommitted `running` row, a second claimant using `BEGIN IMMEDIATE` waits, then refuses. With a deferred `BEGIN`, the claimant reads no `running` row and its insert fails at once with "database is locked"; the holder's commit then fails too only while the claimant keeps its transaction open, and succeeds once the claimant rolls back or closes | probe, Python `sqlite3` |
+| Cancelled writer transaction | On a database built by `alembic upgrade head`, a task cancelled 50 ms into a statement inside `transaction()` on the writer's connection leaves the connection invalidated with no transaction, while another connection's `BEGIN IMMEDIATE` is still refused: the abandoned DBAPI connection keeps the write lock. `close_run` on the writer then fails after the busy timeout (2 s here) with "database is locked", the row stays `running`, and the lock is still held after the writer's engine is disposed. With the same write behind `asyncio.shield`, the write finishes, the lock is free, and the close commits at once (`aborted`, 130) | probe, 2026-10-20: Python 3.13.0, SQLite 3.45.3, SQLAlchemy 2.0.45, aiosqlite 0.22.1 |
 | Loguru placeholders | ruff 0.14.11 PLE1205 flags `logger.warning("brace {}", value)` and passes `logger.warning("percent %s", value)` for `logger = get_logger(__name__)` | `ruff check --isolated --select PLE1205,PLE1206,G` on a probe file |
 | Tracked database | `github_activity.db` at `c1f474b`: SHA-256 `c18b2bc50a7e60f822cff185723cabc2846da31bcd8814aa9df46dca0d1b4751`, revision `b3c4d5e6f7g8`, 14,669 pull requests, 0 `user_tags` and 0 `pr_user_tags` rows, `user_version` 0, journal mode `delete` | `shasum -a 256`; `sqlite3` on a copy |
 | Quality gates | At `43fcf06`, before Step 1: no CI; pre-commit hooks not installed; ruff 0.14.11 (lock) 10 findings plus 4 format diffs vs ruff 0.8.6 (pre-commit pin) 0 findings plus 1 format diff; mypy clean on 91 files; 608 tests, 0 failures | local |
