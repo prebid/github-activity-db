@@ -7,7 +7,9 @@ records the source returns.
 
 from __future__ import annotations
 
+import copy
 import json
+from collections.abc import Callable
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta, timezone
 from typing import Any
@@ -33,7 +35,9 @@ from tests.source.conftest import START, FakeClock, all_lookups, all_outcomes
 from tests.source.recordings import Unit
 from tests.source.replay import Replay, loaded_units, synthetic, unanswered
 from tests.source.scenario import (
+    ORDERS,
     RENDERED,
+    PullRequest,
     Repository,
     Scenario,
     ScenarioError,
@@ -677,10 +681,17 @@ async def test_a_bot_commit_links_its_bot_login(scenario: Scenario) -> None:
         bot,
         "dependabot[bot]",
     )
-    databaseId = scenario.account(bot)["databaseId"]
+    recorded = next(
+        node["commit"]["author"]
+        for unit in recorded_units()
+        if unit.kind == "pull_request" and unit.key["number"] == 15724
+        for node in unit.data["commits"]["nodes"]
+        if node["commit"]["author"]["user"]["login"].endswith("[bot]")
+    )
+    recorded_id, model_id = recorded["user"]["databaseId"], scenario.account(bot)["databaseId"]
     assert (commit.author_name, commit.author_email) == (
-        "dependabot[bot]",
-        f"{databaseId}+dependabot[bot]@users.noreply.github.com",
+        recorded["name"],
+        recorded["email"].replace(str(recorded_id), str(model_id)),
     )
     async with scenario.source() as source:
         accounts, _ = await all_lookups(source, [bot])
@@ -708,6 +719,8 @@ async def test_a_push_during_hydration_is_read_again(scenario: Scenario) -> None
     ]
     assert record.head_ref_oid == pull.node["headRefOid"] != head
     assert pull.node["headRefOid"] == pull.node["commits"]["nodes"][-1]["commit"]["oid"]
+    assert (pull.node["files"]["totalCount"], pull.node["updatedAt"]) == (101, iso(START))
+    assert [seen.operation for seen in scenario.replay.seen].count("PullRequestBatch") == 2
 
 
 async def test_a_pull_request_above_250_commits_reads_its_compare(scenario: Scenario) -> None:
@@ -756,6 +769,8 @@ async def test_a_clock_in_another_zone_still_dates_in_utc() -> None:
     async with world.source() as source:
         resolved = await source.resolve("example", "project")
     assert resolved.resolved_at == START
+    answered = post(world, documents.RESOLVE, {"owner": "example", "name": "project"})
+    assert answered.headers["date"] == "Sat, 17 Oct 2026 12:00:00 GMT"
     assert unanswered(world.replay) == []
 
 
@@ -910,3 +925,176 @@ def test_a_recorded_issue_keeps_its_recorded_id() -> None:
         link["number"],
         link["fullDatabaseId"],
     )
+
+
+async def test_an_account_the_model_never_held_goes_unanswered() -> None:
+    """A recorded pull request names accounts no lookup was recorded for; the model cannot say
+    what GitHub answers for them, so it leaves the lookup unanswered rather than NOT_FOUND."""
+    model = Scenario.from_recordings(FakeClock())
+    record = hydrated(await hydrate(model, "prebid", "Prebid.js", 13481))
+    assert record.author is not None and record.author.node_id not in model.accounts
+    async with model.source() as source:
+        with pytest.raises(FatalSourceError):
+            await all_lookups(source, [record.author.node_id])
+    assert model.replay.problems == [
+        f"no user unit for {{'id': '{record.author.node_id}'}}: record it with "
+        "scripts/record_fixtures.py"
+    ]
+
+
+def test_lifecycle_changes_github_refuses(scenario: Scenario) -> None:
+    repository, author = project(scenario, pulls=3)
+    merged, closed, opened = repository.pulls[1], repository.pulls[2], repository.pulls[3]
+    draft = scenario.open_pull_request(repository, author, isDraft=True)
+    merged.merge(by=author)
+    closed.close()
+    refused: list[tuple[PullRequest, Callable[[], None], str]] = [
+        (merged, lambda: merged.merge(by=None), "#1 is merged: GitHub merges an open one"),
+        (merged, merged.close, "#1 is merged: GitHub closes an open one"),
+        (merged, merged.reopen, "#1 is merged: GitHub reopens a closed one"),
+        (closed, lambda: closed.merge(by=None), "#2 is closed: GitHub merges an open one"),
+        (closed, closed.close, "#2 is closed: GitHub closes an open one"),
+        (opened, opened.reopen, "#3 is open: GitHub reopens a closed one"),
+        (draft, lambda: draft.merge(by=None), "#4 is open draft: GitHub merges an open one"),
+    ]
+    for pull, change, message in refused:
+        before = copy.deepcopy(pull.node)
+        with pytest.raises(ScenarioError, match=message):
+            change()
+        assert pull.node == before
+
+
+def test_names_are_unique(scenario: Scenario) -> None:
+    scenario.add_repository("example", "one")
+    two = scenario.add_repository("example", "two")
+    with pytest.raises(ScenarioError, match="example/two is taken"):
+        scenario.add_repository("example", "two")
+    one = scenario.repository("example", "one")
+    assert one is not None
+    with pytest.raises(ScenarioError, match="example/two is taken"):
+        scenario.rename_repository(one, "two")
+    assert (one.full_name, scenario.repository("example", "two")) == ("example/one", two)
+    scenario.rename_repository(one, "one")  # its own name is not taken from it
+    assert one.full_name == "example/one"
+
+
+def test_a_change_must_change_something(scenario: Scenario) -> None:
+    issues = scenario.add_repository("example", "issues")
+    repository, author = project(scenario)
+    pull = repository.pulls[1]
+    pull.add("files", scenario.node("files"))
+    pull.add("comments", scenario.node("comments", by=author))
+    scenario.clock.advance(60)
+    before = (copy.deepcopy(pull.node), dict(pull.heads))
+    for connection in ("comments", "files", "commits"):
+        with pytest.raises(ScenarioError, match=f"nothing in #1's {connection} matches"):
+            pull.remove(connection, lambda node: False)
+    with pytest.raises(ScenarioError, match="#1 links no issue 42 of example/issues"):
+        pull.unlink(42, issues)
+    with pytest.raises(ScenarioError, match="example/project has no label LA_unknown"):
+        scenario.rename_label(repository, "LA_unknown", "renamed")
+    assert (pull.node, pull.heads) == before
+
+
+async def test_a_change_after_a_request_that_never_comes_fails_the_test() -> None:
+    world = Scenario(FakeClock())
+    project(world)
+    world.after("PullRequestIndex", lambda: None)
+    world.after("PullRequestBatch", lambda: None, times=2)
+    async with world.source() as source:
+        resolved = await source.resolve("example", "project")
+        await all_outcomes(source, resolved, [1])
+    assert unanswered(world.replay) == ["fault 0: served 0, 1 left", "fault 1: served 1, 1 left"]
+
+
+async def test_a_change_aimed_at_one_repositorys_request() -> None:
+    world = Scenario(FakeClock())
+    author = world.add_account()
+    for name in ("first", "second"):
+        world.open_pull_request(world.add_repository("example", name), author)
+    changed: list[str] = []
+    world.after(
+        "PullRequestIndex",
+        lambda: changed.append("second"),
+        when=lambda seen: seen.variables["name"] == "second",
+    )
+    async with world.source() as source:
+        for name in ("first", "second"):
+            await source.index_pull_requests(await source.resolve("example", name))
+    assert changed == ["second"]
+    assert unanswered(world.replay) == []
+
+
+async def test_an_old_head_two_pushes_back_and_a_deletion_during_its_read(
+    scenario: Scenario,
+) -> None:
+    """Two pushes and a deletion land while the oldest head's compare is read: that head still
+    answers its own 251 commits, and the deletion reaches them too."""
+    repository, author = project(scenario)
+    pull = repository.pulls[1]
+    pull.add("commits", *(scenario.node("commits", by=author) for _ in range(251)))
+    head = pull.node["headRefOid"]
+    before = [node["commit"]["oid"] for node in pull.node["commits"]["nodes"]]
+
+    def pushes_and_a_deletion() -> None:
+        pull.add("commits", scenario.node("commits"))
+        pull.add("commits", scenario.node("commits"))
+        scenario.delete_account(author)
+
+    scenario.after("PullRequestBatch", pushes_and_a_deletion)
+    record = hydrated(await hydrate(scenario, "example", "project", 1))
+    assert (record.head_ref_oid, [commit.sha for commit in record.commits]) == (head, before)
+    assert {(commit.author, commit.author_name) for commit in record.commits} == {(None, "alice")}
+    assert len(pull.heads) == 3  # the head before 251 commits, and the two pushes since
+
+
+async def test_a_compare_in_a_repository_now_gone_goes_unanswered() -> None:
+    world = Scenario(FakeClock())
+    repository, author = project(world)
+    pull = repository.pulls[1]
+    pull.add("commits", *(world.node("commits", by=author) for _ in range(251)))
+    refs = (pull.node["baseRefOid"], pull.node["headRefOid"])
+
+    def remove() -> None:
+        repository.gone = True
+
+    world.after("PullRequestBatch", remove)
+    async with world.source() as source:
+        resolved = await source.resolve("example", "project")
+        with pytest.raises(FatalSourceError):
+            await all_outcomes(source, resolved, [1])
+    key = {"owner": "example", "name": "project", "base": refs[0], "head": refs[1]}
+    key.update(page=1, per_page=100)
+    assert world.replay.problems == [
+        f"no compare unit for {key}: record it with scripts/record_fixtures.py"
+    ]
+
+
+async def test_new_comments_and_commits_are_made_now(scenario: Scenario) -> None:
+    repository, author = project(scenario, pulls=2)
+    scenario.clock.advance(120)
+    pull = repository.pulls[1]
+    pull.add("comments", scenario.node("comments", by=author))
+    pull.add("commits", scenario.node("commits", by=author))
+    repository.pulls[2].merge(by=None)
+    async with scenario.source() as source:
+        resolved = await source.resolve("example", "project")
+        first, second = await all_outcomes(source, resolved, [1, 2])
+    now = scenario.clock.now()
+    (comment,) = hydrated(first).comments
+    (commit,) = hydrated(first).commits
+    assert (comment.created_at, comment.published_at, comment.updated_at) == (now, now, now)
+    assert commit.authored_at == now
+    assert (hydrated(second).state, hydrated(second).merged_by) == ("MERGED", None)
+
+
+@pytest.mark.parametrize(
+    "unit",
+    [u for u in recorded_units() if u.kind == "pull_request" and u.data],
+    ids=lambda u: str(u.path()),
+)
+def test_recorded_lists_are_in_the_order_cursors_name(unit: Unit) -> None:
+    """Paging by key rests on every recorded list being in its key's order (``ORDERS``)."""
+    for connection, order in ORDERS.items():
+        keys = [order(node) for node in unit.data[connection]["nodes"]]
+        assert keys == sorted(keys), connection

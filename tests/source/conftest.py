@@ -63,9 +63,8 @@ def replay() -> Iterator[Replay]:
     assert unanswered(replay) == []
 
 
-@pytest.fixture
-def open_source(replay: Replay, clock: FakeClock) -> OpenSource:
-    """``async with open_source(deadline=...) as source`` over the replay and the fake clock."""
+def opened_over(replay: Replay, clock: FakeClock) -> OpenSource:
+    """``async with opened(deadline=...) as source``: the real source over ``replay``."""
 
     @asynccontextmanager
     async def opened(deadline: datetime | None = None) -> AsyncIterator[GitHubSource]:
@@ -76,6 +75,12 @@ def open_source(replay: Replay, clock: FakeClock) -> OpenSource:
             yield source
 
     return opened
+
+
+@pytest.fixture
+def open_source(replay: Replay, clock: FakeClock) -> OpenSource:
+    """``async with open_source(deadline=...) as source`` over the replay and the fake clock."""
+    return opened_over(replay, clock)
 
 
 async def all_outcomes(

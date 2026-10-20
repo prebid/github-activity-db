@@ -33,9 +33,9 @@ from typing import Any
 from github_activity_db.source import GitHubSource
 from github_activity_db.source.documents import CONNECTIONS_BY_KEY
 from github_activity_db.source.limits import INDEX_CLOSING_LINKS, PAGE_SIZE
-from tests.source.conftest import FakeClock
+from tests.source.conftest import FakeClock, opened_over
 from tests.source.recordings import Unit
-from tests.source.replay import Replay, loaded_units
+from tests.source.replay import Replay, Seen, loaded_units
 
 Node = dict[str, Any]
 
@@ -267,7 +267,10 @@ class PullRequest:
         self.node["updatedAt"] = self.now(at)
 
     def merge(self, by: str | None, at: datetime | None = None) -> None:
-        """Merged by the account ``by`` (a node id), or by none GitHub still names (D28)."""
+        """Merged by the account ``by`` (a node id), or by none GitHub still names (D28); only an
+        open pull request that is not a draft merges."""
+        if self.node["state"] != "OPEN" or self.node["isDraft"]:
+            raise ScenarioError(f"#{self.number} is {self._status()}: GitHub merges an open one")
         moment = self.now(at)
         self.node.update(
             state="MERGED",
@@ -279,12 +282,20 @@ class PullRequest:
         )
 
     def close(self, at: datetime | None = None) -> None:
+        if self.node["state"] != "OPEN":
+            raise ScenarioError(f"#{self.number} is {self._status()}: GitHub closes an open one")
         moment = self.now(at)
         self.node.update(state="CLOSED", closedAt=moment, updatedAt=moment)
 
     def reopen(self, at: datetime | None = None) -> None:
+        if self.node["state"] != "CLOSED":
+            raise ScenarioError(f"#{self.number} is {self._status()}: GitHub reopens a closed one")
         moment = self.now(at)
         self.node.update(state="OPEN", closedAt=None, updatedAt=moment)
+
+    def _status(self) -> str:
+        draft = " draft" if self.node["state"] == "OPEN" and self.node["isDraft"] else ""
+        return f"{self.node['state'].lower()}{draft}"
 
     def add(self, connection: str, *nodes: Node, at: datetime | None = None) -> None:
         """Add nodes, which moves ``updatedAt`` as a comment, a label, or a review request does;
@@ -298,9 +309,13 @@ class PullRequest:
         with a push (``_change``). Removing a commit rewrites every later one, as a force push
         does, so each gets a new oid."""
 
+        self._refuse_push(connection)
+        listed = self.node[connection]["nodes"]
+        first = next((i for i, node in enumerate(listed) if matches(node)), None)
+        if first is None:
+            raise ScenarioError(f"nothing in #{self.number}'s {connection} matches")
+
         def removed() -> None:
-            listed = self.node[connection]["nodes"]
-            first = next((i for i, node in enumerate(listed) if matches(node)), len(listed))
             self._remove(connection, matches)
             if connection == "commits":
                 for node in self.node["commits"]["nodes"][first:]:
@@ -332,8 +347,10 @@ class PullRequest:
             target = node["repository"]["databaseId"]
             return (node["number"], target) == (number, repository.data["databaseId"])
 
-        self._remove("closingIssuesReferences", matches)
+        removed = self._remove("closingIssuesReferences", matches)
         self._remove("userLinkedClosingIssues", matches)
+        if not removed:
+            raise ScenarioError(f"#{self.number} links no issue {number} of {repository.full_name}")
 
     def compare_commits(self) -> list[Node]:
         """What REST compare lists for this pull request's head."""
@@ -351,11 +368,7 @@ class PullRequest:
             apply()
             self.touch(at)
             return
-        if self.compare is not None:
-            raise ScenarioError(
-                f"#{self.number}'s commits are recorded in two orders: push to a pull request "
-                "the model made"
-            )
+        self._refuse_push(connection)
         self.heads[(self.node["baseRefOid"], self.node["headRefOid"])] = self.compare_commits()
         apply()
         if connection == "files":
@@ -363,6 +376,13 @@ class PullRequest:
         self.touch(at)
         commits = self.node["commits"]["nodes"]
         self.node["headRefOid"] = commits[-1]["commit"]["oid"] if commits else self.world.new_oid()
+
+    def _refuse_push(self, connection: str) -> None:
+        if connection in PUSHED and self.compare is not None:
+            raise ScenarioError(
+                f"#{self.number}'s commits are recorded in two orders: push to a pull request "
+                "the model made"
+            )
 
     def _add(self, connection: str, nodes: Any) -> None:
         listed = self.node[connection]
@@ -372,11 +392,13 @@ class PullRequest:
         if order is not None:
             listed["nodes"].sort(key=order)
 
-    def _remove(self, connection: str, matches: Callable[[Node], bool]) -> None:
+    def _remove(self, connection: str, matches: Callable[[Node], bool]) -> int:
         listed = self.node[connection]
         kept = [node for node in listed["nodes"] if not matches(node)]
-        listed["totalCount"] -= len(listed["nodes"]) - len(kept)
+        removed = len(listed["nodes"]) - len(kept)
+        listed["totalCount"] -= removed
         listed["nodes"] = kept
+        return removed
 
     def index_entry(self) -> Node:
         links = self.node["closingIssuesReferences"]
@@ -437,9 +459,11 @@ class Repository:
 class Scenario:
     """Repositories, pull requests, and accounts, answering the replay at request time.
 
-    Any repository, pull request, node, or account the model does not hold is answered
-    ``NOT_FOUND``. It serves no rate-limit reading: every GraphQL response carries the replay's
-    fixed ``rateLimit`` reading (``replay.RATE_LIMIT``), so budget waits come only from faults.
+    Any repository, pull request, or node the model does not hold is answered ``NOT_FOUND``, and
+    so is an account it deleted or recorded as ``NOT_FOUND``; an account it never held goes
+    unanswered, since the model cannot say what GitHub would. It serves no rate-limit reading:
+    every GraphQL response carries the replay's fixed ``rateLimit`` reading
+    (``replay.RATE_LIMIT``), so budget waits come only from faults.
     """
 
     def __init__(self, clock: FakeClock) -> None:
@@ -457,18 +481,19 @@ class Scenario:
     @asynccontextmanager
     async def source(self, deadline: datetime | None = None) -> AsyncIterator[GitHubSource]:
         """``async with scenario.source() as source``: the real source over this model."""
-        source = GitHubSource(
-            "test-token",
-            http_transport=self.replay.transport(),
-            clock=self.clock,
-            deadline=deadline,
-        )
-        async with source:
+        async with opened_over(self.replay, self.clock)(deadline) as source:
             yield source
 
-    def after(self, operation: str, change: Callable[[], None], times: int = 1) -> None:
+    def after(
+        self,
+        operation: str,
+        change: Callable[[], None],
+        times: int = 1,
+        when: Callable[[Seen], bool] | None = None,
+    ) -> None:
         """Apply ``change`` right after the replay answers the next ``times`` requests of
-        ``operation``: a one-shot fault (``Replay.modify``), so a change that never runs fails the
+        ``operation`` that ``when`` also selects (one repository's, a first page): a one-shot
+        fault (``Replay.modify``), so a change that never runs fails the
         test like an unused fault, and one that raises is the replay's problem. The first
         matching fault serves a request, so a change meant to follow a faulted response belongs
         in that fault's ``respond``."""
@@ -480,7 +505,10 @@ class Scenario:
                 self.replay.problems.append(f"the change after {operation} failed: {error!r}")
                 raise
 
-        self.replay.modify(changed, when=lambda seen: seen.operation == operation, times=times)
+        def matches(seen: Seen) -> bool:
+            return seen.operation == operation and (when is None or when(seen))
+
+        self.replay.modify(changed, when=matches, times=times)
 
     # -- building ---------------------------------------------------------------------------
     def new_id(self) -> int:
@@ -542,9 +570,17 @@ class Scenario:
             labels={"totalCount": 0, "nodes": []},
         )
         data.update(fields)
+        self._claim(data["nameWithOwner"])
         repository = Repository(data)
         self.repositories[repository.full_name.lower()] = repository
         return repository
+
+    def _claim(self, full_name: str, by: Repository | None = None) -> None:
+        """Refuse a name another live repository has: GitHub keeps names unique."""
+        held = self.repositories.get(full_name.lower())
+        live = held is not None and not held.gone and held.full_name.lower() == full_name.lower()
+        if live and held is not by:
+            raise ScenarioError(f"{full_name} is taken")
 
     def add_label(self, repository: Repository, name: str) -> Node:
         """A repository label; returns it as a pull request carries it, ``{id, name}``."""
@@ -674,6 +710,7 @@ class Scenario:
         """Rename within its owner; the old name still resolves to it, and every link to it and
         every pull request from it show the new name."""
         owner = repository.data["owner"]["login"]
+        self._claim(f"{owner}/{name}", by=repository)
         repository.data.update(name=name, nameWithOwner=f"{owner}/{name}")
         self.repositories[repository.full_name.lower()] = repository
         for pull in self.pulls():
@@ -687,9 +724,11 @@ class Scenario:
     def rename_label(self, repository: Repository, label_id: str, name: str) -> None:
         """A label keeps its id when renamed, on the repository and on every pull request,
         without a new ``updatedAt`` for them (plan section 7, "Change signal")."""
-        for label in repository.data["labels"]["nodes"]:
-            if label["id"] == label_id:
-                label.update(name=name, updatedAt=iso(self.clock.now()))
+        labels = [label for label in repository.data["labels"]["nodes"] if label["id"] == label_id]
+        if not labels:
+            raise ScenarioError(f"{repository.full_name} has no label {label_id}")
+        for label in labels:
+            label.update(name=name, updatedAt=iso(self.clock.now()))
         for pull in repository.pulls.values():
             for label in pull.node.get("labels", {}).get("nodes", []):
                 if label["id"] == label_id:
@@ -736,8 +775,9 @@ class Scenario:
 
     def unit(self, kind: str, key: dict[str, Any]) -> Unit | None:
         """The unit the replay serves for ``kind`` and ``key``. ``None`` leaves the request
-        unanswered, which the replay reports: a kind the model does not render, a compare of a
-        head no pull request has, or a pull request known only from the index."""
+        unanswered, which the replay reports: a kind the model does not render, an account it
+        never held, a compare of a head no pull request has had or in a repository now gone, or
+        a pull request known only from the index."""
         data: Any = None
         errors: list[dict[str, Any]] = []
         match kind:
@@ -784,7 +824,9 @@ class Scenario:
                 else:
                     data = continued.continuation(key["connection"], key["after"])
             case "user":
-                account = self.accounts.get(key["id"])
+                if key["id"] not in self.accounts:
+                    return None
+                account = self.accounts[key["id"]]
                 if account is None:
                     errors = missing_node(key["id"])
                 else:
@@ -876,9 +918,9 @@ class Scenario:
             for link in pull.node["closingIssuesReferences"]["nodes"]:
                 issue = (link["repository"]["databaseId"], link["number"])
                 world._issues[issue] = int(link["fullDatabaseId"])
+        hydrated_by_id = {pull.node["id"]: pull for pull in world.pulls() if pull.hydratable}
         for unit in by_kind["overflow"]:
-            continued = world.pull_request(unit.key["id"])
-            assert continued is not None, f"overflow {unit.key} continues no recorded pull request"
+            continued = hydrated_by_id[unit.key["id"]]
             connection = unit.key["connection"]
             joined(unit.data[connection], continued.cursors[connection], continued.node[connection])
         for unit in sorted(by_kind["compare"], key=lambda u: u.key["page"]):
