@@ -3,8 +3,8 @@
 The model holds each repository, pull request, and account as the JSON GitHub returns for it, with
 every connection's nodes joined across pages. The replay asks it for each unit when a request
 arrives (``Replay.provider``), so a response shows the model's state at that moment and carries the
-test clock's time as its ``Date``. A test changes the state between requests, or during one
-through ``Replay.wrap``, with the methods below.
+test clock's time as its ``Date``. A test changes the state between requests, or during a run with
+``Scenario.after``, through the methods below.
 
 Pages follow GitHub's cursors: the index's, comments', reviews', and review requests' name the
 page's last node, so the next page starts after it even when nodes before it come or go; the other
@@ -19,8 +19,8 @@ model renders them.
 from __future__ import annotations
 
 import base64
-import binascii
 import copy
+import functools
 import itertools
 import json
 from collections.abc import AsyncIterator, Callable, Iterator
@@ -66,6 +66,8 @@ ORDERS: dict[str, Callable[[Node], tuple[Any, ...]]] = {
     "reviews": lambda node: (node["createdAt"], int(node["fullDatabaseId"])),
     "reviewRequests": lambda node: (node["databaseId"],),
 }
+# The connections a push changes: changing them moves ``headRefOid``.
+PUSHED = ("commits", "files")
 # The kinds the model renders; its stamp for each is the one the recordings of that kind carry.
 RENDERED = ("resolve", "repository_labels", "index", "pull_request", "overflow", "user", "compare")
 # The recordings new objects are copied from.
@@ -74,7 +76,7 @@ PULL_REQUEST_TEMPLATE = ("prebid", "go-gdpr", 21)
 
 
 class ScenarioError(Exception):
-    """A request names a page the model never served."""
+    """A test asked the model for something GitHub would not give it."""
 
 
 def iso(moment: datetime) -> str:
@@ -125,15 +127,43 @@ def forget(value: Any, node_id: str) -> None:
             obj["nodes"] = kept
 
 
+def read_commit(commit: Node) -> Node:
+    """A REST compare commit, reduced to the fields the source reads (``models.CompareCommit``)."""
+    author = commit.get("author")
+    return {
+        "sha": commit["sha"],
+        "commit": {"author": {k: commit["commit"]["author"][k] for k in ("name", "email", "date")}},
+        "author": author if not author else {k: author[k] for k in ("id", "node_id", "login")},
+    }
+
+
+def rest_commit(node: Node) -> Node:
+    """A commit node of the pull request as REST compare lists it."""
+    commit = node["commit"]
+    user = commit["author"]["user"]
+    return {
+        "sha": commit["oid"],
+        "commit": {
+            "author": {
+                "name": commit["author"]["name"],
+                "email": commit["author"]["email"],
+                "date": commit["authoredDate"],
+            }
+        },
+        "author": user
+        and {"id": user["databaseId"], "node_id": user["id"], "login": user["login"]},
+    }
+
+
 @dataclass
 class Cursors:
-    """A connection's page cursors: each names a node (by ``order``) or a position. GitHub's
-    recorded cursors are kept; for other page ends the model makes its own, which the source never
-    decodes: ``scenario:`` and the node's key, or a position in GitHub's offset form (base64 of
-    the number)."""
+    """A connection's page cursors: each names a node (by ``order``) or a position. A cursor is
+    one GitHub recorded or one the model served; any other names no page. The model's own are
+    ``scenario:`` and the node's key, or a position in GitHub's offset form (base64 of the
+    number); the source never decodes a cursor."""
 
     order: Callable[[Node], tuple[Any, ...]] | None = None
-    recorded: dict[str, Any] = field(default_factory=dict)  # cursor -> the key or position
+    known: dict[str, Any] = field(default_factory=dict)  # cursor -> the key or position it names
 
     def mark(self, nodes: list[Node], end: int) -> Any:
         return self.order(nodes[end - 1]) if self.order is not None else end
@@ -141,35 +171,29 @@ class Cursors:
     def record(self, nodes: list[Node], cursor: str | None) -> None:
         """Keep a recorded page's ``endCursor``: the page ended at the last of ``nodes``."""
         if cursor is not None:
-            self.recorded[cursor] = self.mark(nodes, len(nodes))
+            self.known[cursor] = self.mark(nodes, len(nodes))
 
     def end(self, nodes: list[Node], end: int) -> str | None:
         if end == 0:
             return None
         mark = self.mark(nodes, end)
-        for cursor, recorded in self.recorded.items():
-            if recorded == mark:
+        for cursor, known in self.known.items():
+            if known == mark:
                 return cursor
         if self.order is not None:
-            return "scenario:" + json.dumps(list(mark))
-        return base64.b64encode(str(mark).encode()).decode().rstrip("=")
+            cursor = "scenario:" + json.dumps(list(mark))
+        else:
+            cursor = base64.b64encode(str(mark).encode()).decode().rstrip("=")
+        self.known[cursor] = mark
+        return cursor
 
     def start(self, nodes: list[Node], cursor: str | None) -> int:
         """Where the page after ``cursor`` starts in ``nodes`` as they are now."""
         if cursor is None:
             return 0
-        unserved = ScenarioError(f"cursor {cursor!r} names no page the model served")
-        if cursor in self.recorded:
-            mark = self.recorded[cursor]
-        elif self.order is not None:
-            if not cursor.startswith("scenario:"):
-                raise unserved
-            mark = tuple(json.loads(cursor.removeprefix("scenario:")))
-        else:
-            try:
-                mark = int(base64.b64decode(cursor + "=" * (-len(cursor) % 4)).decode())
-            except (binascii.Error, UnicodeDecodeError, ValueError) as error:
-                raise unserved from error
+        if cursor not in self.known:
+            raise ScenarioError(f"cursor {cursor!r} names no page the model served")
+        mark = self.known[cursor]
         if self.order is None:
             position: int = mark
             return position
@@ -210,7 +234,8 @@ class PullRequest:
     world: Scenario
     node: Node
     cursors: dict[str, Cursors] = field(default_factory=dict)
-    # REST compare commits, for a pull request above 250 commits: the fields the source reads.
+    # REST compare's commits as recorded, for a pull request above 250 commits; without a
+    # recording they are made from the commit nodes.
     compare: list[Node] | None = None
     gone: bool = False
 
@@ -239,14 +264,14 @@ class PullRequest:
     def touch(self, at: datetime | None = None) -> None:
         self.node["updatedAt"] = self.now(at)
 
-    def merge(self, by: Node, at: datetime | None = None) -> None:
-        """Merged by the account ``by`` names (``Scenario.actor``)."""
+    def merge(self, by: str | None, at: datetime | None = None) -> None:
+        """Merged by the account ``by`` (a node id), or by none GitHub still names (D28)."""
         moment = self.now(at)
         self.node.update(
             state="MERGED",
             mergedAt=moment,
             closedAt=moment,
-            mergedBy=by,
+            mergedBy=self.world.actor(by) if by is not None else None,
             mergeCommit={"oid": self.world.new_oid()},
             updatedAt=moment,
         )
@@ -260,16 +285,25 @@ class PullRequest:
         self.node.update(state="OPEN", closedAt=None, updatedAt=moment)
 
     def add(self, connection: str, *nodes: Node, at: datetime | None = None) -> None:
-        """Add nodes, which moves ``updatedAt`` as a comment, a label, or a review request does."""
+        """Add nodes, which moves ``updatedAt`` as a comment, a label, or a review request does;
+        commits and files come with a push, which moves ``headRefOid`` too."""
         self._add(connection, nodes)
-        self.touch(at)
+        if connection == "commits" and self.compare is not None:
+            self.compare.extend(rest_commit(node) for node in nodes)
+        self._changed(connection, at)
 
     def remove(
         self, connection: str, matches: Callable[[Node], bool], at: datetime | None = None
     ) -> None:
-        """Remove the nodes ``matches`` selects, which moves ``updatedAt``."""
+        """Remove the nodes ``matches`` selects, which moves ``updatedAt`` (and ``headRefOid``
+        for commits and files)."""
+        if connection == "commits" and self.compare is not None:
+            gone = {
+                node["commit"]["oid"] for node in self.node["commits"]["nodes"] if matches(node)
+            }
+            self.compare = [commit for commit in self.compare if commit["sha"] not in gone]
         self._remove(connection, matches)
-        self.touch(at)
+        self._changed(connection, at)
 
     def link(self, number: int, repository: Repository, *, user_linked: bool = False) -> None:
         """Link issue ``number`` of ``repository`` as a closing issue, without a new
@@ -279,10 +313,10 @@ class PullRequest:
             "databaseId": repository.data["databaseId"],
             "nameWithOwner": repository.full_name,
         }
-        github_id = str(self.world.new_id())
+        github_id = self.world.issue_id(target["databaseId"], number)
         self._add(
             "closingIssuesReferences",
-            [{"fullDatabaseId": github_id, "number": number, "repository": target}],
+            [{"fullDatabaseId": str(github_id), "number": number, "repository": target}],
         )
         if user_linked:
             self._add(
@@ -297,6 +331,17 @@ class PullRequest:
 
         self._remove("closingIssuesReferences", matches)
         self._remove("userLinkedClosingIssues", matches)
+
+    def compare_commits(self) -> list[Node]:
+        """What REST compare lists for this pull request's head."""
+        if self.compare is not None:
+            return self.compare
+        return [rest_commit(node) for node in self.node["commits"]["nodes"]]
+
+    def _changed(self, connection: str, at: datetime | None) -> None:
+        self.touch(at)
+        if connection in PUSHED:
+            self.node["headRefOid"] = self.world.new_oid()
 
     def _add(self, connection: str, nodes: Any) -> None:
         listed = self.node[connection]
@@ -345,7 +390,6 @@ class PullRequest:
 class Repository:
     """A repository: its resolve data with every label, and its pull requests by number."""
 
-    world: Scenario
     data: Node
     pulls: dict[int, PullRequest] = field(default_factory=dict)
     label_cursors: Cursors = field(default_factory=Cursors)
@@ -384,6 +428,8 @@ class Scenario:
         # Lookup data by node id; ``None`` is an account GitHub answers NOT_FOUND for.
         self.accounts: dict[str, Node | None] = {}
         self._deleted: dict[str, Node] = {}
+        # One id per issue, by its repository's databaseId and its number.
+        self._issues: dict[tuple[int, int], int] = {}
         self._ids = itertools.count(1)
         self.replay = Replay(provider=self.unit)
 
@@ -399,6 +445,15 @@ class Scenario:
         async with source:
             yield source
 
+    def after(self, operation: str, change: Callable[[], None], times: int = 1) -> None:
+        """Apply ``change`` right after the replay answers the next ``times`` requests of
+        ``operation``: a one-shot fault (``Replay.modify``), so a change that never runs fails the
+        test like an unused fault. The first matching fault serves a request, so a change meant
+        to follow a faulted response belongs in that fault's ``respond``."""
+        self.replay.modify(
+            lambda body: change(), when=lambda seen: seen.operation == operation, times=times
+        )
+
     # -- building ---------------------------------------------------------------------------
     def new_id(self) -> int:
         """A database id no recording uses."""
@@ -407,6 +462,10 @@ class Scenario:
     def new_oid(self) -> str:
         """A git object id no recording uses."""
         return f"5ce4a1{next(self._ids):034x}"
+
+    def issue_id(self, repository_id: int, number: int) -> int:
+        """The id of issue ``number`` of the repository ``repository_id``, the same each time."""
+        return self._issues.setdefault((repository_id, number), self.new_id())
 
     def add_account(self, typename: str = "User", login: str | None = None, **fields: Any) -> str:
         """An account copied from a recorded one of ``typename``; returns its node id."""
@@ -424,12 +483,20 @@ class Scenario:
         node_id: str = data["id"]
         return node_id
 
-    def actor(self, node_id: str) -> Node:
-        """How a pull request names an account (the ``Actor`` fragment). A deleted account is
-        named only by a commit link (gap 90), through ``node("commits", by=...)``."""
+    def account(self, node_id: str, *, deleted: bool = False) -> Node:
+        """An account's lookup data; a deleted one's only when ``deleted`` (a commit link)."""
         data = self.accounts.get(node_id)
-        if data is None:
+        if data is not None:
+            return data
+        if deleted and node_id in self._deleted:
+            return self._deleted[node_id]
+        if node_id in self.accounts:
             raise ScenarioError(f"{node_id} is deleted: only a commit links it (gap 90)")
+        raise ScenarioError(f"no account {node_id}: add it with add_account")
+
+    def actor(self, node_id: str) -> Node:
+        """How a pull request names an account (the ``Actor`` fragment)."""
+        data = self.account(node_id)
         return {k: data[k] for k in ("__typename", "login", "id", "databaseId")}
 
     def add_repository(self, owner: str, name: str, **fields: Any) -> Repository:
@@ -445,12 +512,12 @@ class Scenario:
             labels={"totalCount": 0, "nodes": []},
         )
         data.update(fields)
-        repository = Repository(self, data)
+        repository = Repository(data)
         self.repositories[repository.full_name.lower()] = repository
         return repository
 
     def add_label(self, repository: Repository, name: str) -> Node:
-        """A repository label; a pull request carries it as ``{id, name}``."""
+        """A repository label; returns it as a pull request carries it, ``{id, name}``."""
         moment = iso(self.clock.now())
         label = {
             "id": f"LA_scenario{self.new_id()}",
@@ -463,7 +530,7 @@ class Scenario:
         }
         repository.data["labels"]["nodes"].append(label)
         repository.data["labels"]["totalCount"] += 1
-        return label
+        return {"id": label["id"], "name": name}
 
     def open_pull_request(
         self, repository: Repository, author: str, number: int | None = None, **fields: Any
@@ -522,9 +589,10 @@ class Scenario:
 
     def node(self, connection: str, by: str | None = None, **fields: Any) -> Node:
         """A new node of ``connection``, made now and copied from a recorded one with its own
-        identity: fresh ids, a commit's own oid, a file's own path, and the account ``by`` (a node
-        id) wherever the node names one, or none. An assignee is the account ``by`` itself. A
-        label comes from ``add_label`` and a closing link from ``PullRequest.link``."""
+        identity: fresh ids, a commit's own oid and git author, a file's own path, and the
+        account ``by`` (a node id) wherever the node names one, or none. An assignee is the
+        account ``by`` itself. A label comes from ``add_label`` and a closing link from
+        ``PullRequest.link``."""
         if connection in ("labels", "closingIssuesReferences", "userLinkedClosingIssues"):
             raise ScenarioError(f"{connection} come from add_label and PullRequest.link")
         if connection == "assignedActors":
@@ -543,21 +611,33 @@ class Scenario:
                 times = ("createdAt", "updatedAt", "publishedAt", "submittedAt")
                 node.update({key: moment for key in times if key in node})
             case "commits":
-                author = node["commit"]["author"]
-                author["user"] = None
-                if by is not None:
-                    # A commit can link an account a lookup no longer finds (gap 90).
-                    data = self.accounts.get(by) or self._deleted[by]
-                    login = data["login"]
-                    author.update(name=login, email=f"{login}@example.com")
-                    author["user"] = {k: data[k] for k in ("id", "databaseId", "login")}
                 node["commit"].update(oid=self.new_oid(), authoredDate=moment)
+                node["commit"]["author"] = self._git_author(by, number)
             case "files":
                 node["path"] = f"file-{number}"
             case "reviewRequests":
                 node["requestedReviewer"] = self.actor(by) if by is not None else None
         node.update(fields)
         return node
+
+    def _git_author(self, by: str | None, number: int) -> Node:
+        """A commit's git author and the account GitHub links it to. A commit can link an
+        account a lookup no longer finds (gap 90), and links a bot as ``<login>[bot]``, as the
+        recordings show (plan 5.2)."""
+        if by is None:
+            return {
+                "name": f"author {number}",
+                "email": f"author-{number}@example.com",
+                "user": None,
+            }
+        data = self.account(by, deleted=True)
+        login = data["login"]
+        email = f"{login}@example.com"
+        if data["__typename"] == "Bot":
+            login = f"{login}[bot]"
+            email = f"{data['databaseId']}+{login}@users.noreply.github.com"
+        user = {"id": data["id"], "databaseId": data["databaseId"], "login": login}
+        return {"name": login, "email": email, "user": user}
 
     # -- changes ----------------------------------------------------------------------------
     def rename_repository(self, repository: Repository, name: str) -> None:
@@ -625,8 +705,8 @@ class Scenario:
 
     def unit(self, kind: str, key: dict[str, Any]) -> Unit | None:
         """The unit the replay serves for ``kind`` and ``key``. ``None`` leaves the request
-        unanswered, which the replay reports: a kind the model does not render, a compare it does
-        not hold, or a pull request known only from the index."""
+        unanswered, which the replay reports: a kind the model does not render, a compare of a
+        head no pull request has, or a pull request known only from the index."""
         data: Any = None
         errors: list[dict[str, Any]] = []
         match kind:
@@ -690,10 +770,11 @@ class Scenario:
         repository = self.repository(key["owner"], key["name"])
         for pull in repository.pulls.values() if repository is not None else ():
             refs = (pull.node.get("baseRefOid"), pull.node.get("headRefOid"))
-            if pull.compare is not None and refs == (key["base"], key["head"]):
+            if pull.hydratable and refs == (key["base"], key["head"]):
+                listed = pull.compare_commits()
                 start = (key["page"] - 1) * key["per_page"]
-                commits = pull.compare[start : start + key["per_page"]]
-                return {"total_commits": len(pull.compare), "commits": copy.deepcopy(commits)}
+                commits = listed[start : start + key["per_page"]]
+                return {"total_commits": len(listed), "commits": copy.deepcopy(commits)}
         return None
 
     def _unit(
@@ -706,7 +787,7 @@ class Scenario:
         stamp = _templates().stamps.get((kind, connection))
         if stamp is None:
             return None
-        now = self.clock.now()
+        now = self.clock.now().astimezone(UTC)
         return Unit(
             kind=kind,
             key=dict(key),
@@ -731,7 +812,7 @@ class Scenario:
             return world.repositories[f"{unit.key['owner']}/{unit.key['name']}".lower()]
 
         for unit in by_kind["resolve"]:
-            repository = Repository(world, unit.data)
+            repository = Repository(unit.data)
             repository.data["labels"] = joined(unit.data["labels"], repository.label_cursors)
             world.repositories[repository.full_name.lower()] = repository
             world.repositories[f"{unit.key['owner']}/{unit.key['name']}".lower()] = repository
@@ -755,6 +836,9 @@ class Scenario:
             for key in CONNECTIONS_BY_KEY:
                 pull.node[key] = joined(unit.data[key], pull.cursors[key])
             hydrated.pulls[pull.number] = pull
+            for link in pull.node["closingIssuesReferences"]["nodes"]:
+                issue = (link["repository"]["databaseId"], link["number"])
+                world._issues[issue] = int(link["fullDatabaseId"])
         for unit in by_kind["overflow"]:
             continued = world.pull_request(unit.key["id"])
             assert continued is not None, f"overflow {unit.key} continues no recorded pull request"
@@ -771,49 +855,35 @@ class Scenario:
         return world
 
 
-def read_commit(commit: Node) -> Node:
-    """A REST compare commit, reduced to the fields the source reads (``models.CompareCommit``)."""
-    author = commit.get("author")
-    return {
-        "sha": commit["sha"],
-        "commit": {"author": {k: commit["commit"]["author"][k] for k in ("name", "email", "date")}},
-        "author": author if not author else {k: author[k] for k in ("id", "node_id", "login")},
-    }
-
-
-@dataclass(frozen=True)
+@dataclass
 class _Templates:
-    stamps: dict[tuple[str, str | None], str]
-    repository: Node
-    pull_request: Node
-    nodes: dict[str, Node]
-    accounts: dict[str, Node]
+    stamps: dict[tuple[str, str | None], str] = field(default_factory=dict)
+    repository: Node = field(default_factory=dict)
+    pull_request: Node = field(default_factory=dict)
+    nodes: dict[str, Node] = field(default_factory=dict)
+    accounts: dict[str, Node] = field(default_factory=dict)
 
 
-_TEMPLATES: list[_Templates] = []
-
-
+@functools.cache
 def _templates() -> _Templates:
     """What the model copies from the recordings, read once: each kind's stamp (a kind recorded
     under two stamps fails the round trip), the objects new ones are copied from, and the first
     recorded node of each connection."""
-    if not _TEMPLATES:
-        found = _Templates({}, {}, {}, {}, {})
-        for unit in recorded_units():
-            key = unit.key
-            found.stamps[(unit.kind, key.get("connection"))] = unit.document_sha256
-            if unit.kind == "resolve" and (key["owner"], key["name"]) == REPOSITORY_TEMPLATE:
-                found.repository.update(unit.data)
-            if unit.kind == "pull_request" and unit.data is not None:
-                if (key["owner"], key["name"], key["number"]) == PULL_REQUEST_TEMPLATE:
-                    found.pull_request.update(unit.data)
-                for connection in CONNECTIONS_BY_KEY:
-                    if unit.data[connection]["nodes"]:
-                        found.nodes.setdefault(connection, unit.data[connection]["nodes"][0])
-            if unit.kind == "user" and unit.data is not None:
-                found.accounts.setdefault(unit.data["__typename"], unit.data)
-        _TEMPLATES.append(found)
-    return _TEMPLATES[0]
+    found = _Templates()
+    for unit in recorded_units():
+        key = unit.key
+        found.stamps[(unit.kind, key.get("connection"))] = unit.document_sha256
+        if unit.kind == "resolve" and (key["owner"], key["name"]) == REPOSITORY_TEMPLATE:
+            found.repository.update(unit.data)
+        if unit.kind == "pull_request" and unit.data is not None:
+            if (key["owner"], key["name"], key["number"]) == PULL_REQUEST_TEMPLATE:
+                found.pull_request.update(unit.data)
+            for connection in CONNECTIONS_BY_KEY:
+                if unit.data[connection]["nodes"]:
+                    found.nodes.setdefault(connection, unit.data[connection]["nodes"][0])
+        if unit.kind == "user" and unit.data is not None:
+            found.accounts.setdefault(unit.data["__typename"], unit.data)
+    return found
 
 
 def recorded_units() -> Iterator[Unit]:

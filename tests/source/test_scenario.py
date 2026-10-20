@@ -8,9 +8,8 @@ records the source returns.
 from __future__ import annotations
 
 import json
-from collections.abc import Callable
 from dataclasses import replace
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta, timezone
 from typing import Any
 
 import httpx
@@ -29,6 +28,7 @@ from github_activity_db.source.errors import (
     RepositoryNotFound,
     RepositoryShapeError,
 )
+from github_activity_db.source.models import ComparePage
 from tests.source.conftest import START, FakeClock, all_lookups, all_outcomes
 from tests.source.recordings import Unit
 from tests.source.replay import Replay, loaded_units, synthetic, unanswered
@@ -37,7 +37,7 @@ from tests.source.scenario import (
     Repository,
     Scenario,
     ScenarioError,
-    read_commit,
+    iso,
     recorded_units,
 )
 
@@ -65,12 +65,9 @@ def test_each_recording_re_renders_exactly(recorded_model: Scenario, unit: Unit)
     assert rendered is not None
     assert rendered.document_sha256 == unit.document_sha256
     if unit.kind == "compare":
-        # Compared on what the source reads: the recorded pages also carry REST fields it never
+        # Compared as the source reads them: the recorded pages also carry REST fields it never
         # reads, which the model does not hold.
-        assert rendered.data["total_commits"] == unit.data["total_commits"]
-        assert dumped(rendered.data["commits"]) == dumped(
-            [read_commit(commit) for commit in unit.data["commits"]]
-        )
+        assert ComparePage.model_validate(rendered.data) == ComparePage.model_validate(unit.data)
     else:
         assert dumped(rendered.data) == dumped(unit.data)
     assert dumped(rendered.errors) == dumped(unit.errors)
@@ -153,25 +150,6 @@ def hydrated(outcome: PullRequestOutcome) -> PullRequestRecord:
     return outcome.record
 
 
-def after_first(scenario: Scenario, operation: str, change: Callable[[], None]) -> None:
-    """Apply ``change`` once, right after the replay answers the first ``operation`` request."""
-    changed: list[bool] = []
-
-    def wrap(
-        handle: Callable[[httpx.Request], httpx.Response],
-    ) -> Callable[[httpx.Request], httpx.Response]:
-        def handled(request: httpx.Request) -> httpx.Response:
-            response = handle(request)
-            if not changed and scenario.replay.seen[-1].operation == operation:
-                changed.append(True)
-                change()
-            return response
-
-        return handled
-
-    scenario.replay.wrap = wrap
-
-
 def project(scenario: Scenario, pulls: int = 1) -> tuple[Repository, str]:
     """``example/project`` with ``pulls`` open pull requests by one author."""
     author = scenario.add_account(login="alice")
@@ -185,7 +163,7 @@ async def test_new_objects_read_back_with_the_clock_as_date(scenario: Scenario) 
     repository, author = project(scenario)
     pull = repository.pulls[1]
     label = scenario.add_label(repository, "bug")
-    pull.add("labels", {"id": label["id"], "name": label["name"]})
+    pull.add("labels", label)
     pull.add("comments", scenario.node("comments", by=author))
     scenario.clock.advance(90)
 
@@ -230,16 +208,25 @@ async def test_new_nodes_have_their_own_identity(scenario: Scenario) -> None:
     pull = repository.pulls[1]
     pull.add("commits", scenario.node("commits", by=author), scenario.node("commits", by=author))
     pull.add("files", scenario.node("files"), scenario.node("files"))
+    pull.add("commits", scenario.node("commits"), scenario.node("commits"))
     pull.add("comments", scenario.node("comments"))
+    scenario.clock.advance(30)
+    pull.add("reviews", scenario.node("reviews", by=author))
     pull.add("assignedActors", scenario.node("assignedActors", by=author))
     pull.add("reviewRequests", scenario.node("reviewRequests", by=author))
 
     record = hydrated(await hydrate(scenario, "example", "project", 1))
-    assert len({commit.sha for commit in record.commits}) == 2
+    assert len({commit.sha for commit in record.commits}) == 4
     assert [commit.author.login if commit.author else None for commit in record.commits] == [
         "alice",
         "alice",
+        None,
+        None,
     ]
+    assert len({commit.author_email for commit in record.commits}) == 3
+    (review,) = record.reviews
+    assert (review.created_at, review.submitted_at) == (scenario.clock.now(), scenario.clock.now())
+    assert review.reviewer is not None and review.reviewer.login == "alice"
     assert len({file.path for file in record.files}) == 2
     assert record.comments[0].author is None
     assert [assignee.login for assignee in record.assignees] == ["alice"]
@@ -265,7 +252,7 @@ async def test_merge_close_and_reopen(scenario: Scenario) -> None:
     merged, closed = repository.pulls[1], repository.pulls[2]
     merger = scenario.add_account(login="merger")
     scenario.clock.advance(3600)
-    merged.merge(by=scenario.actor(merger))
+    merged.merge(by=merger)
     closed.close()
 
     record = hydrated(await hydrate(scenario, "example", "project", 1))
@@ -275,7 +262,7 @@ async def test_merge_close_and_reopen(scenario: Scenario) -> None:
     assert record.merge_commit_oid is not None
     assert record.github_updated_at == now
     record = hydrated(await hydrate(scenario, "example", "project", 2))
-    assert (record.state, record.closed_at) == ("CLOSED", now)
+    assert (record.state, record.closed_at, record.github_updated_at) == ("CLOSED", now, now)
 
     scenario.clock.advance(60)
     closed.reopen()
@@ -288,18 +275,19 @@ async def test_merge_close_and_reopen(scenario: Scenario) -> None:
 
 
 async def test_set_leaves_updated_at_and_touch_moves_it(scenario: Scenario) -> None:
-    repository, author = project(scenario)
+    repository, author = project(scenario, pulls=2)
     scenario.open_pull_request(repository, author, isDraft=True)
     scenario.clock.advance(60)
     repository.pulls[1].set(authorAssociation="MEMBER")
-    repository.pulls[2].set(isDraft=False)
+    repository.pulls[2].set(isDraft=True)  # converted to a draft, which moves updatedAt
     repository.pulls[2].touch()
-    repository.pulls[2].touch()
+    repository.pulls[3].set(isDraft=False)  # marked ready, which is not shown to move it
     async with scenario.source() as source:
         index = await source.index_pull_requests(await source.resolve("example", "project"))
-    first, second = index.entries
+    first, second, third = index.entries
     assert (first.author_association, first.updated_at) == ("MEMBER", START)
-    assert (second.is_draft, second.updated_at) == (False, scenario.clock.now())
+    assert (second.is_draft, second.updated_at) == (True, scenario.clock.now())
+    assert (third.is_draft, third.updated_at) == (False, START)
 
 
 async def test_the_index_is_in_creation_order(scenario: Scenario) -> None:
@@ -323,32 +311,38 @@ async def test_a_pull_request_gone_during_an_index_scan_is_rescanned(
     def remove() -> None:
         repository.pulls[5].gone = True
 
-    after_first(scenario, "PullRequestIndex", remove)
+    scenario.after("PullRequestIndex", remove)
     async with scenario.source() as source:
         index = await source.index_pull_requests(await source.resolve("example", "project"))
     assert index.scans == 2
     assert [entry.number for entry in index.entries] == [n for n in range(1, 151) if n != 5]
 
 
-async def test_a_comment_replaced_during_hydration_is_read_again(scenario: Scenario) -> None:
-    """One comment removed and one added in the same second leave the total and ``updatedAt``
-    as they were; the continuation starts after the first page's last comment, as GitHub's
-    does, so the count disagrees and the source reads the pull request again."""
+@pytest.mark.parametrize("connection", ["comments", "reviews"])
+async def test_a_node_replaced_during_hydration_is_read_again(
+    scenario: Scenario, connection: str
+) -> None:
+    """One node removed and one added in the same second leave the total and ``updatedAt`` as
+    they were; the continuation starts after the first page's last node, as GitHub's does, so
+    the count disagrees and the source reads the pull request again."""
     repository, author = project(scenario)
     pull = repository.pulls[1]
-    pull.add("comments", *(scenario.node("comments", by=author) for _ in range(101)))
-    removed = pull.node["comments"]["nodes"][5]["id"]
+    pull.add(connection, *(scenario.node(connection, by=author) for _ in range(101)))
+    removed = pull.node[connection]["nodes"][5]["id"]
 
     def replace_one() -> None:
-        pull.remove("comments", lambda node: node["id"] == removed)
-        pull.add("comments", scenario.node("comments", by=author))
+        pull.remove(connection, lambda node: node["id"] == removed)
+        pull.add(connection, scenario.node(connection, by=author))
 
-    after_first(scenario, "PullRequestBatch", replace_one)
+    scenario.after("PullRequestBatch", replace_one)
     record = hydrated(await hydrate(scenario, "example", "project", 1))
-    assert [comment.node_id for comment in record.comments] == [
-        node["id"] for node in pull.node["comments"]["nodes"]
+    read = record.comments if connection == "comments" else record.reviews
+    assert [node.node_id for node in read] == [
+        node["id"] for node in pull.node[connection]["nodes"]
     ]
     assert [seen.operation for seen in scenario.replay.seen].count("PullRequestBatch") == 2
+    # What makes the cursor the only signal: the change kept the total and the time.
+    assert (pull.node[connection]["totalCount"], pull.node["updatedAt"]) == (101, iso(START))
 
 
 async def test_which_changes_move_updated_at(scenario: Scenario) -> None:
@@ -358,7 +352,7 @@ async def test_which_changes_move_updated_at(scenario: Scenario) -> None:
     label = scenario.add_label(repository, "bug")
     pulls[2].add("comments", scenario.node("comments", by=author))
     pulls[4].link(1, issues)
-    pulls[5].add("labels", {"id": label["id"], "name": label["name"]})
+    pulls[5].add("labels", label)
     scenario.clock.advance(60)
     pulls[1].add("comments", scenario.node("comments", by=author))
     pulls[2].remove("comments", lambda node: True)
@@ -379,7 +373,7 @@ async def test_a_pull_request_gone_between_its_pages_is_gone(scenario: Scenario)
     def remove() -> None:
         pull.gone = True
 
-    after_first(scenario, "PullRequestBatch", remove)
+    scenario.after("PullRequestBatch", remove)
     assert await hydrate(scenario, "example", "project", 1) == Gone(1)
     assert [seen.operation for seen in scenario.replay.seen].count("Overflow") == 1
 
@@ -387,7 +381,7 @@ async def test_a_pull_request_gone_between_its_pages_is_gone(scenario: Scenario)
 async def test_a_renamed_label_keeps_its_id(scenario: Scenario) -> None:
     repository, _ = project(scenario)
     label = scenario.add_label(repository, "bug")
-    repository.pulls[1].add("labels", {"id": label["id"], "name": label["name"]})
+    repository.pulls[1].add("labels", label)
     scenario.clock.advance(300)
     scenario.rename_label(repository, label["id"], "defect")
 
@@ -407,6 +401,7 @@ async def test_a_deleted_account(scenario: Scenario) -> None:
     leaving = scenario.add_account(login="leaving")
     kept = scenario.add_account(login="kept")
     pull = scenario.open_pull_request(repository, leaving)
+    pull.merge(by=leaving)
     pull.add("comments", scenario.node("comments", by=leaving))
     pull.add("commits", scenario.node("commits", by=leaving))
     pull.add("reviewRequests", scenario.node("reviewRequests", by=leaving))
@@ -425,7 +420,7 @@ async def test_a_deleted_account(scenario: Scenario) -> None:
         accounts, failed = await all_lookups(source, [leaving])
     record = hydrated(outcome)
     assert (record.author, record.comments[0].author) == (None, None)
-    assert record.head_repository is None
+    assert (record.head_repository, record.head_repository_owner, record.merged_by) == (None,) * 3
     assert (record.commits[0].author, record.commits[0].author_name) == (None, "leaving")
     assert [request.account for request in record.review_requests] == [None]
     assert [assignee.login for assignee in record.assignees] == ["kept"]
@@ -466,6 +461,7 @@ async def test_a_pull_request_gone(scenario: Scenario) -> None:
     repository, _ = project(scenario)
     repository.pulls[1].gone = True
     assert await hydrate(scenario, "example", "project", 1) == Gone(1)
+    assert await hydrate(scenario, "example", "project", 99) == Gone(99)
     async with scenario.source() as source:
         index = await source.index_pull_requests(await source.resolve("example", "project"))
     assert index.entries == ()
@@ -492,7 +488,7 @@ async def test_a_repository_gone_between_its_label_pages(scenario: Scenario) -> 
     def remove() -> None:
         repository.gone = True
 
-    after_first(scenario, "Resolve", remove)
+    scenario.after("Resolve", remove)
     async with scenario.source() as source:
         with pytest.raises(RepositoryShapeError, match="errors on a label page"):
             await source.resolve("example", "project")
@@ -621,8 +617,7 @@ async def test_a_continuation_no_recording_covers_is_left_unanswered() -> None:
     repository, _ = project(world)
     pull = repository.pulls[1]
     for position in range(101):
-        label = world.add_label(repository, f"label-{position}")
-        pull.add("labels", {"id": label["id"], "name": label["name"]})
+        pull.add("labels", world.add_label(repository, f"label-{position}"))
     async with world.source() as source:
         resolved = await source.resolve("example", "project")
         with pytest.raises(FatalSourceError):
@@ -633,24 +628,30 @@ async def test_a_continuation_no_recording_covers_is_left_unanswered() -> None:
     ]
 
 
-async def test_a_cursor_the_model_never_served_is_reported() -> None:
-    """The model's failure is the replay's problem, not an error inside the transport."""
+@pytest.mark.parametrize(
+    ("connection", "cursor"),
+    [("comments", "unserved"), ("comments", "scenario:[1]"), ("commits", "NTA")],
+)
+async def test_a_cursor_the_model_never_served_is_reported(connection: str, cursor: str) -> None:
+    """A cursor in the model's own form, or GitHub's offset form (``NTA``, base64 of 50), that the
+    model did not serve names no page; the failure is the replay's problem, not an error inside
+    the transport."""
     world = Scenario(FakeClock())
     repository, author = project(world)
-    repository.pulls[1].add("comments", *(world.node("comments", by=author) for _ in range(101)))
+    repository.pulls[1].add(connection, *(world.node(connection, by=author) for _ in range(101)))
 
-    def unserved(body: dict[str, Any]) -> None:
-        body["data"]["repository"]["p0"]["comments"]["pageInfo"]["endCursor"] = "unserved"
+    def forged(body: dict[str, Any]) -> None:
+        body["data"]["repository"]["p0"][connection]["pageInfo"]["endCursor"] = cursor
 
-    world.replay.modify(unserved, when=lambda seen: seen.operation == "PullRequestBatch")
+    world.replay.modify(forged, when=lambda seen: seen.operation == "PullRequestBatch")
     async with world.source() as source:
         resolved = await source.resolve("example", "project")
         with pytest.raises(FatalSourceError):
             await all_outcomes(source, resolved, [1])
-    key = {"id": repository.pulls[1].node["id"], "connection": "comments", "after": "unserved"}
+    key = {"id": repository.pulls[1].node["id"], "connection": connection, "after": cursor}
+    message = f"cursor {cursor!r} names no page the model served"
     assert world.replay.problems == [
-        f"the provider failed on overflow {key}: ScenarioError(\"cursor 'unserved' names no "
-        'page the model served")'
+        f"the provider failed on overflow {key}: ScenarioError({message!r})"
     ]
 
 
@@ -659,3 +660,121 @@ def test_unanswered_lists_problems_then_unused_faults() -> None:
     replay.fault(lambda request: synthetic("server_error"))
     replay.problems.append("no unit")
     assert unanswered(replay) == ["no unit", "fault 0: served 0, 1 left"]
+
+
+async def test_a_bot_commit_links_its_bot_login(scenario: Scenario) -> None:
+    """A commit links a bot as ``<login>[bot]`` (Prebid.js#15724's recording), where a lookup
+    and an actor name it by its login."""
+    repository, _ = project(scenario)
+    bot = scenario.add_account("Bot", login="dependabot")
+    repository.pulls[1].add("commits", scenario.node("commits", by=bot))
+    record = hydrated(await hydrate(scenario, "example", "project", 1))
+    (commit,) = record.commits
+    assert commit.author is not None and (commit.author.node_id, commit.author.login) == (
+        bot,
+        "dependabot[bot]",
+    )
+    databaseId = scenario.account(bot)["databaseId"]
+    assert (commit.author_name, commit.author_email) == (
+        "dependabot[bot]",
+        f"{databaseId}+dependabot[bot]@users.noreply.github.com",
+    )
+    async with scenario.source() as source:
+        accounts, _ = await all_lookups(source, [bot])
+    found = accounts[bot]
+    assert found is not None and found.account.login == "dependabot"
+
+
+async def test_a_push_during_hydration_is_read_again(scenario: Scenario) -> None:
+    """A file replaced in the same second keeps the total and ``updatedAt``; the push moves the
+    head, so the continuation shows the change and the source reads the pull request again."""
+    repository, _ = project(scenario)
+    pull = repository.pulls[1]
+    pull.add("files", *(scenario.node("files") for _ in range(101)))
+    head = pull.node["headRefOid"]
+    removed = pull.node["files"]["nodes"][5]["path"]
+
+    def replace_one() -> None:
+        pull.remove("files", lambda node: node["path"] == removed)
+        pull.add("files", scenario.node("files"))
+
+    scenario.after("PullRequestBatch", replace_one)
+    record = hydrated(await hydrate(scenario, "example", "project", 1))
+    assert [file.path for file in record.files] == [
+        node["path"] for node in pull.node["files"]["nodes"]
+    ]
+    assert record.head_ref_oid == pull.node["headRefOid"] != head
+
+
+async def test_a_pull_request_above_250_commits_reads_its_compare(scenario: Scenario) -> None:
+    repository, author = project(scenario)
+    pull = repository.pulls[1]
+    pull.add("commits", *(scenario.node("commits", by=author) for _ in range(251)))
+    record = hydrated(await hydrate(scenario, "example", "project", 1))
+    assert record.commits_source == "compare"
+    assert [commit.sha for commit in record.commits] == [
+        node["commit"]["oid"] for node in pull.node["commits"]["nodes"]
+    ]
+
+
+async def test_one_issue_keeps_one_id(scenario: Scenario) -> None:
+    issues = scenario.add_repository("example", "issues")
+    repository, _ = project(scenario, pulls=2)
+    first, second = repository.pulls[1], repository.pulls[2]
+    first.link(7, issues)
+    second.link(7, issues)
+    first.unlink(7, issues)
+    first.link(7, issues)
+    async with scenario.source() as source:
+        resolved = await source.resolve("example", "project")
+        outcomes = await all_outcomes(source, resolved, [1, 2])
+    ids = {link.github_id for outcome in outcomes for link in hydrated(outcome).closing_issues}
+    assert ids == {scenario.issue_id(issues.data["databaseId"], 7)}
+
+
+async def test_a_clock_in_another_zone_still_dates_in_utc() -> None:
+    world = Scenario(FakeClock(START.astimezone(timezone(timedelta(hours=2)))))
+    project(world)
+    async with world.source() as source:
+        resolved = await source.resolve("example", "project")
+    assert resolved.resolved_at == START
+    assert unanswered(world.replay) == []
+
+
+async def test_a_repository_gone_between_a_batch_and_its_overflow(scenario: Scenario) -> None:
+    repository, author = project(scenario)
+    repository.pulls[1].add("comments", *(scenario.node("comments", by=author) for _ in range(101)))
+
+    def remove() -> None:
+        repository.gone = True
+
+    scenario.after("PullRequestBatch", remove)
+    async with scenario.source() as source:
+        resolved = await source.resolve("example", "project")
+        with pytest.raises(RepositoryNotFound):
+            await all_outcomes(source, resolved, [1])
+    assert "Overflow" in [seen.operation for seen in scenario.replay.seen]
+
+
+async def test_what_the_model_leaves_unanswered() -> None:
+    """A pull request known only from an index recording, and the rate-limit readings."""
+    model = Scenario.from_recordings(FakeClock())
+    async with model.source() as source:
+        resolved = await source.resolve("prebid", "prebid-cache-java")
+        with pytest.raises(FatalSourceError):
+            await all_outcomes(source, resolved, [4])
+        with pytest.raises(FatalSourceError):
+            await source.rate_limits()
+    key = {"owner": "prebid", "name": "prebid-cache-java", "number": 4}
+    assert model.replay.problems[0] == (
+        f"no pull_request unit for {key}: record it with scripts/record_fixtures.py"
+    )
+    assert any("rate_limit unit" in problem for problem in model.replay.problems[1:])
+
+
+def test_an_account_the_model_never_held_is_named_so(scenario: Scenario) -> None:
+    repository = scenario.add_repository("example", "project")
+    with pytest.raises(ScenarioError, match="no account User_typo: add it with add_account"):
+        scenario.open_pull_request(repository, "User_typo")
+    with pytest.raises(ScenarioError, match="no account User_typo"):
+        scenario.node("commits", by="User_typo")

@@ -151,38 +151,50 @@ next run must see GitHub as the test left it.
   for each unit when a request arrives (`Replay.provider`), so a response shows the state at that
   moment, and its `Date` is the test clock's reading. A repository, pull request, node, or account
   the model does not hold is answered `NOT_FOUND` (a missing repository makes an index or batch
-  response's `repository` null). A compare it does not hold and a pull request it knows only from
-  an index recording go unanswered, and it serves no rate-limit reading: every GraphQL response
-  carries the replay's fixed `rateLimit` reading, so budget waits come only from faults (a
-  rate-limit fault without a reset header waits for that reading's `resetAt`, an hour after the
-  clock's start).
+  response's `repository` null). A pull request it knows only from an index recording, a compare
+  of a head no pull request has, and the rate-limit readings go unanswered. Every GraphQL
+  response carries the replay's fixed `rateLimit` reading, so budget waits come only from faults;
+  a rate-limit fault without a reset header waits for that reading's `resetAt` (13:00 on the
+  clock's default start day) while the clock reads earlier, and for the transport's fallback
+  once the clock has passed it.
 - **Pages follow GitHub's cursors**: the index's, comments', reviews', and review requests' name
   the page's last node, so a pull request gone between index pages makes the count disagree and
-  the source rescan, as on GitHub; the other connections' name a position.
-- **Changes**: `add_repository`, `add_label`, `add_account`, and `open_pull_request` copy recorded
-  objects with fresh ids, and `node(connection, by=account)` a recorded node made now, with its own
-  ids, oid, or path and the account it names (labels and closing links come from `add_label` and
-  `link`). A pull request's `merge`, `close`, `reopen`, and `touch` move its times; `add` and
-  `remove` change a connection and move `updatedAt`; `set`, `link`, `unlink`, and `rename_label` do
-  not, as plan section 7 ("Change signal") measured for closing links, label renames, and author
-  associations and plan 5.3 step 3 for marking a draft ready (converting to a draft moves it:
-  `set` then `touch`). `rename_repository` renames within the owner and keeps the old name
-  resolving. `delete_account` makes lookups answer `NOT_FOUND` and nulls or drops every reference
-  to the account and its forks; afterwards only a commit can name it (gap 90), and
-  `restore_account` makes lookups find it again. `gone` removes a pull request or a repository. A
-  test changes the model between requests, or during a run through `replay.wrap`; faults stack on
-  the model as on the recordings.
+  the source rescan, as on GitHub; the other connections' name a position. A cursor the model
+  neither recorded nor served names no page.
+- **Changes**: `add_repository`, `add_account`, and `open_pull_request` copy recorded objects with
+  fresh ids; `add_label` returns the `{id, name}` a pull request carries; and
+  `node(connection, by=account)` copies a recorded node, made now, with its own ids, oid, git
+  author, or path and the account it names (a bot's commit link reads `<login>[bot]`, as
+  recorded). A pull request's `merge`, `close`, `reopen`, and `touch` move its times; `add` and
+  `remove` change a connection and move `updatedAt`, and for commits and files `headRefOid` too,
+  as a push does; `set`, `link`, `unlink`, and `rename_label` do not move `updatedAt`, as plan
+  section 7 ("Change signal") measured for closing links, label renames, and author associations
+  and plan 5.3 step 3 for marking a draft ready (converting to a draft moves it: `set` then
+  `touch`). An issue keeps one id across the pull requests that link it. REST compare lists a
+  pull request's commit nodes (its recorded pages for Prebid.js#8858). `rename_repository`
+  renames within the owner and keeps the old name resolving. `delete_account` makes lookups
+  answer `NOT_FOUND` and nulls or drops every reference to the account and its forks; afterwards
+  only a commit can name it (gap 90), and `restore_account` makes lookups find it again. `gone`
+  removes a pull request or a repository.
+- **During a run**: `scenario.after(operation, change)` applies a change right after the replay
+  answers the next request of that operation. It is a one-shot fault, so a change that never runs
+  fails the test; the first matching fault serves a request, so a change meant to follow a
+  faulted response belongs in that fault's `respond`. Faults stack on the model as on the
+  recordings.
 - **Checked against the recordings**: `test_scenario.py` loads every recorded unit except the
-  rate-limit readings into one model and requires each to re-render exactly (compare pages on the
-  fields the source reads), and the source to read the model as it reads the recordings. Rendered
-  units carry the recordings' stamps, so a changed document is refused until the recordings are
-  made again and the model renders them. A continuation no recording covers (labels, closing
-  issues, user-linked closing issues, review requests, assignees) goes unanswered.
+  rate-limit readings into one model and requires each to re-render exactly (compare pages as the
+  source's `ComparePage` reads them), and the source to read the model as it reads the
+  recordings. Rendered units carry the recordings' stamps, so a changed document is refused until
+  the recordings are made again and the model renders them. A continuation no recording covers
+  (labels, closing issues, user-linked closing issues, review requests, assignees) goes
+  unanswered.
 - **Fixture**: `scenario` (`tests/conftest.py`) is an empty model on its own `FakeClock`, whose
   `advance` moves time between a test's steps; `async with scenario.source() as source` opens the
   real source over it. Like the `replay` fixture, it fails a test with anything in
   `unanswered(replay)`: a request the replay could not answer (the model's own errors included)
-  or a fault never used up.
+  or a fault never used up. Objects and changes are made at the clock's reading, so an item
+  hydrated less than `[sync].unsettled_minutes` after its last change is planned again by the
+  next run; a test that checks a later plan advances the clock past that window first.
 
 ---
 
