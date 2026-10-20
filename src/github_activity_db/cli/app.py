@@ -15,6 +15,7 @@ from typer.core import TyperGroup
 
 from github_activity_db import __version__
 from github_activity_db.cli import github as github_cmd
+from github_activity_db.cli import sync as sync_cmd
 from github_activity_db.cli.common import error_console
 from github_activity_db.config import get_settings
 from github_activity_db.logging import setup_logging
@@ -125,6 +126,7 @@ def main(
 
 
 app.add_typer(github_cmd.app, name="github")
+app.command("sync")(sync_cmd.sync)
 
 
 if __name__ == "__main__":

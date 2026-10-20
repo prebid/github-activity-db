@@ -82,10 +82,11 @@ class TestGlobalFlags:
         assert result.exit_code == 0
         assert "ghactivity version" in result.stdout
 
-    def test_only_the_github_commands_remain(self) -> None:
+    def test_the_github_and_sync_commands_are_listed_and_the_removed_ones_are_not(self) -> None:
         help_text = _plain(runner.invoke(app, ["--help"]).stdout)
-        assert "github" in help_text
-        for removed in ("sync", "search", "tags"):
+        for command in ("github", "sync"):
+            assert _has_option(help_text, command), command
+        for removed in ("search", "tags"):
             assert not _has_option(help_text, removed), removed
 
 
