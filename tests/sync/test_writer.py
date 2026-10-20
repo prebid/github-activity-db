@@ -1759,6 +1759,30 @@ async def test_accounts_due_for_the_refresh(w: Writer) -> None:
     assert [target.node_id for target in due] == ["N2", "N1"]
 
 
+async def test_not_found_accounts_a_commit_links_join_the_refresh(w: Writer) -> None:
+    """Gap 90: a stored account with ``not_found_at`` set is a target only when listed in
+    ``not_found``, whatever its ``refreshed_at``; the order stays oldest first."""
+    now = T0 + timedelta(days=10)
+    with connect(w.database) as connection:
+        seed = Seed(connection)
+        seed.user("due", github_id=1, node_id="N1", refreshed_at=now - timedelta(days=2))
+        seed.user("linked", github_id=2, node_id="N2", refreshed_at=now, not_found_at=now)
+        seed.user(
+            "old", github_id=3, node_id="N3", refreshed_at=now - timedelta(days=4), not_found_at=now
+        )
+        seed.user(
+            "unlinked",
+            github_id=4,
+            node_id="N4",
+            refreshed_at=now - timedelta(days=5),
+            not_found_at=now,
+        )
+        seed.user("fresh", github_id=5, node_id="N5", refreshed_at=now)
+    async with open_writer(_url(w.database)) as writer:
+        due = await accounts_to_refresh(writer, now=now, not_found=[2, 3, 5, 99])
+    assert [target.node_id for target in due] == ["N3", "N1", "N2"]
+
+
 async def test_stored_accounts_by_github_id(w: Writer) -> None:
     with connect(w.database) as connection:
         seed = Seed(connection)
