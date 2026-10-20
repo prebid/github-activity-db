@@ -152,11 +152,12 @@ next run must see GitHub as the test left it.
   moment, and its `Date` is the test clock's reading. A repository, pull request, node, or account
   the model does not hold is answered `NOT_FOUND` (a missing repository makes an index or batch
   response's `repository` null). A pull request it knows only from an index recording, a compare
-  of a head no pull request has, and the rate-limit readings go unanswered. Every GraphQL
-  response carries the replay's fixed `rateLimit` reading, so budget waits come only from faults;
-  a rate-limit fault without a reset header waits for that reading's `resetAt` (13:00 on the
-  clock's default start day) while the clock reads earlier, and for the transport's fallback
-  once the clock has passed it.
+  of a head no pull request has had or in a repository now gone, and the rate-limit readings go
+  unanswered. Every GraphQL
+  response carries the replay's fixed `rateLimit` reading, so budget waits come only from faults:
+  a GraphQL rate-limit fault without a reset header, after a response that carried the reading,
+  waits for its `resetAt` (13:00 on the clock's default start day) while the clock reads earlier;
+  any other such fault waits for the transport's fallback.
 - **Pages follow GitHub's cursors**: the index's, comments', reviews', and review requests' name
   the page's last node, so a pull request gone between index pages makes the count disagree and
   the source rescan, as on GitHub; the other connections' name a position. A cursor the model
@@ -166,8 +167,8 @@ next run must see GitHub as the test left it.
   `node(connection, by=account)` copies a recorded node, made now, with its own ids, oid, git
   author, or path and the account it names (a bot's commit link reads `<login>[bot]`, as
   recorded). A pull request's `merge`, `close`, `reopen`, and `touch` move its times; `add` and
-  `remove` change a connection and move `updatedAt`, and for commits and files `headRefOid` too,
-  as a push does; `set`, `link`, `unlink`, and `rename_label` do not move `updatedAt`, as plan
+  `remove` change a connection and move `updatedAt`; a change to commits or files is a push,
+  which moves `headRefOid` to the last commit, while the old head's compare still answers; `set`, `link`, `unlink`, and `rename_label` do not move `updatedAt`, as plan
   section 7 ("Change signal") measured for closing links, label renames, and author associations
   and plan 5.3 step 3 for marking a draft ready (converting to a draft moves it: `set` then
   `touch`). An issue keeps one id across the pull requests that link it. REST compare lists a
@@ -178,7 +179,8 @@ next run must see GitHub as the test left it.
   removes a pull request or a repository.
 - **During a run**: `scenario.after(operation, change)` applies a change right after the replay
   answers the next request of that operation. It is a one-shot fault, so a change that never runs
-  fails the test; the first matching fault serves a request, so a change meant to follow a
+  fails the test, and one that raises is the replay's problem; the first matching fault serves a
+  request, so a change meant to follow a
   faulted response belongs in that fault's `respond`. Faults stack on the model as on the
   recordings.
 - **Checked against the recordings**: `test_scenario.py` loads every recorded unit except the

@@ -237,6 +237,8 @@ class PullRequest:
     # REST compare's commits as recorded, for a pull request above 250 commits; without a
     # recording they are made from the commit nodes.
     compare: list[Node] | None = None
+    # The compare each earlier head still answers, by (base, head): commits never change.
+    heads: dict[tuple[str, str], list[Node]] = field(default_factory=dict)
     gone: bool = False
 
     def __post_init__(self) -> None:
@@ -286,24 +288,28 @@ class PullRequest:
 
     def add(self, connection: str, *nodes: Node, at: datetime | None = None) -> None:
         """Add nodes, which moves ``updatedAt`` as a comment, a label, or a review request does;
-        commits and files come with a push, which moves ``headRefOid`` too."""
-        self._add(connection, nodes)
-        if connection == "commits" and self.compare is not None:
-            self.compare.extend(rest_commit(node) for node in nodes)
-        self._changed(connection, at)
+        commits and files come with a push (``_push``)."""
+
+        def added() -> None:
+            self._add(connection, nodes)
+            if connection == "commits" and self.compare is not None:
+                self.compare.extend(rest_commit(node) for node in nodes)
+
+        self._change(connection, added, at)
 
     def remove(
         self, connection: str, matches: Callable[[Node], bool], at: datetime | None = None
     ) -> None:
-        """Remove the nodes ``matches`` selects, which moves ``updatedAt`` (and ``headRefOid``
-        for commits and files)."""
-        if connection == "commits" and self.compare is not None:
-            gone = {
-                node["commit"]["oid"] for node in self.node["commits"]["nodes"] if matches(node)
-            }
-            self.compare = [commit for commit in self.compare if commit["sha"] not in gone]
-        self._remove(connection, matches)
-        self._changed(connection, at)
+        """Remove the nodes ``matches`` selects, which moves ``updatedAt``; commits and files
+        go with a push (``_push``)."""
+
+        def removed() -> None:
+            if connection == "commits" and self.compare is not None:
+                oids = {n["commit"]["oid"] for n in self.node["commits"]["nodes"] if matches(n)}
+                self.compare = [c for c in self.compare if c["sha"] not in oids]
+            self._remove(connection, matches)
+
+        self._change(connection, removed, at)
 
     def link(self, number: int, repository: Repository, *, user_linked: bool = False) -> None:
         """Link issue ``number`` of ``repository`` as a closing issue, without a new
@@ -338,10 +344,20 @@ class PullRequest:
             return self.compare
         return [rest_commit(node) for node in self.node["commits"]["nodes"]]
 
-    def _changed(self, connection: str, at: datetime | None) -> None:
+    def _change(self, connection: str, apply: Callable[[], None], at: datetime | None) -> None:
+        """Apply a change and move ``updatedAt``. A change to commits or files is a push: the
+        head moves to the last commit (to a new oid when only files changed), and the old head's
+        compare still answers, since commits never change."""
+        pushed = connection in PUSHED
+        if pushed:
+            old = (self.node["baseRefOid"], self.node["headRefOid"])
+            self.heads[old] = copy.deepcopy(self.compare_commits())
+        apply()
         self.touch(at)
-        if connection in PUSHED:
-            self.node["headRefOid"] = self.world.new_oid()
+        if pushed:
+            commits = self.compare_commits()
+            last = commits[-1]["sha"] if connection == "commits" and commits else None
+            self.node["headRefOid"] = last or self.world.new_oid()
 
     def _add(self, connection: str, nodes: Any) -> None:
         listed = self.node[connection]
@@ -448,11 +464,18 @@ class Scenario:
     def after(self, operation: str, change: Callable[[], None], times: int = 1) -> None:
         """Apply ``change`` right after the replay answers the next ``times`` requests of
         ``operation``: a one-shot fault (``Replay.modify``), so a change that never runs fails the
-        test like an unused fault. The first matching fault serves a request, so a change meant
-        to follow a faulted response belongs in that fault's ``respond``."""
-        self.replay.modify(
-            lambda body: change(), when=lambda seen: seen.operation == operation, times=times
-        )
+        test like an unused fault, and one that raises is the replay's problem. The first
+        matching fault serves a request, so a change meant to follow a faulted response belongs
+        in that fault's ``respond``."""
+
+        def changed(body: Node) -> None:
+            try:
+                change()
+            except Exception as error:
+                self.replay.problems.append(f"the change after {operation} failed: {error!r}")
+                raise
+
+        self.replay.modify(changed, when=lambda seen: seen.operation == operation, times=times)
 
     # -- building ---------------------------------------------------------------------------
     def new_id(self) -> int:
@@ -488,10 +511,12 @@ class Scenario:
         data = self.accounts.get(node_id)
         if data is not None:
             return data
-        if deleted and node_id in self._deleted:
-            return self._deleted[node_id]
-        if node_id in self.accounts:
+        if node_id in self._deleted:
+            if deleted:
+                return self._deleted[node_id]
             raise ScenarioError(f"{node_id} is deleted: only a commit links it (gap 90)")
+        if node_id in self.accounts:
+            raise ScenarioError(f"lookups answer NOT_FOUND for {node_id}: no account to name")
         raise ScenarioError(f"no account {node_id}: add it with add_account")
 
     def actor(self, node_id: str) -> Node:
@@ -678,6 +703,7 @@ class Scenario:
                 pull.node["headRepository"] = None
             forget(pull.node, node_id)
             forget(pull.compare, node_id)
+            forget(pull.heads, node_id)
 
     def restore_account(self, node_id: str) -> None:
         """Lookups find the account again; references it lost stay lost."""
@@ -768,13 +794,19 @@ class Scenario:
 
     def _compare(self, key: dict[str, Any]) -> Node | None:
         repository = self.repository(key["owner"], key["name"])
+        asked = (key["base"], key["head"])
         for pull in repository.pulls.values() if repository is not None else ():
-            refs = (pull.node.get("baseRefOid"), pull.node.get("headRefOid"))
-            if pull.hydratable and refs == (key["base"], key["head"]):
+            if not pull.hydratable:
+                continue
+            if asked == (pull.node["baseRefOid"], pull.node["headRefOid"]):
                 listed = pull.compare_commits()
-                start = (key["page"] - 1) * key["per_page"]
-                commits = listed[start : start + key["per_page"]]
-                return {"total_commits": len(listed), "commits": copy.deepcopy(commits)}
+            elif asked in pull.heads:
+                listed = pull.heads[asked]
+            else:
+                continue
+            start = (key["page"] - 1) * key["per_page"]
+            commits = listed[start : start + key["per_page"]]
+            return {"total_commits": len(listed), "commits": copy.deepcopy(commits)}
         return None
 
     def _unit(

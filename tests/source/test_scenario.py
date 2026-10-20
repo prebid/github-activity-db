@@ -710,10 +710,24 @@ async def test_a_pull_request_above_250_commits_reads_its_compare(scenario: Scen
     repository, author = project(scenario)
     pull = repository.pulls[1]
     pull.add("commits", *(scenario.node("commits", by=author) for _ in range(251)))
+    pull.add("commits", scenario.node("commits"))
     record = hydrated(await hydrate(scenario, "example", "project", 1))
     assert record.commits_source == "compare"
-    assert [commit.sha for commit in record.commits] == [
-        node["commit"]["oid"] for node in pull.node["commits"]["nodes"]
+    nodes = [node["commit"] for node in pull.node["commits"]["nodes"]]
+    assert pull.node["headRefOid"] == nodes[-1]["oid"]
+    read = [
+        (c.sha, c.author.login if c.author else None, c.author_name, c.author_email, c.authored_at)
+        for c in record.commits
+    ]
+    assert read == [
+        (
+            node["oid"],
+            node["author"]["user"]["login"] if node["author"]["user"] else None,
+            node["author"]["name"],
+            node["author"]["email"],
+            datetime.fromisoformat(node["authoredDate"]),
+        )
+        for node in nodes
     ]
 
 
@@ -757,7 +771,7 @@ async def test_a_repository_gone_between_a_batch_and_its_overflow(scenario: Scen
 
 
 async def test_what_the_model_leaves_unanswered() -> None:
-    """A pull request known only from an index recording, and the rate-limit readings."""
+    """A pull request known only from an index recording, and both rate-limit readings."""
     model = Scenario.from_recordings(FakeClock())
     async with model.source() as source:
         resolved = await source.resolve("prebid", "prebid-cache-java")
@@ -765,11 +779,16 @@ async def test_what_the_model_leaves_unanswered() -> None:
             await all_outcomes(source, resolved, [4])
         with pytest.raises(FatalSourceError):
             await source.rate_limits()
+    with httpx.Client(
+        transport=model.replay.transport(), base_url="https://api.github.com"
+    ) as client:
+        assert client.get("/rate_limit").status_code == 418
     key = {"owner": "prebid", "name": "prebid-cache-java", "number": 4}
-    assert model.replay.problems[0] == (
-        f"no pull_request unit for {key}: record it with scripts/record_fixtures.py"
-    )
-    assert any("rate_limit unit" in problem for problem in model.replay.problems[1:])
+    assert model.replay.problems == [
+        f"no pull_request unit for {key}: record it with scripts/record_fixtures.py",
+        "no rate_limit unit for {}: record it with scripts/record_fixtures.py",
+        "no rest_rate_limit unit for {}: record it with scripts/record_fixtures.py",
+    ]
 
 
 def test_an_account_the_model_never_held_is_named_so(scenario: Scenario) -> None:
@@ -778,3 +797,73 @@ def test_an_account_the_model_never_held_is_named_so(scenario: Scenario) -> None
         scenario.open_pull_request(repository, "User_typo")
     with pytest.raises(ScenarioError, match="no account User_typo"):
         scenario.node("commits", by="User_typo")
+    scenario.delete_account("User_never_held")
+    with pytest.raises(ScenarioError, match="lookups answer NOT_FOUND for User_never_held"):
+        scenario.node("commits", by="User_never_held")
+
+
+async def test_a_change_that_fails_is_the_replays_problem() -> None:
+    world = Scenario(FakeClock())
+    project(world)
+
+    def broken() -> None:
+        world.node("commits", by="User_typo")
+
+    world.after("PullRequestBatch", broken)
+    async with world.source() as source:
+        resolved = await source.resolve("example", "project")
+        with pytest.raises(FatalSourceError):
+            await all_outcomes(source, resolved, [1])
+    assert world.replay.problems == [
+        "the change after PullRequestBatch failed: "
+        "ScenarioError('no account User_typo: add it with add_account')"
+    ]
+
+
+async def test_a_push_while_its_compare_is_read_keeps_the_old_head(scenario: Scenario) -> None:
+    """Commits never change, so the compare of the head the batch read still answers, and the
+    record is that head's; the next run sees the push."""
+    repository, author = project(scenario)
+    pull = repository.pulls[1]
+    pull.add("commits", *(scenario.node("commits", by=author) for _ in range(251)))
+    head = pull.node["headRefOid"]
+    scenario.after("PullRequestBatch", lambda: pull.add("commits", scenario.node("commits")))
+    record = hydrated(await hydrate(scenario, "example", "project", 1))
+    assert (record.head_ref_oid, len(record.commits)) == (head, 251)
+    assert len(pull.node["commits"]["nodes"]) == 252
+
+
+async def test_commits_pushed_to_a_recorded_compare() -> None:
+    model = Scenario.from_recordings(FakeClock())
+    pull = model.repositories["prebid/prebid.js"].pulls[8858]
+    model.add_account(login="pusher")
+    pusher = next(i for i, data in model.accounts.items() if data and data["login"] == "pusher")
+    pushed = model.node("commits", by=pusher)
+    pull.add("commits", pushed)
+    record = hydrated(await hydrate(model, "prebid", "Prebid.js", 8858))
+    assert (record.commits_source, len(record.commits)) == ("compare", 255)
+    assert record.commits[-1].sha == pushed["commit"]["oid"] == pull.node["headRefOid"]
+    pull.remove("commits", lambda node: node["commit"]["oid"] == pushed["commit"]["oid"])
+    record = hydrated(await hydrate(model, "prebid", "Prebid.js", 8858))
+    assert len(record.commits) == 254
+    assert unanswered(model.replay) == []
+
+
+def test_a_recorded_issue_keeps_its_recorded_id() -> None:
+    model = Scenario.from_recordings(FakeClock())
+    pull = next(
+        p for p in model.pulls() if p.hydratable and p.node["closingIssuesReferences"]["nodes"]
+    )
+    link = pull.node["closingIssuesReferences"]["nodes"][0]
+    target = model.repositories.get(
+        link["repository"]["nameWithOwner"].lower()
+    ) or model.add_repository(
+        *link["repository"]["nameWithOwner"].split("/"), databaseId=link["repository"]["databaseId"]
+    )
+    pull.unlink(link["number"], target)
+    pull.link(link["number"], target)
+    relinked = pull.node["closingIssuesReferences"]["nodes"][-1]
+    assert (relinked["number"], relinked["fullDatabaseId"]) == (
+        link["number"],
+        link["fullDatabaseId"],
+    )
