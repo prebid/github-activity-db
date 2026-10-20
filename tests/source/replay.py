@@ -181,7 +181,7 @@ class Replay:
         return Seen(operation="rest", variables={}, query="", path=str(request.url))
 
     def _lookup(self, kind: str, key: dict[str, Any], stamp: str | None = None) -> Unit:
-        unit = self.provider(kind, key) if self.provider is not None else None
+        unit = self._provided(kind, key)
         if unit is None:
             unit = self.units.get((kind, _key(key)))
         if unit is None:
@@ -277,14 +277,30 @@ class Replay:
                 return _graphql_response(seen, [unit for unit, _ in units], {"nodes": nodes}, units)
         raise _Miss(f"no replay for GraphQL operation {seen.operation}")
 
-    def _absent_repository(self, seen: Seen) -> httpx.Response | None:
-        """A null ``repository`` when the provider says it does not exist."""
+    def _provided(self, kind: str, key: dict[str, Any]) -> Unit | None:
+        """The provider's unit; a provider that fails is a request the replay cannot answer."""
         if self.provider is None:
             return None
-        key = {"owner": seen.variables["owner"], "name": seen.variables["name"]}
-        unit = self.provider("repository", key)
+        try:
+            return self.provider(kind, key)
+        except Exception as error:
+            raise _Miss(f"the provider failed on {kind} {key}: {error!r}") from error
+
+    def _absent_repository(self, seen: Seen) -> httpx.Response | None:
+        """A null ``repository`` when the provider says it does not exist, its unit stamped as
+        the request's own units would be."""
+        index = seen.operation == "PullRequestIndex"
+        kind = "index" if index else "pull_request"
+        key = {"owner": seen.variables["owner"], "name": seen.variables["name"], "for": kind}
+        unit = self._provided("repository", key)
         if unit is None:
             return None
+        stamp = whole_stamp(seen.query) if index else pull_request_stamp(seen.query)
+        if unit.document_sha256 != stamp:
+            raise _Miss(
+                f"{kind} unit {key} was recorded for another query document: re-record with "
+                "scripts/record_fixtures.py"
+            )
         return _graphql_response(seen, [unit], {"repository": None}, [(unit, ["repository"])])
 
     def _rest(self, request: httpx.Request) -> httpx.Response:
@@ -300,6 +316,12 @@ class Replay:
 
 class _Miss(Exception):
     pass
+
+
+def unanswered(replay: Replay) -> list[str]:
+    """What a test leaves empty: the requests the replay could not answer, then the faults never
+    served or not used up, whose predicates missed."""
+    return [*replay.problems, *unused_faults(replay)]
 
 
 def unused_faults(replay: Replay) -> list[str]:

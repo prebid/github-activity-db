@@ -76,12 +76,9 @@ def scenario() -> Iterator[Scenario]:
     test fails when the replay could not answer a request, or a fault was never used up."""
     # Imported here so this conftest does not load the source tests' conftest at import time.
     from tests.source.conftest import FakeClock
-    from tests.source.replay import unused_faults
+    from tests.source.replay import unanswered
     from tests.source.scenario import Scenario
 
     world = Scenario(FakeClock())
     yield world
-    assert world.replay.problems == [], "\n".join(world.replay.problems)
-    assert unused_faults(world.replay) == [], (
-        "a fault's predicate never matched as the test assumes"
-    )
+    assert unanswered(world.replay) == []

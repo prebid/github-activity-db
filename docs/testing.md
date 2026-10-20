@@ -149,25 +149,36 @@ next run must see GitHub as the test left it.
 - **State is GitHub's JSON**: each repository, pull request, and account is held as the JSON
   GitHub returns for it, every connection's nodes joined across pages. The replay asks the model
   for each unit when a request arrives (`Replay.provider`), so a response shows the state at that
-  moment, and its `Date` is the test clock's reading. Anything the model does not hold is
-  answered `NOT_FOUND`, a repository it cannot find with a null `repository`.
-- **Changes**: `add_repository`, `add_label`, `add_account`, and `open_pull_request` copy
-  recorded objects with fresh ids; a pull request's `merge`, `close`, `reopen`, and `touch` move
-  its times, `set` changes fields without `updatedAt` (a draft toggle, an author association),
-  and `add`, `remove`, `link`, and `unlink` change its connections. The model renames labels and
-  repositories (the old name still resolves), deletes an account (lookups answer `NOT_FOUND` and
-  no response names it), and finds one again; `gone` removes a pull request or a repository.
-  `node(connection)` copies a recorded node of that connection for a test to adjust.
-- **Checked against the recordings**: `test_scenario.py` loads every recorded unit into one model
-  and requires each to re-render exactly (compare pages on the fields the source reads), and the
-  source to read the model as it reads the recordings. Rendered units carry the recordings'
-  stamps, so a changed document is refused until the recordings are made again and the model
-  renders them. Connections no recording covers (label and closing-issue continuations) have no
-  stamp, and the model refuses to render them.
+  moment, and its `Date` is the test clock's reading. A repository, pull request, node, or account
+  the model does not hold is answered `NOT_FOUND` (a missing repository makes an index or batch
+  response's `repository` null). A compare it does not hold and a pull request it knows only from
+  an index recording go unanswered, and it serves no rate-limit reading: every GraphQL response
+  carries the replay's fixed `rateLimit` reading, so budget waits come only from faults.
+- **Pages follow GitHub's cursors**: the index's, comments', reviews', and review requests' name
+  the page's last node, so a pull request gone between index pages makes the count disagree and
+  the source rescan, as on GitHub; the other connections' name a position.
+- **Changes**: `add_repository`, `add_label`, `add_account`, and `open_pull_request` copy recorded
+  objects with fresh ids, and `node(connection, by=account)` a recorded node with its own ids, oid,
+  or path and the account it names. A pull request's `merge`, `close`, `reopen`, and `touch` move
+  its times; `add` and `remove` change a connection and move `updatedAt`; `set`, `link`, `unlink`,
+  and `rename_label` do not, as plan section 7 ("Change signal") measured for draft toggles,
+  author associations, closing links, and label renames. `rename_repository` keeps the old name
+  resolving. `delete_account` makes lookups answer `NOT_FOUND` and nulls or drops every reference
+  that exists then; a reference added afterwards names the account, as GitHub can (gap 90), and
+  `restore_account` makes lookups find it again. `gone` removes a pull request or a repository. A
+  test changes the model between requests, or during a run through `replay.wrap`; faults stack on
+  the model as on the recordings.
+- **Checked against the recordings**: `test_scenario.py` loads every recorded unit except the
+  rate-limit readings into one model and requires each to re-render exactly (compare pages on the
+  fields the source reads), and the source to read the model as it reads the recordings. Rendered
+  units carry the recordings' stamps, so a changed document is refused until the recordings are
+  made again and the model renders them. A continuation no recording covers (labels, closing
+  issues, user-linked closing issues, review requests, assignees) goes unanswered.
 - **Fixture**: `scenario` (`tests/conftest.py`) is an empty model on its own `FakeClock`, whose
   `advance` moves time between a test's steps; `async with scenario.source() as source` opens the
-  real source over it. The fixture fails a test whose request the replay could not answer, or
-  whose fault was never used up; faults stack on the model as on the recordings.
+  real source over it. Like the `replay` fixture, it fails a test with anything in
+  `unanswered(replay)`: a request the replay could not answer (the model's own errors included)
+  or a fault never used up.
 
 ---
 

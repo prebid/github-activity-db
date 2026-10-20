@@ -17,7 +17,7 @@ from github_activity_db.cli.app import app
 from github_activity_db.config import get_settings
 from github_activity_db.source import GitHubSource
 from tests.source.conftest import FakeClock
-from tests.source.replay import Replay, synthetic, unused_faults
+from tests.source.replay import Replay, synthetic, unanswered
 
 runner = CliRunner()
 # Rich's width when none of stdin, stdout, and stderr is a terminal and COLUMNS is unset, as in
@@ -47,8 +47,7 @@ def replay(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Iterator[Replay]:
     )
     yield recorded
     get_settings.cache_clear()
-    assert recorded.problems == []
-    assert unused_faults(recorded) == []
+    assert unanswered(recorded) == []
 
 
 class TestRateLimit:

@@ -3,8 +3,12 @@
 The model holds each repository, pull request, and account as the JSON GitHub returns for it, with
 every connection's nodes joined across pages. The replay asks it for each unit when a request
 arrives (``Replay.provider``), so a response shows the model's state at that moment and carries the
-test clock's time as its ``Date``. A test changes the state between requests through the methods
-below; anything the model does not hold is answered as GitHub answers it, ``NOT_FOUND``.
+test clock's time as its ``Date``. A test changes the state between requests, or during one
+through ``Replay.wrap``, with the methods below.
+
+Pages follow GitHub's cursors: the index's, comments', reviews', and review requests' name the
+page's last node, so the next page starts after it even when nodes before it come or go; the other
+connections' name a position.
 
 The recordings check the model: they load into one model that re-renders each of them exactly
 (``tests/source/test_scenario.py``). Rendered units carry the recordings' document stamps, so a
@@ -18,6 +22,7 @@ import base64
 import binascii
 import copy
 import itertools
+import json
 from collections.abc import AsyncIterator, Callable, Iterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
@@ -32,6 +37,8 @@ from tests.source.conftest import FakeClock
 from tests.source.recordings import Unit
 from tests.source.replay import Replay, loaded_units
 
+Node = dict[str, Any]
+
 # The fields of an index entry; its closing links come from the same connection, at most
 # INDEX_CLOSING_LINKS of them (documents.PULL_REQUEST_INDEX).
 INDEX_FIELDS = (
@@ -45,7 +52,20 @@ INDEX_FIELDS = (
     "mergedAt",
     "closedAt",
 )
-# The kinds the model renders. Its stamp for each is the one the recordings of that kind carry.
+
+
+def _index_order(node: Node) -> tuple[Any, ...]:
+    return (node["createdAt"], int(node["fullDatabaseId"]))
+
+
+# The order of the connections whose cursors name a node: what each recorded cursor encodes
+# (``cursor:v2:`` and the node's key), and the order every recorded list is in.
+ORDERS: dict[str, Callable[[Node], tuple[Any, ...]]] = {
+    "comments": lambda node: (int(node["fullDatabaseId"]),),
+    "reviews": lambda node: (node["createdAt"], int(node["fullDatabaseId"])),
+    "reviewRequests": lambda node: (node["databaseId"],),
+}
+# The kinds the model renders; its stamp for each is the one the recordings of that kind carry.
 RENDERED = ("resolve", "repository_labels", "index", "pull_request", "overflow", "user", "compare")
 # The recordings new objects are copied from.
 REPOSITORY_TEMPLATE = ("prebid", "go-gdpr")
@@ -53,7 +73,7 @@ PULL_REQUEST_TEMPLATE = ("prebid", "go-gdpr", 21)
 
 
 class ScenarioError(Exception):
-    """A test asked the model for something it cannot build."""
+    """A request names a page the model never served."""
 
 
 def iso(moment: datetime) -> str:
@@ -65,93 +85,116 @@ def not_found(message: str) -> list[dict[str, Any]]:
     return [{"message": message, "path": [], "type": "NOT_FOUND"}]
 
 
-def missing_repository(key: dict[str, Any]) -> list[dict[str, Any]]:
-    """GitHub's answer for a repository it cannot find; no recording has one, so the text follows
-    GitHub's other NOT_FOUND messages."""
-    return not_found(
-        f"Could not resolve to a Repository with the name '{key['owner']}/{key['name']}'."
-    )
+def missing_node(node_id: str) -> list[dict[str, Any]]:
+    return not_found(f"Could not resolve to a node with the global id of '{node_id}'.")
+
+
+def missing_repository(owner: str, name: str) -> list[dict[str, Any]]:
+    """No recording holds GitHub's answer for a missing repository; the text follows its others."""
+    return not_found(f"Could not resolve to a Repository with the name '{owner}/{name}'.")
+
+
+def dicts(value: Any) -> Iterator[Node]:
+    """Every object inside a JSON value."""
+    if isinstance(value, dict):
+        yield value
+        for item in value.values():
+            yield from dicts(item)
+    elif isinstance(value, list):
+        for item in value:
+            yield from dicts(item)
+
+
+def names(value: Any, node_id: str) -> bool:
+    """Whether a JSON object is a reference to the account ``node_id`` (GraphQL or REST)."""
+    return isinstance(value, dict) and node_id in (value.get("id"), value.get("node_id"))
+
+
+def forget(value: Any, node_id: str) -> None:
+    """Drop every reference to the account ``node_id``: a field that named it is null, as GitHub
+    returns a deleted account's references (D28), and a connection lists it no more."""
+    for obj in list(dicts(value)):
+        for key, item in list(obj.items()):
+            if names(item, node_id):
+                obj[key] = None
+        nodes = obj.get("nodes")
+        if isinstance(nodes, list) and "totalCount" in obj:
+            kept = [node for node in nodes if not names(node, node_id)]
+            obj["totalCount"] -= len(nodes) - len(kept)
+            obj["nodes"] = kept
 
 
 @dataclass
 class Cursors:
-    """Where a connection's pages end: GitHub's cursors where recorded, else the offset form
-    GitHub uses for labels, commits, and files among others (base64 of the position). The source
-    never decodes a cursor."""
+    """A connection's page cursors: each names a node (by ``order``) or a position. GitHub's
+    recorded cursors are kept; for other page ends the model makes its own, which the source never
+    decodes (a position in GitHub's offset form, base64 of the number)."""
 
-    recorded: dict[int, str] = field(default_factory=dict)
+    order: Callable[[Node], tuple[Any, ...]] | None = None
+    recorded: dict[str, Any] = field(default_factory=dict)  # cursor -> the key or position
 
-    def at(self, position: int) -> str:
-        return self.recorded.get(position) or (
-            base64.b64encode(str(position).encode()).decode().rstrip("=")
-        )
+    def mark(self, nodes: list[Node], end: int) -> Any:
+        return self.order(nodes[end - 1]) if self.order is not None else end
 
-    def position(self, cursor: str | None) -> int:
+    def record(self, nodes: list[Node], cursor: str | None) -> None:
+        """Keep a recorded page's ``endCursor``: the page ended at the last of ``nodes``."""
+        if cursor is not None:
+            self.recorded[cursor] = self.mark(nodes, len(nodes))
+
+    def end(self, nodes: list[Node], end: int) -> str | None:
+        if end == 0:
+            return None
+        mark = self.mark(nodes, end)
+        for cursor, recorded in self.recorded.items():
+            if recorded == mark:
+                return cursor
+        if self.order is not None:
+            return "scenario:" + json.dumps(list(mark))
+        return base64.b64encode(str(mark).encode()).decode().rstrip("=")
+
+    def start(self, nodes: list[Node], cursor: str | None) -> int:
+        """Where the page after ``cursor`` starts in ``nodes`` as they are now."""
         if cursor is None:
             return 0
-        for position, recorded in self.recorded.items():
-            if recorded == cursor:
-                return position
-        try:
-            return int(base64.b64decode(cursor + "=" * (-len(cursor) % 4)).decode())
-        except (binascii.Error, UnicodeDecodeError, ValueError) as error:
-            raise ScenarioError(f"cursor {cursor!r} names no page of this connection") from error
+        if cursor in self.recorded:
+            mark = self.recorded[cursor]
+        elif self.order is not None and cursor.startswith("scenario:"):
+            mark = tuple(json.loads(cursor.removeprefix("scenario:")))
+        else:
+            try:
+                mark = int(base64.b64decode(cursor + "=" * (-len(cursor) % 4)).decode())
+            except (binascii.Error, UnicodeDecodeError, ValueError) as error:
+                raise ScenarioError(f"cursor {cursor!r} names no page the model served") from error
+        if self.order is None:
+            position: int = mark
+            return position
+        order = self.order
+        return next((i for i, node in enumerate(nodes) if order(node) > mark), len(nodes))
 
 
-def page(connection: dict[str, Any], start: int, cursors: Cursors) -> dict[str, Any]:
-    """The page of up to PAGE_SIZE nodes after ``start``, as GitHub renders it."""
-    nodes = connection["nodes"][start : start + PAGE_SIZE]
-    end = start + len(nodes)
+def page(connection: Node, cursors: Cursors, after: str | None = None) -> Node:
+    """The page of up to PAGE_SIZE nodes after ``after``, as GitHub renders it."""
+    nodes = connection["nodes"]
+    start = cursors.start(nodes, after)
+    end = start + len(nodes[start : start + PAGE_SIZE])
     return {
         "totalCount": connection["totalCount"],
         "pageInfo": {
             "hasNextPage": end < connection["totalCount"],
-            "endCursor": cursors.at(end) if end else None,
+            "endCursor": cursors.end(nodes, end),
         },
-        "nodes": copy.deepcopy(nodes),
+        "nodes": copy.deepcopy(nodes[start:end]),
     }
 
 
-def joined(connection: dict[str, Any], cursors: Cursors) -> dict[str, Any]:
-    """A recorded first page as the model keeps it: every node, no page info."""
-    if connection["pageInfo"]["endCursor"] is not None:
-        cursors.recorded[len(connection["nodes"])] = connection["pageInfo"]["endCursor"]
-    return {"totalCount": connection["totalCount"], "nodes": connection["nodes"]}
-
-
-def extend(
-    connection: dict[str, Any], start: int, recorded: dict[str, Any], cursors: Cursors
-) -> None:
-    """Append a recorded continuation page at ``start``."""
-    if start != len(connection["nodes"]):
-        raise ScenarioError(f"a page at {start} continues {len(connection['nodes'])} nodes")
+def joined(recorded: Node, cursors: Cursors, connection: Node | None = None) -> Node:
+    """A recorded page added to ``connection`` (a new one for a first page): its nodes, its
+    total, and its ``endCursor``."""
+    connection = connection if connection is not None else {"totalCount": 0, "nodes": []}
     connection["nodes"].extend(recorded["nodes"])
     connection["totalCount"] = recorded["totalCount"]
-    if recorded["pageInfo"]["endCursor"] is not None:
-        cursors.recorded[len(connection["nodes"])] = recorded["pageInfo"]["endCursor"]
-
-
-def forget(value: Any, node_id: str) -> None:
-    """Drop every reference to the deleted account ``node_id``: a field that named it is null,
-    as GitHub returns a deleted account's references (D28), and a connection lists it no more."""
-    if isinstance(value, list):
-        for item in value:
-            forget(item, node_id)
-        return
-    if not isinstance(value, dict):
-        return
-    for key, item in list(value.items()):
-        if isinstance(item, dict) and item.get("id") == node_id:
-            value[key] = None
-        else:
-            forget(item, node_id)
-    nodes = value.get("nodes")
-    if isinstance(nodes, list) and "totalCount" in value:
-        kept = [
-            node for node in nodes if not (isinstance(node, dict) and node.get("id") == node_id)
-        ]
-        value["totalCount"] -= len(nodes) - len(kept)
-        value["nodes"] = kept
+    cursors.record(connection["nodes"], recorded["pageInfo"]["endCursor"])
+    return connection
 
 
 @dataclass
@@ -159,12 +202,16 @@ class PullRequest:
     """A pull request: its node with every connection's nodes, or only its index entry when no
     hydration was recorded for it (such a pull request cannot be hydrated)."""
 
-    clock: FakeClock
-    node: dict[str, Any]
+    world: Scenario
+    node: Node
     cursors: dict[str, Cursors] = field(default_factory=dict)
-    # REST compare commits, for a pull request above 250 commits; only the fields the source reads.
-    compare: list[dict[str, Any]] | None = None
+    # REST compare commits, for a pull request above 250 commits: the fields the source reads.
+    compare: list[Node] | None = None
     gone: bool = False
+
+    def __post_init__(self) -> None:
+        for key in CONNECTIONS_BY_KEY:
+            self.cursors.setdefault(key, Cursors(ORDERS.get(key)))
 
     @property
     def number(self) -> int:
@@ -175,71 +222,91 @@ class PullRequest:
     def hydratable(self) -> bool:
         return "id" in self.node
 
+    def now(self, at: datetime | None) -> str:
+        return iso(at or self.world.clock.now())
+
     def set(self, **fields: Any) -> None:
-        """Change fields as GitHub can without a new ``updatedAt`` (a draft toggle, an author
-        association); ``touch`` moves ``updatedAt``."""
+        """Change fields without a new ``updatedAt``, as a draft toggle or an author-association
+        change does (plan section 7, "Change signal")."""
         self.node.update(fields)
 
     def touch(self, at: datetime | None = None) -> None:
-        self.node["updatedAt"] = iso(at or self.clock.now())
+        self.node["updatedAt"] = self.now(at)
 
-    def merge(self, by: dict[str, Any], at: datetime | None = None) -> None:
+    def merge(self, by: Node, at: datetime | None = None) -> None:
         """Merged by the account ``by`` names (``Scenario.actor``)."""
-        moment = iso(at or self.clock.now())
-        oid = f"{int(self.node['fullDatabaseId']) + 2:040x}"
+        moment = self.now(at)
         self.node.update(
             state="MERGED",
             mergedAt=moment,
             closedAt=moment,
             mergedBy=by,
-            mergeCommit={"oid": oid},
+            mergeCommit={"oid": self.world.new_oid()},
             updatedAt=moment,
         )
 
     def close(self, at: datetime | None = None) -> None:
-        moment = iso(at or self.clock.now())
+        moment = self.now(at)
         self.node.update(state="CLOSED", closedAt=moment, updatedAt=moment)
 
     def reopen(self, at: datetime | None = None) -> None:
-        moment = iso(at or self.clock.now())
+        moment = self.now(at)
         self.node.update(state="OPEN", closedAt=None, updatedAt=moment)
 
-    def add(self, connection: str, *nodes: dict[str, Any]) -> None:
-        self.node[connection]["nodes"].extend(nodes)
-        self.node[connection]["totalCount"] += len(nodes)
+    def add(self, connection: str, *nodes: Node, at: datetime | None = None) -> None:
+        """Add nodes, which moves ``updatedAt`` as a comment, a label, or a review request does."""
+        self._add(connection, nodes)
+        self.touch(at)
 
-    def remove(self, connection: str, matches: Callable[[dict[str, Any]], bool]) -> None:
-        kept = [node for node in self.node[connection]["nodes"] if not matches(node)]
-        self.node[connection]["totalCount"] -= len(self.node[connection]["nodes"]) - len(kept)
-        self.node[connection]["nodes"] = kept
-
-    def link(
-        self, number: int, repository: dict[str, Any], *, user_linked: bool, github_id: int
+    def remove(
+        self, connection: str, matches: Callable[[Node], bool], at: datetime | None = None
     ) -> None:
-        """Link the issue ``number`` of ``repository`` (its resolve data) as a closing issue;
-        a user-linked one is also in ``userLinkedClosingIssues`` (D23)."""
-        self.add(
+        """Remove the nodes ``matches`` selects, which moves ``updatedAt``."""
+        self._remove(connection, matches)
+        self.touch(at)
+
+    def link(self, number: int, repository: Repository, *, user_linked: bool = False) -> None:
+        """Link issue ``number`` of ``repository`` as a closing issue, without a new
+        ``updatedAt`` (plan section 7, "Change signal"); a user-linked one is also in
+        ``userLinkedClosingIssues`` (D23)."""
+        target = {
+            "databaseId": repository.data["databaseId"],
+            "nameWithOwner": repository.full_name,
+        }
+        github_id = str(self.world.new_id())
+        self._add(
             "closingIssuesReferences",
-            {
-                "fullDatabaseId": str(github_id),
-                "number": number,
-                "repository": {
-                    "databaseId": repository["databaseId"],
-                    "nameWithOwner": repository["nameWithOwner"],
-                },
-            },
+            [{"fullDatabaseId": github_id, "number": number, "repository": target}],
         )
         if user_linked:
-            self.add(
+            self._add(
                 "userLinkedClosingIssues",
-                {"number": number, "repository": {"databaseId": repository["databaseId"]}},
+                [{"number": number, "repository": {"databaseId": target["databaseId"]}}],
             )
 
-    def unlink(self, number: int) -> None:
-        for connection in ("closingIssuesReferences", "userLinkedClosingIssues"):
-            self.remove(connection, lambda node: node["number"] == number)
+    def unlink(self, number: int, repository: Repository) -> None:
+        def matches(node: Node) -> bool:
+            target = node["repository"]["databaseId"]
+            return (node["number"], target) == (number, repository.data["databaseId"])
 
-    def index_entry(self) -> dict[str, Any]:
+        self._remove("closingIssuesReferences", matches)
+        self._remove("userLinkedClosingIssues", matches)
+
+    def _add(self, connection: str, nodes: Any) -> None:
+        listed = self.node[connection]
+        listed["nodes"].extend(nodes)
+        listed["totalCount"] += len(nodes)
+        order = ORDERS.get(connection)
+        if order is not None:
+            listed["nodes"].sort(key=order)
+
+    def _remove(self, connection: str, matches: Callable[[Node], bool]) -> None:
+        listed = self.node[connection]
+        kept = [node for node in listed["nodes"] if not matches(node)]
+        listed["totalCount"] -= len(listed["nodes"]) - len(kept)
+        listed["nodes"] = kept
+
+    def index_entry(self) -> Node:
         links = self.node["closingIssuesReferences"]
         return {
             **{name: self.node[name] for name in INDEX_FIELDS},
@@ -252,23 +319,31 @@ class PullRequest:
             },
         }
 
-    def render(self) -> dict[str, Any]:
+    def render(self) -> Node:
         rendered = {
             k: copy.deepcopy(v) for k, v in self.node.items() if k not in CONNECTIONS_BY_KEY
         }
         for key in CONNECTIONS_BY_KEY:
-            rendered[key] = page(self.node[key], 0, self.cursors.setdefault(key, Cursors()))
+            rendered[key] = page(self.node[key], self.cursors[key])
         return rendered
+
+    def continuation(self, connection: str, after: str) -> Node:
+        return {
+            "headRefOid": self.node["headRefOid"],
+            "updatedAt": self.node["updatedAt"],
+            connection: page(self.node[connection], self.cursors[connection], after),
+        }
 
 
 @dataclass
 class Repository:
     """A repository: its resolve data with every label, and its pull requests by number."""
 
-    data: dict[str, Any]
+    world: Scenario
+    data: Node
     pulls: dict[int, PullRequest] = field(default_factory=dict)
     label_cursors: Cursors = field(default_factory=Cursors)
-    index_cursors: Cursors = field(default_factory=Cursors)
+    index_cursors: Cursors = field(default_factory=lambda: Cursors(_index_order))
     gone: bool = False
 
     @property
@@ -276,27 +351,33 @@ class Repository:
         name: str = self.data["nameWithOwner"]
         return name
 
-    def indexed(self) -> list[PullRequest]:
-        """The pull requests GitHub lists, in the index's order (created, then id)."""
+    def index(self) -> Node:
+        """The index connection: the pull requests GitHub lists, in its order."""
         listed = [pull for pull in self.pulls.values() if not pull.gone]
-        return sorted(listed, key=lambda p: (p.node["createdAt"], int(p.node["fullDatabaseId"])))
+        listed.sort(key=lambda pull: _index_order(pull.node))
+        return {"totalCount": len(listed), "nodes": [pull.index_entry() for pull in listed]}
 
-    def render(self) -> dict[str, Any]:
+    def render(self) -> Node:
         rendered = {k: copy.deepcopy(v) for k, v in self.data.items() if k != "labels"}
-        rendered["labels"] = page(self.data["labels"], 0, self.label_cursors)
+        rendered["labels"] = page(self.data["labels"], self.label_cursors)
         return rendered
 
 
 class Scenario:
-    """Repositories, pull requests, and accounts, answering the replay at request time."""
+    """Repositories, pull requests, and accounts, answering the replay at request time.
+
+    Any repository, pull request, node, or account the model does not hold is answered
+    ``NOT_FOUND``. It serves no rate-limit reading: every GraphQL response carries the replay's
+    fixed ``rateLimit`` reading (``replay.RATE_LIMIT``), so budget waits come only from faults.
+    """
 
     def __init__(self, clock: FakeClock) -> None:
         self.clock = clock
         # By lower-cased ``owner/name``; a rename keeps the old name (``followRenames``).
         self.repositories: dict[str, Repository] = {}
         # Lookup data by node id; ``None`` is an account GitHub answers NOT_FOUND for.
-        self.accounts: dict[str, dict[str, Any] | None] = {}
-        self._deleted: dict[str, dict[str, Any]] = {}
+        self.accounts: dict[str, Node | None] = {}
+        self._deleted: dict[str, Node] = {}
         self._ids = itertools.count(1)
         self.replay = Replay(provider=self.unit)
 
@@ -317,6 +398,10 @@ class Scenario:
         """A database id no recording uses."""
         return 9_000_000_000_000 + next(self._ids)
 
+    def new_oid(self) -> str:
+        """A git object id no recording uses."""
+        return f"5ce4a1{next(self._ids):034x}"
+
     def add_account(self, typename: str = "User", login: str | None = None, **fields: Any) -> str:
         """An account copied from a recorded one of ``typename``; returns its node id."""
         number = self.new_id()
@@ -333,8 +418,9 @@ class Scenario:
         node_id: str = data["id"]
         return node_id
 
-    def actor(self, node_id: str) -> dict[str, Any]:
-        """How a pull request names an account (the ``Actor`` fragment)."""
+    def actor(self, node_id: str) -> Node:
+        """How a pull request names an account (the ``Actor`` fragment). A deleted account can be
+        named too: GitHub can still link one a lookup no longer finds (gap 90)."""
         data = self.accounts.get(node_id) or self._deleted[node_id]
         return {k: data[k] for k in ("__typename", "login", "id", "databaseId")}
 
@@ -351,11 +437,11 @@ class Scenario:
             labels={"totalCount": 0, "nodes": []},
         )
         data.update(fields)
-        repository = Repository(data)
+        repository = Repository(self, data)
         self.repositories[repository.full_name.lower()] = repository
         return repository
 
-    def add_label(self, repository: Repository, name: str) -> dict[str, Any]:
+    def add_label(self, repository: Repository, name: str) -> Node:
         """A repository label; a pull request carries it as ``{id, name}``."""
         moment = iso(self.clock.now())
         label = {
@@ -374,8 +460,8 @@ class Scenario:
     def open_pull_request(
         self, repository: Repository, author: str, number: int | None = None, **fields: Any
     ) -> PullRequest:
-        """An open pull request by ``author`` (a node id), copied from a recorded one, with every
-        connection empty; ``fields`` replace any of its fields."""
+        """An open pull request by ``author`` (a node id) from a fork, copied from a recorded one,
+        with every connection empty; ``fields`` replace any of its fields."""
         moment = iso(self.clock.now())
         github_id = self.new_id()
         actor = self.actor(author)
@@ -400,8 +486,8 @@ class Scenario:
             author=actor,
             authorAssociation="CONTRIBUTOR",
             baseRefName=repository.data["defaultBranchRef"]["name"],
-            baseRefOid=f"{github_id:040x}",
-            headRefOid=f"{github_id + 1:040x}",
+            baseRefOid=self.new_oid(),
+            headRefOid=self.new_oid(),
             headRefName=f"change-{github_id}",
             isCrossRepository=True,
             headRepository={
@@ -422,36 +508,57 @@ class Scenario:
         for key in CONNECTIONS_BY_KEY:
             node[key] = {"totalCount": 0, "nodes": []}
         node.update(fields)
-        pull = PullRequest(self.clock, node)
+        pull = PullRequest(self, node)
         repository.pulls[pull.number] = pull
         return pull
 
-    def node(self, connection: str, **fields: Any) -> dict[str, Any]:
-        """A new node of ``connection`` copied from a recorded one, with fresh ids."""
+    def node(self, connection: str, by: str | None = None, **fields: Any) -> Node:
+        """A new node of ``connection``, copied from a recorded one with its own identity: fresh
+        ids, a commit's own oid, a file's own path, and the account ``by`` (a node id) wherever
+        the node names one (none when ``by`` is None; an assignee is the account itself). A label
+        is the ``{id, name}`` of a repository label (``add_label``); a closing link comes from
+        ``PullRequest.link``."""
+        if connection == "assignedActors":
+            return {**self.actor(by or ""), **fields}
         node = copy.deepcopy(_templates().nodes[connection])
         number = self.new_id()
-        if "id" in node:
-            node["id"] = f"N_scenario{number}"
-        if "fullDatabaseId" in node:
-            node["fullDatabaseId"] = str(number)
-        if "databaseId" in node:
-            node["databaseId"] = number
+        fresh = {"id": f"N_scenario{number}", "fullDatabaseId": str(number), "databaseId": number}
+        node.update({key: value for key, value in fresh.items() if key in node})
+        actor = self.actor(by) if by is not None else None
+        match connection:
+            case "comments" | "reviews":
+                node.update(author=actor, editor=None)
+            case "commits":
+                author = node["commit"]["author"]
+                author["user"] = None
+                if actor is not None:
+                    author.update(name=actor["login"], email=f"{actor['login']}@example.com")
+                    author["user"] = {k: actor[k] for k in ("id", "databaseId", "login")}
+                node["commit"]["oid"] = self.new_oid()
+            case "files":
+                node["path"] = f"file-{number}"
+            case "reviewRequests":
+                node["requestedReviewer"] = actor
         node.update(fields)
         return node
 
     # -- changes ----------------------------------------------------------------------------
     def rename_repository(self, repository: Repository, owner: str, name: str) -> None:
-        """Rename; the old name still resolves to it, and links to its issues show the new name."""
+        """Rename; the old name still resolves to it, and every link to it and every pull
+        request from it show the new name."""
         repository.data.update(name=name, owner={"login": owner}, nameWithOwner=f"{owner}/{name}")
         self.repositories[repository.full_name.lower()] = repository
-        for other in self.repositories.values():
-            for pull in other.pulls.values():
-                for link in pull.node.get("closingIssuesReferences", {}).get("nodes", []):
-                    if link["repository"]["databaseId"] == repository.data["databaseId"]:
-                        link["repository"]["nameWithOwner"] = repository.full_name
+        for pull in self.pulls():
+            for obj in dicts(pull.node):
+                if (
+                    obj.get("databaseId") == repository.data["databaseId"]
+                    and "nameWithOwner" in obj
+                ):
+                    obj["nameWithOwner"] = repository.full_name
 
     def rename_label(self, repository: Repository, label_id: str, name: str) -> None:
-        """A label keeps its id when renamed, on the repository and on every pull request."""
+        """A label keeps its id when renamed, on the repository and on every pull request,
+        without a new ``updatedAt`` for them (plan section 7, "Change signal")."""
         for label in repository.data["labels"]["nodes"]:
             if label["id"] == label_id:
                 label.update(name=name, updatedAt=iso(self.clock.now()))
@@ -461,20 +568,30 @@ class Scenario:
                     label["name"] = name
 
     def delete_account(self, node_id: str) -> None:
-        """Lookups answer NOT_FOUND, and nothing GitHub renders names the account any more."""
+        """Lookups answer NOT_FOUND, and every reference to the account that exists now is null
+        or gone, its REST compare commits' included. A reference added afterwards names it, as
+        GitHub can link an account a lookup no longer finds (gap 90)."""
         data = self.accounts.get(node_id)
         if data is not None:
             self._deleted[node_id] = data
         self.accounts[node_id] = None
-        for repository in self.repositories.values():
-            for pull in repository.pulls.values():
-                forget(pull.node, node_id)
+        for pull in self.pulls():
+            forget(pull.node, node_id)
+            forget(pull.compare, node_id)
 
     def restore_account(self, node_id: str) -> None:
         """Lookups find the account again; references it lost stay lost."""
         self.accounts[node_id] = self._deleted.pop(node_id)
 
     # -- answering the replay ---------------------------------------------------------------
+    def pulls(self) -> Iterator[PullRequest]:
+        """Every pull request once (a renamed repository is listed under both names)."""
+        seen: set[int] = set()
+        for repository in self.repositories.values():
+            if id(repository) not in seen:
+                seen.add(id(repository))
+                yield from repository.pulls.values()
+
     def repository(self, owner: str, name: str) -> Repository | None:
         repository = self.repositories.get(f"{owner}/{name}".lower())
         return None if repository is None or repository.gone else repository
@@ -487,86 +604,58 @@ class Scenario:
         return None
 
     def unit(self, kind: str, key: dict[str, Any]) -> Unit | None:
-        """The unit the replay serves for ``kind`` and ``key``; ``None`` leaves the request to
-        the recorded units (the rate-limit readings)."""
+        """The unit the replay serves for ``kind`` and ``key``. ``None`` leaves the request
+        unanswered, which the replay reports: a kind the model does not render, a compare it does
+        not hold, or a pull request known only from the index."""
         data: Any = None
         errors: list[dict[str, Any]] = []
         match kind:
             case "repository":
-                # Asked before an index or batch: a unit only for a repository GitHub cannot find.
+                # Asked before an index or batch request (``for`` names it): a unit only for a
+                # repository GitHub cannot find, stamped as that request's units are.
                 if self.repository(key["owner"], key["name"]) is not None:
                     return None
-                errors = missing_repository(key)
+                errors = missing_repository(key["owner"], key["name"])
+                return self._unit(key["for"], key, data, errors)
             case "resolve":
                 repository = self.repository(key["owner"], key["name"])
-                if repository is not None:
-                    data = repository.render()
-                else:
-                    errors = missing_repository(key)
-            case "repository_labels":
-                found = [
-                    r
-                    for r in self.repositories.values()
-                    if r.data.get("id") == key["id"] and not r.gone
-                ]
-                if not found:
-                    errors = not_found(
-                        f"Could not resolve to a node with the global id of '{key['id']}'."
-                    )
-                else:
-                    owner = found[0]
-                    start = owner.label_cursors.position(key["after"])
-                    data = {
-                        "id": key["id"],
-                        "labels": page(owner.data["labels"], start, owner.label_cursors),
-                    }
-            case "index":
-                repository = self.repository(key["owner"], key["name"])
                 if repository is None:
-                    return None
-                listed = repository.indexed()
-                entries = {
-                    "totalCount": len(listed),
-                    "nodes": [pull.index_entry() for pull in listed],
-                }
-                data = page(
-                    entries,
-                    repository.index_cursors.position(key["after"]),
-                    repository.index_cursors,
+                    errors = missing_repository(key["owner"], key["name"])
+                else:
+                    data = repository.render()
+            case "repository_labels":
+                labelled = next(
+                    (r for r in self.repositories.values() if r.data["id"] == key["id"]), None
                 )
+                if labelled is None or labelled.gone:
+                    errors = missing_node(key["id"])
+                else:
+                    labels = page(labelled.data["labels"], labelled.label_cursors, key["after"])
+                    data = {"id": key["id"], "labels": labels}
+            case "index":
+                indexed = self.repositories[f"{key['owner']}/{key['name']}".lower()]
+                data = page(indexed.index(), indexed.index_cursors, key["after"])
             case "pull_request":
-                repository = self.repository(key["owner"], key["name"])
-                pull = repository.pulls.get(key["number"]) if repository is not None else None
-                if pull is not None and not pull.gone and not pull.hydratable:
-                    return None
+                held = self.repositories[f"{key['owner']}/{key['name']}".lower()]
+                pull = held.pulls.get(key["number"])
                 if pull is None or pull.gone:
                     errors = not_found(
                         f"Could not resolve to a PullRequest with the number of {key['number']}."
                     )
+                elif not pull.hydratable:
+                    return None
                 else:
                     data = pull.render()
             case "overflow":
-                pull = self.pull_request(key["id"])
-                if pull is None:
-                    errors = not_found(
-                        f"Could not resolve to a node with the global id of '{key['id']}'."
-                    )
+                continued = self.pull_request(key["id"])
+                if continued is None:
+                    errors = missing_node(key["id"])
                 else:
-                    connection = key["connection"]
-                    cursors = pull.cursors.setdefault(connection, Cursors())
-                    data = {
-                        "headRefOid": pull.node["headRefOid"],
-                        "updatedAt": pull.node["updatedAt"],
-                        connection: page(
-                            pull.node[connection], cursors.position(key["after"]), cursors
-                        ),
-                    }
+                    data = continued.continuation(key["connection"], key["after"])
             case "user":
                 account = self.accounts.get(key["id"])
                 if account is None:
-                    errors = not_found(
-                        f"Could not resolve to a node with the global id of '{key['id']}'."
-                    )
+                    errors = missing_node(key["id"])
                 else:
                     data = copy.deepcopy(account)
             case "compare":
@@ -577,39 +666,31 @@ class Scenario:
                 return None
         return self._unit(kind, key, data, errors)
 
-    def _compare(self, key: dict[str, Any]) -> dict[str, Any] | None:
+    def _compare(self, key: dict[str, Any]) -> Node | None:
         repository = self.repository(key["owner"], key["name"])
-        if repository is None:
-            return None
-        for pull in repository.pulls.values():
-            node = pull.node
-            if pull.compare is not None and (node["baseRefOid"], node["headRefOid"]) == (
-                key["base"],
-                key["head"],
-            ):
+        for pull in repository.pulls.values() if repository is not None else ():
+            refs = (pull.node.get("baseRefOid"), pull.node.get("headRefOid"))
+            if pull.compare is not None and refs == (key["base"], key["head"]):
                 start = (key["page"] - 1) * key["per_page"]
-                return {
-                    "total_commits": len(pull.compare),
-                    "commits": copy.deepcopy(pull.compare[start : start + key["per_page"]]),
-                }
+                commits = pull.compare[start : start + key["per_page"]]
+                return {"total_commits": len(pull.compare), "commits": copy.deepcopy(commits)}
         return None
 
     def _unit(
         self, kind: str, key: dict[str, Any], data: Any, errors: list[dict[str, Any]]
     ) -> Unit | None:
         """A unit stamped as the recordings of its kind are; none when no recording checks the
-        model's rendering of that kind (the label and closing-issue continuations), so the
-        replay reports the request as one to record."""
-        stamp = _templates().stamps.get(
-            (kind, key.get("connection") if kind == "overflow" else None)
-        )
-        if stamp is None and kind != "repository":
+        model's rendering of it: a continuation of labels, closing issues, user-linked closing
+        issues, review requests, or assignees."""
+        connection = key.get("connection") if kind == "overflow" else None
+        stamp = _templates().stamps.get((kind, connection))
+        if stamp is None:
             return None
         now = self.clock.now()
         return Unit(
             kind=kind,
             key=dict(key),
-            document_sha256=stamp or "",
+            document_sha256=stamp,
             recorded_at=iso(now),
             headers={"date": format_datetime(now, usegmt=True)},
             data=data,
@@ -625,76 +706,52 @@ class Scenario:
         by_kind: dict[str, list[Unit]] = {}
         for unit in loaded_units():
             by_kind.setdefault(unit.kind, []).append(copy.deepcopy(unit))
-        for unit in by_kind.get("resolve", []):
-            labels = Cursors()
-            data = {**unit.data, "labels": joined(unit.data["labels"], labels)}
-            repository = Repository(data, label_cursors=labels)
+
+        def repository_of(unit: Unit) -> Repository:
+            return world.repositories[f"{unit.key['owner']}/{unit.key['name']}".lower()]
+
+        for unit in by_kind["resolve"]:
+            repository = Repository(world, unit.data)
+            repository.data["labels"] = joined(unit.data["labels"], repository.label_cursors)
             world.repositories[repository.full_name.lower()] = repository
             world.repositories[f"{unit.key['owner']}/{unit.key['name']}".lower()] = repository
-        for unit in by_kind.get("repository_labels", []):
-            labels_of = next(
-                r for r in world.repositories.values() if r.data.get("id") == unit.key["id"]
+        for unit in by_kind["repository_labels"]:
+            labelled = next(
+                r for r in world.repositories.values() if r.data["id"] == unit.key["id"]
             )
-            start = labels_of.label_cursors.position(unit.key["after"])
-            extend(labels_of.data["labels"], start, unit.data["labels"], labels_of.label_cursors)
-        for unit in sorted(by_kind.get("index", []), key=lambda u: u.key["after"] is not None):
-            indexed = world._recorded_repository(unit.key["owner"], unit.key["name"])
-            start = indexed.index_cursors.position(unit.key["after"])
-            if start != len(indexed.pulls):
-                raise ScenarioError(f"index page at {start} after {len(indexed.pulls)} entries")
+            joined(unit.data["labels"], labelled.label_cursors, labelled.data["labels"])
+        for unit in sorted(by_kind["index"], key=lambda u: u.key["after"] is not None):
+            indexed = repository_of(unit)
             for entry in unit.data["nodes"]:
-                indexed.pulls[entry["number"]] = PullRequest(clock, entry)
-            if unit.data["pageInfo"]["endCursor"] is not None:
-                indexed.index_cursors.recorded[len(indexed.pulls)] = unit.data["pageInfo"][
-                    "endCursor"
-                ]
-        for unit in by_kind.get("pull_request", []):
-            hydrated = world._recorded_repository(unit.key["owner"], unit.key["name"])
+                indexed.pulls[entry["number"]] = PullRequest(world, entry)
+            indexed.index_cursors.record(unit.data["nodes"], unit.data["pageInfo"]["endCursor"])
+        for unit in by_kind["pull_request"]:
+            hydrated = repository_of(unit)
             if unit.data is None:
-                hydrated.pulls[unit.key["number"]] = PullRequest(
-                    clock, {"number": unit.key["number"]}, gone=True
-                )
+                gone = PullRequest(world, {"number": unit.key["number"]}, gone=True)
+                hydrated.pulls[gone.number] = gone
                 continue
-            pull = PullRequest(clock, unit.data)
+            pull = PullRequest(world, unit.data)
             for key in CONNECTIONS_BY_KEY:
-                pull.cursors[key] = Cursors()
                 pull.node[key] = joined(unit.data[key], pull.cursors[key])
             hydrated.pulls[pull.number] = pull
-        for unit in by_kind.get("overflow", []):
+        for unit in by_kind["overflow"]:
             continued = world.pull_request(unit.key["id"])
-            if continued is None:
-                raise ScenarioError(f"overflow {unit.key} continues no recorded pull request")
+            assert continued is not None, f"overflow {unit.key} continues no recorded pull request"
             connection = unit.key["connection"]
-            cursors = continued.cursors[connection]
-            extend(
-                continued.node[connection],
-                cursors.position(unit.key["after"]),
-                unit.data[connection],
-                cursors,
-            )
-        for unit in sorted(by_kind.get("compare", []), key=lambda u: u.key["page"]):
-            compared = world._recorded_repository(unit.key["owner"], unit.key["name"])
-            for pull in compared.pulls.values():
-                if (pull.node.get("baseRefOid"), pull.node.get("headRefOid")) == (
-                    unit.key["base"],
-                    unit.key["head"],
-                ):
-                    pull.compare = (pull.compare or []) + [
-                        read_commit(c) for c in unit.data["commits"]
-                    ]
-        for unit in by_kind.get("user", []):
+            joined(unit.data[connection], continued.cursors[connection], continued.node[connection])
+        for unit in sorted(by_kind["compare"], key=lambda u: u.key["page"]):
+            refs = (unit.key["base"], unit.key["head"])
+            for pull in repository_of(unit).pulls.values():
+                if (pull.node.get("baseRefOid"), pull.node.get("headRefOid")) == refs:
+                    commits = [read_commit(commit) for commit in unit.data["commits"]]
+                    pull.compare = (pull.compare or []) + commits
+        for unit in by_kind["user"]:
             world.accounts[unit.key["id"]] = unit.data
         return world
 
-    def _recorded_repository(self, owner: str, name: str) -> Repository:
-        """The repository of a recorded unit, as a bare placeholder when no resolve was recorded."""
-        key = f"{owner}/{name}".lower()
-        if key not in self.repositories:
-            self.repositories[key] = Repository({"nameWithOwner": f"{owner}/{name}"})
-        return self.repositories[key]
 
-
-def read_commit(commit: dict[str, Any]) -> dict[str, Any]:
+def read_commit(commit: Node) -> Node:
     """A REST compare commit, reduced to the fields the source reads (``models.CompareCommit``)."""
     author = commit.get("author")
     return {
@@ -707,58 +764,35 @@ def read_commit(commit: dict[str, Any]) -> dict[str, Any]:
 @dataclass(frozen=True)
 class _Templates:
     stamps: dict[tuple[str, str | None], str]
-    repository: dict[str, Any]
-    pull_request: dict[str, Any]
-    nodes: dict[str, dict[str, Any]]
-    accounts: dict[str, dict[str, Any]]
+    repository: Node
+    pull_request: Node
+    nodes: dict[str, Node]
+    accounts: dict[str, Node]
 
 
 _TEMPLATES: list[_Templates] = []
 
 
 def _templates() -> _Templates:
-    """What the model copies from the recordings, read once: each kind's stamp, the objects new
-    ones are copied from, and the first recorded node of each connection."""
+    """What the model copies from the recordings, read once: each kind's stamp (a kind recorded
+    under two stamps fails the round trip), the objects new ones are copied from, and the first
+    recorded node of each connection."""
     if not _TEMPLATES:
-        stamps: dict[tuple[str, str | None], set[str]] = {}
-        repository: dict[str, Any] = {}
-        pull_request: dict[str, Any] = {}
-        nodes: dict[str, dict[str, Any]] = {}
-        accounts: dict[str, dict[str, Any]] = {}
-        for unit in loaded_units():
-            if unit.kind not in RENDERED:
-                continue
-            slot = (unit.kind, unit.key["connection"] if unit.kind == "overflow" else None)
-            stamps.setdefault(slot, set()).add(unit.document_sha256)
-            if (
-                unit.kind == "resolve"
-                and (unit.key["owner"], unit.key["name"]) == REPOSITORY_TEMPLATE
-            ):
-                repository = unit.data
+        found = _Templates({}, {}, {}, {}, {})
+        for unit in recorded_units():
+            key = unit.key
+            found.stamps[(unit.kind, key.get("connection"))] = unit.document_sha256
+            if unit.kind == "resolve" and (key["owner"], key["name"]) == REPOSITORY_TEMPLATE:
+                found.repository.update(unit.data)
             if unit.kind == "pull_request" and unit.data is not None:
-                if (
-                    unit.key["owner"],
-                    unit.key["name"],
-                    unit.key["number"],
-                ) == PULL_REQUEST_TEMPLATE:
-                    pull_request = unit.data
-                for key in CONNECTIONS_BY_KEY:
-                    if unit.data[key]["nodes"] and key not in nodes:
-                        nodes[key] = unit.data[key]["nodes"][0]
+                if (key["owner"], key["name"], key["number"]) == PULL_REQUEST_TEMPLATE:
+                    found.pull_request.update(unit.data)
+                for connection in CONNECTIONS_BY_KEY:
+                    if unit.data[connection]["nodes"]:
+                        found.nodes.setdefault(connection, unit.data[connection]["nodes"][0])
             if unit.kind == "user" and unit.data is not None:
-                accounts.setdefault(unit.data["__typename"], unit.data)
-        mixed = {slot: found for slot, found in stamps.items() if len(found) != 1}
-        if mixed:
-            raise ScenarioError(f"recordings of one kind carry different document stamps: {mixed}")
-        _TEMPLATES.append(
-            _Templates(
-                stamps={slot: found.pop() for slot, found in stamps.items()},
-                repository=repository,
-                pull_request=pull_request,
-                nodes=nodes,
-                accounts=accounts,
-            )
-        )
+                found.accounts.setdefault(unit.data["__typename"], unit.data)
+        _TEMPLATES.append(found)
     return _TEMPLATES[0]
 
 

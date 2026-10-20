@@ -17,7 +17,7 @@ from github_activity_db.source import (
     RepositoryRecord,
     UserLookupFailed,
 )
-from tests.source.replay import Replay, unused_faults
+from tests.source.replay import Replay, unanswered
 
 START = datetime(2026, 10, 17, 12, 0, tzinfo=UTC)
 
@@ -60,8 +60,7 @@ def clock() -> FakeClock:
 def replay() -> Iterator[Replay]:
     replay = Replay.from_fixtures()
     yield replay
-    assert replay.problems == [], "\n".join(replay.problems)
-    assert unused_faults(replay) == [], "a fault's predicate never matched as the test assumes"
+    assert unanswered(replay) == []
 
 
 @pytest.fixture

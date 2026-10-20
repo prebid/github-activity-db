@@ -8,6 +8,7 @@ records the source returns.
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from dataclasses import replace
 from datetime import UTC, datetime
 from typing import Any
@@ -28,10 +29,10 @@ from github_activity_db.source.errors import (
     RepositoryNotFound,
     RepositoryShapeError,
 )
-from tests.source.conftest import FakeClock, all_lookups, all_outcomes
+from tests.source.conftest import START, FakeClock, all_lookups, all_outcomes
 from tests.source.recordings import Unit
-from tests.source.replay import Replay, unused_faults
-from tests.source.scenario import Scenario, read_commit, recorded_units
+from tests.source.replay import Replay, loaded_units, synthetic, unanswered
+from tests.source.scenario import RENDERED, Repository, Scenario, read_commit, recorded_units
 
 EPOCH = datetime(1970, 1, 1, tzinfo=UTC)
 
@@ -44,6 +45,11 @@ def dumped(value: Any) -> str:
 @pytest.fixture(scope="module")
 def recorded_model() -> Scenario:
     return Scenario.from_recordings(FakeClock())
+
+
+def test_every_recorded_kind_but_the_rate_limits_is_rendered() -> None:
+    kinds = {unit.kind for unit in loaded_units()}
+    assert kinds == {*RENDERED, "rate_limit", "rest_rate_limit"}
 
 
 @pytest.mark.parametrize("unit", list(recorded_units()), ids=lambda unit: str(unit.path()))
@@ -68,8 +74,8 @@ def test_the_recordings_join_into_one_model(recorded_model: Scenario) -> None:
     an index entry comes from its hydrated node, and labels span the resolve and its label page."""
     go_gdpr = recorded_model.repositories["prebid/go-gdpr"]
     assert go_gdpr.pulls[21].hydratable
-    assert len(go_gdpr.indexed()) == 37
-    assert len(recorded_model.repositories["prebid/prebid-cache-java"].indexed()) == 157
+    assert go_gdpr.index()["totalCount"] == 37
+    assert recorded_model.repositories["prebid/prebid-cache-java"].index()["totalCount"] == 157
     server = recorded_model.repositories["prebid/prebid-server"].pulls[4343].node
     assert (server["comments"]["totalCount"], len(server["comments"]["nodes"])) == (109, 109)
     assert len(recorded_model.repositories["golang/go"].data["labels"]["nodes"]) == 144
@@ -123,9 +129,7 @@ async def test_the_source_reads_the_model_as_it_reads_the_recordings() -> None:
     model = Scenario.from_recordings(FakeClock())
     expected = await read_everything(recorded, FakeClock())
     assert await read_everything(model.replay, model.clock) == expected
-    for replay in (recorded, model.replay):
-        assert replay.problems == []
-        assert unused_faults(replay) == []
+    assert unanswered(recorded) == unanswered(model.replay) == []
     assert any(isinstance(item, Gone) for item in expected)
 
 
@@ -142,13 +146,40 @@ def hydrated(outcome: PullRequestOutcome) -> PullRequestRecord:
     return outcome.record
 
 
-async def test_new_objects_read_back_with_the_clock_as_date(scenario: Scenario) -> None:
+def after_first(scenario: Scenario, operation: str, change: Callable[[], None]) -> None:
+    """Apply ``change`` once, right after the replay answers the first ``operation`` request."""
+    changed: list[bool] = []
+
+    def wrap(
+        handle: Callable[[httpx.Request], httpx.Response],
+    ) -> Callable[[httpx.Request], httpx.Response]:
+        def handled(request: httpx.Request) -> httpx.Response:
+            response = handle(request)
+            if not changed and scenario.replay.seen[-1].operation == operation:
+                changed.append(True)
+                change()
+            return response
+
+        return handled
+
+    scenario.replay.wrap = wrap
+
+
+def project(scenario: Scenario, pulls: int = 1) -> tuple[Repository, str]:
+    """``example/project`` with ``pulls`` open pull requests by one author."""
     author = scenario.add_account(login="alice")
     repository = scenario.add_repository("example", "project")
+    for _ in range(pulls):
+        scenario.open_pull_request(repository, author)
+    return repository, author
+
+
+async def test_new_objects_read_back_with_the_clock_as_date(scenario: Scenario) -> None:
+    repository, author = project(scenario)
+    pull = repository.pulls[1]
     label = scenario.add_label(repository, "bug")
-    pull = scenario.open_pull_request(repository, author)
     pull.add("labels", {"id": label["id"], "name": label["name"]})
-    pull.add("comments", scenario.node("comments", author=scenario.actor(author), editor=None))
+    pull.add("comments", scenario.node("comments", by=author))
     scenario.clock.advance(90)
 
     async with scenario.source() as source:
@@ -163,7 +194,7 @@ async def test_new_objects_read_back_with_the_clock_as_date(scenario: Scenario) 
     )
     assert resolved.resolved_at == scenario.clock.now()
     assert [label.name for label in resolved.labels] == ["bug"]
-    assert [(entry.number, entry.state) for entry in index.entries] == [(pull.number, "OPEN")]
+    assert [(entry.number, entry.state) for entry in index.entries] == [(1, "OPEN")]
     record = hydrated(outcome)
     assert record.hydrated_at == scenario.clock.now()
     assert (record.github_id, record.state) == (int(pull.node["fullDatabaseId"]), "OPEN")
@@ -175,91 +206,224 @@ async def test_new_objects_read_back_with_the_clock_as_date(scenario: Scenario) 
     assert found is not None and found.account.login == "alice"
 
 
+async def test_each_response_dates_from_the_clock_when_it_is_sent(scenario: Scenario) -> None:
+    """A fault stacks on the model: the retried batch is answered after the retry's wait."""
+    project(scenario)
+    scenario.replay.fault(
+        lambda request: synthetic("server_error"),
+        when=lambda seen: seen.operation == "PullRequestBatch",
+    )
+    record = hydrated(await hydrate(scenario, "example", "project", 1))
+    assert scenario.clock.sleeps
+    assert record.hydrated_at == scenario.clock.now() > START
+
+
+async def test_new_nodes_have_their_own_identity(scenario: Scenario) -> None:
+    repository, author = project(scenario)
+    pull = repository.pulls[1]
+    pull.add("commits", scenario.node("commits", by=author), scenario.node("commits", by=author))
+    pull.add("files", scenario.node("files"), scenario.node("files"))
+    pull.add("comments", scenario.node("comments"))
+    pull.add("assignedActors", scenario.node("assignedActors", by=author))
+    pull.add("reviewRequests", scenario.node("reviewRequests", by=author))
+
+    record = hydrated(await hydrate(scenario, "example", "project", 1))
+    assert len({commit.sha for commit in record.commits}) == 2
+    assert [commit.author.login if commit.author else None for commit in record.commits] == [
+        "alice",
+        "alice",
+    ]
+    assert len({file.path for file in record.files}) == 2
+    assert record.comments[0].author is None
+    assert [assignee.login for assignee in record.assignees] == ["alice"]
+    assert [
+        request.account.login if request.account else None for request in record.review_requests
+    ] == ["alice"]
+
+
 async def test_merge_close_and_reopen(scenario: Scenario) -> None:
-    author = scenario.add_account()
+    repository, _ = project(scenario, pulls=2)
+    merged, closed = repository.pulls[1], repository.pulls[2]
     merger = scenario.add_account(login="merger")
-    repository = scenario.add_repository("example", "project")
-    merged = scenario.open_pull_request(repository, author)
-    closed = scenario.open_pull_request(repository, author)
     scenario.clock.advance(3600)
     merged.merge(by=scenario.actor(merger))
     closed.close()
 
-    record = hydrated(await hydrate(scenario, "example", "project", merged.number))
-    assert (record.state, record.merged_at, record.closed_at) == (
-        "MERGED",
-        scenario.clock.now(),
-        scenario.clock.now(),
-    )
+    record = hydrated(await hydrate(scenario, "example", "project", 1))
+    now = scenario.clock.now()
+    assert (record.state, record.merged_at, record.closed_at) == ("MERGED", now, now)
     assert record.merged_by is not None and record.merged_by.login == "merger"
-    assert record.github_updated_at == scenario.clock.now()
-    record = hydrated(await hydrate(scenario, "example", "project", closed.number))
-    assert (record.state, record.closed_at) == ("CLOSED", scenario.clock.now())
+    assert record.merge_commit_oid is not None
+    assert record.github_updated_at == now
+    record = hydrated(await hydrate(scenario, "example", "project", 2))
+    assert (record.state, record.closed_at) == ("CLOSED", now)
 
     scenario.clock.advance(60)
     closed.reopen()
-    record = hydrated(await hydrate(scenario, "example", "project", closed.number))
-    assert (record.state, record.closed_at) == ("OPEN", None)
+    record = hydrated(await hydrate(scenario, "example", "project", 2))
+    assert (record.state, record.closed_at, record.github_updated_at) == (
+        "OPEN",
+        None,
+        scenario.clock.now(),
+    )
 
 
-async def test_index_only_changes_leave_updated_at(scenario: Scenario) -> None:
-    repository = scenario.add_repository("example", "project")
-    pull = scenario.open_pull_request(repository, scenario.add_account(), isDraft=True)
-    before = pull.node["updatedAt"]
+async def test_set_leaves_updated_at_and_touch_moves_it(scenario: Scenario) -> None:
+    repository, _ = project(scenario, pulls=2)
     scenario.clock.advance(60)
-    pull.set(isDraft=False, authorAssociation="MEMBER")
+    repository.pulls[1].set(isDraft=True, authorAssociation="MEMBER")
+    repository.pulls[2].touch()
     async with scenario.source() as source:
         index = await source.index_pull_requests(await source.resolve("example", "project"))
-    (entry,) = index.entries
-    assert (entry.is_draft, entry.author_association) == (False, "MEMBER")
-    assert pull.node["updatedAt"] == before
+    first, second = index.entries
+    assert (first.is_draft, first.author_association, first.updated_at) == (True, "MEMBER", START)
+    assert second.updated_at == scenario.clock.now()
+
+
+async def test_the_index_is_in_creation_order(scenario: Scenario) -> None:
+    repository, author = project(scenario, pulls=2)
+    scenario.open_pull_request(repository, author, createdAt="2026-01-01T00:00:00Z")
+    scenario.open_pull_request(repository, author)
+    async with scenario.source() as source:
+        index = await source.index_pull_requests(await source.resolve("example", "project"))
+    # Pull requests 1, 2, and 4 share a creation time; GitHub orders those by id.
+    assert [entry.number for entry in index.entries] == [3, 1, 2, 4]
+
+
+async def test_a_pull_request_gone_during_an_index_scan_is_rescanned(
+    scenario: Scenario,
+) -> None:
+    """The index's cursor names the last entry served, so the next page starts after it and the
+    count no longer adds up, as on GitHub (plan 5.3 step 2)."""
+    repository, _ = project(scenario, pulls=150)
+
+    def remove() -> None:
+        repository.pulls[5].gone = True
+
+    after_first(scenario, "PullRequestIndex", remove)
+    async with scenario.source() as source:
+        index = await source.index_pull_requests(await source.resolve("example", "project"))
+    assert index.scans == 2
+    assert [entry.number for entry in index.entries] == [n for n in range(1, 151) if n != 5]
+
+
+async def test_a_comment_removed_during_hydration_is_read_again(scenario: Scenario) -> None:
+    repository, author = project(scenario)
+    pull = repository.pulls[1]
+    pull.add("comments", *(scenario.node("comments", by=author) for _ in range(101)))
+    removed = pull.node["comments"]["nodes"][5]["id"]
+    after_first(
+        scenario,
+        "PullRequestBatch",
+        lambda: pull.remove("comments", lambda node: node["id"] == removed),
+    )
+    record = hydrated(await hydrate(scenario, "example", "project", 1))
+    assert [comment.node_id for comment in record.comments] == [
+        node["id"] for node in pull.node["comments"]["nodes"]
+    ]
+    assert len(record.comments) == 100
+
+
+async def test_a_pull_request_gone_between_its_pages_is_gone(scenario: Scenario) -> None:
+    repository, author = project(scenario)
+    pull = repository.pulls[1]
+    pull.add("comments", *(scenario.node("comments", by=author) for _ in range(101)))
+
+    def remove() -> None:
+        pull.gone = True
+
+    after_first(scenario, "PullRequestBatch", remove)
+    assert await hydrate(scenario, "example", "project", 1) == Gone(1)
+    assert [seen.operation for seen in scenario.replay.seen].count("Overflow") == 1
 
 
 async def test_a_renamed_label_keeps_its_id(scenario: Scenario) -> None:
-    repository = scenario.add_repository("example", "project")
+    repository, _ = project(scenario)
     label = scenario.add_label(repository, "bug")
-    pull = scenario.open_pull_request(repository, scenario.add_account())
-    pull.add("labels", {"id": label["id"], "name": label["name"]})
+    repository.pulls[1].add("labels", {"id": label["id"], "name": label["name"]})
+    scenario.clock.advance(300)
     scenario.rename_label(repository, label["id"], "defect")
 
-    record = hydrated(await hydrate(scenario, "example", "project", pull.number))
-    assert [(label.node_id, label.name) for label in record.labels] == [(label["id"], "defect")]
-
-
-async def test_a_deleted_account_and_one_seen_again(scenario: Scenario) -> None:
-    author = scenario.add_account(login="leaving")
-    repository = scenario.add_repository("example", "project")
-    pull = scenario.open_pull_request(repository, author)
-    pull.add("comments", scenario.node("comments", author=scenario.actor(author), editor=None))
-    scenario.delete_account(author)
-
-    record = hydrated(await hydrate(scenario, "example", "project", pull.number))
-    assert record.author is None and record.comments[0].author is None
     async with scenario.source() as source:
-        accounts, failed = await all_lookups(source, [author])
-    assert (accounts, failed) == ({author: None}, {})
+        resolved = await source.resolve("example", "project")
+        (outcome,) = await all_outcomes(source, resolved, [1])
+    assert [(label.node_id, label.name, label.updated_at) for label in resolved.labels] == [
+        (label["id"], "defect", scenario.clock.now())
+    ]
+    assert [(label.node_id, label.name) for label in hydrated(outcome).labels] == [
+        (label["id"], "defect")
+    ]
 
-    scenario.restore_account(author)
+
+async def test_a_deleted_account(scenario: Scenario) -> None:
+    repository, _ = project(scenario)
+    leaving = scenario.add_account(login="leaving")
+    kept = scenario.add_account(login="kept")
+    pull = scenario.open_pull_request(repository, leaving)
+    pull.add("comments", scenario.node("comments", by=leaving))
+    pull.add("commits", scenario.node("commits", by=leaving))
+    pull.add("reviewRequests", scenario.node("reviewRequests", by=leaving))
+    pull.add(
+        "assignedActors",
+        scenario.node("assignedActors", by=leaving),
+        scenario.node("assignedActors", by=kept),
+    )
+    scenario.delete_account(leaving)
+    later = scenario.open_pull_request(repository, leaving)
+
     async with scenario.source() as source:
-        accounts, _ = await all_lookups(source, [author])
-    found = accounts[author]
+        resolved = await source.resolve("example", "project")
+        outcomes = await all_outcomes(source, resolved, [pull.number, later.number])
+        accounts, failed = await all_lookups(source, [leaving])
+    record, added_later = (hydrated(outcome) for outcome in outcomes)
+    assert (record.author, record.comments[0].author) == (None, None)
+    assert (record.commits[0].author, record.commits[0].author_name) == (None, "leaving")
+    assert [request.account for request in record.review_requests] == [None]
+    assert [assignee.login for assignee in record.assignees] == ["kept"]
+    assert record.totals.assignees == 1
+    # A reference made after the deletion names the account its lookup no longer finds (gap 90).
+    assert added_later.author is not None and added_later.author.login == "leaving"
+    assert (accounts, failed) == ({leaving: None}, {})
+
+    scenario.restore_account(leaving)
+    async with scenario.source() as source:
+        accounts, _ = await all_lookups(source, [leaving])
+    found = accounts[leaving]
     assert found is not None and found.account.login == "leaving"
     assert pull.node["author"] is None
 
 
+async def test_a_deleted_account_leaves_its_compare_commits() -> None:
+    model = Scenario.from_recordings(FakeClock())
+    commits = model.repositories["prebid/prebid.js"].pulls[8858].compare
+    assert commits is not None
+    linked = {commit["author"]["node_id"] for commit in commits if commit["author"]}
+    leaving = max(
+        linked,
+        key=lambda node_id: sum(
+            1 for commit in commits if commit["author"] and commit["author"]["node_id"] == node_id
+        ),
+    )
+    model.delete_account(leaving)
+    record = hydrated(await hydrate(model, "prebid", "Prebid.js", 8858))
+    assert record.commits_source == "compare"
+    assert all(
+        commit.author is None or commit.author.node_id != leaving for commit in record.commits
+    )
+    assert unanswered(model.replay) == []
+
+
 async def test_a_pull_request_gone(scenario: Scenario) -> None:
-    repository = scenario.add_repository("example", "project")
-    pull = scenario.open_pull_request(repository, scenario.add_account())
-    pull.gone = True
-    assert await hydrate(scenario, "example", "project", pull.number) == Gone(pull.number)
+    repository, _ = project(scenario)
+    repository.pulls[1].gone = True
+    assert await hydrate(scenario, "example", "project", 1) == Gone(1)
     async with scenario.source() as source:
         index = await source.index_pull_requests(await source.resolve("example", "project"))
     assert index.entries == ()
 
 
 async def test_a_repository_gone(scenario: Scenario) -> None:
-    repository = scenario.add_repository("example", "project")
-    pull = scenario.open_pull_request(repository, scenario.add_account())
+    repository, _ = project(scenario)
     async with scenario.source() as source:
         resolved = await source.resolve("example", "project")
         repository.gone = True
@@ -268,81 +432,124 @@ async def test_a_repository_gone(scenario: Scenario) -> None:
         with pytest.raises(RepositoryShapeError, match="NOT_FOUND"):
             await source.index_pull_requests(resolved)
         with pytest.raises(RepositoryNotFound):
-            await all_outcomes(source, resolved, [pull.number])
+            await all_outcomes(source, resolved, [1])
 
 
-async def test_a_renamed_repository_resolves_by_its_old_name(scenario: Scenario) -> None:
-    issues = scenario.add_repository("example", "issues")
-    repository = scenario.add_repository("example", "project")
-    pull = scenario.open_pull_request(repository, scenario.add_account())
-    pull.link(7, issues.data, user_linked=False, github_id=scenario.new_id())
-    scenario.rename_repository(issues, "example", "tracker")
+async def test_a_repository_gone_between_its_label_pages(scenario: Scenario) -> None:
+    repository, _ = project(scenario)
+    for position in range(101):
+        scenario.add_label(repository, f"label-{position}")
 
+    def remove() -> None:
+        repository.gone = True
+
+    after_first(scenario, "Resolve", remove)
     async with scenario.source() as source:
-        resolved = await source.resolve("example", "issues")
-        (outcome,) = await all_outcomes(
-            source, await source.resolve("example", "project"), [pull.number]
-        )
-    assert (resolved.full_name, resolved.github_id) == (
-        "example/tracker",
-        issues.data["databaseId"],
+        with pytest.raises(RepositoryShapeError, match="errors on a label page"):
+            await source.resolve("example", "project")
+
+
+async def test_a_renamed_repository_is_followed(scenario: Scenario) -> None:
+    repository, author = project(scenario)
+    own = scenario.open_pull_request(repository, author, isCrossRepository=False)
+    own.set(
+        headRepository={
+            "databaseId": repository.data["databaseId"],
+            "nameWithOwner": "example/project",
+        }
     )
-    assert [link.repo_full_name for link in hydrated(outcome).closing_issues] == ["example/tracker"]
-
-
-async def test_closing_links_beyond_the_index_cap(scenario: Scenario) -> None:
-    issues = scenario.add_repository("example", "issues")
-    repository = scenario.add_repository("example", "project")
-    pull = scenario.open_pull_request(repository, scenario.add_account())
-    for number in range(1, 12):
-        pull.link(number, issues.data, user_linked=number == 1, github_id=scenario.new_id())
+    repository.pulls[1].link(7, repository)
+    scenario.rename_repository(repository, "example", "renamed")
 
     async with scenario.source() as source:
         resolved = await source.resolve("example", "project")
         index = await source.index_pull_requests(resolved)
-        (outcome,) = await all_outcomes(source, resolved, [pull.number])
-    (entry,) = index.entries
-    assert (entry.closing_issues_total, len(entry.closing_issues)) == (11, 10)
-    links = hydrated(outcome).closing_issues
-    assert [(link.number, link.user_linked) for link in links] == [
+        outcomes = await all_outcomes(source, resolved, [1, own.number])
+        by_new_name = await source.resolve("example", "renamed")
+    assert (resolved.full_name, by_new_name.github_id) == ("example/renamed", resolved.github_id)
+    assert [entry.number for entry in index.entries] == [1, own.number]
+    linked, from_itself = (hydrated(outcome) for outcome in outcomes)
+    assert [link.repo_full_name for link in linked.closing_issues] == ["example/renamed"]
+    assert from_itself.head_repository is not None
+    assert from_itself.head_repository.full_name == "example/renamed"
+    names = {
+        seen.variables.get("name")
+        for seen in scenario.replay.seen
+        if seen.operation in ("PullRequestIndex", "PullRequestBatch")
+    }
+    assert names == {"renamed"}
+
+
+async def test_closing_links_beyond_the_index_cap(scenario: Scenario) -> None:
+    issues = scenario.add_repository("example", "issues")
+    repository, _ = project(scenario)
+    pull = repository.pulls[1]
+    for number in range(1, 12):
+        pull.link(number, issues, user_linked=number == 1)
+    async with scenario.source() as source:
+        resolved = await source.resolve("example", "project")
+        (entry,) = (await source.index_pull_requests(resolved)).entries
+        (outcome,) = await all_outcomes(source, resolved, [1])
+    assert (entry.closing_issues_total, len(entry.closing_issues), entry.updated_at) == (
+        11,
+        10,
+        START,
+    )
+    assert [(link.number, link.user_linked) for link in hydrated(outcome).closing_issues] == [
         (number, number == 1) for number in range(1, 12)
     ]
-    pull.unlink(1)
-    assert pull.node["userLinkedClosingIssues"]["totalCount"] == 0
+
+    pull.unlink(1, issues)
+    async with scenario.source() as source:
+        resolved = await source.resolve("example", "project")
+        (entry,) = (await source.index_pull_requests(resolved)).entries
+        (outcome,) = await all_outcomes(source, resolved, [1])
+    assert (entry.closing_issues_total, len(entry.closing_issues)) == (10, 10)
+    assert [(link.number, link.user_linked) for link in hydrated(outcome).closing_issues] == [
+        (number, False) for number in range(2, 12)
+    ]
 
 
 async def test_a_connection_beyond_one_page(scenario: Scenario) -> None:
-    author = scenario.add_account()
-    repository = scenario.add_repository("example", "project")
-    pull = scenario.open_pull_request(repository, author)
-    pull.add(
-        "comments",
-        *(
-            scenario.node("comments", author=scenario.actor(author), editor=None)
-            for _ in range(101)
-        ),
-    )
-    record = hydrated(await hydrate(scenario, "example", "project", pull.number))
+    repository, author = project(scenario)
+    repository.pulls[1].add("comments", *(scenario.node("comments", by=author) for _ in range(101)))
+    record = hydrated(await hydrate(scenario, "example", "project", 1))
     assert len(record.comments) == 101
     assert [seen.operation for seen in scenario.replay.seen].count("Overflow") == 1
+
+
+# -- refusals ------------------------------------------------------------------------------------
+def post(world: Scenario, query: str, variables: dict[str, Any]) -> httpx.Response:
+    with httpx.Client(
+        transport=world.replay.transport(), base_url="https://api.github.com"
+    ) as client:
+        return client.post("/graphql", json={"query": query, "variables": variables})
 
 
 def test_a_document_the_model_was_not_checked_against_is_refused() -> None:
     world = Scenario(FakeClock())
     world.add_repository("example", "project")
+    variables = {"owner": "example", "name": "project"}
     changed = documents.RESOLVE.replace("isPrivate", "isPrivate isFork")
     assert changed != documents.RESOLVE
-    variables = {"owner": "example", "name": "project"}
-    with httpx.Client(
-        transport=world.replay.transport(), base_url="https://api.github.com"
-    ) as client:
-        answered = client.post(
-            "/graphql", json={"query": documents.RESOLVE, "variables": variables}
-        )
-        refused = client.post("/graphql", json={"query": changed, "variables": variables})
-    assert (answered.status_code, refused.status_code) == (200, 418)
+    assert post(world, documents.RESOLVE, variables).status_code == 200
+    assert post(world, changed, variables).status_code == 418
     assert world.replay.problems == [
         f"resolve unit {variables} was recorded for another query document: re-record with "
+        "scripts/record_fixtures.py"
+    ]
+
+
+def test_a_missing_repository_is_answered_only_for_a_checked_document() -> None:
+    world = Scenario(FakeClock())
+    variables = {"owner": "example", "name": "absent", "after": None}
+    changed = documents.PULL_REQUEST_INDEX.replace("isDraft", "isDraft title")
+    answered = post(world, documents.PULL_REQUEST_INDEX, variables)
+    assert (answered.status_code, answered.json()["data"]["repository"]) == (200, None)
+    assert post(world, changed, variables).status_code == 418
+    key = {"owner": "example", "name": "absent", "for": "index"}
+    assert world.replay.problems == [
+        f"index unit {key} was recorded for another query document: re-record with "
         "scripts/record_fixtures.py"
     ]
 
@@ -351,16 +558,37 @@ async def test_a_continuation_no_recording_covers_is_left_unanswered() -> None:
     """No recording continues labels, so the model renders no label continuation: the replay
     reports the request as one to record, and the source stops on its answer."""
     world = Scenario(FakeClock())
-    repository = world.add_repository("example", "project")
-    pull = world.open_pull_request(repository, world.add_account())
+    repository, _ = project(world)
+    pull = repository.pulls[1]
     for position in range(101):
         label = world.add_label(repository, f"label-{position}")
         pull.add("labels", {"id": label["id"], "name": label["name"]})
     async with world.source() as source:
         resolved = await source.resolve("example", "project")
         with pytest.raises(FatalSourceError):
-            await all_outcomes(source, resolved, [pull.number])
+            await all_outcomes(source, resolved, [1])
     key = {"id": pull.node["id"], "connection": "labels", "after": "MTAw"}
     assert world.replay.problems == [
         f"no overflow unit for {key}: record it with scripts/record_fixtures.py"
+    ]
+
+
+async def test_a_cursor_the_model_never_served_is_reported() -> None:
+    """The model's failure is the replay's problem, not an error inside the transport."""
+    world = Scenario(FakeClock())
+    repository, author = project(world)
+    repository.pulls[1].add("comments", *(world.node("comments", by=author) for _ in range(101)))
+
+    def unserved(body: dict[str, Any]) -> None:
+        body["data"]["repository"]["p0"]["comments"]["pageInfo"]["endCursor"] = "unserved"
+
+    world.replay.modify(unserved, when=lambda seen: seen.operation == "PullRequestBatch")
+    async with world.source() as source:
+        resolved = await source.resolve("example", "project")
+        with pytest.raises(FatalSourceError):
+            await all_outcomes(source, resolved, [1])
+    key = {"id": repository.pulls[1].node["id"], "connection": "comments", "after": "unserved"}
+    assert world.replay.problems == [
+        f"the provider failed on overflow {key}: ScenarioError(\"cursor 'unserved' names no "
+        'page the model served")'
     ]
