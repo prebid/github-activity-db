@@ -257,8 +257,9 @@ keep the command's `common.open_source` and `GitHubSource`, replacing their HTTP
 (`client.build_github`) with the replay and `common.clock` with a `FakeClock`, so `--max-minutes`
 reaches the transport as in a real run. A child that kills itself with SIGKILL after its third
 committed item, under `subprocess.run(timeout=...)`, leaves its run `running` for a
-`--break-lock` resume; a child whose stdout, or stdout and stderr, are a pipe with no reader, and
-one started with its stdout descriptor closed, exit with the run's code.
+`--break-lock` resume. Children whose stdout, or stdout and stderr, are a pipe with no reader, one
+started with its stdout descriptor closed, and one whose stdout is a file at its RLIMIT_FSIZE exit
+with the run's code.
 
 ---
 

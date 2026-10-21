@@ -15,7 +15,7 @@ import sys
 import time
 from collections.abc import Iterator
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, TextIO
 
 import click
 import typer
@@ -118,7 +118,9 @@ def sync(
         print_report(console, report, seconds=time.monotonic() - started, break_lock=break_lock)
     except (UnicodeEncodeError, OSError) as e:
         # The run is recorded; an output that cannot take the report (an encoding without one of
-        # its characters, a closed pipe) never changes the exit code.
+        # its characters, a closed pipe, a full disk) never changes the exit code.
+        if isinstance(e, OSError):
+            _discard(sys.stdout)
         _note(f"The report could not be printed: {type(e).__name__}")
     raise typer.Exit(report.exit_code)
 
@@ -158,9 +160,7 @@ class _ReportConsole(Console):
     the run's code."""
 
     def on_broken_pipe(self) -> None:
-        # As Rich does: print nothing more, and point stdout at /dev/null.
         self.quiet = True
-        _point_at_devnull(sys.stdout.fileno())
         raise BrokenPipeError(errno.EPIPE, os.strerror(errno.EPIPE))
 
 
@@ -168,29 +168,26 @@ console = _ReportConsole()
 
 
 def _note(text: str) -> None:
-    """``text`` on stderr. A stderr that cannot take it (the closed pipe stdout is on, as with
-    ``2>&1 | head``) is pointed at /dev/null too, and a missing one (fd 2 closed when the
-    interpreter started) is skipped."""
-    stream = sys.stderr
-    if stream is None:
-        return
+    """``text`` on stderr, discarded when stderr cannot take it (the closed pipe stdout is on, as
+    with ``2>&1 | head``)."""
     try:
-        stream.write(text + "\n")
-        stream.flush()
+        sys.stderr.write(text + "\n")
+        sys.stderr.flush()
     except (OSError, ValueError):
-        with contextlib.suppress(OSError, ValueError):
-            _point_at_devnull(stream.fileno())
+        _discard(sys.stderr)
 
 
-def _point_at_devnull(fd: int) -> None:
-    """Point ``fd`` at /dev/null: the interpreter flushes stdout and stderr again at exit, and a
-    failure there, on what a closed pipe left buffered, would exit 120 instead of the run's
-    code."""
-    devnull = os.open(os.devnull, os.O_WRONLY)
-    try:
-        os.dup2(devnull, fd)
-    finally:
-        os.close(devnull)
+def _discard(stream: TextIO) -> None:
+    """Point ``stream``'s descriptor at /dev/null, dropping what a failed write left buffered:
+    the interpreter flushes stdout and stderr again at exit, and a failure there would exit 120
+    instead of the run's code. Rich's own ``on_broken_pipe`` does this for stdout."""
+    with contextlib.suppress(OSError, ValueError):
+        fd = stream.fileno()
+        devnull = os.open(os.devnull, os.O_WRONLY)
+        try:
+            os.dup2(devnull, fd)
+        finally:
+            os.close(devnull)
 
 
 def print_report(

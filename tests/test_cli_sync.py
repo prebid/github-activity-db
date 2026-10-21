@@ -10,15 +10,17 @@ its row ``running`` with its committed items for a resume.
 
 from __future__ import annotations
 
+import functools
 import hashlib
 import io
 import os
 import re
+import resource
 import signal
 import sqlite3
 import subprocess
 import sys
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from pathlib import Path
 from typing import Any
 
@@ -346,12 +348,12 @@ def _child(
     plant: str = "",
     stdout: int = subprocess.PIPE,
     stderr: int = subprocess.PIPE,
-    closed: tuple[int, ...] = (),
+    preexec_fn: Callable[[], None] | None = None,
 ) -> subprocess.CompletedProcess[str]:
     """Run the installed package in an isolated interpreter (``-I``: no user site, no
     PYTHONPATH, no working directory on the path), over the recordings; its stdout and stderr
-    are captured unless ``stdout`` or ``stderr`` names a file descriptor, and the descriptors in
-    ``closed`` are closed before it starts."""
+    are captured unless ``stdout`` or ``stderr`` names a file descriptor, and ``preexec_fn``
+    runs in the child before the interpreter starts."""
     base = {key: value for key, value in os.environ.items() if key in ("PATH", "HOME")}
     env = {
         **base,
@@ -360,11 +362,6 @@ def _child(
         "TRACKING_CONFIG_PATH": str(tracking),
     }
     script = CHILD.format(root=str(ROOT), plant=plant, args=["sync", *args])
-
-    def close() -> None:
-        for fd in closed:
-            os.close(fd)
-
     return subprocess.run(
         [sys.executable, "-I", "-c", script],
         stdout=stdout,
@@ -374,7 +371,7 @@ def _child(
         cwd=cwd,
         timeout=120,
         check=False,
-        preexec_fn=close if closed else None,
+        preexec_fn=preexec_fn,
     )
 
 
@@ -457,11 +454,42 @@ def test_a_stdout_closed_at_start_keeps_the_runs_exit_code(
         tracking=tracking,
         cwd=tmp_path,
         plant=plant,
-        closed=(1,),
+        preexec_fn=functools.partial(os.close, 1),
     )
 
     assert child.returncode == code, child.stderr
     assert child.stderr == ""
+    assert _runs(migrated_database) == [{"id": 1, "status": "complete", "exit_code": code}]
+
+
+@pytest.mark.parametrize(("plant", "code"), [("", 0), (FAIL_ONE_ITEM, 2)], ids=["0", "2"])
+def test_a_stdout_file_that_cannot_grow_keeps_the_runs_exit_code(
+    migrated_database: Path, tracking: Path, tmp_path: Path, plant: str, code: int
+) -> None:
+    """``ghactivity sync > report.txt`` where the file cannot grow (it is at the child's
+    RLIMIT_FSIZE, so a write fails as on a full disk): what the failed write left buffered is
+    dropped, stderr says so, and the command exits with the run's code, not the interpreter's
+    120."""
+    limit = 16 * 1024 * 1024
+    report = tmp_path / "report.txt"
+    with report.open("wb") as file:
+        file.truncate(limit)
+    stdout = os.open(report, os.O_WRONLY | os.O_APPEND)
+    try:
+        child = _child(
+            [],
+            database=migrated_database,
+            tracking=tracking,
+            cwd=tmp_path,
+            plant=plant,
+            stdout=stdout,
+            preexec_fn=functools.partial(resource.setrlimit, resource.RLIMIT_FSIZE, (limit, limit)),
+        )
+    finally:
+        os.close(stdout)
+
+    assert child.returncode == code, child.stderr
+    assert child.stderr == "The report could not be printed: OSError\n"
     assert _runs(migrated_database) == [{"id": 1, "status": "complete", "exit_code": code}]
 
 

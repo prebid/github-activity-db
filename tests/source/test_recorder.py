@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import dataclasses
 import json
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -332,15 +333,46 @@ async def test_a_retried_item_records_one_unit_per_file(first_sync: bool) -> Non
     ] == []
 
 
-async def test_a_first_sync_that_fails_names_why() -> None:
-    """A run that fails before its index (every request answered 401) raises with its report."""
+def _label_count_mismatch(body: dict[str, Any]) -> None:
+    body["data"]["repository"]["labels"]["totalCount"] += 1
+
+
+@pytest.mark.parametrize(
+    ("change", "message"),
+    [
+        pytest.param(
+            lambda replay: replay.fault(
+                lambda request: httpx.Response(401, json={"message": "Bad credentials"}),
+                times=None,
+            ),
+            "first sync exited 1: Run 1: failed, exit 1; prebid/go-gdpr: no outcome: not "
+            "resolved; Hydrated 0 items; GraphQL points 0, REST calls 0, 0 s; Error: Unauthorized: "
+            "GitHub answered 401: Bad credentials",
+            id="401",
+        ),
+        pytest.param(
+            lambda replay: replay.modify(
+                _label_count_mismatch, when=lambda seen: seen.operation == "Resolve"
+            ),
+            "first sync exited 1: Run 1: failed, exit 1; prebid/go-gdpr: no outcome: "
+            "LabelCountMismatch: prebid/go-gdpr: fetched 10 labels, totalCount 11; Hydrated 0 "
+            "items; GraphQL points 1, REST calls 0, 0 s; Error: NoRepositoryResolved: no "
+            "configured repository resolved",
+            id="label count mismatch",
+        ),
+    ],
+)
+async def test_a_first_sync_that_fails_names_why(
+    change: Callable[[Replay], None], message: str
+) -> None:
+    """A run that fails at its resolve raises with the run's report, which names the cause: the
+    run's error, or the repository's when only the report has it."""
     replay = Replay.from_directory(FIRST_SYNC)
-    replay.fault(
-        lambda request: httpx.Response(401, json={"message": "Bad credentials"}), times=None
-    )
+    change(replay)
     owner, name = FIRST_SYNC_REPOSITORY
-    with pytest.raises(RecordingFailed, match=r"first sync exited 1: .*401"):
+    with pytest.raises(RecordingFailed) as raised:
         await record_first_sync("test-token", owner, name, inner=replay.transport())
+    assert str(raised.value) == message
     assert [seen.operation for seen in replay.seen] == ["Resolve"]
 
 
