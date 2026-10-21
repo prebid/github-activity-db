@@ -77,7 +77,7 @@ Within scope the database collects and distinguishes data and never interprets i
 | D22 | The CI test gate allows no skipped tests (`scripts/check_junit.py --max-skipped 0`). A test that must skip in CI needs the allowance raised in the workflow, in the same change. pytest reports `xfail` as skipped, so the same applies to an `xfail`. |
 | D23 | Closing-issue links are read by the index as well as by hydration, and the stored links are compared with the index on every run, so a link added after merge, which does not change the PR's `updatedAt`, is captured: a PR whose indexed links differ from its stored links is planned for hydration (5.3 step 3). Hydration also reads which links GitHub lists as manually linked (`userLinkedOnly`), at no added cost (section 7). |
 | D24 | Conversation comments are stored one row per comment, its `github_id`, author, and times and never its text, so a comment by an account the database never stored is a row with a null author, never dropped (D28). Review bodies, inline review comment text, and commit messages are not stored either. |
-| D25 | A run, scheduled or manual, publishes when its starting database is valid (the downloaded snapshot passed `verify --db-only`, or `bootstrap` started from an empty database), sync exited 0 or 2, and verify exited 0 (no error, 5.4). The manifest records the sync exit code and verify's counts per class. A final job that runs whatever the others did then marks the workflow failed if sync exited 2, verify failed, or nothing was published, so a failure is visible after the data is saved. |
+| D25 | A run, scheduled or manual, publishes when its starting database is valid (the downloaded snapshot passed `verify --db-only`, or `bootstrap` started from an empty database), sync exited 0 or 2, and verify exited 0 (no failing class, 5.4). The manifest records the sync exit code and verify's counts per class. A final job that runs whatever the others did then marks the workflow failed if sync exited 2, verify failed, or nothing was published, so a failure is visible after the data is saved. |
 | D26 | The Step 5 database is not committed; it becomes the first snapshot of release `db` (Step 6b). From Step 3 until 6c removes it, the tracked `github_activity.db` keeps its pre-Step-3 content: the default `DATABASE_URL` moves to a git-ignored file, and `scripts/check_frozen_db.py` fails when the file's SHA-256 differs from the digest it pins, as a pre-commit hook on the file (so CI's `--all-files` run checks it) and as a test; the tests also fail when git stores the file other than as one regular file, and the `tracked-db-no-sidecar` hook refuses a committed `-journal` or `-wal` file beside it, which SQLite would apply on the next open, and the `-shm` index that goes with a `-wal`. |
 | D27 | A stored repository no longer listed in `tracking.toml` is reported, with exit 2, on every run without `--repo` (5.3 steps 1 and 8), and its rows stay until `ghactivity sync --prune-untracked` deletes them; the prune, on the operator's explicit flag, removes rows section 1 puts out of scope (repositories not in the tracked list) and is recorded in `sync_runs.deletions_approved` (5.1). |
 | D28 | The database keeps a person attached to everything it attributed to them. A stored account stays stored after a lookup returns `NOT_FOUND` for it, with its last known login and type, and every reference to it stays: when GitHub later returns that actor as null, as a re-hydration does once GitHub stops returning the account, the writer keeps the stored reference of the same object (the PR's author and merger, the issue's author, the review's reviewer or the comment's author with the same `github_id`, this PR's commit with the same SHA, and the default-branch commit with the same repository and SHA, Step 4b), and the row's `*_reported` column records that GitHub returned no actor in that hydration (5.1). Other actor references (editors, requested reviewers, event actors) take GitHub's current value, null included, and the assignees are GitHub's current `assignedActors` list. `not_found_at` (named `deleted_at` until Step 3b-1) records when a lookup returned `NOT_FOUND`; it changes no reference, the 24-hour refresh skips the account, and a later sighting of the account clears it. GitHub does not say why it returns a null actor (`Prebid.js#13769` is merged, with a null `mergedBy` and an existing author), so a null reference means only that GitHub returned no actor and the object had none stored, and an account never stored has no `github_users` row. A non-null actor GitHub returns replaces the stored one. On a commit, `linked_github_id` holds the account id GitHub linked in the latest hydration whether or not a lookup found the account, so a link whose lookup returned null is told apart from an email linked to no account. The attribution lives in the stored rows and cascades with them, so anything that re-creates a row from GitHub drops it for accounts GitHub no longer returns: a bootstrap (it starts from an empty file), a transferred issue (new `github_id`), and a repository pruned and re-added (D27). |
@@ -89,6 +89,7 @@ Within scope the database collects and distinguishes data and never interprets i
 | D34 | Decision of 2026-10-20 (the maintainer): wherever stored data must tell runs apart, a run is its `sync_runs` row id, stored with the data, never a clock reading and never state the writer or the engine keeps in memory, which neither a later run nor a reader of the file can see. `sync_failures.last_run_id` names the latest run in which the item failed, and `attempts` adds one only for a failure in another run, whatever the two runs' clocks read (5.1, gap 91). |
 | D35 | Engine decisions of 2026-10-20 (the maintainer): Step 3b-2a-2b is two pull requests, the scenario model and the engine with `--dry-run` (section 6). A run can stop at any point: every write is its own transaction and every close updates its row only while it is `running`, so whatever ends a run without its close leaves the row `running` for the stale-row rule or `--break-lock` to recover, and nothing shields a writer transaction from an interrupt (5.3, gap 93). The deadline is reached when a request or a wait is refused for it (5.3 step 4), and the engine hydrates and writes one batch at a time (5.3 step 6). An `AccountMissing` refusal is an item failure, so an engine defect still publishes (5.3 step 6, D25); two entries resolving to one repository fail only the later one (5.3 step 1, gap 92); and D27's exit 2 applies to runs without `--repo`. |
 | D36 | Verify decisions of 2026-10-21: Step 3b-2b is two pull requests, the REST sampler and then verify with the live acceptance (section 6). Verify writes nothing to the database and claims no run: before any request it reads `sync_runs` and exits 1 while a row holds the lock by the claim's rule, so a stale or crashed run stays for the next claim or `sync --break-lock` (5.3). `--repo` limits verify to the repositories it names, as it limits a sync (D27). A verify that never starts writes no report; once it starts, `--report` is written on every exit verify's own code handles, and one that cannot be written turns an exit 0 or 2 into 1, because Step 6a reads it, while an interrupt exits 130 either way; verify's printed output follows sync's rule (5.3 step 8). Every repository failure 5.3 gives a resolve, an index, or a hydration batch, and a repository error during a timeline lookup, makes a repository unverified, and a verify in which every repository it attempts is unverified, the deadline having stopped none, is fatal. verify reads each repository's stored rows in two statements before indexing it, and its report records its own points, REST calls, and time (5.4, gap 94). |
+| D37 | Decision of 2026-10-21 (the maintainer): an error is better than a silent failure or silently wrong data. Where the code cannot check something, or cannot accept what GitHub returned, it reports a failure that stops publication or turns the run red, never a pass. For verify: an unchecked item and an unverified repository fail verify in both modes, not only `--exact`, and a lookup whose answer verify cannot accept is an error (5.4, 5.8, gap 97), so D25 does not publish a database verify could not check. |
 
 ## 3. Coverage rule
 
@@ -222,6 +223,7 @@ Every gap found in the audit, and where it is resolved.
 | 94 | 5.4 left verify's edges unstated: its lock check (the claim's rule runs only inside the claim, which writes); whether `--repo` limits the untracked repositories it reports; whether `--report` is written when verify stops before comparing or when the path cannot be written; the class of the resolve and index failures it did not list (not found, no default branch, a label list that fails its count, a number listed twice or out of creation order, a response the resolve or index rejects), beyond the three it did (a fetch that still fails, a second count mismatch, a resolve to another `github_id`), and of a repository error during a lookup; a verify that verifies no repository; when it reads the stored rows, which a sync that claims after its lock check can change; which events match a link difference GitHub reports only in the totals; and where its cost is recorded, since it writes no `sync_runs` row | Step 3b-2b-2 (5.4, D36) |
 | 95 | `timelineItems(since:)` keeps only items created after `since`, so a lookup passing the boundary would miss an event at it; GitHub's schema describes `filteredCount` as the count after applying `before` and `after`, and names neither `itemTypes` nor `since` | Step 3b-2b-2: `since` one second before the boundary, and `filteredCount` used as measured (5.8; section 7, "Timeline `since`") |
 | 96 | The REST sampler's lists have no stop rule (`Transport.rest_get` returns no `Link` header); the recorder's default mode rebuilds `recorded/` from what it records, and `--only documents` drops every unit kind but the compare and rate-limit kinds it keeps; and its check that a repository is public, after the name list it refuses before any request, runs on a resolve, which a REST-only recording does not make | Step 3b-2b-1 for the sampler and its REST units, recorded in their own directory; Step 3b-2b-2 for the timeline units (5.8) |
+| 97 | Without `--exact`, an unchecked item and an unverified repository did not fail verify, and a timeline lookup whose entries differed from `filteredCount` left its item unchecked, so the scheduled verify (5.6, no `--exact`) could exit 0 and D25 publish a database it had not checked | D37: both fail verify in every mode, and an answer verify cannot accept is an error (5.4, 5.8) |
 
 ## 5. Design
 
@@ -878,13 +880,17 @@ the first class that matches, in this order:
   `NOT_FOUND`, listed by number (the lookup is a hydration batch: `Gone` is removed since sync, a
   hydrated PR an error);
 - unchecked: a differing item whose timeline lookup (5.8) or lookup by number still fails after the
-  retries, or that a lookup had not answered when a repository error stopped it, those of the batch
-  the error ended included, listed by number;
-- error: anything else.
+  retries on a request GitHub did not answer (a transport, server, timeout, or rate-limit failure),
+  or that a lookup had not answered when a repository error stopped it, those of the batch the error
+  ended included, listed by number;
+- error: anything else, a lookup whose answer verify cannot accept included (a timeline lookup
+  whose entries still differ from `filteredCount` after its retry, a value the typed models reject).
 
-Only an error fails verify. `verify --exact` also fails on not synced, pending, halted deletion,
-removed since sync, unchecked, and known failures not listed in `[sync].accepted_failures`; it is
-the mode the Step 3-5 acceptance uses, and drift is reported in both modes. A repository that verify cannot
+An error, an unchecked item, and an unverified repository fail verify in both modes: what verify
+could not check is a failure, never a pass (D37). `verify --exact` also fails on not synced,
+pending, halted deletion, removed since sync, and known failures not listed in
+`[sync].accepted_failures`; it is the mode the Step 3-5 acceptance uses, and drift is reported in
+both modes. A repository that verify cannot
 resolve, re-index, or look up is reported as unverified: every repository error the source raises at
 resolve or index (not found, no default branch, a fetch that still fails after its retries, a
 response or GitHub error the resolve or index rejects, a label list that fails its count or names a
@@ -894,10 +900,9 @@ entry resolving to an earlier entry's `github_id`, gap 92, and another `is_track
 holding the resolved `full_name`, ignoring case, checked as a dry run checks it, against the stored
 names and the names earlier entries resolved to, 5.1), and a repository error during a lookup by
 number or a timeline lookup (5.3 step 4), which keeps the classes the repository's comparisons
-already gave. An unverified repository fails `--exact` and is reported,
-without failing, otherwise; a verify in which every repository it attempts is unverified, and the
-deadline stopped none, is fatal (exit 1), as a sync is when no configured repository resolves (5.3
-step 1). A verify that reaches
+already gave. An unverified repository fails verify and is reported with its reason; a verify in
+which every repository it attempts is unverified, and the deadline stopped none, is fatal (exit 1),
+as a sync is when no configured repository resolves (5.3 step 1). A verify that reaches
 `--max-minutes` stops with a timeout instead of waiting past it. Exit 0 when no failing class
 occurred, 2 when one did, 1 on a fatal error or a timeout, and 130 on an interrupt, the CLI's code
 (5.3). A verify that never starts exits 1 before any request, writes no report, and leaves PATH as
@@ -1280,8 +1285,9 @@ first page's `filteredCount`, which applies `itemTypes` and `since` (measured; G
 describes it as the count after applying `before` and `after`, and names neither); a later page's
 `filteredCount` counts only the items after its cursor, and `totalCount` is neither filtered nor
 the number of entries GitHub returns (section 7, "Closing-link timeline events"). A lookup whose
-entries differ from that count is retried once alone, as an item error is (5.3 step 4), and then
-leaves its item unchecked (5.4). Its document, formula cost, and recordings are added here when it
+entries differ from that count is retried once alone, as an item error is (5.3 step 4), and a
+difference that remains makes its item an error, as a value the typed models reject does (5.4,
+D37). Its document, formula cost, and recordings are added here when it
 is written; the recorder adds them without changing the existing recordings, and its default mode
 and `--only documents` record them too, so a re-recording keeps them (gap 96). The document takes
 no `tests/query_versions.json` entry: verify stores nothing, so no `hydration_version` depends on
@@ -1845,7 +1851,8 @@ resolves to a `github_id` other than its stored row's, with no stored `is_tracke
 untracked), its child-count checks (each by a planted row deletion), an unverified repository for
 each failure 5.4 lists, one made unverified by a lookup by number and one by a timeline lookup, each
 keeping the classes it already had and leaving unchecked the items no lookup had answered, those of
-the batch the error ended included, a verify with every repository unverified exiting 1, a
+the batch the error ended included, an unchecked item and an unverified repository each making a
+verify without `--exact` exit 2, a verify with every repository unverified exiting 1, a
 repository's `sync_pending` rows replaced by a sync's close between verify's two reads and the item
 still reported pending, a
 `CLOSED` PR whose `closedAt` falls on each side of the
@@ -1870,8 +1877,9 @@ disconnected event, an event at the boundary counted and one a second before it 
 planted in the lookup's response at a second and at half a second before the boundary and not
 counted, a stored link no longer indexed on a PR whose index lists every link matched only by an
 event naming it, a filtered page whose `totalCount` differs from its entries, a lookup whose entries
-differ from its `filteredCount` leaving its item unchecked, one that differs once and matches on
-its retry, classed by its events, and a lookup
+differ from its `filteredCount` after its retry and one whose response the typed models reject,
+each an error, one that differs once and matches on its retry, classed by its events, and a
+lookup
 spanning two pages whose second page's `filteredCount` counts only the entries after its cursor
 (5.8). A re-recording in the default mode and with `--only documents` keeping the timeline units.
 
