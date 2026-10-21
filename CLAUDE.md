@@ -67,8 +67,8 @@ sampler (Step 3b-2b-1), and `verify` (Step 3b-2b-2). The tracked `github_activit
 frozen at the first schema (D26).
 
 **Planned in the redesign plan:** D37 in the sync (Step 3b-2a-3), the REST sampler (Step
-3b-2b-1), and verify (Step 3b-2b-2); GitHub Issues and closing-issue links (Step 4); scheduled
-sync and release publication (Step 6).
+3b-2b-1), and verify (Step 3b-2b-2); GitHub Issues, closing-issue links, and default-branch
+activity (Step 4); the full bootstrap (Step 5); scheduled sync and release publication (Step 6).
 
 **Out of Scope (Future):**
 - Webhooks / real-time sync

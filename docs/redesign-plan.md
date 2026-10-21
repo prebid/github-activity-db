@@ -92,7 +92,7 @@ Within scope the database collects and distinguishes data and never interprets i
 | D35 | Engine decisions of 2026-10-20 (the maintainer): Step 3b-2a-2b is two pull requests, the scenario model and the engine with `--dry-run` (section 6). A run can stop at any point: every write is its own transaction and every close updates its row only while it is `running`, so whatever ends a run without its close leaves the row `running` for the stale-row rule or `--break-lock` to recover, and nothing shields a writer transaction from an interrupt (5.3, gap 93). The deadline is reached when a request or a wait is refused for it (5.3 step 4), and the engine hydrates and writes one batch at a time (5.3 step 6). An `AccountMissing` refusal is an item failure, so an engine defect still publishes (5.3 step 6, D25); two entries resolving to one repository fail only the later one (5.3 step 1, gap 92); and D27's exit 2 applies to runs without `--repo`. |
 | D36 | Verify decisions of 2026-10-21: Step 3b-2b is two pull requests, the REST sampler and then verify with the live acceptance (section 6). Verify writes nothing to the database and claims no run: before any request it reads `sync_runs` and exits 1 while a row holds the lock by the claim's rule, so a stale or crashed run stays for the next claim or `sync --break-lock` (5.3). `--repo` limits verify to the repositories it names, as it limits a sync (D27). A verify that never starts writes no report; once it starts, `--report` is written on every exit verify's own code handles, and one that cannot be written turns an exit 0 or 2 into 1, because Step 6a reads it, while an interrupt exits 130 either way; verify's printed output follows sync's rule (5.3 step 8). Every repository failure 5.3 gives a resolve, an index, or a hydration batch, and a repository error during a timeline lookup, makes a repository unverified, and a verify in which every repository it attempts is unverified, the deadline having stopped none, is fatal. verify reads each repository's stored rows in two statements before indexing it, and its report records its own points, REST calls, and time (5.4, gap 94). |
 | D37 | Decision of 2026-10-21 (the maintainer): an error is better than a silent failure or silently wrong data. Where the code cannot check something, or cannot accept what GitHub returned, it reports a failure that stops publication or turns the run red, never a pass. For verify: an unchecked item and an unverified repository fail verify in both modes, not only `--exact`, and a lookup whose answer verify cannot accept is an error (5.4, 5.8, gap 97), so D25 does not publish a database verify could not check. |
-| D38 | Decisions of 2026-10-21 applying D37 to the sync and to the steps not yet built (gaps 98-110). The sync exits 2 when a 24-hour account refresh fails, when the run reaches its deadline, and when a hydration contradicts the run's own index after one retry (Step 3b-2a-3); the failures a batch made final before a deadline are recorded, not left pending. An `accepted_failures` entry accepts one error class, of an item or of an account's refresh, so a permanent failure can be accepted without turning every run red. A PR with more closing links than the index carries is hydrated every run. Every node id a sighting, a lookup, or a commit link reports for a stored account is stored, and `sync_runs` records the `--repo` filter and the commit-link lookups GitHub answered `NOT_FOUND`. The source refuses what it cannot read (gap 104), and the run records refuse what they cannot write or determine (gap 105). Step 4b marks a compare file list at GitHub's 300-file cap and counts it in verify's report and the manifest, completes an activity read only at the log's end or the floor, and fails a history read whose count still differs after a rescan. Step 5 measures which edits leave `updatedAt` unchanged. Step 6 compares the App's reads with the token's before any App run publishes, pins the database file the job checked, tests that every exit-code `if:` compares a non-empty string, and ties a snapshot to the job's own sync. A schedule that stops is the one silent case this repository cannot see: no run starts, so nothing turns red; 5.6 states the staleness rule a consumer applies, and building it belongs to the dashboard's integration (section 9). Left as they are, because the stored data already says what happened: a compare-linked account a lookup answers `NOT_FOUND` (D28; now also counted per run), a REST git author without a name or email (stored null, as GitHub reports none), deletions recorded as a count (the snapshots retained for 7 days hold the identities; older ones are not kept), which accounts failed a refresh (printed; the count is stored, the run is red, and the accounts are retried), and the merge state as of `hydrated_at` (D32). New tables and columns of GitHub-derived data on a populated file follow gap 110's rule (5.1). |
+| D38 | Decisions of 2026-10-21 applying D37 to the sync and to the steps not yet built (gaps 98-110). The sync exits 2 when a 24-hour account refresh fails, when the run reaches its deadline, and when a hydration contradicts the run's own index after one retry (Step 3b-2a-3); the failures a batch made final before a deadline are recorded, not left pending. An `accepted_failures` entry accepts one error class, of an item or of an account's refresh, so a permanent failure can be accepted without turning every run red. A PR with more closing links than the index carries is hydrated every run. Every node id a sighting, a lookup, or a commit link reports for a stored account is stored, and `sync_runs` records the `--repo` filter and the commit-link lookups GitHub answered `NOT_FOUND`. The source refuses what it cannot read (gap 104), and the run records refuse what they cannot write and mark `-unknown` what they cannot determine (gap 105). Step 4b marks a compare file list at GitHub's 300-file cap and counts it in verify's report and the manifest, completes an activity read only at the log's end or the floor, and fails a history read whose count still differs after a rescan. Step 5 measures which edits leave `updatedAt` unchanged. Step 6 compares the App's reads with the token's before any App run publishes to `db`, pins the database file the job checked, tests that every exit-code `if:` compares a non-empty string, and ties a snapshot to the job's own sync. A schedule that stops is the one silent case this repository cannot see: no run starts, so nothing turns red; 5.6 states the staleness rule a consumer applies, and building it belongs to the dashboard's integration (section 9). Left as they are, because the stored data already says what happened: a commit-linked account a lookup answers `NOT_FOUND` (D28; now also counted per run), a compare at GitHub's 300-file cap and one GitHub refuses (marked by `files_at_cap` and `http_status`, counted in verify's report and the manifest), a REST git author without a name or email (stored null, as GitHub reports none), deletions recorded as a count (the snapshots retained for 7 days hold the identities; older ones are not kept), which accounts failed a refresh (printed; the count is stored, the run is red unless an account entry accepts the failure, and the accounts are retried), and the merge state as of `hydrated_at` (D32). New tables and columns of GitHub-derived data on a populated file follow gap 110's rule (5.1). |
 
 ## 3. Coverage rule
 
@@ -227,18 +227,18 @@ Every gap found in the audit, and where it is resolved.
 | 95 | `timelineItems(since:)` keeps only items created after `since`, so a lookup passing the boundary would miss an event at it; GitHub's schema describes `filteredCount` as the count after applying `before` and `after`, and names neither `itemTypes` nor `since` | Step 3b-2b-2: `since` one second before the boundary, and `filteredCount` used as measured (5.8; section 7, "Timeline `since`") |
 | 96 | The REST sampler's lists have no stop rule (`Transport.rest_get` returns no `Link` header); the recorder's default mode rebuilds `recorded/` from what it records, and `--only documents` drops every unit kind but the compare and rate-limit kinds it keeps; and its check that a repository is public, after the name list it refuses before any request, runs on a resolve, which a REST-only recording does not make | Step 3b-2b-1 for the sampler and its REST units, recorded in their own directory; Step 3b-2b-2 for the timeline units (5.8) |
 | 97 | Without `--exact`, an unchecked item and an unverified repository did not fail verify, and a timeline lookup whose entries differed from `filteredCount` left its item unchecked, so the scheduled verify (5.6, no `--exact`) could exit 0 and D25 publish a database it had not checked | D37: both fail verify in every mode, and an answer verify cannot accept is an error (5.4, 5.8) |
-| 98 | A 24-hour account refresh that still fails, or whose answer the writer refuses (another `databaseId` for a stored node id), left the run `complete` with exit 0; the only trace was a printed line, and a test pinned exit 0 | Step 3b-2a-3: counted in `sync_runs.refresh_failures`, listed in the report, and exit 2 (5.3 step 4, D38) |
+| 98 | A 24-hour account refresh that still fails, or whose answer the writer refuses (another `databaseId` for a stored node id), left the run `complete` with exit 0; the only trace was a printed line, and a test pinned exit 0 | Step 3b-2a-3: counted in `sync_runs.refresh_failures`, listed in the report, and exit 2 unless an account entry in `[sync].accepted_failures` accepts it (5.3 step 4, 5.5, D38) |
 | 99 | A run that reached `--max-minutes` exited 0, and a deadline inside a batch turned the item failures it had computed into pending items | Step 3b-2a-3: a run that reaches its deadline exits 2, which D25 still publishes with the workflow red, and the failures a batch made final before the deadline are recorded (5.3 steps 6 and 8, D38) |
 | 100 | A PR the run's own index listed in coverage that hydration then answered `NOT_FOUND`, or returned out of coverage, was neither written, failed, nor pending, and nothing reported it; a hydration older than the index entry was written without a check | Step 3b-2a-3: each is an item error (5.3 steps 4 and 5, D38) |
-| 101 | An `accepted_failures` entry accepted any failure of its item, so a new cause stayed out of exit 2 | Step 3b-2a-3: an entry names the error class it accepts (5.5, D38) |
+| 101 | An `accepted_failures` entry accepted any failure of its item, so a new cause stayed out of exit 2 | Step 3b-2a-3: an entry names the error class and the message it accepts, and may name an account (5.5, D38) |
 | 102 | A PR with more than the 10 closing links the index carries was not re-hydrated when a link beyond the 10th was swapped with equal totals | Step 3b-2a-3: such a PR is hydrated every run (5.3 step 3, D38). Verify keeps comparing the totals and the indexed links: the sync re-reads every link of such a PR each run, and verify's child-count check holds the stored rows to the hydrated total |
-| 103 | A `databaseId` reported under a second node id kept the stored node id and dropped the reported one; only a printed line recorded it; a commit link's node id was never read | Step 3b-2a-3: `account_node_ids` stores every node id a sighting, a lookup, or a commit link reports for an account (5.1, 5.2, D38) |
+| 103 | A `databaseId` reported under a second node id kept the stored node id and dropped the reported one; only a printed line recorded it; the sync used a commit link's node id, which the source reads, only as a lookup key, never storing or checking it | Step 3b-2a-3: `account_node_ids` stores every node id a sighting, a lookup, or a commit link reports for an account (5.1, 5.2, D38) |
 | 104 | Source checks that accepted what they should refuse: a REST response without readable rate-limit headers, a GraphQL `errors` present but not a list (`{}`, `""`), a compare above 250 commits checked by count but not membership, and an index page from a repository other than the one resolved | Step 3b-2a-3 (5.3 steps 2, 4, and 5, D38) |
 | 105 | Run records and setup that hid a failure: `code_version` without `-dirty` when `git status` failed, a close that ignored outcomes it could not write, a missing `[automation]` table emptying the automation lists, `foreign_keys` never read back, `alembic stamp` accepted, a wheel check comparing repository names only, a log file no record reaches, and no record of a run's `--repo` filter | Step 3b-2a-3 (5.1, 5.3 step 8, 5.5, D38) |
 | 106 | Step 4b: compare `files` stop at GitHub's documented 300 per comparison with no total, so a capped list read as complete; the activity read had no paging or completeness rule; a history count mismatch had no outcome; a refused compare was never retried; and the log's first event was not stored | Step 4b (5.1, D38) |
 | 107 | Step 6: an App token may return null where the maintainer's token read a value; a stopped schedule turns nothing red; a missing `DATABASE_URL` builds from empty; an empty exit-code output compares equal to 0 in `if:`; and `snapshot` did not check that the job's own sync ran | Step 6 and 5.6 (D38), except the stopped schedule: no run starts, so this repository cannot see it; 5.6 states the consumer's staleness rule, which the dashboard's integration builds (section 9) |
 | 108 | The data dictionary presented head-repository, milestone, and team names as GitHub's current values, though they are as of `hydrated_at` | Step 3b-2a-3: described as of `hydrated_at` (D38) |
-| 109 | Edits that may leave `updatedAt` unchanged (body, base ref, review dismissal) were accepted as missed | Step 5 measures them; one that does gets an index-side check or a periodic re-hydration (section 8, D38) |
+| 109 | Edits that may leave `updatedAt` unchanged (body, base ref, review dismissal, issue label events) were accepted as missed | Step 5 measures at least 20 cases of each; a kind not shown to change `updatedAt` gets an index-side check or a periodic re-hydration before Step 6a (section 8, D38) |
 | 110 | A GitHub-derived column a later migration adds to a table without `hydration_version` (accounts, compares), or a new table of such data, is never filled for existing rows | 5.1: such a migration adds a per-row read version or refuses while the file holds the rows it would leave unread (D38) |
 
 ## 5. Design
@@ -269,15 +269,16 @@ IMMEDIATE`, and
 revision the upgrade started from, with no revision of that upgrade applied. `PRAGMA
 foreign_key_check` runs inside that transaction after the last revision and raises on any row,
 before the commit. It runs before every command commits, one that runs no revision (`current`,
-`check`, and a `stamp` that changes nothing) included; a `stamp` that would change the revision is
-refused before any statement (gap 105): alembic loads each revision module inside the transaction,
-so a module's top-level code can change rows or the schema without a revision running (section 7,
-"Revision module code"), and a file that already holds a violation fails every command that
-connects. A migration that batch-alters a table a view reads drops those views first and
-recreates them afterwards from its own frozen SQL; `legacy_alter_table` stays off, so a view left
-in place fails the migration (gap 71). Migrations import only the standard library, alembic, and
-SQLAlchemy, never application code, and name every index, CHECK constraint, and foreign key they create through
-`op.f()`: env.py passes
+`check`, and a `stamp` that changes nothing) included; a `stamp` that changes the revision is
+refused by an `on_version_apply` callback, which raises on alembic's `MigrationInfo.is_stamp`
+inside the command's transaction, so nothing commits, and a `stamp` at head has no step (gap 105):
+alembic loads each revision module inside the transaction, so a module's top-level code can change
+rows or the schema without a revision running (section 7, "Revision module code"), and a file that
+already holds a violation fails every command that connects. A migration that batch-alters a table a
+view reads drops those views first and recreates them afterwards from its own frozen SQL;
+`legacy_alter_table` stays off, so a view left in place fails the migration (gap 71). Migrations
+import only the standard library, alembic, and SQLAlchemy, never application code, and name every
+index, CHECK constraint, and foreign key they create through `op.f()`: env.py passes
 `Base.metadata` as `target_metadata`, and alembic applies its naming convention to every migration's
 operations, old revisions included (on a fresh build, the unnamed foreign keys of `01421d8dfaeb`
 and `a2b3c4d5e6f7` take the head convention's names, which is harmless only because Step 3 drops
@@ -342,9 +343,9 @@ and `color`, `pr_user_tags.created_at`).
 | `default_branch_commits` | `repository_id`, `sha`, `author_id`, `linked_github_id`, `author_name`, `author_email`, `authored_at`, `committed_at`, `parent_count`, `additions`, `deletions`, `changed_files` | Step 4b; PK (`repository_id`, `sha`); the default branch's history since the floor as GitHub lists it (D30); the author link as in `pr_commits`, a replace keeping the stored link of the row with the same SHA when GitHub returns none (D28); `parent_count` is GitHub's `parents.totalCount`; `changed_files` is GitHub's `changedFilesIfAvailable`, null when GitHub returns none; no message (D19) |
 | `automation_accounts` | `github_id`, `login`, `reason`, `run_id` | integer primary key; `github_id` unique; replaced from `tracking.toml` at the start of every run, `run_id` naming that run (a reference to `sync_runs`) |
 | `account_profiles` | `account_id`, `company`, `location`, `website_url`, and an organization's `description`, `email`, `twitter_username`, `is_verified`, `archived_at`, `has_sponsors_listing`, and `pinned_items_remaining`, `refreshed_at` | PK `account_id`, a reference to `github_users` (`ON DELETE CASCADE`); rows only for a `User` or an `Organization` (D31); each lookup that returns the account replaces the whole row with the profile it returned, through the writer and in the transaction that writes `github_users`' login and type, so no earlier value survives a field GitHub now returns as null or a change of type; a lookup that returns `NOT_FOUND` leaves the row unchanged, marked by `github_users.not_found_at` (D28); every field nullable as GitHub's is, the organization fields null for a user and `company` null for an organization; `refreshed_at` as on `github_users` |
-| `account_node_ids` | `account_id`, `node_id`, `first_run_id`, `last_run_id` | Step 3b-2a-3; PK (`account_id`, `node_id`); `node_id` unique; every node id GitHub reported for the account in an actor sighting, a lookup, or a commit link, the one `github_users.node_id` holds included, with the first and latest runs that reported it, so GitHub's second node id for one `databaseId` is stored, not dropped (5.2, gap 103); its migration refuses a file whose `github_users` holds rows (gap 110); consumer |
+| `account_node_ids` | `account_id`, `node_id`, `first_run_id`, `last_run_id` | Step 3b-2a-3; PK (`account_id`, `node_id`); `node_id` unique; every node id GitHub reported for the account in an actor sighting, a lookup, or a commit link, the one `github_users.node_id` holds included, with the first and latest runs that reported it, so GitHub's second node id for one `databaseId` is stored, not dropped (5.2, gap 103); its migration refuses a file whose `github_users` holds rows, since no file was published before Step 6b (gap 110); consumer |
 | `automation_emails` | `email`, `reason`, `run_id` | integer primary key; `email` unique, stored lowercase ASCII (SQLite's `lower()`, which the views apply to commit emails, folds only ASCII letters); replaced the same way |
-| `sync_runs` | `started_at`, `deadline_at`, `finished_at`, `status`, `exit_code`, `trigger`, `code_version`, `config_source`, `config_sha256`, `graphql_points`, `rest_calls`, `items_planned`, `items_hydrated`, `items_deleted`, `failures`, `refresh_failures`, `links_not_found`, `repo_filter`, `deletions_approved` | `status` in (`running`, `complete`, `time_limited`, `failed`, `aborted`), set as 5.3 step 8 says; `deadline_at` is `started_at` plus `--max-minutes`, null without it; `trigger` is `schedule` or `workflow_dispatch` from `GITHUB_EVENT_NAME`, else `manual`; `code_version` is `GITHUB_SHA`, else the commit of the checkout the package runs from (with `-dirty` appended when `git status` lists changes and `-unknown` when it fails or times out, gap 105; `git ls-files --error-unmatch` exiting 1 means the package is not tracked, and any other failure of it or of `git rev-parse`, a missing `git` included, records the package version followed by `-unknown`; the package runs from a checkout when git tracks its `__init__.py`), else the package version; `config_source` is `packaged` or the `TRACKING_CONFIG_PATH` path made absolute (symlinks not followed), and `config_sha256` the digest of the `tracking.toml` bytes the run read (gap 88); `items_planned` counts the distinct items planned for hydration (in-place updates excluded), `items_hydrated` the hydrated items written, and `items_deleted` the item rows step 7 and the prune deleted; `failures` counts this run's item failures, accepted ones included, and `refresh_failures` the accounts whose refresh failed this run (5.3 step 4), `links_not_found` the commit-link accounts a lookup answered `NOT_FOUND` this run (5.2), and `repo_filter` the repositories `--repo` named, null for a run without it; the migration that adds these three refuses a file whose `sync_runs` holds rows (gap 110); `deletions_approved` is null or JSON with `allow_deletions` (the repository, the approved N, and for each guarded set, step 7's items and from Step 4b the activity events and the default-branch commits, its candidate count and whether its deletion ran) and `prune_untracked` (each pruned repository's `github_id`, `full_name`, and items deleted), written as `{"allow_deletions": {"repository", "github_id", "approved", "sets": {"items": {"candidates", "deleted"}}}, "prune_untracked": [{"github_id", "full_name", "items_deleted"}]}` with sorted keys, in the transaction of the deletion it records, as `items_deleted` is; every column is consumer except the run counters (5.1, consumer interface) |
+| `sync_runs` | `started_at`, `deadline_at`, `finished_at`, `status`, `exit_code`, `trigger`, `code_version`, `config_source`, `config_sha256`, `graphql_points`, `rest_calls`, `items_planned`, `items_hydrated`, `items_deleted`, `failures`, `refresh_failures`, `links_not_found`, `repo_filter`, `deletions_approved` | `status` in (`running`, `complete`, `time_limited`, `failed`, `aborted`), set as 5.3 step 8 says; `deadline_at` is `started_at` plus `--max-minutes`, null without it; `trigger` is `schedule` or `workflow_dispatch` from `GITHUB_EVENT_NAME`, else `manual`; `code_version` is `GITHUB_SHA`, else the commit of the checkout the package runs from (with `-dirty` appended when `git status` lists changes and `-unknown` when it fails or times out, gap 105; the package runs from a checkout only when its directory or a parent holds a `.git` entry, and then `git ls-files --error-unmatch` exiting 1 means the package is not tracked, while any other failure of a git call, exit 128 and a missing `git` included, records the package version, or the commit when `rev-parse` answered, followed by `-unknown`; the package runs from a checkout when git tracks its `__init__.py`), else the package version; `config_source` is `packaged` or the `TRACKING_CONFIG_PATH` path made absolute (symlinks not followed), and `config_sha256` the digest of the `tracking.toml` bytes the run read (gap 88); `items_planned` counts the distinct items planned for hydration (in-place updates excluded), `items_hydrated` the hydrated items written, and `items_deleted` the item rows step 7 and the prune deleted; `failures` counts this run's item failures, accepted ones included, and `refresh_failures` the accounts whose refresh failed this run (5.3 step 4), `links_not_found` the commit-link accounts a lookup answered `NOT_FOUND` this run, gap 90's lookups included (5.2), and `repo_filter` a JSON array of the `--repo` values as given, sorted, null for a run without `--repo`; `refresh_failures`, like `failures`, counts accepted ones; the migration that adds these three refuses a file whose `sync_runs` holds rows (gap 110); `deletions_approved` is null or JSON with `allow_deletions` (the repository, the approved N, and for each guarded set, step 7's items and from Step 4b the activity events and the default-branch commits, its candidate count and whether its deletion ran) and `prune_untracked` (each pruned repository's `github_id`, `full_name`, and items deleted), written as `{"allow_deletions": {"repository", "github_id", "approved", "sets": {"items": {"candidates", "deleted"}}}, "prune_untracked": [{"github_id", "full_name", "items_deleted"}]}` with sorted keys, in the transaction of the deletion it records, as `items_deleted` is; every column is consumer except the run counters (5.1, consumer interface) |
 | `repo_sync_state` | `repository_id`, `last_index_started_at`, `index_pr_total`, `index_issue_total`, `last_success_at`, `last_run_id`, `last_outcome`, `halt_reason`, and from Step 4b `activity_read_at`, `activity_first_event_at`, `activity_last_outcome`, `activity_halt_reason`, `history_read_at`, and `default_branch_commits_total` | PK `repository_id`; `activity_first_event_at` is the `timestamp` of the oldest event the latest complete activity read listed, so a consumer can tell a quiet period from a log that does not reach back (gap 106); `activity_read_at` is the GitHub `Date` header of the first page of the latest activity-log read that completed and was written; `history_read_at` and `default_branch_commits_total` are the first page's `Date` header and the `totalCount` of the latest history read that replaced the rows, written only with that replace; `activity_last_outcome` in (`complete`, `time_limited`, `failed`, `halted`); `activity_halt_reason` holds a Step 4b deletion halt's reason and candidate counts and is cleared by a run whose Step 4b did not halt (Step 4b); `last_run_id` is the latest run that attempted the repository, or found it untracked, and `last_outcome` its result, in (`complete`, `time_limited`, `failed`, `incomplete_index`, `halted`, `untracked`), both written by step 8, or by the close of a fatal or interrupted run (5.3 step 8); `last_index_started_at` is written only when that index completed and the repository did not fail later in the run, a time-limited repository included (its unreached items are in `sync_pending`), and never by the close of a fatal or interrupted run; `last_success_at` is the run's `finished_at` when `last_outcome` is `complete` and no item of the repository failed outside `[sync].accepted_failures`; `halt_reason` holds step 7's halt and is cleared by a run whose step 7 ran for the repository and did not halt, a run whose step 7 did not run for it leaving it |
 | `sync_pending` | `repository_id`, `item_kind`, `number`, `run_id` | PK (`repository_id`, `item_kind`, `number`); `item_kind` in (`pull_request`, `issue`); items a time-limited run planned but did not reach; step 8 replaces the rows of each completely indexed repository that did not fail later in the run (a repository gone during hydration keeps its rows, 5.3 step 4) with this run's unreached items, so a run that reached them all leaves none; consumer, so an in-coverage item not yet hydrated is told apart from one outside coverage |
 | `sync_failures` | `repository_id`, `item_kind`, `number`, `attempts`, `last_error`, `first_failed_at`, `last_failed_at`, `last_run_id` | unique (`repository_id`, `item_kind`, `number`); `item_kind` in (`pull_request`, `issue`); `attempts` counts the runs in which the item failed: `last_run_id` is the latest such run, and a failure adds one only when its run is another, whatever the runs' clocks read; `last_error` is the error's class and message; row deleted on success, or by step 7 when its repository's in-coverage set no longer lists the item |
@@ -393,9 +394,13 @@ Column rules:
   A table without `hydration_version` (`github_users`, `account_profiles`, the Step 4b compare
   tables) to which a later migration adds a GitHub-derived column gains a per-row read version
   that the planner compares the same way, or the migration refuses while the table holds rows, so
-  a column is never left unread on old rows; a migration that adds a table of GitHub-derived data,
-  or a run counter, refuses while the file holds the rows the new table or column would describe,
-  so no row reads as "none" where nothing was recorded (gap 110).
+  a column is never left unread on old rows. A migration that adds a table of GitHub-derived data
+  refuses only while the file holds rows no later run reads for it, so no row reads as "none" where
+  nothing was recorded; a table or column every run fills for every stored parent, whose unread
+  state is already marked, does not refuse (Step 4a's issue tables, Step 4b's activity, compare,
+  and history tables and `repo_sync_state` columns, unread while `activity_last_outcome` or
+  `history_read_at` is null). A run counter added after Step 6b is nullable, null meaning not
+  recorded, since a refusal there would force a bootstrap (gap 110).
 - `state_reason` is GitHub's value including `DUPLICATE` (5.8). Descriptive enums, every GitHub
   enum column except a PR's, issue's, and review's `state` (`github_users.type` keeps its CHECK),
   such as `change_type`, `author_association`, `state_reason`, `merge_state_status`, and
@@ -574,9 +579,9 @@ same number.
   from its own `Date` header and leaves `refreshed_at`. The refresh runs after the last hydration
   write and before step 7, oldest `refreshed_at` first, and stops at the deadline; in it, a
   `databaseId` that differs from the stored `github_id` is a failed refresh, which makes the exit 2
-  (5.3 step 4). Accounts that no stored
-  row references any more stay stored and refreshed: within one file, `github_users` holds every
-  account it ever stored (a bootstrap starts without them, section 9).
+  unless an account entry in `[sync].accepted_failures` accepts it (5.3 step 4). Accounts that no
+  stored row references any more stay stored and refreshed: within one file, `github_users` holds
+  every account it ever stored (a bootstrap starts without them, section 9).
 - Automation lists: `[automation].accounts` and `[automation].emails` name accounts and commit
   emails the maintainer lists, each with a reason. Each run copies both lists into
   `automation_accounts` and `automation_emails` with its run id, and the views show the matching
@@ -690,8 +695,9 @@ an interrupt, which is re-raised.
    A failure the engine detects itself (these two, a hydrated `github_id` other than the index's, a
    review or comment id stored under another PR, a per-batch lookup's `databaseId` other than the
    commit link's) is recorded at once, without the solo retry, which would repeat a deterministic
-   result. A hydration that contradicts the run's own index (step 5) is the exception: a lagging
-   read can clear, so the engine requests the item once more alone before it records the failure.
+   result. Step 5's three contradictions of the run's own index (an alias `NOT_FOUND`, an item
+   outside coverage, an earlier `updatedAt`) are the exception: a lagging read can clear, so the
+   engine requests the item once more alone before it records the failure.
    The planner is a pure function over snapshots of the stored rows, which `--dry-run` reuses. The
    run reads its snapshot once, after the claim and before step 1 (a dry run, after the head check).
 4. Hydrate: GraphQL batches of 25 PRs or 100 issues of one repository via aliased
@@ -731,9 +737,9 @@ an interrupt, which is re-raised.
    item error for each item waiting on those accounts (5.2). A failed 24-hour refresh (a lookup that
    still fails after its retries, an answer the typed models or the id check reject, or a
    `databaseId` other than the stored `github_id`) keeps the stored values (D28), is listed in the
-   report, counted in `sync_runs.refresh_failures`, retried next run, and makes the exit 2 (D37,
-   gap 98). Fields that drive logic (`state`, review `state`) are closed enums in the typed models;
-   descriptive enums are text (5.1).
+   report, counted in `sync_runs.refresh_failures`, retried next run, and makes the exit 2 unless
+   an account entry in `[sync].accepted_failures` accepts it (D37, gap 98). Fields that drive logic
+   (`state`, review `state`) are closed enums in the typed models; descriptive enums are text (5.1).
 
    Any other exception after the claim is fatal too. A fatal run closes as `failed` (exit 1), with
    step 7's halt reasons when step 7 ran.
@@ -769,7 +775,9 @@ an interrupt, which is re-raised.
    with state `CLOSED` (D3). A hydration that contradicts the run's own index (an alias `NOT_FOUND`,
    an item outside coverage, an `updatedAt` earlier than the index entry's) is requested once more
    alone by the engine, which holds the index, and a second contradiction is an item failure,
-   recorded before any account lookup for it (gap 100). Above 250 commits, only the commit
+   recorded before any account lookup for it (gap 100); a deadline that refuses that request
+   leaves the item in `sync_pending`, and the batch's other checked items are written as at any
+   deadline. Above 250 commits, only the commit
    connection's first page is checked against compare's list: it holds the oldest commits, which a
    wrong base adds or drops, and reading the rest would cost continuations a count check already
    covers.
@@ -827,14 +835,15 @@ an interrupt, which is re-raised.
    indexed completely and nothing failed; 2 when an item failed in this run (other than one listed
    in `[sync].accepted_failures`), a repository failed, had an incomplete index, or halted, a stored
    repository is untracked in a run without `--repo`, a prune was refused (step 7), a refresh
-   failed (step 4), or the run reached its deadline (status `time_limited`, whatever it stopped:
-   hydration, the refresh, or a Step 4b read; gap 99); 1 on a fatal error. The
-   exit code is decided after the prune. An accepted failure is still recorded and reported; it
-   names the repository and number, or the account's `github_id`, with the error class and reason
-   in `tracking.toml`, so a permanent failure does not turn every run red, and a failure of another
-   class is not accepted (gap 101). An entry
+   failed (step 4, other than one an account entry accepts), or the run reached its deadline (status
+   `time_limited`, whatever it stopped: hydration, the refresh, or a Step 4b read; gap 99); 1 on a
+   fatal error. The exit code is decided after the prune. An accepted failure is still recorded and
+   reported; it names the repository and number, or the account, with the error class, the message,
+   and a reason in `tracking.toml`, so a permanent failure does not turn every run red, and a
+   failure of another class or message is not accepted (5.5, gap 101). An item entry
    is reported as not having failed when its repository's outcome in this run is `complete`,
-   `time_limited`, or `halted` and its item neither failed in this run nor is pending (5.5).
+   `time_limited`, or `halted` and its item neither failed in this run nor is pending (5.5); an
+   account entry, only when this run's refresh looked the account up and the lookup succeeded.
    `--max-minutes` stops queueing new hydration, records in `sync_pending` the planned items it did
    not reach (a repository that failed during hydration keeps its rows, step 4), still runs step 7
    for complete repositories and step 8, and sets status `time_limited`; unreached items are not
@@ -937,8 +946,8 @@ the first class that matches, in this order:
 An error, an unchecked item, and an unverified repository fail verify in both modes: what verify
 could not check is a failure, never a pass (D37). `verify --exact` also fails on not synced,
 pending, halted deletion, removed since sync, and known failures no `[sync].accepted_failures`
-entry matches by repository, number, and error class; it is the mode the Step 3-5 acceptance uses,
-and drift is reported in both modes. A repository that verify cannot
+entry accepts as 5.5 matches it (repository, number, error class, and message); it is the mode the
+Step 3-5 acceptance uses, and drift is reported in both modes. A repository that verify cannot
 resolve, re-index, or look up is reported as unverified: every repository error the source raises at
 resolve or index (not found, no default branch, a fetch that still fails after its retries, a
 response or GitHub error the resolve or index rejects, a label list that fails its count or names a
@@ -991,7 +1000,8 @@ state per check.
 
 `ghactivity verify --db-only` (Step 6a, beside the `snapshot` command that writes its inputs; it takes
 the snapshot gz, its manifest, the asset digest, and `--out PATH` as explicit arguments, and a halt
-exits 1) decompresses to PATH, prints that file's SHA-256 on its last line once every check passes,
+exits 1) decompresses to PATH, prints that file's SHA-256 and its highest `sync_runs` id (0 when
+it has none) on its last line once every check passes,
 and checks a downloaded snapshot before anything touches it: the gz SHA-256
 equals the manifest's (and the release asset's `digest` when GitHub reports one; a null digest leaves
 the manifest as the only check); decompression succeeds; `PRAGMA integrity_check` returns `ok` and
@@ -1019,13 +1029,13 @@ Python `timedelta` holds, so the planner can build the window), `delete_guard_mi
 of at least 0,
 and `delete_guard_percent` a number above 0 and at most 100; an `accepted_failures` entry names
 an item (a configured `repository` and a `number` of at least 1) or an account (`github_id`, for a
-refresh failure), and an `error`: the error class it accepts, compared for equality with the text
-of `sync_failures.last_error` (or the refresh failure's text) before its first `": "`, which the
-loader refuses unless it is one of the failure classes the sync records; for a class whose message
-carries the cause (`AliasError`, `UserLookupFailed`), the entry also gives `message`, compared for
-equality with the rest of that text. Entries are unique by item or account, an item entry matches
-by its configured repository, so a rename does not unhook it, and a new cause is not accepted
-(gap 101); an entry whose item or account did not fail is reported (5.3 step 8).
+refresh failure, or `node_id` for an account stored with a null `github_id`), an `error`, and a
+`message`: the class and the message of `sync_failures.last_error` (or of the refresh failure's
+text), split at its first `": "` and each compared for equality, since several classes carry
+more than one cause in their message; the loader refuses a class that is not one of the failure
+classes the sync records, and an entry without `message`. Entries are unique by item or account, an
+item entry matches by its configured repository, so a rename does not unhook it, and a new cause is
+not accepted (gap 101); an entry whose item or account did not fail is reported (5.3 step 8).
 `[automation]` is required, its lists may be empty, so a file without it is refused instead of
 emptying the automation tables (gap 105). The file holds domain policy only. Step 1 added
 `[[repositories]]`; Step 3b-2a-1 adds `[coverage]` and `[sync]`'s `unsettled_minutes`,
@@ -1057,9 +1067,11 @@ emails = [
 unsettled_minutes = 10
 delete_guard_min_rows = 25
 delete_guard_percent = 2.0
-# Items whose failure is understood and does not count toward exit 2 (5.3 step 8).
+# Items or accounts whose failure is understood and does not count toward exit 2 (5.3 step 8).
 accepted_failures = [
-  # { repository = "prebid/Prebid.js", number = 12345, error = "ItemConflict", reason = "..." },
+  # { repository = "prebid/Prebid.js", number = 12345, error = "ItemConflict",
+  #   message = "#12345: ...", reason = "..." },
+  # { github_id = 1234567, error = "UserLookupFailed", message = "...", reason = "..." },
 ]
 ```
 
@@ -1087,13 +1099,14 @@ Workflow `.github/workflows/sync.yml`:
     `verify --db-only`; a missing or failing snapshot halts the run. With `bootstrap`, it downloads
     nothing and starts from an empty file, and the manifest records `bootstrap: true`. One job-level
     `DATABASE_URL` names the file every step uses, the `--out` path of `verify --db-only`; without
-    `bootstrap`, before `alembic upgrade head` the job records the file's highest `sync_runs` id and
-    fails unless the file's SHA-256 equals the one `verify --db-only` printed (gap 107). It then runs
-    `alembic upgrade head`, asserts the revision is head, runs `ghactivity sync --max-minutes 300`
-    and `ghactivity verify --max-minutes 40 --report verify.json`, runs `ghactivity snapshot
-    --verify-report verify.json`, and hands the snapshot and manifest to `publish` as a workflow
+    `bootstrap`, before `alembic upgrade head` the job records the highest `sync_runs` id that
+    `verify --db-only` printed (N; 0 for a bootstrap) and fails unless the file's SHA-256 equals the
+    one it printed (gap 107). It then runs `alembic upgrade head`, asserts the revision is head, runs
+    `ghactivity sync --max-minutes 300` and `ghactivity verify --max-minutes 40 --report
+    verify.json`, runs `ghactivity snapshot --after-run N --sync-exit C --verify-report verify.json`
+    with C the sync's exit code, and hands the snapshot and manifest to `publish` as a workflow
     artifact, with the sync and verify exit codes as job outputs. The job fails when
-    `verify --db-only` halts, sync exits 1, or `snapshot` refuses the verify report.
+    `verify --db-only` halts, the file's SHA-256 differs, sync exits 1, or `snapshot` refuses.
   - `publish` (`needs: sync`; `permissions: contents: write`; no App secret, no project code, no
     PyPI dependencies) runs when D25's condition holds. It accepts only artifact files whose names
     match `^github_activity-[0-9]{8}T[0-9]{6}Z\.(db\.gz|manifest\.json)$` and reads only the
@@ -1118,14 +1131,16 @@ Workflow `.github/workflows/sync.yml`:
   dependencies (Step 6a). The App key is readable by the sync job's dependencies, so the App stays
   read-only and its key rotatable. The workflow's own `GITHUB_TOKEN` (`contents: write`) is used
   only in `publish`.
-- Snapshots: `ghactivity snapshot --out DIR [--run-id ID] [--sync-run ID] [--verify-report PATH]`
-  writes the copy with `VACUUM INTO`, checks its header for rollback-journal mode (the check
-  `scripts/check_db_journal.py` makes), gzips it, and writes the manifest, in the workflow and for
-  6b's first snapshot (`run_id` null). Names are `github_activity-<T>.db.gz` and
-  `github_activity-<T>.manifest.json`, with `T` as `YYYYMMDDTHHMMSSZ`, because GitHub renames asset
-  names that contain special characters. The latest snapshot is the newest `T` whose two assets are
-  both in state `uploaded`; `verify --db-only` on that pair decides, and a mismatch halts, with no
-  fallback to an older pair. The manifest records the run id, code SHA, the `tracking.toml` digest
+- Snapshots: `ghactivity snapshot --out DIR [--run-id ID]` with either `--after-run N --sync-exit C`
+  or `--sync-run ID` (exactly one of the two; another combination is a usage error, exit 1), and
+  `[--verify-report PATH]`, writes the copy with `VACUUM INTO`, checks its header for
+  rollback-journal mode (the check `scripts/check_db_journal.py` makes), gzips it, and writes the
+  manifest, in the workflow and for 6b's first snapshot (`run_id` null). Names are
+  `github_activity-<T>.db.gz` and `github_activity-<T>.manifest.json`, with `T` as
+  `YYYYMMDDTHHMMSSZ`, because GitHub renames asset names that contain special characters. The latest
+  snapshot is the newest `T` whose two assets are both in state `uploaded`; `verify --db-only` on
+  that pair decides, and a mismatch halts, with no fallback to an older pair. The manifest records
+  `actions_run_id`, `sync_run_id`, `sync_finished_at`, the code SHA, the `tracking.toml` digest
   (`sync_runs.config_sha256`), migration head,
   `schema_version`, coverage floor, `bootstrap`, per-repository PR and issue counts, per kind the
   number of rows whose `hydration_version` differs from the code's, the sync exit code, verify's
@@ -1137,10 +1152,12 @@ Workflow `.github/workflows/sync.yml`:
   workflow, `snapshot --after-run N --sync-exit C` takes the highest `sync_runs` id the job recorded
   before the sync (0 for a bootstrap) and the sync's exit code, and exits 1 unless exactly one
   `sync_runs` row is newer than N, that row is closed with exit code C, and it is the
-  `last_run_id` of every tracked repository's `repo_sync_state` row (the workflow's sync has no
-  `--repo`), so a job whose sync did not run cannot republish the old file (gap 107). For 6b's
-  first snapshot, `--sync-run ID` names Step 5's last run instead. The manifest records that run's
-  id and `finished_at`.
+  `last_run_id` of the stored row of every entry in the `tracking.toml` that run read (matched as
+  5.3 step 1 matches; an entry that never resolved has no row), so a job whose sync did not run
+  cannot republish the old file (gap 107). For 6b's first snapshot, `--sync-run ID` names Step 5's
+  last run instead, which must exist and be closed with exit 0 or 2, and supplies the manifest's
+  sync exit code. The manifest records that run as `sync_run_id` and `sync_finished_at`, and
+  `--run-id` as `actions_run_id`.
 - Uploads never use `--clobber`. Before each upload, `publish` deletes a same-name asset in any state
   other than `uploaded`. A same-name `uploaded` asset whose `digest` is `sha256:` followed by the
   expected SHA-256 (or, when `digest` is null, whose downloaded SHA-256 matches) is skipped, so a
@@ -1166,7 +1183,7 @@ Workflow `.github/workflows/sync.yml`:
   downloads the `.db.gz`, checks its SHA-256 against the manifest, decompresses it once, and
   replaces its local copy by writing a temporary file and renaming it over the old one, so no query
   reads a half-written file. It does this once per new snapshot (about every 6 hours, D11), not per
-  read, and queries its copy with SQLite. It treats a pair whose manifest `finished_at` is older
+  read, and queries its copy with SQLite. It treats a pair whose manifest `sync_finished_at` is older
   than 13 hours (D11's 6-hour interval, a job of up to 355 minutes, and an hour of schedule delay)
   as stale and says so wherever it shows the data, with the manifest's sync exit code and verify
   counts beside it: a stopped schedule runs nothing, so only a check outside this repository can
@@ -1878,15 +1895,15 @@ Prerequisite: Step 3b-2a-2 has merged.
 Scope: the sync rules D38 changes, with a migration that adds `sync_runs.refresh_failures`,
 `links_not_found`, and `repo_filter` and the `account_node_ids` table, and refuses a file whose
 `sync_runs` or `github_users` holds rows (5.1, gap 110; a development file is rebuilt by a sync):
-- a failed 24-hour refresh is counted (accounts), listed in the report, and makes the exit 2 (5.3
-  step 4, gap 98);
+- a failed 24-hour refresh is counted (accounts), listed in the report, and makes the exit 2
+  unless an account entry accepts it (5.3 step 4, gap 98);
 - a run that reaches its deadline exits 2, and the failures a batch made final before the deadline
   are recorded, the hydrator handing them over with the deadline (5.3 steps 6 and 8, gap 99);
 - a hydration that contradicts the run's own index (an alias `NOT_FOUND`, an item outside coverage,
   an `updatedAt` earlier than the index entry's) is requested once more alone by the engine and
   then is an item failure (5.3 steps 3, 4, and 5, gap 100);
-- an `accepted_failures` entry names the error class it accepts, and may name an account for a
-  refresh failure (5.5, gap 101);
+- an `accepted_failures` entry names the error class and the message it accepts, and may name an
+  account, by `github_id` or `node_id`, for a refresh failure (5.5, gap 101);
 - a PR whose link `totalCount` exceeds the 10 links the index carries is hydrated every run (5.3
   step 3, gap 102);
 - every node id a sighting, a lookup, or a commit link reports for a stored account is stored in
@@ -1905,30 +1922,43 @@ Scope: the sync rules D38 changes, with a migration that adds `sync_runs.refresh
 - the data dictionary describes the head-repository, milestone, and team names as of
   `hydrated_at` (gap 108);
 - the fixtures these rules break: the scenario model renders `x-ratelimit-*` headers on REST units
-  and the repository `databaseId` on index pages, and every test configuration gains
-  `[automation]`.
+  and the repository `databaseId` on index pages; every test configuration gains `[automation]`;
+  every `accepted_failures` entry in the tests and in the packaged file's comment gains `error` and
+  `message`; `tests/test_cli_sync_report.py` follows the account and message forms.
 
 Tests: each rule with planted inputs on both sides: a refresh request that fails and one that
-succeeds, a refresh answer with another `databaseId`, and an accepted account entry; a run that
+succeeds, a refresh answer with another `databaseId`, an accepted account entry (exit 0) by
+`github_id` and by `node_id`, and an account entry the refresh did not reach, not reported as not
+having failed; a run that
 finishes before its deadline (exit 0) and one whose deadline stops hydration, the refresh, or both
 (exit 2); a deadline inside a batch after one item's failure became final, which is recorded while
 the rest wait in `sync_pending`; a `NOT_FOUND` alias for a number the index listed that the retry
 clears and one it does not, then a later run whose index omits the number and whose step 7 removes
-the item and its failure; a hydration outside coverage; a hydrated `updatedAt` earlier than, equal
+the item and its failure; a hydration outside coverage that the retry clears and one it does
+not; a deadline that refuses the retry, leaving the item in `sync_pending`; a hydrated `updatedAt`
+earlier than, equal
 to, and later than the index entry's, the earlier one cleared by the retry and not; an accepted
-entry whose class matches, one whose class differs, one whose `message` differs, and a loader
-refusing an unknown class; PRs with 10 and with 11 links; a second node id from a sighting, a
-lookup, and a REST compare link stored and seen again, and a node id in `account_node_ids` reported
-under another `databaseId` failing the item; a commit-link lookup answered `NOT_FOUND` counted; each
-source check accepting the valid shape and refusing the planted one, and a 502 without rate-limit
-headers still retried; `code_version` outside a checkout, in a clean and a dirty checkout, and with
-`git status`, `ls-files`, and `rev-parse` failing or timing out; a close given an outcome with no
-stored row leaving the row `running`; a `stamp` to another revision refused and one at head
-accepted; the migration refusing a populated file. Each is a regression test that fails against the
-parent's code. The tests that pinned the old behaviour change with the rule they pinned: in
-`tests/sync/test_engine.py` the failed-refresh, deadline (hydration and refresh), gone-item,
-leaving-coverage, and 11-link tests; in `tests/sync/test_runs.py` the skipped-close and
-`code_version` tests; and in `tests/test_tracking_config.py` the defaults without `[automation]`.
+entry whose class and message match, one whose class differs, one whose message differs, and a
+loader refusing an unknown class and an entry without `message`; PRs with 10 and with 11 links; a
+second node id from a sighting, a lookup, and a REST compare link stored and seen again, and a node
+id in `account_node_ids` reported under another `databaseId` failing the item; a commit-link lookup
+answered `NOT_FOUND` counted; each source check accepting the valid shape and refusing the planted
+one, and a 502 without rate-limit headers still retried; `code_version` outside any `.git` (the
+package version), in a checkout with the package untracked (the package version), in a clean and a
+dirty checkout (the commit, and `-dirty`), and with `git status`, `ls-files`, and `rev-parse`
+failing or timing out inside a checkout (`-unknown`); a close given an outcome with no stored row
+leaving the row `running`; a `stamp` to another revision refused with nothing committed and one at
+head accepted; the migration refusing a populated file; a connection whose `foreign_keys` reads back
+0 refused; the wheel check failing when the packaged `tracking.toml` bytes differ while its
+repository names match; a record at the log file's level reaching it and one below not;
+`repo_filter` written for a `--repo` run and null without one; a file without `[automation]`
+refused; and the report listing failed refreshes and commit links answered `NOT_FOUND`. Each is a
+regression test that fails against the parent's code. The tests that pinned the old behaviour change
+with the rule they pinned: in `tests/sync/test_engine.py` the failed-refresh, deadline (hydration
+and refresh), gone-item, leaving-coverage, and 11-link tests; in `tests/sync/test_runs.py` the
+skipped-close and `code_version` tests; in `tests/test_tracking_config.py` the defaults without
+`[automation]` and the accepted-failure entries; and the deadline-inside-a-batch test, whose
+failures are now recorded.
 
 Acceptance: an adversarial review of the change, by reviewers who did not write it, finds no rule of
 this step without a test that targets it; CI passes on the exact PR head.
@@ -2023,6 +2053,7 @@ planted in the lookup's response at a second and at half a second before the bou
 counted, a stored link no longer indexed on a PR whose index lists every link matched only by an
 event naming it, a filtered page whose `totalCount` differs from its entries, a lookup whose entries
 differ from its `filteredCount` after its retry and one whose response the typed models reject,
+a known failure whose class an entry accepts but whose message differs failing `--exact`,
 each an error, one that differs once and matches on its retry, classed by its events, and a
 lookup
 spanning two pages whose second page's `filteredCount` counts only the entries after its cursor
@@ -2175,8 +2206,8 @@ Prerequisite: a GitHub App with read access to Contents, Pull requests, Issues, 
 installed on the tracked repositories, with its app ID, private key, and installation ID stored as
 repository secrets.
 
-Scope: 6a merges `sync.yml` with `workflow_dispatch` only, adds `ghactivity snapshot` and
-`ghactivity verify --db-only` (5.4), and adds the
+Scope: 6a merges `sync.yml` with `workflow_dispatch` only, adds `ghactivity snapshot`,
+`ghactivity verify --db-only` (5.4), and `scripts/compare_reads.py` for 6b, and adds the
 `githubkit[auth-app]` extra to `pyproject.toml` and `uv.lock`. Its tests: `verify --db-only`
 accepting the gz and manifest `ghactivity snapshot` wrote, and halting with exit 1 on a tampered
 copy; `snapshot --verify-report` exiting 1 on a missing report, a truncated one, one of an unknown
@@ -2186,28 +2217,35 @@ unverified repositories (5.6); through
 minute ahead, a clock moved past it mid-run, and a second token request before the next API request
 (githubkit keeps a token until one minute before `expires_at`); and a 401 on an API request still
 exiting 1 with the run closed (5.3 step 4); `verify --db-only --out` writing the file and printing
-its SHA-256; `snapshot --after-run --sync-exit` refusing no newer row, two newer rows, a row closed
-with another exit code, and a tracked repository whose `last_run_id` is older (5.6); and a test
-that reads `sync.yml` and fails unless every `if:` that reads an exit-code output compares a quoted
-string and requires it to be non-empty. 6b creates release `db` and uploads the Step 5 database
-with its manifest (`ghactivity snapshot --sync-run` naming Step 5's last run, and
-`--verify-report` from Step 5's `verify --exact --report`) as the first snapshot. Before any App
-run writes to release `db`, 6b reads one sample with the App and with the maintainer's token back
-to back (team review requests, organization assignees, every resolve field, and each repository's
-index totals) and compares them, every column and child row; any difference blocks App runs that
-publish to `db`, and 6c, until it is explained or the permission is granted, and until then App
-runs publish only to `db-test` (gap 107). It creates release `db-test` the same way, holding
-snapshots prepared offline: the corrupted cases below, one with a `pr_files` row deleted (a verify
-error), one built at the revision before the last migration, and one holding an extra repository
-absent from `tracking.toml` (a sync exit 2). It then runs one normal manual run and one bootstrap
-run. 6c enables the schedule and stops tracking `github_activity.db`: it removes the file
-from the index, the `!/github_activity.db` exception from `.gitignore`, the `check-added-large-files`
-exclude, the `tracked-db-rollback-journal` and `tracked-db-no-sidecar` hooks, the D26 freeze
-check, and `alembic/env.py`'s refusal of the repository-root `github_activity.db` and of any file
-of that name (gap 73); replaces the tracked-file
-journal test with one on the snapshot `VACUUM INTO` writes; records the D20 WAL decision for the
-working file; and documents how to download the latest snapshot and the staleness rule 5.6 gives
-consumers.
+its SHA-256 and highest `sync_runs` id; `snapshot --after-run --sync-exit` refusing no newer row,
+two newer rows, a row closed with another exit code, and a configured entry's stored row whose
+`last_run_id` is older, and accepting a stored repository the run neither attempted nor marked
+(5.6); `snapshot --sync-run` refusing a missing or unclosed row, and neither form or both a usage
+error; the manifest carrying `sync_run_id`, `sync_finished_at`, `actions_run_id`, and the Step 4b
+compare counts; and a test that reads `sync.yml` and fails unless every `if:` that reads an
+exit-code output compares a quoted string and requires it to be non-empty, the job-level
+`DATABASE_URL` equals `verify --db-only`'s `--out`, the SHA-256 comparison and the recording of N
+come before `alembic upgrade head`, and `snapshot` is given `--after-run` and `--sync-exit`. 6b
+creates release `db` and uploads the Step 5 database with its manifest
+(`ghactivity snapshot --sync-run` naming Step 5's last run, and `--verify-report` from Step 5's
+`verify --exact --report`) as the first snapshot. Before any App run writes to release `db`, 6b
+compares the App's reads with the maintainer token's: a `workflow_dispatch` run with
+`release: db-test` syncs a sample of the repositories with the App, and at once a local run syncs
+the same repositories with the token into a fresh file; `scripts/compare_reads.py` compares the two
+files over the hydrated tables, every column and child row except those stamped from `Date` headers
+and the run ids. Any difference blocks App runs that publish to `db`, and 6c, until it is explained
+or the permission is granted (gap 107). It creates release `db-test` the same way, holding snapshots
+prepared offline: the corrupted cases below, one with a `pr_files` row deleted (a verify error), one
+built at the revision before the last migration, and one holding an extra repository absent from
+`tracking.toml` (a sync exit 2). Once the comparison shows no unexplained difference, it runs one
+normal manual run and one bootstrap run with `release: db`. 6c enables the schedule and stops
+tracking `github_activity.db`: it removes the file from the index, the `!/github_activity.db`
+exception from `.gitignore`, the `check-added-large-files` exclude, the
+`tracked-db-rollback-journal` and `tracked-db-no-sidecar` hooks, the D26 freeze check, and
+`alembic/env.py`'s refusal of the repository-root `github_activity.db` and of any file of that name
+(gap 73); replaces the tracked-file journal test with one on the snapshot `VACUUM INTO` writes;
+records the D20 WAL decision for the working file; and documents how to download the latest snapshot
+and the staleness rule 5.6 gives consumers.
 
 Acceptance: two consecutive scheduled runs publish, and their manifests list drift, pending, and
 failure counts; the bootstrap run publishes, and the next scheduled run starts from its snapshot; a
@@ -2215,7 +2253,9 @@ run makes requests more than 60 minutes after its first installation-token mint,
 records at least two mints; against release `db-test`, the snapshot one migration behind head
 upgrades and publishes, the snapshot with an untracked repository publishes and the workflow is
 marked failed, the snapshot with a deleted `pr_files` row publishes nothing and the workflow is
-marked failed, a re-run of `publish` after an interrupted upload completes, and each of these halts
+marked failed, a re-run of `publish` after an interrupted upload completes, a run whose working
+file differs from the one `verify --db-only` printed fails before `alembic upgrade head`, and each
+of these halts
 without publishing: a truncated gz, a database changed after
 its manifest was written, a manifest whose counts disagree, and, each with a matching manifest, a gz
 that does not decompress, a database failing `integrity_check`, one with a foreign-key violation,
