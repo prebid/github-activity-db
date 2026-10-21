@@ -810,7 +810,10 @@ an interrupt, which is re-raised.
    file or one not at head, a refused claim, or a database error before the claim returns (the busy
    timeout included). `--repo` and the `--allow-deletions` repository must each name a configured
    repository, ignoring case; a single-valued option given twice (click keeps the last value
-   silently) and `--dry-run` with `--break-lock` are usage errors.
+   silently) and `--dry-run` with `--break-lock` are usage errors. A report that cannot be written
+   leaves the exit code the run's. When stderr cannot take what the process wrote to it (a closed
+   pipe or a full disk: a never-started run's error, or `-v` debug logs), the interpreter fails its
+   flush at exit and exits 120 instead; 120 is outside the codes D25 publishes on.
 
 ### 5.4 Verification
 

@@ -475,6 +475,8 @@ def test_a_stdout_file_that_cannot_grow_keeps_the_runs_exit_code(
     with report.open("wb") as file:
         file.truncate(limit)
     stdout = os.open(report, os.O_WRONLY | os.O_APPEND)
+    # macOS checks the limit against the descriptor's offset, not the append position.
+    os.lseek(stdout, 0, os.SEEK_END)
     try:
         child = _child(
             [],
@@ -490,6 +492,7 @@ def test_a_stdout_file_that_cannot_grow_keeps_the_runs_exit_code(
 
     assert child.returncode == code, child.stderr
     assert child.stderr == "The report could not be printed: OSError\n"
+    assert report.stat().st_size == limit
     assert _runs(migrated_database) == [{"id": 1, "status": "complete", "exit_code": code}]
 
 

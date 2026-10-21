@@ -106,13 +106,14 @@ failed, an index was incomplete, deletions halted, a stored repository is untrac
 was refused), and 1 on a fatal error. A command line that never starts its work (a usage error,
 an invalid `tracking.toml` or setting, a log file that cannot be opened, a missing token, a
 missing or unmigrated database file, or another sync holding the lock) exits 1, before any
-`sync_runs` row; with stderr a closed pipe, the interpreter fails to flush that error at exit and
-exits 120 instead. A first Ctrl-C closes the run `aborted` and exits 130; a second one during that
+`sync_runs` row. A first Ctrl-C closes the run `aborted` and exits 130; a second one during that
 close leaves the run `running`, for `--break-lock` or the stale-row rule (10 minutes past its
 `--max-minutes` deadline) to recover. A report that cannot be printed (stdout a closed pipe, with
 stderr on it too as with `2>&1 | head`, a write that fails as on a full disk, or an encoding
 without one of its characters) leaves a line on stderr where stderr can take it, and the exit code
-is the run's.
+is the run's. When stderr cannot take what the process wrote to it (a closed pipe or a full disk:
+the error of a command line that never starts, or `-v` debug logs), the interpreter fails its
+flush at exit and exits 120 instead.
 
 ### Code Quality
 
