@@ -40,6 +40,15 @@ uv run pytest                      # CI also runs Python 3.12, `alembic check`, 
 | [Architecture](docs/architecture.md), [Data Model](docs/data-model.md) | History: the pipeline and schema Step 3a removed, kept until Step 7 |
 | [Roadmap](docs/roadmap.md) | History of earlier phases; superseded by the redesign plan |
 
+## Test Evidence
+
+Nothing is planted, seeded, or tampered, and there is no mutation testing, under any name
+(redesign plan D39): no test, review, or acceptance changes a copy of the code, a test, the plan, a
+database, or a file to see whether something catches the change, or measures how many such
+changes are found. Tests use recorded GitHub responses, stubs of what GitHub or the environment
+can send, and databases and files the project's own code wrote, and assert exact results
+([Testing](docs/testing.md)).
+
 ## Current Scope
 
 **Implemented:**

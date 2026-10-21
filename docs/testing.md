@@ -10,9 +10,15 @@ How the test suite is built and what it counts as evidence. The plan of record i
 - **Real components, faked boundaries.** GitHub is the only fake: the real `GitHubSource` runs
   over `httpx.MockTransport`, answering from responses recorded from public repositories.
   Databases are real SQLite files built by `alembic upgrade head`.
-- **Direct evidence.** A check is tested with planted inputs on both sides of the boundary it
-  states, tampered databases and artifacts, and a positive control showing it sees what it
-  checks; a fix comes with a regression test that fails against the parent commit's code.
+- **Direct evidence, nothing planted** (redesign plan D39). A test's inputs are GitHub's recorded
+  responses, stubs of what GitHub or the environment can send, calls and configuration the code
+  must refuse, and databases and files the project's own code wrote; it asserts the exact result.
+  No test changes a copy of the code, a test, a database, or a file to see whether a check catches
+  it, and none measures how many such changes are caught: there is no mutation testing, under any
+  name. A check that only a defect of this code could fail is tested on its passing side, with the
+  exact count of what it compared. A fix comes with a regression test that fails against the parent
+  commit's code. Tests merged before D39 that change a copy of a database or a file are replaced in
+  Step 7.
 - **No skipped tests** (D22). CI runs `scripts/check_junit.py --max-skipped 0`, which fails a run
   where any test was skipped (pytest reports `xfail` as skipped) or none ran.
 - **Time.** Source tests pass a `FakeClock`, so waits and retries are asserted, never slept.
