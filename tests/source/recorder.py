@@ -32,6 +32,7 @@ from pathlib import Path
 
 import httpx
 
+from github_activity_db.cli.sync import report_lines
 from github_activity_db.source import Clock, Failed, GitHubSource, RepositoryRecord, SystemClock
 from github_activity_db.sync.engine import SyncOptions, sync
 from github_activity_db.tracking import TrackingConfig, TrackingConfigFile, load_tracking_config
@@ -262,7 +263,8 @@ async def record_first_sync(
     if refused:
         raise PrivateRepository(refused[0])
     if report.exit_code != 0 or report.failures:
-        raise RecordingFailed(f"first sync exited {report.exit_code}: {report.failures}")
+        lines = "; ".join(report_lines(report, seconds=0))
+        raise RecordingFailed(f"first sync exited {report.exit_code}: {lines}")
     print(
         f"first sync: {report.items_hydrated} items, {report.graphql_points} GraphQL points",
         file=sys.stderr,

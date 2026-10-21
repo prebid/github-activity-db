@@ -346,10 +346,12 @@ def _child(
     plant: str = "",
     stdout: int = subprocess.PIPE,
     stderr: int = subprocess.PIPE,
+    closed: tuple[int, ...] = (),
 ) -> subprocess.CompletedProcess[str]:
     """Run the installed package in an isolated interpreter (``-I``: no user site, no
     PYTHONPATH, no working directory on the path), over the recordings; its stdout and stderr
-    are captured unless ``stdout`` or ``stderr`` names a file descriptor."""
+    are captured unless ``stdout`` or ``stderr`` names a file descriptor, and the descriptors in
+    ``closed`` are closed before it starts."""
     base = {key: value for key, value in os.environ.items() if key in ("PATH", "HOME")}
     env = {
         **base,
@@ -358,6 +360,11 @@ def _child(
         "TRACKING_CONFIG_PATH": str(tracking),
     }
     script = CHILD.format(root=str(ROOT), plant=plant, args=["sync", *args])
+
+    def close() -> None:
+        for fd in closed:
+            os.close(fd)
+
     return subprocess.run(
         [sys.executable, "-I", "-c", script],
         stdout=stdout,
@@ -367,6 +374,7 @@ def _child(
         cwd=cwd,
         timeout=120,
         check=False,
+        preexec_fn=close if closed else None,
     )
 
 
@@ -408,8 +416,7 @@ def test_a_closed_stdout_keeps_the_runs_exit_code(
         os.close(write)
 
     assert child.returncode == code, child.stderr
-    assert child.stderr.splitlines()[-1] == "The report could not be printed: BrokenPipeError"
-    assert "Traceback" not in child.stderr and "Exception ignored" not in child.stderr
+    assert child.stderr == "The report could not be printed: BrokenPipeError\n"
     assert _runs(migrated_database) == [{"id": 1, "status": "complete", "exit_code": code}]
 
 
@@ -438,30 +445,24 @@ def test_closed_stdout_and_stderr_keep_the_runs_exit_code(
     assert _runs(migrated_database) == [{"id": 1, "status": "complete", "exit_code": code}]
 
 
-@pytest.mark.parametrize("missing", [False, True], ids=["usage error", "missing database"])
-def test_a_command_line_that_never_starts_exits_1_with_its_output_closed(
-    migrated_database: Path, tracking: Path, tmp_path: Path, missing: bool
+@pytest.mark.parametrize(("plant", "code"), [("", 0), (FAIL_ONE_ITEM, 2)], ids=["0", "2"])
+def test_a_stdout_closed_at_start_keeps_the_runs_exit_code(
+    migrated_database: Path, tracking: Path, tmp_path: Path, plant: str, code: int
 ) -> None:
-    """With stdout and stderr closed pipes, a usage error and a missing database file exit 1, as
-    with a terminal; the error they could not print does not make it 120."""
-    database = tmp_path / "missing.db" if missing else migrated_database
-    read, write = os.pipe()
-    os.close(read)
-    try:
-        child = _child(
-            [] if missing else ["--dry-run", "--break-lock"],
-            database=database,
-            tracking=tracking,
-            cwd=tmp_path,
-            stdout=write,
-            stderr=write,
-        )
-    finally:
-        os.close(write)
+    """``ghactivity sync >&-``: with fd 1 closed when the interpreter starts, ``sys.stdout`` is
+    None and the report goes nowhere; the command exits with the run's code."""
+    child = _child(
+        [],
+        database=migrated_database,
+        tracking=tracking,
+        cwd=tmp_path,
+        plant=plant,
+        closed=(1,),
+    )
 
-    assert child.returncode == 1
-    assert database.exists() is not missing
-    assert missing or _runs(migrated_database) == []
+    assert child.returncode == code, child.stderr
+    assert child.stderr == ""
+    assert _runs(migrated_database) == [{"id": 1, "status": "complete", "exit_code": code}]
 
 
 def test_a_killed_run_stays_running_and_a_resume_keeps_its_writes(
@@ -504,8 +505,9 @@ def test_a_killed_run_stays_running_and_a_resume_keeps_its_writes(
     ) == [{"items_planned": 8, "items_hydrated": 8}]
 
 
-# A child started with SIGINT ignored (a suite run under nohup or with &) inherits that; Python
-# then installs no handler of its own, so the plant installs Python's default, as at a terminal.
+# A child started with SIGINT ignored (a suite started with & from a non-interactive shell)
+# inherits that; Python then installs no handler of its own, so the plant installs Python's
+# default, as at a terminal.
 INTERRUPT_AFTER_THIRD_ITEM = """\
 import os, signal
 signal.signal(signal.SIGINT, signal.default_int_handler)

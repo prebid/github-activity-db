@@ -108,9 +108,9 @@ an invalid `tracking.toml` or setting, a log file that cannot be opened, a missi
 missing or unmigrated database file, or another sync holding the lock) exits 1, before any
 `sync_runs` row. A first Ctrl-C closes the run `aborted` and exits 130; a second one during that
 close leaves the run `running`, for `--break-lock` or the stale-row rule (10 minutes past its
-`--max-minutes` deadline) to recover. A report that cannot be printed (stdout a closed pipe, or an
-encoding without one of its characters) leaves a line on stderr, and the exit code is the run's;
-output that cannot be written at all (stdout and stderr closed pipes) changes no exit code either.
+`--max-minutes` deadline) to recover. A report that cannot be printed (stdout a closed pipe, with
+stderr on it too as with `2>&1 | head`, or an encoding without one of its characters) leaves a
+line on stderr where stderr can take it, and the exit code is the run's.
 
 ### Code Quality
 

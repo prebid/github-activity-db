@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import contextlib
-import os
 import sys
 from pathlib import Path
 from typing import Annotated, Any, NoReturn
@@ -30,43 +28,24 @@ class ExitCodeGroup(TyperGroup):
     click exits 2 on a usage error, the code a scheduled run publishes on (D25). Usage errors, an
     invalid tracking.toml, invalid settings, and a log file that cannot be set up exit 1 here; a
     command's own exit code passes through, and an interrupt exits 130 (typer turns
-    KeyboardInterrupt into it before click's Abort). Output that cannot be written (stdout or
-    stderr a closed pipe) never changes the exit code. CliRunner tests and the installed script
+    KeyboardInterrupt into it before click's Abort). CliRunner tests and the installed script
     both run this ``main``.
     """
 
     def main(self, *args: Any, **kwargs: Any) -> NoReturn:
         kwargs["standalone_mode"] = False
         try:
-            try:
-                code = super().main(*args, **kwargs)
-            except click.ClickException as e:
-                rich_utils.rich_format_error(e)
-                code = 1
-            except click.Abort:
-                rich_utils.rich_abort_error()
-                code = 1
-            except TrackingConfigError as e:
-                error_console.print(f"[red]Error:[/red] {escape(str(e))}", highlight=False)
-                code = 1
-        finally:
-            _discard_unwritable_output()
+            code = super().main(*args, **kwargs)
+        except click.ClickException as e:
+            rich_utils.rich_format_error(e)
+            sys.exit(1)
+        except click.Abort:
+            rich_utils.rich_abort_error()
+            sys.exit(1)
+        except TrackingConfigError as e:
+            error_console.print(f"[red]Error:[/red] {escape(str(e))}", highlight=False)
+            sys.exit(1)
         sys.exit(code if isinstance(code, int) else 0)
-
-
-def _discard_unwritable_output() -> None:
-    """Flush stdout and stderr, pointing one that cannot take its buffered output (a closed
-    pipe) at /dev/null: the interpreter flushes both again at exit, and a failure there would
-    replace the exit code with 120."""
-    for stream in (sys.stdout, sys.stderr):
-        try:
-            stream.flush()
-        except (OSError, ValueError):
-            # ValueError: the stream is closed, or has no file descriptor to point elsewhere.
-            with contextlib.suppress(OSError, ValueError):
-                devnull = os.open(os.devnull, os.O_WRONLY)
-                os.dup2(devnull, stream.fileno())
-                os.close(devnull)
 
 
 app = typer.Typer(

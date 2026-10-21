@@ -31,8 +31,9 @@ async def test_recording_the_replay_gives_back_every_unit() -> None:
     replay = Replay.from_fixtures()
     units = await record("test-token", inner=replay.transport())
     assert replay.problems == []
+    requests = {(s.operation, json.dumps(s.variables, sort_keys=True), s.path) for s in replay.seen}
+    assert len(requests) == len(replay.seen), "a request was sent twice"
     produced = {(unit.kind, json.dumps(unit.key, sort_keys=True)): unit for unit in units}
-    assert len(produced) == len(units), "a unit was recorded twice"
     assert produced.keys() == replay.units.keys()
     for key, unit in produced.items():
         original = replay.units[key]
@@ -286,7 +287,6 @@ async def test_recording_a_first_sync_of_its_recordings_gives_them_back() -> Non
         "UserLookup",
     ]
     produced = {(unit.kind, json.dumps(unit.key, sort_keys=True)): unit for unit in units}
-    assert len(units) == len(produced)
     assert produced.keys() == replay.units.keys()
     for key, unit in produced.items():
         original = replay.units[key]
@@ -309,17 +309,39 @@ async def test_a_private_repository_stops_a_first_sync_after_its_resolve() -> No
     assert [seen.operation for seen in replay.seen] == ["Resolve"]
 
 
-async def test_a_retried_item_records_one_unit_per_file() -> None:
-    """The batch's first alias fails once and its item's solo retry answers it: the recording
-    keeps the retry's unit, one per file, and the run exits 0."""
-    replay = Replay.from_directory(FIRST_SYNC)
+@pytest.mark.parametrize("first_sync", [False, True], ids=["record", "first sync"])
+async def test_a_retried_item_records_one_unit_per_file(first_sync: bool) -> None:
+    """The first batch's first alias fails once and its item's solo retry answers it: the
+    recording holds the replay's units, one per file, the retry's answer kept."""
+    replay = Replay.from_directory(FIRST_SYNC) if first_sync else Replay.from_fixtures()
     replay.modify(_batch_alias_error, when=lambda seen: seen.operation == "PullRequestBatch")
+    if first_sync:
+        owner, name = FIRST_SYNC_REPOSITORY
+        units = await record_first_sync("test-token", owner, name, inner=replay.transport())
+    else:
+        units = await record("test-token", inner=replay.transport())
+    batches = [seen.numbers for seen in replay.seen if seen.operation == "PullRequestBatch"]
+    assert batches[1] == batches[0][:1]  # the solo retry
+    assert len(units) == len(replay.units)
+    produced = {(unit.kind, json.dumps(unit.key, sort_keys=True)): unit for unit in units}
+    original = replay.units
+    assert [
+        key
+        for key, unit in produced.items()
+        if (unit.data, unit.errors) != (original[key].data, original[key].errors)
+    ] == []
+
+
+async def test_a_first_sync_that_fails_names_why() -> None:
+    """A run that fails before its index (every request answered 401) raises with its report."""
+    replay = Replay.from_directory(FIRST_SYNC)
+    replay.fault(
+        lambda request: httpx.Response(401, json={"message": "Bad credentials"}), times=None
+    )
     owner, name = FIRST_SYNC_REPOSITORY
-    units = await record_first_sync("test-token", owner, name, inner=replay.transport())
-    assert [seen.operation for seen in replay.seen].count("PullRequestBatch") == 2
-    assert len({unit.path() for unit in units}) == len(units) == len(replay.units)
-    pulls = [unit for unit in units if unit.kind == "pull_request"]
-    assert [(unit.data is None, unit.errors) for unit in pulls] == [(False, [])] * len(pulls)
+    with pytest.raises(RecordingFailed, match=r"first sync exited 1: .*401"):
+        await record_first_sync("test-token", owner, name, inner=replay.transport())
+    assert [seen.operation for seen in replay.seen] == ["Resolve"]
 
 
 async def test_a_first_sync_that_does_not_exit_0_stops_the_recording() -> None:

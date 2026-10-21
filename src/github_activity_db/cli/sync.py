@@ -119,8 +119,7 @@ def sync(
     except (UnicodeEncodeError, OSError) as e:
         # The run is recorded; an output that cannot take the report (an encoding without one of
         # its characters, a closed pipe) never changes the exit code.
-        with contextlib.suppress(Exception):
-            sys.stderr.write(f"The report could not be printed: {type(e).__name__}\n")
+        _note(f"The report could not be printed: {type(e).__name__}")
     raise typer.Exit(report.exit_code)
 
 
@@ -159,16 +158,39 @@ class _ReportConsole(Console):
     the run's code."""
 
     def on_broken_pipe(self) -> None:
-        # As Rich does: print nothing more, and point stdout at /dev/null so that the
-        # interpreter's last flush of what is still buffered cannot fail at exit.
+        # As Rich does: print nothing more, and point stdout at /dev/null.
         self.quiet = True
-        devnull = os.open(os.devnull, os.O_WRONLY)
-        os.dup2(devnull, sys.stdout.fileno())
-        os.close(devnull)
+        _point_at_devnull(sys.stdout.fileno())
         raise BrokenPipeError(errno.EPIPE, os.strerror(errno.EPIPE))
 
 
 console = _ReportConsole()
+
+
+def _note(text: str) -> None:
+    """``text`` on stderr. A stderr that cannot take it (the closed pipe stdout is on, as with
+    ``2>&1 | head``) is pointed at /dev/null too, and a missing one (fd 2 closed when the
+    interpreter started) is skipped."""
+    stream = sys.stderr
+    if stream is None:
+        return
+    try:
+        stream.write(text + "\n")
+        stream.flush()
+    except (OSError, ValueError):
+        with contextlib.suppress(OSError, ValueError):
+            _point_at_devnull(stream.fileno())
+
+
+def _point_at_devnull(fd: int) -> None:
+    """Point ``fd`` at /dev/null: the interpreter flushes stdout and stderr again at exit, and a
+    failure there, on what a closed pipe left buffered, would exit 120 instead of the run's
+    code."""
+    devnull = os.open(os.devnull, os.O_WRONLY)
+    try:
+        os.dup2(devnull, fd)
+    finally:
+        os.close(devnull)
 
 
 def print_report(
