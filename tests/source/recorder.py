@@ -236,7 +236,8 @@ async def record_first_sync(
         f"first sync: {report.items_hydrated} items, {report.graphql_points} GraphQL points",
         file=sys.stderr,
     )
-    return recording.units
+    # The resolve before the sync and the sync's own record one unit; keep the later.
+    return list({unit.path(): unit for unit in recording.units}.values())
 
 
 def write_units(units: list[Unit], directory: Path) -> int:

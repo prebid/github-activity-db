@@ -16,7 +16,7 @@ from typing import Annotated
 
 import click
 import typer
-from rich.markup import escape
+from rich.console import Console
 
 import github_activity_db
 from github_activity_db.cli import common
@@ -111,9 +111,7 @@ def sync(
         ),
         error_prefix="Sync did not start",
     )
-    for line in report_lines(report, seconds=time.monotonic() - started, break_lock=break_lock):
-        # Markup is the report's own; GitHub's text is escaped, and :name: is not an emoji.
-        console.print(line, highlight=False, emoji=False)
+    print_report(console, report, seconds=time.monotonic() - started, break_lock=break_lock)
     raise typer.Exit(report.exit_code)
 
 
@@ -146,10 +144,21 @@ def _configured(names: list[str], config: TrackingConfig) -> tuple[TrackedReposi
 # --------------------------------------------------------------------------------------------
 # The report
 # --------------------------------------------------------------------------------------------
+def print_report(
+    console: Console, report: SyncReport, *, seconds: float, break_lock: bool = False
+) -> None:
+    """Print the report as plain text: no markup, emoji, highlighting, or wrapping, so GitHub's
+    text (labels, names, error messages) is printed as written, on one line each."""
+    for line in report_lines(report, seconds=seconds, break_lock=break_lock):
+        style = "red" if line.startswith("Error: ") else None
+        console.print(line, style=style, markup=False, emoji=False, highlight=False, soft_wrap=True)
+
+
 def report_lines(report: SyncReport, *, seconds: float, break_lock: bool = False) -> Iterator[str]:
-    """The report as console lines, GitHub's text escaped. Each repository's line names step 1's
-    updates; a dry run also lists each planned hydration with its reasons, each in-place update,
-    and each delete candidate (5.3 step 8)."""
+    """The report's lines. Each repository's line names step 1's updates to it (new, renamed,
+    tracked again, group, archived, default branch, labels); a dry run also lists each planned
+    hydration with its reasons, each in-place update, and each delete candidate (5.3 step 8).
+    Other repository fields the resolve reads are written without being listed."""
     if report.dry_run:
         yield f"Dry run: the run would exit {report.exit_code}"
     else:
@@ -160,7 +169,7 @@ def report_lines(report: SyncReport, *, seconds: float, break_lock: bool = False
         yield f"--break-lock marked run {run_id} aborted"
     if break_lock and report.run_id is not None and not report.broken:
         # 5.3: --break-lock with no blocking row proceeds and says so.
-        yield "--break-lock found no running sync to abort"
+        yield "--break-lock found no blocking run"
     deletions = {d.repository_github_id: d for d in report.deletions}
     for repository in report.repositories:
         yield _repository_line(repository)
@@ -176,94 +185,83 @@ def report_lines(report: SyncReport, *, seconds: float, break_lock: bool = False
             f"delete candidates {candidates}"
         )
         if decision is not None and decision.decision.halt_reason is not None:
-            yield f"  deletions halted: {escape(decision.decision.halt_reason)}"
+            yield f"  deletions halted: {decision.decision.halt_reason}"
         if not report.dry_run:
             continue
         for item in planned:
             reasons = ", ".join(sorted(reason.value for reason in item.reasons))
             pending = " (pending)" if item.pending else ""
-            yield f"  hydrate #{item.number}{pending}: {escape(reasons)}"
+            yield f"  hydrate #{item.number}{pending}: {reasons}"
         for update in updates:
             yield (
                 f"  update #{update.number}: is_draft {update.is_draft}, "
-                f"author_association {escape(update.author_association)}"
+                f"author_association {update.author_association}"
             )
         if decision is not None:
             for candidate in decision.candidates:
                 yield f"  delete #{candidate.number} (github_id {candidate.github_id})"
     for full_name in report.untracked:
-        yield f"Untracked: {escape(full_name)}"
+        yield f"Untracked: {full_name}"
     for pruned in report.pruned:
         verb = "Would prune" if report.dry_run else "Pruned"
-        yield f"{verb}: {escape(pruned.full_name)} ({pruned.items_deleted} items)"
+        yield f"{verb}: {pruned.full_name} ({pruned.items_deleted} items)"
     if report.prune_refused is not None:
-        yield f"Prune refused: {escape(report.prune_refused)}"
+        yield f"Prune refused: {report.prune_refused}"
     for failure in report.failures:
-        accepted = (
-            f" (accepted: {escape(failure.accepted.reason)})"
-            if failure.accepted is not None
-            else ""
-        )
-        yield (
-            f"Failed: {escape(failure.repository)}#{failure.number}: "
-            f"{escape(failure.error)}{accepted}"
-        )
+        accepted = f" (accepted: {failure.accepted.reason})" if failure.accepted is not None else ""
+        yield f"Failed: {failure.repository}#{failure.number}: {failure.error}{accepted}"
     for entry in report.accepted_not_failed:
-        yield (
-            f"Accepted failure did not fail: {escape(entry.repository)}#{entry.number} "
-            f"({escape(entry.reason)})"
-        )
+        yield (f"Accepted failure did not fail: {entry.repository}#{entry.number} ({entry.reason})")
     for message in report.refresh_failures:
-        yield f"Refresh failed: {escape(message)}"
+        yield f"Refresh failed: {message}"
     for second in report.second_node_ids:
         yield (
-            f"Account {second.github_id} reported as node {escape(second.reported_node_id)}, "
-            f"stored as {escape(second.stored_node_id)}"
+            f"Account {second.github_id} reported as node {second.reported_node_id}, "
+            f"stored as {second.stored_node_id}"
         )
     yield (
         f"Hydrated {report.items_hydrated} items; GraphQL points {report.graphql_points}, "
         f"REST calls {report.rest_calls}, {seconds:.0f} s"
     )
     if report.error is not None:
-        yield f"[red]Error:[/red] {escape(report.error)}"
+        yield f"Error: {report.error}"
 
 
 def _repository_line(repository: RepositoryReport) -> str:
-    name = escape(repository.configured.full_name)
+    name = repository.configured.full_name
     record, stored = repository.record, repository.stored
     if record is None:
         outcome = repository.outcome or "no outcome"
-        return f"{name}: {outcome}: {escape(repository.reason or 'not resolved')}"
+        return f"{name}: {outcome}: {repository.reason or 'not resolved'}"
     notes: list[str] = []
     if stored is None:
         notes.append("new")
     else:
         if stored.full_name != record.full_name:
-            notes.append(f"renamed from {escape(stored.full_name)}")
+            notes.append(f"renamed from {stored.full_name}")
         if not stored.is_tracked:
             notes.append("tracked again")
+        if stored.repo_group != repository.configured.group:
+            notes.append(f"group {stored.repo_group} -> {repository.configured.group}")
+        if stored.is_archived != record.is_archived:
+            notes.append("archived" if record.is_archived else "no longer archived")
         if stored.default_branch != record.default_branch:
-            notes.append(
-                f"default branch {escape(stored.default_branch)} -> {escape(record.default_branch)}"
-            )
+            notes.append(f"default branch {stored.default_branch} -> {record.default_branch}")
         notes.extend(_label_changes(dict(stored.labels), record))
     if record.full_name.lower() != repository.configured.full_name.lower():
-        notes.append(f"GitHub name {escape(record.full_name)}")
+        notes.append(f"GitHub name {record.full_name}")
     shown = f" ({', '.join(notes)})" if notes else ""
-    reason = f": {escape(repository.reason)}" if repository.reason else ""
+    reason = f": {repository.reason}" if repository.reason else ""
     return f"{name}: {repository.outcome or 'no outcome'}{shown}{reason}"
 
 
 def _label_changes(stored: dict[str, str], record: RepositoryRecord) -> Iterator[str]:
     """The labels step 1 adds, removes, and renames, by node id (D8)."""
     resolved = {label.node_id: label.name for label in record.labels}
-    added = sorted(resolved[node] for node in resolved.keys() - stored.keys())
-    removed = sorted(stored[node] for node in stored.keys() - resolved.keys())
-    renamed = sorted(
-        f"{stored[node]} -> {resolved[node]}"
-        for node in stored.keys() & resolved.keys()
-        if stored[node] != resolved[node]
-    )
-    for verb, names in (("label added", added), ("label removed", removed)):
-        yield from (f"{verb} {escape(name)}" for name in names)
-    yield from (f"label renamed {escape(change)}" for change in renamed)
+    for name in sorted(resolved[node] for node in resolved.keys() - stored.keys()):
+        yield f"label added {name}"
+    for name in sorted(stored[node] for node in stored.keys() - resolved.keys()):
+        yield f"label removed {name}"
+    for node in sorted(stored.keys() & resolved.keys(), key=lambda node: stored[node]):
+        if stored[node] != resolved[node]:
+            yield f"label renamed {stored[node]} -> {resolved[node]}"

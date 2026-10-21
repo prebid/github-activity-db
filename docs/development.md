@@ -106,7 +106,9 @@ failed, an index was incomplete, deletions halted, a stored repository is untrac
 was refused), and 1 on a fatal error. A command line that never starts its work (a usage error,
 an invalid `tracking.toml` or setting, a log file that cannot be opened, a missing token, a
 missing or unmigrated database file, or another sync holding the lock) exits 1, before any
-`sync_runs` row; an interrupt (Ctrl-C) closes the run `aborted` and exits 130.
+`sync_runs` row. A first Ctrl-C closes the run `aborted` and exits 130; a second one during that
+close leaves the run `running`, for `--break-lock` or the stale-row rule (10 minutes past its
+`--max-minutes` deadline) to recover.
 
 ### Code Quality
 

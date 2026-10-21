@@ -464,7 +464,7 @@ def test_break_lock_without_a_running_sync_proceeds_and_says_so(
     result = _sync("--break-lock")
 
     assert result.exit_code == 0, result.output
-    assert "--break-lock found no running sync to abort" in _plain(result.output)
+    assert "--break-lock found no blocking run" in _plain(result.output)
     assert _runs(migrated_database) == [{"id": 1, "status": "complete", "exit_code": 0}]
 
 
@@ -546,3 +546,24 @@ def test_repo_attempts_only_the_repositories_it_names(
     assert fetch(migrated_database, "SELECT full_name FROM repositories") == [
         {"full_name": f"{OWNER}/{NAME}"}
     ]
+
+
+def test_label_text_never_changes_the_exit_code(replay: Replay, migrated_database: Path) -> None:
+    """Brackets split across two label names, which markup would read as a closing tag, are
+    printed as written, and the command still exits with the run's code."""
+    first = _sync()
+    assert first.exit_code == 0, first.output
+
+    def renamed(body: dict[str, Any]) -> None:
+        nodes = body["data"]["repository"]["labels"]["nodes"]
+        for node, name in zip(nodes, ("x[/", "y]"), strict=False):
+            node["name"] = name
+
+    replay.modify(renamed, when=lambda seen: seen.operation == "Resolve")
+
+    result = _sync()
+
+    assert result.exit_code == 0, result.output
+    assert _runs(migrated_database)[-1] == {"id": 2, "status": "complete", "exit_code": 0}
+    output = _plain(result.output)
+    assert "-> x[/" in output and "-> y]" in output, output

@@ -13,8 +13,9 @@ from typing import Any
 import pytest
 from rich.console import Console
 
-from github_activity_db.cli.sync import report_lines
+from github_activity_db.cli.sync import print_report
 from github_activity_db.sync.engine import SyncReport
+from github_activity_db.sync.writer import Pruned, SecondNodeId
 from tests.source.scenario import Scenario
 from tests.sync.engine_support import World, project
 
@@ -25,11 +26,10 @@ def world(scenario: Scenario, migrated_database: Path) -> Iterator[World]:
 
 
 def rendered(report: SyncReport, **options: Any) -> list[str]:
-    """The report's lines as the command prints them, markup rendered, without styling."""
+    """The report's lines as the command prints them (``print_report``), on a console narrower
+    than most of them, so a wrapped line would show."""
     buffer = io.StringIO()
-    console = Console(file=buffer, width=400, color_system=None)
-    for line in report_lines(report, seconds=0, **options):
-        console.print(line, highlight=False, emoji=False)
+    print_report(Console(file=buffer, width=40, color_system=None), report, seconds=0, **options)
     return buffer.getvalue().splitlines()
 
 
@@ -48,8 +48,12 @@ async def test_a_dry_run_reports_step_1s_updates_and_its_plan(world: World) -> N
     labels["nodes"] = [label for label in labels["nodes"] if label["id"] != kept["id"]]
     labels["totalCount"] -= 1
     scenario.rename_label(repository, renamed["id"], "renamed")
-    scenario.add_label(repository, "[red]new[/red]")
-    scenario.add_label(repository, ":tada:")
+    # GitHub's text is printed as written: markup, an emoji code, brackets split across two
+    # names, and a trailing backslash.
+    for name in ("[red]new[/red]", ":tada:", "[a", "b]", "C:\\"):
+        scenario.add_label(repository, name)
+    repository.data["isArchived"] = True
+    world.tracked[0]["group"] = "Server"
     repository.pulls[1].set(isDraft=False)
     repository.pulls[2].add("comments", scenario.node("comments", by=author))
     repository.pulls[3].gone = True
@@ -59,8 +63,9 @@ async def test_a_dry_run_reports_step_1s_updates_and_its_plan(world: World) -> N
     lines = rendered(report)
     assert lines[0] == "Dry run: the run would exit 0"
     assert lines[1] == (
-        "prebid/Prebid.js: complete (renamed from prebid/Prebid.js, default branch master -> "
-        "main, label added :tada:, label added [red]new[/red], label removed old, label renamed "
+        "prebid/Prebid.js: complete (renamed from prebid/Prebid.js, group Client -> Server, "
+        "archived, default branch master -> main, label added :tada:, label added C:\\, label "
+        "added [a, label added [red]new[/red], label added b], label removed old, label renamed "
         "rename-me -> renamed, GitHub name prebid/Prebid2.js)"
     )
     assert lines[2] == "  planned 1, in-place updates 1, delete candidates 1"
@@ -125,7 +130,7 @@ async def test_a_run_reports_failures_refusals_and_its_error(world: World) -> No
 
     lines = rendered(report, break_lock=True)
     assert lines[0] == f"Run {report.run_id}: complete, exit 2"
-    assert lines[1] == "--break-lock found no running sync to abort"
+    assert lines[1] == "--break-lock found no blocking run"
     assert (
         "prebid/missing: no outcome: RepositoryNotFound: prebid/missing: repository not found"
         in lines
@@ -154,12 +159,12 @@ def test_an_error_line_is_the_reports_own_markup_and_github_text_is_not() -> Non
         planned=(),
         in_place_updates=(),
         deletions=(),
-        pruned=(),
+        pruned=(Pruned(9, "prebid/gone", 3),),
         prune_refused=None,
         failures=(),
         accepted_not_failed=(),
-        second_node_ids=(),
         refresh_failures=("LookupConflict: node [y] answered for [z]",),
+        second_node_ids=(SecondNodeId(5, "U_stored", "U_[reported]"),),
         items_hydrated=0,
         reclaimed=(3,),
         error="UnexpectedResponse: [/broken] GitHub said :thumbsup:",
@@ -169,7 +174,9 @@ def test_an_error_line_is_the_reports_own_markup_and_github_text_is_not() -> Non
         "Run 7: failed, exit 1",
         "Reclaimed stale run 3 (marked aborted)",
         "Untracked: prebid/[x]:smile:",
+        "Pruned: prebid/gone (3 items)",
         "Refresh failed: LookupConflict: node [y] answered for [z]",
+        "Account 5 reported as node U_[reported], stored as U_stored",
         "Hydrated 0 items; GraphQL points 0, REST calls 0, 0 s",
         "Error: UnexpectedResponse: [/broken] GitHub said :thumbsup:",
     ]

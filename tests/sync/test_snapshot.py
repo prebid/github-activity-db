@@ -90,6 +90,8 @@ async def test_reads_every_stored_value_the_planner_compares(migrated_database: 
                 github_id=11,
                 full_name="prebid/Prebid.js",
                 is_tracked=True,
+                repo_group="Client",
+                is_archived=False,
                 default_branch="master",
                 labels=frozenset({("LA_9", "stale")}),
                 pull_requests=(
@@ -115,6 +117,8 @@ async def test_reads_every_stored_value_the_planner_compares(migrated_database: 
                 github_id=12,
                 full_name="prebid/go-gdpr",
                 is_tracked=False,
+                repo_group="Client",
+                is_archived=False,
                 default_branch="master",
                 labels=frozenset(),
                 pull_requests=(),

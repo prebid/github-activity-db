@@ -58,12 +58,15 @@ class StoredPullRequest:
 @dataclass(frozen=True, slots=True)
 class StoredRepository:
     """A stored repository with its items and its ``sync_failures`` and ``sync_pending`` rows;
-    its default branch and labels are what a dry run reports step 1 would change."""
+    its group, archive flag, default branch, and labels are what a dry run reports step 1 would
+    change."""
 
     row_id: int
     github_id: int
     full_name: str
     is_tracked: bool
+    repo_group: str
+    is_archived: bool
     default_branch: str
     labels: frozenset[LabelKey]
     pull_requests: tuple[StoredPullRequest, ...]
@@ -183,6 +186,8 @@ async def read_snapshot(connection: AsyncConnection) -> Snapshot:
                 Repository.github_id,
                 Repository.full_name,
                 Repository.is_tracked,
+                Repository.repo_group,
+                Repository.is_archived,
                 Repository.default_branch,
             ).order_by(Repository.id)
         )
@@ -194,6 +199,8 @@ async def read_snapshot(connection: AsyncConnection) -> Snapshot:
                 github_id=row.github_id,
                 full_name=row.full_name,
                 is_tracked=row.is_tracked,
+                repo_group=row.repo_group,
+                is_archived=row.is_archived,
                 default_branch=row.default_branch,
                 labels=frozenset(repository_labels[row.id]),
                 pull_requests=tuple(pull_requests[row.id]),
