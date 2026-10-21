@@ -88,7 +88,7 @@ Within scope the database collects and distinguishes data and never interprets i
 | D33 | `prebid-agent-skills` is never queried by an agent. Commands an agent runs (sync, verify, the REST sampler, the difference report, recordings, and `ghactivity github test`) name their repositories with `--repo` and leave it out; its rows enter the database through the scheduled App's workflow (Step 6) or a run the maintainer starts. Recordings come from public repositories only (Step 2). |
 | D34 | Decision of 2026-10-20 (the maintainer): wherever stored data must tell runs apart, a run is its `sync_runs` row id, stored with the data, never a clock reading and never state the writer or the engine keeps in memory, which neither a later run nor a reader of the file can see. `sync_failures.last_run_id` names the latest run in which the item failed, and `attempts` adds one only for a failure in another run, whatever the two runs' clocks read (5.1, gap 91). |
 | D35 | Engine decisions of 2026-10-20 (the maintainer): Step 3b-2a-2b is two pull requests, the scenario model and the engine with `--dry-run` (section 6). A run can stop at any point: every write is its own transaction and every close updates its row only while it is `running`, so whatever ends a run without its close leaves the row `running` for the stale-row rule or `--break-lock` to recover, and nothing shields a writer transaction from an interrupt (5.3, gap 93). The deadline is reached when a request or a wait is refused for it (5.3 step 4), and the engine hydrates and writes one batch at a time (5.3 step 6). An `AccountMissing` refusal is an item failure, so an engine defect still publishes (5.3 step 6, D25); two entries resolving to one repository fail only the later one (5.3 step 1, gap 92); and D27's exit 2 applies to runs without `--repo`. |
-| D36 | Verify decisions of 2026-10-21: Step 3b-2b is two pull requests, the REST sampler and then verify with the live acceptance (section 6). Verify writes nothing to the database and takes no lock: before any request it reads `sync_runs` and exits 1 while a row holds the lock by the claim's rule, so a stale or crashed run stays for the next claim or `sync --break-lock` (5.3). `--repo` limits verify to the repositories it names, as it limits a sync (D27). A verify that never starts writes no report; once it starts, `--report` is written on every exit, and one that cannot be written makes the exit 1, because Step 6a reads it; verify's printed output follows sync's rule (5.3 step 8). Every repository failure 5.3 gives a resolve, an index, or a hydration batch makes a repository unverified, and a verify that verifies no repository is fatal. verify reads each repository's stored rows before indexing it, and its report records its own points, REST calls, and time (5.4, gap 94). |
+| D36 | Verify decisions of 2026-10-21: Step 3b-2b is two pull requests, the REST sampler and then verify with the live acceptance (section 6). Verify writes nothing to the database and claims no run: before any request it reads `sync_runs` and exits 1 while a row holds the lock by the claim's rule, so a stale or crashed run stays for the next claim or `sync --break-lock` (5.3). `--repo` limits verify to the repositories it names, as it limits a sync (D27). A verify that never starts writes no report; once it starts, `--report` is written on every exit verify's own code handles, and one that cannot be written turns an exit 0 or 2 into 1, because Step 6a reads it, while an interrupt exits 130 either way; verify's printed output follows sync's rule (5.3 step 8). Every repository failure 5.3 gives a resolve, an index, or a hydration batch, and a repository error during a timeline lookup, makes a repository unverified, and a verify in which every repository it attempts is unverified, the deadline having stopped none, is fatal. verify reads each repository's stored rows in two statements before indexing it, and its report records its own points, REST calls, and time (5.4, gap 94). |
 
 ## 3. Coverage rule
 
@@ -221,7 +221,7 @@ Every gap found in the audit, and where it is resolved.
 | 93 | A cancel that lands inside a transaction on the writer's connection can leave the abandoned connection holding the write lock; the run's close then fails after the busy timeout and the row stays `running` (measured: a cancel during a slow `SELECT` 3 of 3, during a slow `INSERT` 0 of 3, among alternating short `SELECT`s and `INSERT`s 3 of 24; section 7, "Cancelled writer transaction") | Step 3b-2a-2b-2: accepted; the row is left as a crash leaves it, for the stale-row rule or `--break-lock` (5.3) |
 | 94 | 5.4 left verify's edges unstated: its lock check (the claim's rule runs only inside the claim, which writes); whether `--repo` limits the untracked repositories it reports; whether `--report` is written when verify stops before comparing or when the path cannot be written; the class of the resolve and index failures it did not list (not found, no default branch, a label list that fails its count, a number listed twice or out of creation order, a response the resolve or index rejects), beyond the three it did (a fetch that still fails, a second count mismatch, a resolve to another `github_id`), and of a repository error during a lookup; a verify that verifies no repository; when it reads the stored rows, which a sync that claims after its lock check can change; which events match a link difference GitHub reports only in the totals; and where its cost is recorded, since it writes no `sync_runs` row | Step 3b-2b-2 (5.4, D36) |
 | 95 | `timelineItems(since:)` keeps only items created after `since`, so a lookup passing the boundary would miss an event at it; GitHub's schema describes `filteredCount` as the count after applying `before` and `after`, and names neither `itemTypes` nor `since` | Step 3b-2b-2: `since` one second before the boundary, and `filteredCount` used as measured (5.8; section 7, "Timeline `since`") |
-| 96 | The REST sampler's lists have no stop rule (`Transport.rest_get` returns no `Link` header); the recorder's default mode and `--only documents` rebuild `recorded/` and drop the unit kinds they do not record; and its check that a repository is public, after the name list it refuses before any request, runs on a resolve, which a REST-only recording does not make | Step 3b-2b-1 for the sampler and its REST units, recorded in their own directory; Step 3b-2b-2 for the timeline units (5.8) |
+| 96 | The REST sampler's lists have no stop rule (`Transport.rest_get` returns no `Link` header); the recorder's default mode rebuilds `recorded/` from what it records, and `--only documents` drops every unit kind but the compare and rate-limit kinds it keeps; and its check that a repository is public, after the name list it refuses before any request, runs on a resolve, which a REST-only recording does not make | Step 3b-2b-1 for the sampler and its REST units, recorded in their own directory; Step 3b-2b-2 for the timeline units (5.8) |
 
 ## 5. Design
 
@@ -829,19 +829,22 @@ run" is `repo_sync_state.last_run_id` and the boundary is its `last_index_starte
 the 5.3 step 4 failure classes and retries. It covers the configured repositories and, without
 `--repo`, every stored untracked repository, which it reports as not synced without a request: a
 stored repository that no configured entry resolves to without failing 5.3 step 1 is untracked when
-its `is_tracked` is false, and, when every configured entry resolved, also when it is true, as a
-sync marks it (5.3 step 1). `--repo` limits verify to the repositories it names, each a configured
+its `is_tracked` is false, and, when every configured entry resolved without failing 5.3 step 1
+(to its stored `github_id` or to a new repository), also when it is true, as a sync marks it (5.3
+step 1). `--repo` limits verify to the repositories it names, each a configured
 repository, ignoring case, as it limits a sync (D27). Like
 `sync`, it exits 1 before any request unless the database is at the code's migration head and
 `user_version` equals `schema_version` (gap 74), and it uses no server-side cursor (gap 77); it
 also exits 1, naming the run, while a sync run holds the lock: before any request it reads
 `sync_runs` and stops when a row is `running` with a null `deadline_at` or one less than 10 minutes
 in the past, a deadline not yet reached included, the claim's rule (5.3). verify writes nothing to
-the database and takes no lock, so a stale row stays for the next claim to reclaim, and a crashed
+the database and claims no run, so a stale row stays for the next claim to reclaim, and a crashed
 run with a null `deadline_at` stops verify until a `sync --break-lock` run marks it `aborted` (D36).
-A sync can still claim after that check (gap 77), so for each repository verify reads its
-`repo_sync_state` row, then its stored items with their `sync_failures` and `sync_pending` rows,
-before the first request of its index, and the stored side is never newer than the fresh index.
+A sync can still claim after that check (gap 94), so for each repository, before the first request
+of its index, verify reads its `repo_sync_state` row with its `sync_pending` rows in one statement,
+then its stored items with their closing links and `sync_failures` rows in one statement. Each
+statement reads one consistent state (gap 77), and the stored side is never newer than the fresh
+index.
 It re-indexes and applies the coverage rule, then
 compares by `github_id` the stored set with the result (missing and extra items) and, for items in
 both, the stored `github_updated_at`, `state`, `is_draft`, `author_association`, and closing links
@@ -866,15 +869,17 @@ the first class that matches, in this order:
   its difference is drift only through `createdAt` or `updatedAt` (section 7, "Closing-link
   timeline events"). The index names at most 10 links, so a PR with more can differ in its totals
   alone; that difference is drift when the connected events at or after the boundary number at
-  least the total's increase, or the disconnected events at least its decrease. A PR's link
-  difference is drift only when each part of it is: each differing issue the index names by its
-  own event, and a difference in the totals by that count;
+  least the total's increase, or the disconnected events at least its decrease, every such event
+  counted, those that match a differing issue included. For a link difference with an earlier
+  `updatedAt`, the difference is drift only when each part of it is: each differing issue (indexed
+  and not stored, or stored and not indexed when the index lists every link) by an event whose
+  `subject` is that issue, and a difference in the totals by that count;
 - removed since sync: a stored item missing from the fresh index whose lookup by number returns
   `NOT_FOUND`, listed by number (the lookup is a hydration batch: `Gone` is removed since sync, a
-  hydrated PR an error; a repository error in the batch makes the repository unverified, which keeps
-  the classes its comparisons already gave, and the missing items it did not look up are unchecked);
+  hydrated PR an error);
 - unchecked: a differing item whose timeline lookup (5.8) or lookup by number still fails after the
-  retries, listed by number;
+  retries, or that a lookup had not answered when a repository error stopped it, those of the batch
+  the error ended included, listed by number;
 - error: anything else.
 
 Only an error fails verify. `verify --exact` also fails on not synced, pending, halted deletion,
@@ -885,8 +890,11 @@ resolve or index (not found, no default branch, a fetch that still fails after i
 response or GitHub error the resolve or index rejects, a label list that fails its count or names a
 label twice, paging without progress, a number listed twice or out of creation order, a second
 count mismatch), step 1's own checks (a resolve to a `github_id` other than its stored row's, a later
-entry resolving to an earlier entry's `github_id`, gap 92), and a repository error during a lookup by
-number or a timeline lookup (5.3 step 4). An unverified repository fails `--exact` and is reported,
+entry resolving to an earlier entry's `github_id`, gap 92, and another `is_tracked` stored repository
+holding the resolved `full_name`, ignoring case, checked as a dry run checks it, against the stored
+names and the names earlier entries resolved to, 5.1), and a repository error during a lookup by
+number or a timeline lookup (5.3 step 4), which keeps the classes the repository's comparisons
+already gave. An unverified repository fails `--exact` and is reported,
 without failing, otherwise; a verify in which every repository it attempts is unverified, and the
 deadline stopped none, is fatal (exit 1), as a sync is when no configured repository resolves (5.3
 step 1). A verify that reaches
@@ -904,7 +912,8 @@ because Step 6a reads it (5.6, D36); an interrupt exits 130 either way. The repo
 code and whether `--exact` was given;
 per class, the count of items and their numbers (an item whose differences take two classes counts
 in each); per repository, its `last_run_id`, boundary, per-class counts, and per-state counts;
-the unverified repositories with their reasons; and verify's GraphQL points and REST calls, counted
+for each closing-link difference, the issues it names and the stored and fresh totals; the
+unverified repositories with their reasons; and verify's GraphQL points and REST calls, counted
 by its source as a run's are (5.3 step 4), and the seconds from its start to the report's write,
 since verify writes no `sync_runs` row. A report verify prints that stdout cannot take leaves the
 exit code verify's, and stderr follows 5.3 step 8, 120 included.
@@ -1054,7 +1063,7 @@ Workflow `.github/workflows/sync.yml`:
   exit code, counts per class, and unverified repositories (from `--verify-report`; null without
   it), and the SHA-256. `snapshot` exits 1 when the report `--verify-report` names is missing or
   unreadable, or names a `last_run_id` other than the file's `repo_sync_state`, so a verify that
-  never started, which leaves no report or an earlier one (5.4), fails the job.
+  never started, which leaves no report or one from an earlier sync (5.4), fails the job.
 - Uploads never use `--clobber`. Before each upload, `publish` deletes a same-name asset in any state
   other than `uploaded`. A same-name `uploaded` asset whose `digest` is `sha256:` followed by the
   expected SHA-256 (or, when `digest` is null, whose downloaded SHA-256 matches) is skipped, so a
@@ -1264,19 +1273,20 @@ Verify's timeline lookup (Step 3b-2b-2) reads, for each differing PR, its ready-
 convert-to-draft, connected, and disconnected events at or after the repository's boundary. It
 passes `since` one second before the boundary and counts an entry only when its `createdAt` is at or
 after the boundary: `since` keeps only items created after it, the event times are whole seconds
-(section 7, "Timeline `since`"), and so is the boundary (5.3 step 2). It
-pages by `pageInfo.hasNextPage` and checks the entries it read against the first page's
-`filteredCount`, which applies `itemTypes` and `since` (measured; GitHub's schema describes it as
-the count after applying `before` and `after`, and names neither); a later page's `filteredCount`
-counts only
-the items after its cursor, and `totalCount` is neither filtered nor the number of entries GitHub
-returns (section 7, "Closing-link timeline events"). A lookup whose entries differ from that count
-is retried once alone, as an item error is (5.3 step 4), and then leaves its item unchecked (5.4).
-Its document, formula cost, and recordings are added here when it is written; the recorder adds
-them without changing the existing recordings, and its default mode and `--only documents` record
-them too, so a re-recording keeps them (gap 96). The document takes no `tests/query_versions.json`
-entry: verify stores nothing, so no `hydration_version` depends on it, and once it changes the
-replay fails with "re-record" on its recordings, whose stamp is the old query hash (Step 2).
+(section 7, "Timeline `since`"), and so is the boundary (5.3 step 2). It reads each PR through
+`repository(owner:, name:)` and `pullRequest(number:)`, so a null `repository` is the repository
+error 5.4 names. It pages by `pageInfo.hasNextPage` and checks the entries it read against the
+first page's `filteredCount`, which applies `itemTypes` and `since` (measured; GitHub's schema
+describes it as the count after applying `before` and `after`, and names neither); a later page's
+`filteredCount` counts only the items after its cursor, and `totalCount` is neither filtered nor
+the number of entries GitHub returns (section 7, "Closing-link timeline events"). A lookup whose
+entries differ from that count is retried once alone, as an item error is (5.3 step 4), and then
+leaves its item unchecked (5.4). Its document, formula cost, and recordings are added here when it
+is written; the recorder adds them without changing the existing recordings, and its default mode
+and `--only documents` record them too, so a re-recording keeps them (gap 96). The document takes
+no `tests/query_versions.json` entry: verify stores nothing, so no `hydration_version` depends on
+it, and once it changes the replay fails with "re-record" on its recordings, whose stamp is the old
+query hash (Step 2).
 
 Default-branch history (Step 4b; 100 commits per page cost 1, dry run on Prebid.js, 2026-10-18):
 
@@ -1792,10 +1802,12 @@ but not compared, since the stored merge state is as of `hydrated_at` (5.1);
 each REST list read 100 entries per page until a page holds fewer, since `rest_get` returns no
 `Link` header (gap 96); the offline tests compare REST bodies with rows written from GraphQL units
 recorded in the same recorder run as the REST units of the same PRs, or with rows seeded from a
-synthetic body; REST bodies recorded as their own unit kind by an additive recorder mode, each
-stamped as the other kinds are (Step 2), into their own directory beside `recorded/`, as the
-first-sync recordings are, so the default mode and `--only documents`, which rebuild `recorded/`,
-leave them as they are (gap 96); the mode refuses a repository the recorder's `PRIVATE` list names
+synthetic body; REST bodies recorded as their own unit kind, each stamped as the other kinds are
+(Step 2), by a recorder mode of their own that writes every unit of its run, the sampled PRs'
+GraphQL units included, into its own directory beside `recorded/`, replacing that directory alone,
+as the first-sync mode does, and that a document change re-runs; the offline tests replay that
+directory alone, and the default mode and `--only documents`, which rebuild `recorded/`, leave it
+as it is (gap 96); the mode refuses a repository the recorder's `PRIVATE` list names
 before any request and resolves each other repository through the recorder's public-only source
 before its first REST request (D33); the sampler takes its repositories with `--repo` and refuses
 `prebid-agent-skills` before any request (D33); run from `scripts/`, reaching GitHub through
@@ -1804,7 +1816,8 @@ before its first REST request (D33); the sampler takes its repositories with `--
 Tests: the offline tests the scope lists; a list read across pages, one of them ending on a full
 page followed by an empty one; the recorder mode sending no request for a repository `PRIVATE`
 lists and refusing a private repository before any REST request; a re-recording in the default mode
-and with `--only documents` leaving the REST units as they are; and the sampler reading only the
+and with `--only documents` leaving the mode's directory, REST and GraphQL units, as it is; and the
+sampler reading only the
 repositories `--repo` names and refusing `prebid-agent-skills` before any request.
 
 Acceptance: an adversarial review of the change, by reviewers who did not write it, finds no rule
@@ -1827,10 +1840,14 @@ unit by its `since` (the timeline recordings join the model's round-trip test), 
 fake GitHub: each verify class, each overlapping pair of classes taking the first in the 5.4
 order, a stale item, verify's repository set with and without `--repo` (a stored untracked
 repository, a stored row no configured entry names, a renamed repository, and a renamed repository
-whose configured entry fails to resolve, reported unverified and not untracked), its child-count
-checks (each by a planted row deletion), an unverified repository for each failure 5.4 lists, one
-made unverified by a lookup by number keeping the classes it already had, a verify with every
-repository unverified exiting 1, a
+whose configured entry fails to resolve, reported unverified and not untracked, and an entry that
+resolves to a `github_id` other than its stored row's, with no stored `is_tracked` row reported
+untracked), its child-count checks (each by a planted row deletion), an unverified repository for
+each failure 5.4 lists, one made unverified by a lookup by number and one by a timeline lookup, each
+keeping the classes it already had and leaving unchecked the items no lookup had answered, those of
+the batch the error ended included, a verify with every repository unverified exiting 1, a
+repository's `sync_pending` rows replaced by a sync's close between verify's two reads and the item
+still reported pending, a
 `CLOSED` PR whose `closedAt` falls on each side of the
 floor, verify's head check refusing an older revision, an empty file, and a missing path before
 any request and without creating a file, verify exiting 1 and naming the run while a sync run
@@ -1849,9 +1866,12 @@ timeline lookup through the replay: a connected event naming the differing issue
 another issue, a link difference made by a closing keyword with no event, a difference in the
 link totals alone with enough connected events, with only a disconnected event, and with too few, a
 synthetic
-disconnected event, an event at the boundary counted and one a second before it not, a filtered
-page whose `totalCount` differs from its entries, a lookup whose entries differ from its
-`filteredCount` leaving its item unchecked, and a lookup
+disconnected event, an event at the boundary counted and one a second before it not, entries
+planted in the lookup's response at a second and at half a second before the boundary and not
+counted, a stored link no longer indexed on a PR whose index lists every link matched only by an
+event naming it, a filtered page whose `totalCount` differs from its entries, a lookup whose entries
+differ from its `filteredCount` leaving its item unchecked, one that differs once and matches on
+its retry, classed by its events, and a lookup
 spanning two pages whose second page's `filteredCount` counts only the entries after its cursor
 (5.8). A re-recording in the default mode and with `--only documents` keeping the timeline units.
 
@@ -1866,12 +1886,13 @@ and authors compared as D24 stores them (section 7, "Source vs REST"). The live 
 fresh database at an explicit path, with `GITHUB_TOKEN="$(gh auth token)"` and the token never
 printed; reads `ghactivity github rate-limit` before and after, and does not start with fewer than
 2,500 GraphQL points remaining (the first sync of these repositories spent 1,687, section 7,
-"Step 3b-2a-2c acceptance"), recording any rate-limit wait apart from the run's time; runs a second,
+"Step 3b-2a-2c acceptance"); runs a second,
 incremental sync before verify; and records the points, REST calls, and time it spent, verify's
 from its report. The sample's cases are chosen by SQL queries recorded in the pull request; all
 three repositories hold in-coverage dismissed reviews (section 7, "Step 3b-2a-2c acceptance"). The
 pull request lists each
-closing-link error verify reports, with its PR and link (section 8). `verify --exact` exits 0, or
+closing-link error verify reports, with its PR and link (for a difference in the totals alone,
+found by reading the PR's full closing list; section 8). `verify --exact` exits 0, or
 exits 2 with no failing difference but such closing-link errors, each with REST evidence that
 GitHub changed the link without changing the PR's `updatedAt`. A live item failure that
 cannot pass is listed in `[sync].accepted_failures` with REST evidence of why, as in Step 5. An
@@ -1983,8 +2004,9 @@ Scope: 6a merges `sync.yml` with `workflow_dispatch` only, adds `ghactivity snap
 `ghactivity verify --db-only` (5.4), and adds the
 `githubkit[auth-app]` extra to `pyproject.toml` and `uv.lock`. Its tests: `verify --db-only`
 accepting the gz and manifest `ghactivity snapshot` wrote, and halting with exit 1 on a tampered
-copy; `snapshot --verify-report` exiting 1 on a missing report and on one whose `last_run_id`
-differs from the file's (5.6); through
+copy; `snapshot --verify-report` exiting 1 on a missing report, a truncated one, one of an unknown
+version, and one whose `last_run_id` differs from the file's, and the manifest listing the report's
+unverified repositories (5.6); through
 `httpx.MockTransport`, a mocked installation-token response whose `expires_at` lies just over a
 minute ahead, a clock moved past it mid-run, and a second token request before the next API request
 (githubkit keeps a token until one minute before `expires_at`); and a 401 on an API request still
@@ -2175,7 +2197,7 @@ Measured 2026-10-16 unless noted. "Index" means the created-order enumeration in
 | Whether GitHub returns `EnterpriseUserAccount.id` to a token without the `read:enterprise` scope (the dry run validated the document; no tracked repository has such an actor yet) | Step 3b-1 tests the synthetic actor. A live occurrence decides between two outcomes (a prediction): an error at the alias's path is an item failure (exit 2), and an error without a path is fatal (5.3 step 4, exit 1), which Step 5's bootstrap would surface |
 | Whether the scheduled App token can read every resolve field the token used here read (`diskUsage`, `webCommitSignoffRequired`, `hasVulnerabilityAlertsEnabled`, and `planFeatures` included) | Step 6b's first manual run; a field it cannot read is an error 5.3 step 4 classifies |
 | A `DisconnectedEvent`'s `source` and `subject` (none in the 300 PRs read for section 7, "Closing-link timeline events"; GitHub's schema gives it `ConnectedEvent`'s fields) | Step 3b-2b-2 tests a synthetic one; a live one is recorded when seen |
-| Whether a closing-keyword link can change without the PR's `updatedAt` changing (an issue transfer or deletion, a body edit, a base-ref or default-branch change); 5.4 then reports the difference as an error | Step 3b-2b-2's acceptance lists each such error with its PR and link; Step 5 reports any |
+| Whether a closing-keyword link can change without the PR's `updatedAt` changing (an issue transfer or deletion, a body edit, a base-ref or default-branch change); 5.4 then reports the difference as an error, unless it is a difference in the totals alone that the connected or disconnected events since the boundary cover (5.4) | Step 3b-2b-2's acceptance lists each such error with its PR and link; Step 5 reports any |
 | Whether a pending `reviewRequests` entry for Copilot carries `BOT_kgDOCnlnWA` (the review-request events and the reviews do; no pending request was seen, section 7, "Copilot review requests" and "Step 3b-2a-2c acceptance") | Step 5 reports any Copilot request row; for a `databaseId` reported under a second node id, the writer keeps the stored node id and the run reports the second (5.2) |
 | Whether to collect a `Mannequin`'s `email` ("The mannequin's email on the source instance"; the maintainer's profile decision named users and organizations only, and no mannequin was available to read, so whether GitHub requires a scope for it is unmeasured) | The maintainer decides; a live read on a mannequin comes first |
 | Whether GitHub returns an `EnterpriseUserAccount`'s `enterprise` to the tokens used (an `Enterprise` object; no tracked repository has such an actor) | Not selected until a live occurrence is read |
