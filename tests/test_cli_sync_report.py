@@ -235,7 +235,10 @@ def test_only_the_error_line_is_red() -> None:
         error="UnexpectedResponse: GitHub answered 400",
     )
     buffer = io.StringIO()
-    console = Console(file=buffer, width=200, color_system="standard", force_terminal=True)
+    # no_color=False: NO_COLOR in the environment would otherwise turn off the style tested here.
+    console = Console(
+        file=buffer, width=200, color_system="standard", force_terminal=True, no_color=False
+    )
 
     print_report(console, report, seconds=0)
 

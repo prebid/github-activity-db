@@ -9,6 +9,7 @@ report and exits with the engine's code: 0, 2, or 1 (5.3 step 8).
 from __future__ import annotations
 
 import contextlib
+import errno
 import os
 import sys
 import time
@@ -22,7 +23,7 @@ from rich.console import Console
 
 import github_activity_db
 from github_activity_db.cli import common
-from github_activity_db.cli.common import console, run_async_command
+from github_activity_db.cli.common import run_async_command
 from github_activity_db.config import get_settings
 from github_activity_db.source import RepositoryRecord
 from github_activity_db.sync import engine, runs
@@ -152,6 +153,24 @@ def _configured(names: list[str], config: TrackingConfig) -> tuple[TrackedReposi
 # --------------------------------------------------------------------------------------------
 # The report
 # --------------------------------------------------------------------------------------------
+class _ReportConsole(Console):
+    """The report's console, on stdout. Rich's ``on_broken_pipe`` exits 1 when stdout is a
+    closed pipe; this one raises the ``BrokenPipeError`` instead, so ``sync`` still exits with
+    the run's code."""
+
+    def on_broken_pipe(self) -> None:
+        # As Rich does: print nothing more, and point stdout at /dev/null so that the
+        # interpreter's last flush of what is still buffered cannot fail at exit.
+        self.quiet = True
+        devnull = os.open(os.devnull, os.O_WRONLY)
+        os.dup2(devnull, sys.stdout.fileno())
+        os.close(devnull)
+        raise BrokenPipeError(errno.EPIPE, os.strerror(errno.EPIPE))
+
+
+console = _ReportConsole()
+
+
 def print_report(
     console: Console, report: SyncReport, *, seconds: float, break_lock: bool = False
 ) -> None:

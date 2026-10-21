@@ -119,8 +119,10 @@ repository has more than 100.
   is stamped with `REST_RATE_LIMIT_STAMP`.
 - **Re-recording**: `GITHUB_TOKEN="$(gh auth token)" uv run --no-sync python scripts/record_fixtures.py`
   replaces `tests/fixtures/source/recorded/` only after every scenario recorded without a failed
-  item or user lookup. It refuses a private repository and keeps response bodies plus the
-  `date`, `retry-after`, and `x-ratelimit-*` headers, never request headers.
+  item or user lookup. It refuses a private repository once the resolve that answers it returns
+  (after any further label pages), a first sync's included, before any other request for it. It
+  keeps one unit per file (an item's solo retry replaces its failed answer), with response bodies
+  and the `date`, `retry-after`, and `x-ratelimit-*` headers, never request headers.
   `tests/source/recorder.py` lists the scenarios and why each was chosen. `--only rate-limits`
   records the two rate-limit units alone and keeps every other unit. `--only documents`, for a
   change of the GraphQL documents, records every scenario and user again and replaces those
@@ -250,9 +252,13 @@ shell exports changes a result.
 `tests/test_cli_app.py` also runs the installed console script (`.venv/bin/ghactivity`) in a
 subprocess, for exit codes and tracebacks outside `CliRunner`. `tests/test_cli_sync.py` runs
 `ghactivity sync` both ways: in process, and through the installed package in an isolated child
-interpreter (`python -I -c`) that puts the repository on `sys.path` to patch in the replay. A
-child that kills itself with SIGKILL after its third committed item, under
-`subprocess.run(timeout=...)`, leaves its run `running` for a `--break-lock` resume.
+interpreter (`python -I -c`) that puts the repository on `sys.path` to patch in the replay. Both
+keep the command's `common.open_source` and `GitHubSource`, replacing their HTTP transport
+(`client.build_github`) with the replay and `common.clock` with a `FakeClock`, so `--max-minutes`
+reaches the transport as in a real run. A child that kills itself with SIGKILL after its third
+committed item, under `subprocess.run(timeout=...)`, leaves its run `running` for a
+`--break-lock` resume; a child whose stdout, or stdout and stderr, are pipes with no reader exits
+with its run's code.
 
 ---
 

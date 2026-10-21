@@ -101,11 +101,29 @@ async def test_an_answer_without_data_is_retried_not_recorded() -> None:
     assert clock.sleeps == [RATE_LIMIT_FALLBACK_WAIT]
 
 
-async def test_a_listed_private_repository_is_never_requested() -> None:
+async def test_a_private_answer_comes_after_the_resolves_label_pages() -> None:
+    """golang/go has more than 100 labels, so its resolve asks for a second label page; a private
+    answer raises after that page and before its index."""
     replay = Replay.from_fixtures()
-    scenarios = (Scenario("prebid", "prebid-agent-skills", index=True),)
+    unit = replay.unit("resolve", owner="golang", name="go")
+    unit.data["isPrivate"] = True
+    replay.add(unit)
+    scenarios = (Scenario("golang", "go", index=True),)
+    with pytest.raises(PrivateRepository, match="golang/go"):
+        await record("test-token", inner=replay.transport(), scenarios=scenarios, users=())
+    assert [seen.operation for seen in replay.seen] == ["Resolve", "RepositoryLabels"]
+
+
+@pytest.mark.parametrize(
+    ("owner", "name"), [("prebid", "prebid-agent-skills"), ("Prebid", "Prebid-Agent-Skills")]
+)
+async def test_a_listed_private_repository_is_never_requested(owner: str, name: str) -> None:
+    replay = Replay.from_fixtures()
+    scenarios = (Scenario(owner, name, index=True),)
     with pytest.raises(PrivateRepository):
         await record("test-token", inner=replay.transport(), scenarios=scenarios)
+    with pytest.raises(PrivateRepository):
+        await record_first_sync("test-token", owner, name, inner=replay.transport())
     assert replay.seen == []
 
 
@@ -260,8 +278,14 @@ async def test_recording_a_first_sync_of_its_recordings_gives_them_back() -> Non
     owner, name = FIRST_SYNC_REPOSITORY
     units = await record_first_sync("test-token", owner, name, inner=replay.transport())
     assert replay.problems == []
+    # One resolve, the sync's own: the resolution the privacy check reads is the one it uses.
+    assert [seen.operation for seen in replay.seen] == [
+        "Resolve",
+        "PullRequestIndex",
+        "PullRequestBatch",
+        "UserLookup",
+    ]
     produced = {(unit.kind, json.dumps(unit.key, sort_keys=True)): unit for unit in units}
-    # One unit each: the resolve before the sync and the sync's own count once.
     assert len(units) == len(produced)
     assert produced.keys() == replay.units.keys()
     for key, unit in produced.items():
@@ -283,6 +307,19 @@ async def test_a_private_repository_stops_a_first_sync_after_its_resolve() -> No
     with pytest.raises(PrivateRepository, match=f"{owner}/{name}"):
         await record_first_sync("test-token", owner, name, inner=replay.transport())
     assert [seen.operation for seen in replay.seen] == ["Resolve"]
+
+
+async def test_a_retried_item_records_one_unit_per_file() -> None:
+    """The batch's first alias fails once and its item's solo retry answers it: the recording
+    keeps the retry's unit, one per file, and the run exits 0."""
+    replay = Replay.from_directory(FIRST_SYNC)
+    replay.modify(_batch_alias_error, when=lambda seen: seen.operation == "PullRequestBatch")
+    owner, name = FIRST_SYNC_REPOSITORY
+    units = await record_first_sync("test-token", owner, name, inner=replay.transport())
+    assert [seen.operation for seen in replay.seen].count("PullRequestBatch") == 2
+    assert len({unit.path() for unit in units}) == len(units) == len(replay.units)
+    pulls = [unit for unit in units if unit.kind == "pull_request"]
+    assert [(unit.data is None, unit.errors) for unit in pulls] == [(False, [])] * len(pulls)
 
 
 async def test_a_first_sync_that_does_not_exit_0_stops_the_recording() -> None:

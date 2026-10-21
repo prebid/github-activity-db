@@ -2,7 +2,8 @@
 step 8, 5.7; Step 3b-2a-2c).
 
 In process through CliRunner, and through the installed package in a child interpreter
-(``python -I -c``) with the replay patched in: a run that never starts exits 1 before any
+(``python -I -c``), each with the command's own source factory, whose HTTP transport the replay
+replaces, and the fake clock: a run that never starts exits 1 before any
 ``sync_runs`` row, a run that starts exits with the engine's code, and a run killed mid-run leaves
 its row ``running`` with its committed items for a resume.
 """
@@ -30,7 +31,7 @@ from github_activity_db.cli import common
 from github_activity_db.cli import sync as sync_cli
 from github_activity_db.cli.app import app
 from github_activity_db.config import get_settings
-from github_activity_db.source import GitHubSource
+from github_activity_db.source import client
 from github_activity_db.sync import engine
 from github_activity_db.sync.deletions import parse_allow_deletions
 from github_activity_db.sync.engine import SyncOptions, SyncReport
@@ -101,7 +102,9 @@ def replay(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, migrated_database: Path, tracking: Path
 ) -> Iterator[Replay]:
     """``ghactivity sync`` reads GitHub through go-gdpr's first-sync recordings, on the fake clock,
-    into a migrated database; the replay must answer every request it gets."""
+    into a migrated database; the replay must answer every request it gets. ``common.open_source``
+    and ``GitHubSource`` are the command's own, with the replay as their HTTP transport; the
+    report prints on a plain console, so ``_ReportConsole`` runs only in the child tests."""
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("GITHUB_TOKEN", "test-token")
     monkeypatch.setenv("DATABASE_URL", f"sqlite+aiosqlite:///{migrated_database}")
@@ -111,16 +114,21 @@ def replay(
     recorded = Replay.from_directory(FIRST_SYNC)
     clock = FakeClock()
     monkeypatch.setattr(common, "clock", lambda: clock)
+    build_github = client.build_github
     monkeypatch.setattr(
-        common,
-        "open_source",
-        lambda token, *, deadline=None, clock=None: GitHubSource(
-            token, http_transport=recorded.transport(), clock=clock, deadline=deadline
+        client,
+        "build_github",
+        lambda auth, *, http_transport=None: build_github(
+            auth, http_transport=recorded.transport()
         ),
     )
     yield recorded
     get_settings.cache_clear()
     assert unanswered(recorded) == []
+
+
+# The requests of go-gdpr's first sync after its resolve.
+HYDRATING = ["PullRequestIndex", "PullRequestBatch", "UserLookup"]
 
 
 def _sync(*args: str) -> Any:
@@ -290,15 +298,16 @@ CHILD = """\
 import sys
 sys.path.insert(0, {root!r})
 from github_activity_db.cli import common
-from github_activity_db.source import GitHubSource
+from github_activity_db.source import client
 from tests.source.conftest import FakeClock
 from tests.source.recordings import FIRST_SYNC
 from tests.source.replay import Replay
 replay = Replay.from_directory(FIRST_SYNC)
 clock = FakeClock()
 common.clock = lambda: clock
-common.open_source = lambda token, *, deadline=None, clock=None: GitHubSource(
-    token, http_transport=replay.transport(), clock=clock, deadline=deadline
+build_github = client.build_github
+client.build_github = lambda auth, *, http_transport=None: build_github(
+    auth, http_transport=replay.transport()
 )
 {plant}
 from github_activity_db.cli.app import app
@@ -329,10 +338,18 @@ writer.write_pull_request = write_then_crash
 
 
 def _child(
-    args: list[str], *, database: Path, tracking: Path, cwd: Path, plant: str = ""
+    args: list[str],
+    *,
+    database: Path,
+    tracking: Path,
+    cwd: Path,
+    plant: str = "",
+    stdout: int = subprocess.PIPE,
+    stderr: int = subprocess.PIPE,
 ) -> subprocess.CompletedProcess[str]:
     """Run the installed package in an isolated interpreter (``-I``: no user site, no
-    PYTHONPATH, no working directory on the path), over the recordings."""
+    PYTHONPATH, no working directory on the path), over the recordings; its stdout and stderr
+    are captured unless ``stdout`` or ``stderr`` names a file descriptor."""
     base = {key: value for key, value in os.environ.items() if key in ("PATH", "HOME")}
     env = {
         **base,
@@ -343,7 +360,8 @@ def _child(
     script = CHILD.format(root=str(ROOT), plant=plant, args=["sync", *args])
     return subprocess.run(
         [sys.executable, "-I", "-c", script],
-        capture_output=True,
+        stdout=stdout,
+        stderr=stderr,
         text=True,
         env=env,
         cwd=cwd,
@@ -367,6 +385,83 @@ def test_the_installed_command_exits_with_the_engines_code(
     assert usage.returncode == 1, usage.stderr
     assert "--break-lock does not apply" in _plain(usage.stderr)
     assert _runs(migrated_database) == [{"id": 1, "status": "complete", "exit_code": 2}]
+
+
+@pytest.mark.parametrize(("plant", "code"), [("", 0), (FAIL_ONE_ITEM, 2)], ids=["0", "2"])
+def test_a_closed_stdout_keeps_the_runs_exit_code(
+    migrated_database: Path, tracking: Path, tmp_path: Path, plant: str, code: int
+) -> None:
+    """A reader that closed the pipe before the report (``ghactivity sync | true``): the report
+    is not printed, stderr says so, and the command exits with the run's code."""
+    read, write = os.pipe()
+    os.close(read)
+    try:
+        child = _child(
+            [],
+            database=migrated_database,
+            tracking=tracking,
+            cwd=tmp_path,
+            plant=plant,
+            stdout=write,
+        )
+    finally:
+        os.close(write)
+
+    assert child.returncode == code, child.stderr
+    assert child.stderr.splitlines()[-1] == "The report could not be printed: BrokenPipeError"
+    assert "Traceback" not in child.stderr and "Exception ignored" not in child.stderr
+    assert _runs(migrated_database) == [{"id": 1, "status": "complete", "exit_code": code}]
+
+
+@pytest.mark.parametrize(("plant", "code"), [("", 0), (FAIL_ONE_ITEM, 2)], ids=["0", "2"])
+def test_closed_stdout_and_stderr_keep_the_runs_exit_code(
+    migrated_database: Path, tracking: Path, tmp_path: Path, plant: str, code: int
+) -> None:
+    """``ghactivity sync 2>&1 | true``: neither stream can be written, and the command still
+    exits with the run's code, not the interpreter's 120 for output it could not flush."""
+    read, write = os.pipe()
+    os.close(read)
+    try:
+        child = _child(
+            [],
+            database=migrated_database,
+            tracking=tracking,
+            cwd=tmp_path,
+            plant=plant,
+            stdout=write,
+            stderr=write,
+        )
+    finally:
+        os.close(write)
+
+    assert child.returncode == code
+    assert _runs(migrated_database) == [{"id": 1, "status": "complete", "exit_code": code}]
+
+
+@pytest.mark.parametrize("missing", [False, True], ids=["usage error", "missing database"])
+def test_a_command_line_that_never_starts_exits_1_with_its_output_closed(
+    migrated_database: Path, tracking: Path, tmp_path: Path, missing: bool
+) -> None:
+    """With stdout and stderr closed pipes, a usage error and a missing database file exit 1, as
+    with a terminal; the error they could not print does not make it 120."""
+    database = tmp_path / "missing.db" if missing else migrated_database
+    read, write = os.pipe()
+    os.close(read)
+    try:
+        child = _child(
+            [] if missing else ["--dry-run", "--break-lock"],
+            database=database,
+            tracking=tracking,
+            cwd=tmp_path,
+            stdout=write,
+            stderr=write,
+        )
+    finally:
+        os.close(write)
+
+    assert child.returncode == 1
+    assert database.exists() is not missing
+    assert missing or _runs(migrated_database) == []
 
 
 def test_a_killed_run_stays_running_and_a_resume_keeps_its_writes(
@@ -409,8 +504,11 @@ def test_a_killed_run_stays_running_and_a_resume_keeps_its_writes(
     ) == [{"items_planned": 8, "items_hydrated": 8}]
 
 
+# A child started with SIGINT ignored (a suite run under nohup or with &) inherits that; Python
+# then installs no handler of its own, so the plant installs Python's default, as at a terminal.
 INTERRUPT_AFTER_THIRD_ITEM = """\
 import os, signal
+signal.signal(signal.SIGINT, signal.default_int_handler)
 from github_activity_db.sync import writer
 written = writer.write_pull_request
 count = 0
@@ -529,6 +627,39 @@ def test_every_option_reaches_the_engine(
         f"sqlite+aiosqlite:///{migrated_database}",
     )
     assert options.config.source == str(tracking)
+
+
+@pytest.mark.parametrize("dry_run", [False, True], ids=["run", "dry run"])
+@pytest.mark.parametrize("seconds", [59, 60, 61])
+def test_max_minutes_stops_requests_at_its_deadline(
+    replay: Replay, migrated_database: Path, dry_run: bool, seconds: int
+) -> None:
+    """--max-minutes reaches the transport through the command's own source factory: when the
+    resolve's answer arrives a minute after the run started, no further request is sent and the
+    run exits 2; a second earlier, the run goes on to complete."""
+    clock = common.clock()
+    assert isinstance(clock, FakeClock)  # the replay fixture's
+    replay.modify(
+        lambda body: clock.advance(seconds), when=lambda seen: seen.operation == "Resolve"
+    )
+
+    result = _sync("--max-minutes", "1", *(["--dry-run"] if dry_run else []))
+
+    reached = seconds >= 60
+    code = 2 if reached else 0
+    status = "time_limited" if reached else "complete"
+    operations = ["Resolve"]
+    if not reached:
+        operations += ["PullRequestIndex"] if dry_run else HYDRATING
+    assert result.exit_code == code, result.output
+    assert [seen.operation for seen in replay.seen] == operations
+    first = _plain(result.output.splitlines()[0])
+    assert first == (
+        f"Dry run: the run would exit {code}" if dry_run else f"Run 1: {status}, exit {code}"
+    )
+    assert _runs(migrated_database) == (
+        [] if dry_run else [{"id": 1, "status": status, "exit_code": code}]
+    )
 
 
 def test_repo_attempts_only_the_repositories_it_names(
