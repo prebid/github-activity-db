@@ -90,11 +90,30 @@ uv run ghactivity github rate-limit           # GraphQL reading and the core and
 uv run ghactivity github rate-limit --all     # Every REST pool
 uv run ghactivity github test --pr 13481 --repo prebid/Prebid.js  # Resolve and hydrate one PR
 uv run ghactivity github test --pr 4343       # The first repository in tracking.toml
+
+# Sync into DATABASE_URL (build it first with `uv run alembic upgrade head`)
+uv run ghactivity sync --dry-run              # Resolve, index, and plan; write nothing
+uv run ghactivity sync --repo prebid/go-gdpr  # Only this configured repository (repeatable)
+uv run ghactivity sync --max-minutes 30       # Stop issuing requests after 30 minutes
+uv run ghactivity sync --allow-deletions prebid/Prebid.js=40  # All candidates, if at most 40
+uv run ghactivity sync --prune-untracked      # Delete repositories already untracked
+uv run ghactivity sync --break-lock           # Mark a running sync aborted and claim the run
 ```
 
-There is no `sync` command until Step 3b of the [redesign plan](redesign-plan.md). A command
-line that never starts its work (a usage error, an invalid `tracking.toml` or setting, a log
-file that cannot be opened, a missing token) exits 1; an interrupt (Ctrl-C) exits 130.
+`ghactivity sync` follows [redesign plan](redesign-plan.md) 5.3: it exits 0 when every repository
+indexed completely and nothing failed, 2 when something needs attention (an item or a repository
+failed, an index was incomplete, deletions halted, a stored repository is untracked, or a prune
+was refused), and 1 on a fatal error. A command line that never starts its work (a usage error,
+an invalid `tracking.toml` or setting, a log file that cannot be opened, a missing token, a
+missing or unmigrated database file, or another sync holding the lock) exits 1, before any
+`sync_runs` row. A first Ctrl-C closes the run `aborted` and exits 130; a second one during that
+close leaves the run `running`, for `--break-lock` or the stale-row rule (10 minutes past its
+`--max-minutes` deadline) to recover. A report that cannot be printed (stdout a closed pipe, with
+stderr on it too as with `2>&1 | head`, a write that fails as on a full disk, or an encoding
+without one of its characters) leaves a line on stderr where stderr can take it, and the exit code
+is the run's. When stderr cannot take what the process wrote to it (a closed pipe or a full disk:
+the error of a command line that never starts, or `-v` debug logs), the interpreter fails its
+flush at exit and exits 120 instead.
 
 ### Code Quality
 
@@ -320,7 +339,9 @@ tests/
 1. Create command file in `src/github_activity_db/cli/`
 2. Register in `src/github_activity_db/cli/app.py`
 3. Add tests in `tests/test_cli_<group>.py`; commands that call GitHub get their client from
-   `common.open_source`, which tests replace with one over the recorded-response replay
+   `common.open_source`. Tests answer it from the recorded-response replay, either by replacing
+   `common.open_source` (`tests/test_cli_github.py`) or by replacing only the HTTP transport
+   through `client.build_github` (`tests/test_cli_sync.py`)
 
 **CLI Async Pattern:**
 

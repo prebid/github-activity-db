@@ -46,14 +46,18 @@ tests/
 │   └── test_*.py
 ├── sync/                    # Planner, deletions, writer, and run records over seeded databases
 │   ├── engine_support.py    # A migrated database and a scenario model, synced by the engine
-│   └── test_engine.py       # The engine's cases (redesign plan Step 3b-2a-2b-2)
+│   ├── test_engine.py       # The engine's cases (redesign plan Step 3b-2a-2b-2)
+│   ├── test_first_sync.py   # go-gdpr's first sync from its recordings, without the model
+│   ├── test_seeded_runs.py  # Seeded random changes over several runs, each checked against...
+│   └── expected_state.py    # ...the database the model and its history give, never the writer
 ├── fixtures/source/
 │   ├── recorded/            # Units recorded from public repositories (scripts/record_fixtures.py)
+│   ├── first_sync/          # Every unit go-gdpr's first sync asked for (--only first-sync)
 │   └── synthetic/           # Error responses: documented, observed, or constructed; each names which
 ├── data_dictionary.py       # Reader for docs/data-dictionary.md
 ├── query_versions.json      # hydration_version -> hash of the query documents
 ├── schema_versions.json     # schema version -> consumer (table or view, column) pairs, view digests
-├── test_cli_app.py, test_cli_github.py   # The CLI, in process and through the installed script
+├── test_cli_app.py, test_cli_github.py, test_cli_sync.py   # The CLI, in process and installed
 ├── test_data_dictionary.py  # The dictionary and the schema-version lock
 └── test_*.py                # Settings, logging, scripts, import boundaries, build inputs
 ```
@@ -115,8 +119,10 @@ repository has more than 100.
   is stamped with `REST_RATE_LIMIT_STAMP`.
 - **Re-recording**: `GITHUB_TOKEN="$(gh auth token)" uv run --no-sync python scripts/record_fixtures.py`
   replaces `tests/fixtures/source/recorded/` only after every scenario recorded without a failed
-  item or user lookup. It refuses a private repository and keeps response bodies plus the
-  `date`, `retry-after`, and `x-ratelimit-*` headers, never request headers.
+  item or user lookup. It refuses a private repository once the resolve that answers it returns
+  (after any further label pages), a first sync's included, before any other request for it. It
+  keeps one unit per file (an item's solo retry replaces its failed answer), with response bodies
+  and the `date`, `retry-after`, and `x-ratelimit-*` headers, never request headers.
   `tests/source/recorder.py` lists the scenarios and why each was chosen. `--only rate-limits`
   records the two rate-limit units alone and keeps every other unit. `--only documents`, for a
   change of the GraphQL documents, records every scenario and user again and replaces those
@@ -124,6 +130,12 @@ repository has more than 100.
   the recordings lack. Readings differ between
   recordings, so re-recording the rate limits (a full run does too) means updating the readings
   `tests/test_cli_github.py` asserts.
+- **A first sync's recordings**: `--only first-sync` runs the engine's first sync of
+  `FIRST_SYNC_REPOSITORY` (prebid/go-gdpr) into a scratch database through the recording
+  transport and writes every unit it asked for under `tests/fixtures/source/first_sync/`,
+  replacing that directory alone; `Replay.from_directory` serves them.
+  `tests/sync/test_first_sync.py` checks the stored rows against them, and
+  `tests/test_cli_sync.py` runs `ghactivity sync` over them.
 - **Synthetic responses** (`tests/fixtures/source/synthetic/`) are error responses. Each file's
   `source` says where its shape comes from: GitHub's documentation (quoted), a live observation
   (dated), or a construction for a case GitHub does not document. A test that needs a variant of
@@ -217,6 +229,14 @@ run must see GitHub as the test left it.
   stored rows, the `sync_runs` row, the `repo_sync_state` rows the run wrote (`ended`), and the
   exit code. The `world` fixture fails a test that leaves an `AccountMissing` failure, except the
   one that fakes the writer's refusal.
+- **Seeded runs**: `tests/sync/test_seeded_runs.py` gives each of a few fixed seeds a small world
+  and five runs, with random changes through the model's methods and random clock gaps between
+  them. After each run `tests/sync/expected_state.py` computes the database the plan requires from
+  the model and from what earlier runs stored (D28's kept references, the 24-hour refresh, gap 90,
+  a batch's lookups and sightings, in-place updates, step 7), never from the writer, and compares
+  every table on every column except row ids (mapped to natural keys), the stamps taken from
+  `Date` headers (compared as set or not), and the run counters. Each seed asserts the rules it
+  was chosen to reach, so a driver change that loses coverage fails.
 
 ---
 
@@ -230,7 +250,16 @@ a test that leaves a request unanswered or a fault unserved. `tests/conftest.py`
 `Settings` reads before each test, so neither a terminal size nor a setting the developer's
 shell exports changes a result.
 `tests/test_cli_app.py` also runs the installed console script (`.venv/bin/ghactivity`) in a
-subprocess, for exit codes and tracebacks outside `CliRunner`.
+subprocess, for exit codes and tracebacks outside `CliRunner`. `tests/test_cli_sync.py` runs
+`ghactivity sync` both ways: in process, and through the installed package in an isolated child
+interpreter (`python -I -c`) that puts the repository on `sys.path` to patch in the replay. Both
+keep the command's `common.open_source` and `GitHubSource`, replacing their HTTP transport
+(`client.build_github`) with the replay and `common.clock` with a `FakeClock`, so `--max-minutes`
+reaches the transport as in a real run. A child that kills itself with SIGKILL after its third
+committed item, under `subprocess.run(timeout=...)`, leaves its run `running` for a
+`--break-lock` resume. Children whose stdout, or stdout and stderr, are a pipe with no reader, one
+started with its stdout descriptor closed, and one whose stdout is a file at its RLIMIT_FSIZE exit
+with the run's code.
 
 ---
 

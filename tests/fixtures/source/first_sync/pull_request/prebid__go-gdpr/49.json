@@ -1,0 +1,238 @@
+{
+  "data": {
+    "additions": 180,
+    "assignedActors": {
+      "nodes": [],
+      "pageInfo": {
+        "endCursor": null,
+        "hasNextPage": false
+      },
+      "totalCount": 0
+    },
+    "author": {
+      "__typename": "User",
+      "databaseId": 183383475,
+      "id": "U_kgDOCu41sw",
+      "login": "ggierak"
+    },
+    "authorAssociation": "FIRST_TIME_CONTRIBUTOR",
+    "baseRefName": "master",
+    "baseRefOid": "b00a67a67032c09e47f5d8d0d82d9518fa152ba0",
+    "body": "## Summary\r\n\r\n- Add support for parsing the **Disclosed Vendors** segment (SegmentType=1) introduced in TCF 2.3\r\n- Expose two new methods on the `VendorConsents` interface: `MaxDisclosedVendorID()` and `DisclosedVendor(id)`\r\n- Maintain full backward compatibility with TCF 2.2 strings (methods return `0` / `false` when the segment is absent)\r\n\r\n## Details\r\n\r\nTCF 2.3 makes the Disclosed Vendors segment mandatory in TC Strings:\r\n\r\n```\r\n[Core String].[Disclosed Vendors].[Publisher TC]\r\n```\r\n\r\nThis segment records which vendors were disclosed to the user by the CMP. Previously, `ParseString()` discarded all segments after the first `.` separator. Now it decodes each additional segment, identifies its type via the first 3 bits, and parses Disclosed Vendors (type `1`) using the same bitfield/range encoding as vendor consent.\r\n\r\n### Changes\r\n\r\n| File | Change |\r\n|------|--------|\r\n| `api/consent.go` | Add `MaxDisclosedVendorID()` and `DisclosedVendor(id)` to `VendorConsents` interface |\r\n| `vendorconsent/tcf2/consent.go` | Parse additional segments in `ParseString()`, add `parseDisclosedVendors()` and `parseSegmentRangeSection()` |\r\n| `vendorconsent/tcf2/metadata.go` | Add `disclosedVendors` field and accessor methods with nil-safe handling |\r\n| `vendorconsent/tcf1/metadata.go` | Stub implementations returning zero-values |\r\n| `vendorconsent/tcf2/consent_test.go` | Tests for TCF 2.3 parsing, TCF 2.2 backward compat, and edge cases |\r\n\r\n## Test plan\r\n\r\n- [x] Parse TCF 2.3 string with range-encoded Disclosed Vendors (vendors 1-5, 100, 404)\r\n- [x] Parse TCF 2.2 string without Disclosed Vendors segment (returns 0/false)\r\n- [x] Edge cases: vendor ID 0 and beyond MaxDisclosedVendorID\r\n- [x] Existing tests pass (`go test ./...`)\r\n",
+    "canBeRebased": false,
+    "changedFiles": 5,
+    "closedAt": null,
+    "closingIssuesReferences": {
+      "nodes": [],
+      "pageInfo": {
+        "endCursor": null,
+        "hasNextPage": false
+      },
+      "totalCount": 0
+    },
+    "comments": {
+      "nodes": [
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 16453882,
+            "id": "MDQ6VXNlcjE2NDUzODgy",
+            "login": "osazos"
+          },
+          "authorAssociation": "MEMBER",
+          "createdAt": "2026-02-10T05:22:43Z",
+          "createdViaEmail": false,
+          "editor": null,
+          "fullDatabaseId": "3875407762",
+          "id": "IC_kwDOB-wgI87m_geS",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-02-10T05:22:43Z",
+          "updatedAt": "2026-02-10T05:22:43Z"
+        }
+      ],
+      "pageInfo": {
+        "endCursor": "Y3Vyc29yOnYyOpHO5v4Hkg==",
+        "hasNextPage": false
+      },
+      "totalCount": 1
+    },
+    "commits": {
+      "nodes": [
+        {
+          "commit": {
+            "author": {
+              "email": "guillaume.gierak@outlook.fr",
+              "name": "guillrak",
+              "user": {
+                "databaseId": 174647035,
+                "id": "U_kgDOCmjm-w",
+                "login": "guillrak"
+              }
+            },
+            "authoredDate": "2026-02-09T13:53:56Z",
+            "oid": "6752bfee94089c609270939fb2b8a925076b43a3"
+          }
+        }
+      ],
+      "pageInfo": {
+        "endCursor": "MQ",
+        "hasNextPage": false
+      },
+      "totalCount": 1
+    },
+    "createdAt": "2026-02-09T14:01:17Z",
+    "deletions": 15,
+    "editor": null,
+    "files": {
+      "nodes": [
+        {
+          "additions": 8,
+          "changeType": "MODIFIED",
+          "deletions": 0,
+          "path": "api/consent.go"
+        },
+        {
+          "additions": 10,
+          "changeType": "MODIFIED",
+          "deletions": 0,
+          "path": "vendorconsent/tcf1/metadata.go"
+        },
+        {
+          "additions": 96,
+          "changeType": "MODIFIED",
+          "deletions": 15,
+          "path": "vendorconsent/tcf2/consent.go"
+        },
+        {
+          "additions": 49,
+          "changeType": "MODIFIED",
+          "deletions": 0,
+          "path": "vendorconsent/tcf2/consent_test.go"
+        },
+        {
+          "additions": 17,
+          "changeType": "MODIFIED",
+          "deletions": 0,
+          "path": "vendorconsent/tcf2/metadata.go"
+        }
+      ],
+      "pageInfo": {
+        "endCursor": "NQ",
+        "hasNextPage": false
+      },
+      "totalCount": 5
+    },
+    "fullDatabaseId": "3263030210",
+    "headRefName": "feature/tcf23-disclosed-vendors",
+    "headRefOid": "6752bfee94089c609270939fb2b8a925076b43a3",
+    "headRepository": {
+      "databaseId": 1153474429,
+      "nameWithOwner": "guillrak/go-gdpr"
+    },
+    "headRepositoryOwner": {
+      "id": "U_kgDOCmjm-w",
+      "login": "guillrak"
+    },
+    "id": "PR_kwDOB-wgI87CfePC",
+    "includesCreatedEdit": false,
+    "isCrossRepository": true,
+    "isDraft": false,
+    "labels": {
+      "nodes": [],
+      "pageInfo": {
+        "endCursor": null,
+        "hasNextPage": false
+      },
+      "totalCount": 0
+    },
+    "lastEditedAt": null,
+    "maintainerCanModify": true,
+    "mergeCommit": null,
+    "mergeStateStatus": "DIRTY",
+    "mergeable": "CONFLICTING",
+    "mergedAt": null,
+    "mergedBy": null,
+    "milestone": null,
+    "number": 49,
+    "potentialMergeCommit": null,
+    "publishedAt": "2026-02-09T14:01:17Z",
+    "reviewDecision": "REVIEW_REQUIRED",
+    "reviewRequests": {
+      "nodes": [],
+      "pageInfo": {
+        "endCursor": null,
+        "hasNextPage": false
+      },
+      "totalCount": 0
+    },
+    "reviews": {
+      "nodes": [
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 122366082,
+            "id": "U_kgDOB0sogg",
+            "login": "anishb-ms"
+          },
+          "authorAssociation": "MEMBER",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 1
+          },
+          "commit": {
+            "oid": "6752bfee94089c609270939fb2b8a925076b43a3"
+          },
+          "createdAt": "2026-07-06T10:52:54Z",
+          "editor": null,
+          "fullDatabaseId": "4635142884",
+          "id": "PRR_kwDOB-wgI88AAAABFEaq5A",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-07-06T10:52:54Z",
+          "state": "COMMENTED",
+          "submittedAt": "2026-07-06T10:53:15Z",
+          "updatedAt": "2026-07-06T10:53:15Z"
+        }
+      ],
+      "pageInfo": {
+        "endCursor": "Y3Vyc29yOnYyOpO0MjAyNi0wNy0wNlQxMDo1MzoxNVq0MjAyNi0wNy0wNlQxMDo1Mjo1NFrPAAAAARRGquQ=",
+        "hasNextPage": false
+      },
+      "totalCount": 1
+    },
+    "stack": null,
+    "stackEntry": null,
+    "state": "OPEN",
+    "title": "Add TCF 2.3 Disclosed Vendors segment support",
+    "totalCommentsCount": 2,
+    "updatedAt": "2026-07-06T10:53:15Z",
+    "userLinkedClosingIssues": {
+      "nodes": [],
+      "pageInfo": {
+        "endCursor": null,
+        "hasNextPage": false
+      },
+      "totalCount": 0
+    }
+  },
+  "document_sha256": "3527b3fa77b23d4166d3a8a063506be04f20c8bec7cee75e2bf801d0d608c26c",
+  "errors": [],
+  "extra": {},
+  "headers": {
+    "date": "Tue, 20 Oct 2026 23:36:35 GMT",
+    "x-ratelimit-limit": "5000",
+    "x-ratelimit-remaining": "4975",
+    "x-ratelimit-reset": "1792541966",
+    "x-ratelimit-resource": "graphql",
+    "x-ratelimit-used": "25"
+  },
+  "key": {
+    "name": "go-gdpr",
+    "number": 49,
+    "owner": "prebid"
+  },
+  "kind": "pull_request",
+  "recorded_at": "2026-10-20T23:36:30Z",
+  "source": "live"
+}

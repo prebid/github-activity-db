@@ -14,10 +14,12 @@ uv run pre-commit install
 cp .env.example .env  # Add GITHUB_TOKEN
 uv run alembic upgrade head  # builds github_activity.local.db; refuses the tracked github_activity.db
 
-# CLI (no sync command until redesign plan Step 3b-2a-2c)
+# CLI (the github and sync commands need GITHUB_TOKEN="$(gh auth token)")
 uv run ghactivity --help
 uv run ghactivity github rate-limit --all                          # Rate-limit pools
 uv run ghactivity github test --pr 13481 --repo prebid/Prebid.js   # Resolve and hydrate one PR
+uv run ghactivity sync --repo prebid/go-gdpr --dry-run             # Plan a sync, write nothing
+uv run ghactivity sync --max-minutes 30                            # Sync into DATABASE_URL
 
 # Checks (CI runs the same: .github/workflows/check.yml)
 uv run pre-commit run --all-files  # ruff, mypy, file checks, quality gates
@@ -56,13 +58,14 @@ uv run pytest                      # CI also runs Python 3.12, `alembic check`, 
 - The writer and run records (Step 3b-2a-2a): every write the sync makes, the run claim and lock,
   the close, and the head check, with `[automation]` and `[sync].accepted_failures`
 - The sync engine (Step 3b-2a-2b-2, `sync/engine.py`): plan 5.3 steps 1-8 over the source, the
-  planner, and the writer, and `--dry-run`; no command calls it yet
+  planner, and the writer, and `--dry-run`
+- `ghactivity sync` (Step 3b-2a-2c, `cli/sync.py`): the engine's run with the options of plan
+  5.7; a run that never starts exits 1, and a run that starts exits with the engine's 0, 2, or 1
 
-**Not implemented yet:** nothing writes the new tables until the `sync` command (Step
-3b-2a-2c) calls the engine; `verify` follows in Step 3b-2b. The tracked `github_activity.db` stays
+**Not implemented yet:** `verify` (Step 3b-2b). The tracked `github_activity.db` stays
 frozen at the first schema (D26).
 
-**Planned in the redesign plan:** the `sync` command and verify (Step 3b); GitHub Issues and
+**Planned in the redesign plan:** verify (Step 3b-2b); GitHub Issues and
 closing-issue links (Step 4); scheduled sync and release publication (Step 6).
 
 **Out of Scope (Future):**

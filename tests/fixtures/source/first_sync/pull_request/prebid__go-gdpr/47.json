@@ -1,0 +1,275 @@
+{
+  "data": {
+    "additions": 258,
+    "assignedActors": {
+      "nodes": [],
+      "pageInfo": {
+        "endCursor": null,
+        "hasNextPage": false
+      },
+      "totalCount": 0
+    },
+    "author": {
+      "__typename": "User",
+      "databaseId": 5422376,
+      "id": "MDQ6VXNlcjU0MjIzNzY=",
+      "login": "y9mo"
+    },
+    "authorAssociation": "NONE",
+    "baseRefName": "master",
+    "baseRefOid": "b00a67a67032c09e47f5d8d0d82d9518fa152ba0",
+    "body": "",
+    "canBeRebased": false,
+    "changedFiles": 11,
+    "closedAt": "2026-01-27T12:43:31Z",
+    "closingIssuesReferences": {
+      "nodes": [],
+      "pageInfo": {
+        "endCursor": null,
+        "hasNextPage": false
+      },
+      "totalCount": 0
+    },
+    "comments": {
+      "nodes": [],
+      "pageInfo": {
+        "endCursor": null,
+        "hasNextPage": false
+      },
+      "totalCount": 0
+    },
+    "commits": {
+      "nodes": [
+        {
+          "commit": {
+            "author": {
+              "email": "ericd@adikteev.com",
+              "name": "Eric Da Silva",
+              "user": {
+                "databaseId": 5422376,
+                "id": "MDQ6VXNlcjU0MjIzNzY=",
+                "login": "y9mo"
+              }
+            },
+            "authoredDate": "2026-01-21T17:55:09Z",
+            "oid": "e00bf2be02b3d5cf70318e127209a8e2175f4ec7"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "ericd@adikteev.com",
+              "name": "Eric Da Silva",
+              "user": {
+                "databaseId": 5422376,
+                "id": "MDQ6VXNlcjU0MjIzNzY=",
+                "login": "y9mo"
+              }
+            },
+            "authoredDate": "2026-01-23T14:05:32Z",
+            "oid": "7ddfae03ab14f93c5f55bcf9bd65d3da323f9a48"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "ericd@adikteev.com",
+              "name": "Eric Da Silva",
+              "user": {
+                "databaseId": 5422376,
+                "id": "MDQ6VXNlcjU0MjIzNzY=",
+                "login": "y9mo"
+              }
+            },
+            "authoredDate": "2026-01-23T14:06:20Z",
+            "oid": "6125d39a4264b887389081cc96079d5e85bc64b4"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "ericd@adikteev.com",
+              "name": "Eric Da Silva",
+              "user": {
+                "databaseId": 5422376,
+                "id": "MDQ6VXNlcjU0MjIzNzY=",
+                "login": "y9mo"
+              }
+            },
+            "authoredDate": "2026-01-27T11:31:08Z",
+            "oid": "ecf7d7786eb0b4e90acfcc6b738657501d80765c"
+          }
+        }
+      ],
+      "pageInfo": {
+        "endCursor": "NA",
+        "hasNextPage": false
+      },
+      "totalCount": 4
+    },
+    "createdAt": "2026-01-27T12:43:23Z",
+    "deletions": 64,
+    "editor": null,
+    "files": {
+      "nodes": [
+        {
+          "additions": 1,
+          "changeType": "MODIFIED",
+          "deletions": 1,
+          "path": "vendorconsent/consent20_test.go"
+        },
+        {
+          "additions": 35,
+          "changeType": "ADDED",
+          "deletions": 0,
+          "path": "vendorconsent/tcf2/benchmark_test.go"
+        },
+        {
+          "additions": 1,
+          "changeType": "MODIFIED",
+          "deletions": 3,
+          "path": "vendorconsent/tcf2/bitfield.go"
+        },
+        {
+          "additions": 2,
+          "changeType": "MODIFIED",
+          "deletions": 3,
+          "path": "vendorconsent/tcf2/bitfield_test.go"
+        },
+        {
+          "additions": 87,
+          "changeType": "MODIFIED",
+          "deletions": 15,
+          "path": "vendorconsent/tcf2/consent.go"
+        },
+        {
+          "additions": 10,
+          "changeType": "MODIFIED",
+          "deletions": 4,
+          "path": "vendorconsent/tcf2/metadata.go"
+        },
+        {
+          "additions": 117,
+          "changeType": "MODIFIED",
+          "deletions": 30,
+          "path": "vendorconsent/tcf2/metadata_test.go"
+        },
+        {
+          "additions": 1,
+          "changeType": "MODIFIED",
+          "deletions": 2,
+          "path": "vendorconsent/tcf2/pubrestrict.go"
+        },
+        {
+          "additions": 2,
+          "changeType": "MODIFIED",
+          "deletions": 2,
+          "path": "vendorconsent/tcf2/pubrestrict_test.go"
+        },
+        {
+          "additions": 1,
+          "changeType": "MODIFIED",
+          "deletions": 3,
+          "path": "vendorconsent/tcf2/rangesection.go"
+        },
+        {
+          "additions": 1,
+          "changeType": "MODIFIED",
+          "deletions": 1,
+          "path": "vendorconsent/tcf2/rangesection_test.go"
+        }
+      ],
+      "pageInfo": {
+        "endCursor": "MTE",
+        "hasNextPage": false
+      },
+      "totalCount": 11
+    },
+    "fullDatabaseId": "3214440144",
+    "headRefName": "rico/support-disclosed-vendor",
+    "headRefOid": "ecf7d7786eb0b4e90acfcc6b738657501d80765c",
+    "headRepository": {
+      "databaseId": 1134881620,
+      "nameWithOwner": "Adikteev/go-gdpr"
+    },
+    "headRepositoryOwner": {
+      "id": "MDEyOk9yZ2FuaXphdGlvbjMxNzczMDQ=",
+      "login": "Adikteev"
+    },
+    "id": "PR_kwDOB-wgI86_mHbQ",
+    "includesCreatedEdit": false,
+    "isCrossRepository": true,
+    "isDraft": true,
+    "labels": {
+      "nodes": [],
+      "pageInfo": {
+        "endCursor": null,
+        "hasNextPage": false
+      },
+      "totalCount": 0
+    },
+    "lastEditedAt": null,
+    "maintainerCanModify": false,
+    "mergeCommit": null,
+    "mergeStateStatus": "BLOCKED",
+    "mergeable": "MERGEABLE",
+    "mergedAt": null,
+    "mergedBy": null,
+    "milestone": null,
+    "number": 47,
+    "potentialMergeCommit": {
+      "oid": "5844a58f761d7b4ed8add2f7f6855ef6d34b632a"
+    },
+    "publishedAt": "2026-01-27T12:43:23Z",
+    "reviewDecision": "REVIEW_REQUIRED",
+    "reviewRequests": {
+      "nodes": [],
+      "pageInfo": {
+        "endCursor": null,
+        "hasNextPage": false
+      },
+      "totalCount": 0
+    },
+    "reviews": {
+      "nodes": [],
+      "pageInfo": {
+        "endCursor": null,
+        "hasNextPage": false
+      },
+      "totalCount": 0
+    },
+    "stack": null,
+    "stackEntry": null,
+    "state": "CLOSED",
+    "title": "Support disclosed vendor",
+    "totalCommentsCount": 0,
+    "updatedAt": "2026-01-27T12:43:31Z",
+    "userLinkedClosingIssues": {
+      "nodes": [],
+      "pageInfo": {
+        "endCursor": null,
+        "hasNextPage": false
+      },
+      "totalCount": 0
+    }
+  },
+  "document_sha256": "3527b3fa77b23d4166d3a8a063506be04f20c8bec7cee75e2bf801d0d608c26c",
+  "errors": [],
+  "extra": {},
+  "headers": {
+    "date": "Tue, 20 Oct 2026 23:36:35 GMT",
+    "x-ratelimit-limit": "5000",
+    "x-ratelimit-remaining": "4975",
+    "x-ratelimit-reset": "1792541966",
+    "x-ratelimit-resource": "graphql",
+    "x-ratelimit-used": "25"
+  },
+  "key": {
+    "name": "go-gdpr",
+    "number": 47,
+    "owner": "prebid"
+  },
+  "kind": "pull_request",
+  "recorded_at": "2026-10-20T23:36:30Z",
+  "source": "live"
+}

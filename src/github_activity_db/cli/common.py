@@ -4,13 +4,14 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Coroutine
+from datetime import datetime
 
 import typer
 from rich.console import Console
 from rich.markup import escape
 
 from github_activity_db.config import get_settings
-from github_activity_db.source import GitHubSource
+from github_activity_db.source import Clock, GitHubSource, SystemClock
 
 console = Console()
 error_console = Console(stderr=True)
@@ -65,6 +66,13 @@ def github_token() -> str:
     return value
 
 
-def open_source(token: str) -> GitHubSource:
+def clock() -> Clock:
+    """The clock a command stamps, waits, and sets its deadline with; tests replace it."""
+    return SystemClock()
+
+
+def open_source(
+    token: str, *, deadline: datetime | None = None, clock: Clock | None = None
+) -> GitHubSource:
     """The source layer a command reads GitHub through; tests replace it to inject a transport."""
-    return GitHubSource(token)
+    return GitHubSource(token, deadline=deadline, clock=clock)

@@ -1,0 +1,258 @@
+{
+  "data": {
+    "additions": 256,
+    "assignedActors": {
+      "nodes": [
+        {
+          "__typename": "User",
+          "databaseId": 4790765,
+          "id": "MDQ6VXNlcjQ3OTA3NjU=",
+          "login": "VeronikaSolovei9"
+        },
+        {
+          "__typename": "User",
+          "databaseId": 31041505,
+          "id": "MDQ6VXNlcjMxMDQxNTA1",
+          "login": "hhhjort"
+        }
+      ],
+      "pageInfo": {
+        "endCursor": "Mg",
+        "hasNextPage": false
+      },
+      "totalCount": 2
+    },
+    "author": {
+      "__typename": "User",
+      "databaseId": 1168933,
+      "id": "MDQ6VXNlcjExNjg5MzM=",
+      "login": "bsardo"
+    },
+    "authorAssociation": "MEMBER",
+    "baseRefName": "master",
+    "baseRefOid": "29f461037790957f775acab24098cc483abcaf34",
+    "body": "This change is driven by [PBS Issue 2697](.com/prebid/prebid-server/issues/2697)",
+    "canBeRebased": false,
+    "changedFiles": 3,
+    "closedAt": "2023-06-14T17:19:57Z",
+    "closingIssuesReferences": {
+      "nodes": [],
+      "pageInfo": {
+        "endCursor": null,
+        "hasNextPage": false
+      },
+      "totalCount": 0
+    },
+    "comments": {
+      "nodes": [],
+      "pageInfo": {
+        "endCursor": null,
+        "hasNextPage": false
+      },
+      "totalCount": 0
+    },
+    "commits": {
+      "nodes": [
+        {
+          "commit": {
+            "author": {
+              "email": "1168933+bsardo@users.noreply.github.com",
+              "name": "bsardo",
+              "user": {
+                "databaseId": 1168933,
+                "id": "MDQ6VXNlcjExNjg5MzM=",
+                "login": "bsardo"
+              }
+            },
+            "authoredDate": "2023-06-09T17:40:46Z",
+            "oid": "27b801bad8335e87f72844c40ab824276866e71e"
+          }
+        }
+      ],
+      "pageInfo": {
+        "endCursor": "MQ",
+        "hasNextPage": false
+      },
+      "totalCount": 1
+    },
+    "createdAt": "2023-06-09T17:42:12Z",
+    "deletions": 101,
+    "editor": {
+      "__typename": "User",
+      "databaseId": 1168933,
+      "id": "MDQ6VXNlcjExNjg5MzM=",
+      "login": "bsardo"
+    },
+    "files": {
+      "nodes": [
+        {
+          "additions": 54,
+          "changeType": "MODIFIED",
+          "deletions": 23,
+          "path": "vendorlist2/eager-parsing_test.go"
+        },
+        {
+          "additions": 57,
+          "changeType": "MODIFIED",
+          "deletions": 2,
+          "path": "vendorlist2/lazy-parsing_test.go"
+        },
+        {
+          "additions": 145,
+          "changeType": "MODIFIED",
+          "deletions": 76,
+          "path": "vendorlist2/shared_test.go"
+        }
+      ],
+      "pageInfo": {
+        "endCursor": "Mw",
+        "hasNextPage": false
+      },
+      "totalCount": 3
+    },
+    "fullDatabaseId": "1386536894",
+    "headRefName": "gvl-spec-version-3-test-updates",
+    "headRefOid": "27b801bad8335e87f72844c40ab824276866e71e",
+    "headRepository": {
+      "databaseId": 370525860,
+      "nameWithOwner": "bsardo/go-gdpr"
+    },
+    "headRepositoryOwner": {
+      "id": "MDQ6VXNlcjExNjg5MzM=",
+      "login": "bsardo"
+    },
+    "id": "PR_kwDOB-wgI85SpN--",
+    "includesCreatedEdit": true,
+    "isCrossRepository": true,
+    "isDraft": false,
+    "labels": {
+      "nodes": [],
+      "pageInfo": {
+        "endCursor": null,
+        "hasNextPage": false
+      },
+      "totalCount": 0
+    },
+    "lastEditedAt": "2023-06-12T17:30:58Z",
+    "maintainerCanModify": false,
+    "mergeCommit": {
+      "oid": "b1cf544d420995d57c8baf64d6f06d4bf5247a2f"
+    },
+    "mergeStateStatus": "UNKNOWN",
+    "mergeable": "UNKNOWN",
+    "mergedAt": "2023-06-14T17:19:57Z",
+    "mergedBy": {
+      "__typename": "User",
+      "databaseId": 1168933,
+      "id": "MDQ6VXNlcjExNjg5MzM=",
+      "login": "bsardo"
+    },
+    "milestone": null,
+    "number": 36,
+    "potentialMergeCommit": null,
+    "publishedAt": "2023-06-09T17:42:12Z",
+    "reviewDecision": "APPROVED",
+    "reviewRequests": {
+      "nodes": [],
+      "pageInfo": {
+        "endCursor": null,
+        "hasNextPage": false
+      },
+      "totalCount": 0
+    },
+    "reviews": {
+      "nodes": [
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 31041505,
+            "id": "MDQ6VXNlcjMxMDQxNTA1",
+            "login": "hhhjort"
+          },
+          "authorAssociation": "MEMBER",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 0
+          },
+          "commit": {
+            "oid": "27b801bad8335e87f72844c40ab824276866e71e"
+          },
+          "createdAt": "2023-06-13T19:12:02Z",
+          "editor": null,
+          "fullDatabaseId": "1477892274",
+          "id": "PRR_kwDOB-wgI85YFtiy",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2023-06-13T19:12:02Z",
+          "state": "APPROVED",
+          "submittedAt": "2023-06-13T19:12:02Z",
+          "updatedAt": "2023-06-13T19:12:02Z"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 4790765,
+            "id": "MDQ6VXNlcjQ3OTA3NjU=",
+            "login": "VeronikaSolovei9"
+          },
+          "authorAssociation": "MEMBER",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 0
+          },
+          "commit": {
+            "oid": "27b801bad8335e87f72844c40ab824276866e71e"
+          },
+          "createdAt": "2023-06-14T17:10:25Z",
+          "editor": null,
+          "fullDatabaseId": "1479947585",
+          "id": "PRR_kwDOB-wgI85YNjVB",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2023-06-14T17:10:25Z",
+          "state": "APPROVED",
+          "submittedAt": "2023-06-14T17:10:25Z",
+          "updatedAt": "2023-06-14T17:10:25Z"
+        }
+      ],
+      "pageInfo": {
+        "endCursor": "Y3Vyc29yOnYyOpO0MjAyMy0wNi0xNFQxNzoxMDoyNVq0MjAyMy0wNi0xNFQxNzoxMDoyNVrOWDY1QQ==",
+        "hasNextPage": false
+      },
+      "totalCount": 2
+    },
+    "stack": null,
+    "stackEntry": null,
+    "state": "MERGED",
+    "title": "Update GVL parser tests to ensure GVL spec v3 support",
+    "totalCommentsCount": 1,
+    "updatedAt": "2023-06-14T17:19:57Z",
+    "userLinkedClosingIssues": {
+      "nodes": [],
+      "pageInfo": {
+        "endCursor": null,
+        "hasNextPage": false
+      },
+      "totalCount": 0
+    }
+  },
+  "document_sha256": "3527b3fa77b23d4166d3a8a063506be04f20c8bec7cee75e2bf801d0d608c26c",
+  "errors": [],
+  "extra": {},
+  "headers": {
+    "date": "Tue, 20 Oct 2026 23:36:35 GMT",
+    "x-ratelimit-limit": "5000",
+    "x-ratelimit-remaining": "4975",
+    "x-ratelimit-reset": "1792541966",
+    "x-ratelimit-resource": "graphql",
+    "x-ratelimit-used": "25"
+  },
+  "key": {
+    "name": "go-gdpr",
+    "number": 36,
+    "owner": "prebid"
+  },
+  "kind": "pull_request",
+  "recorded_at": "2026-10-20T23:36:30Z",
+  "source": "live"
+}

@@ -174,6 +174,9 @@ class SyncReport:
     second_node_ids: tuple[SecondNodeId, ...]
     refresh_failures: tuple[str, ...]
     items_hydrated: int
+    # What the run spent, as sync_runs records it.
+    graphql_points: int = 0
+    rest_calls: int = 0
     reclaimed: tuple[int, ...] = ()
     broken: tuple[int, ...] = ()
     error: str | None = None
@@ -973,6 +976,8 @@ class _Sync:
             second_node_ids=tuple(self.second_node_ids),
             refresh_failures=tuple(self.refresh_failures),
             items_hydrated=self.items_hydrated,
+            graphql_points=self.usage.graphql_points,
+            rest_calls=self.usage.rest_calls,
             reclaimed=self.claim.reclaimed if self.claim is not None else (),
             broken=self.claim.broken if self.claim is not None else (),
             error=error,

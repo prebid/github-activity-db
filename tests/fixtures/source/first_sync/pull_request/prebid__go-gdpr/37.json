@@ -1,0 +1,330 @@
+{
+  "data": {
+    "additions": 101,
+    "assignedActors": {
+      "nodes": [
+        {
+          "__typename": "User",
+          "databaseId": 4790765,
+          "id": "MDQ6VXNlcjQ3OTA3NjU=",
+          "login": "VeronikaSolovei9"
+        },
+        {
+          "__typename": "User",
+          "databaseId": 31041505,
+          "id": "MDQ6VXNlcjMxMDQxNTA1",
+          "login": "hhhjort"
+        }
+      ],
+      "pageInfo": {
+        "endCursor": "Mg",
+        "hasNextPage": false
+      },
+      "totalCount": 2
+    },
+    "author": {
+      "__typename": "User",
+      "databaseId": 1168933,
+      "id": "MDQ6VXNlcjExNjg5MzM=",
+      "login": "bsardo"
+    },
+    "authorAssociation": "MEMBER",
+    "baseRefName": "master",
+    "baseRefOid": "b1cf544d420995d57c8baf64d6f06d4bf5247a2f",
+    "body": "",
+    "canBeRebased": false,
+    "changedFiles": 9,
+    "closedAt": "2023-06-16T13:45:03Z",
+    "closingIssuesReferences": {
+      "nodes": [],
+      "pageInfo": {
+        "endCursor": null,
+        "hasNextPage": false
+      },
+      "totalCount": 0
+    },
+    "comments": {
+      "nodes": [],
+      "pageInfo": {
+        "endCursor": null,
+        "hasNextPage": false
+      },
+      "totalCount": 0
+    },
+    "commits": {
+      "nodes": [
+        {
+          "commit": {
+            "author": {
+              "email": "1168933+bsardo@users.noreply.github.com",
+              "name": "bsardo",
+              "user": {
+                "databaseId": 1168933,
+                "id": "MDQ6VXNlcjExNjg5MzM=",
+                "login": "bsardo"
+              }
+            },
+            "authoredDate": "2023-06-13T20:33:37Z",
+            "oid": "d3ed4e6b722b49b2504b7c2bfe232d33ee9eea0b"
+          }
+        },
+        {
+          "commit": {
+            "author": {
+              "email": "1168933+bsardo@users.noreply.github.com",
+              "name": "bsardo",
+              "user": {
+                "databaseId": 1168933,
+                "id": "MDQ6VXNlcjExNjg5MzM=",
+                "login": "bsardo"
+              }
+            },
+            "authoredDate": "2023-06-15T13:30:13Z",
+            "oid": "971c5772c082277760ae06e3f6cafd7ecd5184e5"
+          }
+        }
+      ],
+      "pageInfo": {
+        "endCursor": "Mg",
+        "hasNextPage": false
+      },
+      "totalCount": 2
+    },
+    "createdAt": "2023-06-13T20:34:21Z",
+    "deletions": 53,
+    "editor": null,
+    "files": {
+      "nodes": [
+        {
+          "additions": 3,
+          "changeType": "MODIFIED",
+          "deletions": 0,
+          "path": "api/vendorlist.go"
+        },
+        {
+          "additions": 9,
+          "changeType": "MODIFIED",
+          "deletions": 2,
+          "path": "vendorlist/eager-parsing.go"
+        },
+        {
+          "additions": 7,
+          "changeType": "MODIFIED",
+          "deletions": 0,
+          "path": "vendorlist/lazy-parsing.go"
+        },
+        {
+          "additions": 1,
+          "changeType": "MODIFIED",
+          "deletions": 0,
+          "path": "vendorlist/shared_test.go"
+        },
+        {
+          "additions": 15,
+          "changeType": "MODIFIED",
+          "deletions": 8,
+          "path": "vendorlist2/eager-parsing.go"
+        },
+        {
+          "additions": 28,
+          "changeType": "MODIFIED",
+          "deletions": 20,
+          "path": "vendorlist2/eager-parsing_test.go"
+        },
+        {
+          "additions": 9,
+          "changeType": "MODIFIED",
+          "deletions": 2,
+          "path": "vendorlist2/lazy-parsing.go"
+        },
+        {
+          "additions": 28,
+          "changeType": "MODIFIED",
+          "deletions": 20,
+          "path": "vendorlist2/lazy-parsing_test.go"
+        },
+        {
+          "additions": 1,
+          "changeType": "MODIFIED",
+          "deletions": 1,
+          "path": "vendorlist2/shared_test.go"
+        }
+      ],
+      "pageInfo": {
+        "endCursor": "OQ",
+        "hasNextPage": false
+      },
+      "totalCount": 9
+    },
+    "fullDatabaseId": "1391266602",
+    "headRefName": "vendorlist-interface-spec-version-func",
+    "headRefOid": "971c5772c082277760ae06e3f6cafd7ecd5184e5",
+    "headRepository": {
+      "databaseId": 370525860,
+      "nameWithOwner": "bsardo/go-gdpr"
+    },
+    "headRepositoryOwner": {
+      "id": "MDQ6VXNlcjExNjg5MzM=",
+      "login": "bsardo"
+    },
+    "id": "PR_kwDOB-wgI85S7Qsq",
+    "includesCreatedEdit": false,
+    "isCrossRepository": true,
+    "isDraft": false,
+    "labels": {
+      "nodes": [],
+      "pageInfo": {
+        "endCursor": null,
+        "hasNextPage": false
+      },
+      "totalCount": 0
+    },
+    "lastEditedAt": null,
+    "maintainerCanModify": false,
+    "mergeCommit": {
+      "oid": "43b98940eccdb7780348ed52e82a9478460be487"
+    },
+    "mergeStateStatus": "UNKNOWN",
+    "mergeable": "UNKNOWN",
+    "mergedAt": "2023-06-16T13:45:03Z",
+    "mergedBy": {
+      "__typename": "User",
+      "databaseId": 1168933,
+      "id": "MDQ6VXNlcjExNjg5MzM=",
+      "login": "bsardo"
+    },
+    "milestone": null,
+    "number": 37,
+    "potentialMergeCommit": null,
+    "publishedAt": "2023-06-13T20:34:21Z",
+    "reviewDecision": "APPROVED",
+    "reviewRequests": {
+      "nodes": [],
+      "pageInfo": {
+        "endCursor": null,
+        "hasNextPage": false
+      },
+      "totalCount": 0
+    },
+    "reviews": {
+      "nodes": [
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 31041505,
+            "id": "MDQ6VXNlcjMxMDQxNTA1",
+            "login": "hhhjort"
+          },
+          "authorAssociation": "MEMBER",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 0
+          },
+          "commit": {
+            "oid": "d3ed4e6b722b49b2504b7c2bfe232d33ee9eea0b"
+          },
+          "createdAt": "2023-06-14T18:10:09Z",
+          "editor": null,
+          "fullDatabaseId": "1480039283",
+          "id": "PRR_kwDOB-wgI85YN5tz",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2023-06-14T18:10:09Z",
+          "state": "DISMISSED",
+          "submittedAt": "2023-06-14T18:10:08Z",
+          "updatedAt": "2023-06-15T13:30:52Z"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 31041505,
+            "id": "MDQ6VXNlcjMxMDQxNTA1",
+            "login": "hhhjort"
+          },
+          "authorAssociation": "MEMBER",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 0
+          },
+          "commit": {
+            "oid": "971c5772c082277760ae06e3f6cafd7ecd5184e5"
+          },
+          "createdAt": "2023-06-15T18:38:38Z",
+          "editor": null,
+          "fullDatabaseId": "1482187260",
+          "id": "PRR_kwDOB-wgI85YWGH8",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2023-06-15T18:38:38Z",
+          "state": "APPROVED",
+          "submittedAt": "2023-06-15T18:38:38Z",
+          "updatedAt": "2023-06-15T18:38:38Z"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 4790765,
+            "id": "MDQ6VXNlcjQ3OTA3NjU=",
+            "login": "VeronikaSolovei9"
+          },
+          "authorAssociation": "MEMBER",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 0
+          },
+          "commit": {
+            "oid": "971c5772c082277760ae06e3f6cafd7ecd5184e5"
+          },
+          "createdAt": "2023-06-15T21:35:32Z",
+          "editor": null,
+          "fullDatabaseId": "1482421874",
+          "id": "PRR_kwDOB-wgI85YW_Zy",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2023-06-15T21:35:32Z",
+          "state": "APPROVED",
+          "submittedAt": "2023-06-15T21:35:32Z",
+          "updatedAt": "2023-06-15T21:35:32Z"
+        }
+      ],
+      "pageInfo": {
+        "endCursor": "Y3Vyc29yOnYyOpO0MjAyMy0wNi0xNVQyMTozNTozMlq0MjAyMy0wNi0xNVQyMTozNTozMlrOWFv2cg==",
+        "hasNextPage": false
+      },
+      "totalCount": 3
+    },
+    "stack": null,
+    "stackEntry": null,
+    "state": "MERGED",
+    "title": "Add public VendorList interface method to get GVL specification version",
+    "totalCommentsCount": 1,
+    "updatedAt": "2023-06-16T13:45:04Z",
+    "userLinkedClosingIssues": {
+      "nodes": [],
+      "pageInfo": {
+        "endCursor": null,
+        "hasNextPage": false
+      },
+      "totalCount": 0
+    }
+  },
+  "document_sha256": "3527b3fa77b23d4166d3a8a063506be04f20c8bec7cee75e2bf801d0d608c26c",
+  "errors": [],
+  "extra": {},
+  "headers": {
+    "date": "Tue, 20 Oct 2026 23:36:35 GMT",
+    "x-ratelimit-limit": "5000",
+    "x-ratelimit-remaining": "4975",
+    "x-ratelimit-reset": "1792541966",
+    "x-ratelimit-resource": "graphql",
+    "x-ratelimit-used": "25"
+  },
+  "key": {
+    "name": "go-gdpr",
+    "number": 37,
+    "owner": "prebid"
+  },
+  "kind": "pull_request",
+  "recorded_at": "2026-10-20T23:36:30Z",
+  "source": "live"
+}

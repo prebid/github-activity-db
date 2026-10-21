@@ -1,0 +1,31 @@
+{
+  "data": {
+    "__typename": "User",
+    "company": null,
+    "createdAt": "2024-07-03T18:43:42Z",
+    "databaseId": 174647035,
+    "id": "U_kgDOCmjm-w",
+    "location": null,
+    "login": "guillrak",
+    "name": null,
+    "updatedAt": "2026-09-07T18:42:22Z",
+    "websiteUrl": null
+  },
+  "document_sha256": "8ff584c890202fea5cbc1f0e26a1466c737702d2f6b5be23eeb23343264bce9b",
+  "errors": [],
+  "extra": {},
+  "headers": {
+    "date": "Tue, 20 Oct 2026 23:36:36 GMT",
+    "x-ratelimit-limit": "5000",
+    "x-ratelimit-remaining": "4974",
+    "x-ratelimit-reset": "1792541966",
+    "x-ratelimit-resource": "graphql",
+    "x-ratelimit-used": "26"
+  },
+  "key": {
+    "id": "U_kgDOCmjm-w"
+  },
+  "kind": "user",
+  "recorded_at": "2026-10-20T23:36:30Z",
+  "source": "live"
+}

@@ -1,0 +1,270 @@
+{
+  "data": {
+    "additions": 8,
+    "assignedActors": {
+      "nodes": [],
+      "pageInfo": {
+        "endCursor": null,
+        "hasNextPage": false
+      },
+      "totalCount": 0
+    },
+    "author": {
+      "__typename": "User",
+      "databaseId": 59438,
+      "id": "MDQ6VXNlcjU5NDM4",
+      "login": "peczenyj"
+    },
+    "authorAssociation": "CONTRIBUTOR",
+    "baseRefName": "master",
+    "baseRefOid": "b00a67a67032c09e47f5d8d0d82d9518fa152ba0",
+    "body": "I add the description from https://iabeurope.eu/wp-content/uploads/2023/05/FAQ_-TCF-v2.2-.pdf",
+    "canBeRebased": false,
+    "changedFiles": 1,
+    "closedAt": "2026-09-14T07:10:37Z",
+    "closingIssuesReferences": {
+      "nodes": [],
+      "pageInfo": {
+        "endCursor": null,
+        "hasNextPage": false
+      },
+      "totalCount": 0
+    },
+    "comments": {
+      "nodes": [
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 59438,
+            "id": "MDQ6VXNlcjU5NDM4",
+            "login": "peczenyj"
+          },
+          "authorAssociation": "CONTRIBUTOR",
+          "createdAt": "2025-12-09T08:27:29Z",
+          "createdViaEmail": false,
+          "editor": null,
+          "fullDatabaseId": "3630977509",
+          "id": "IC_kwDOB-wgI87YbFHl",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2025-12-09T08:27:29Z",
+          "updatedAt": "2025-12-09T08:27:29Z"
+        }
+      ],
+      "pageInfo": {
+        "endCursor": "Y3Vyc29yOnYyOpHO2GxR5Q==",
+        "hasNextPage": false
+      },
+      "totalCount": 1
+    },
+    "commits": {
+      "nodes": [
+        {
+          "commit": {
+            "author": {
+              "email": "tiago.peczenyj@gmail.com",
+              "name": "Tiago Peczenyj",
+              "user": {
+                "databaseId": 59438,
+                "id": "MDQ6VXNlcjU5NDM4",
+                "login": "peczenyj"
+              }
+            },
+            "authoredDate": "2025-04-07T14:44:07Z",
+            "oid": "2cad56c9b0c7285375d2fb1cd846b00b572c91e1"
+          }
+        }
+      ],
+      "pageInfo": {
+        "endCursor": "MQ",
+        "hasNextPage": false
+      },
+      "totalCount": 1
+    },
+    "createdAt": "2025-04-07T14:46:04Z",
+    "deletions": 0,
+    "editor": null,
+    "files": {
+      "nodes": [
+        {
+          "additions": 8,
+          "changeType": "MODIFIED",
+          "deletions": 0,
+          "path": "consentconstants/tcf2/purposes.go"
+        }
+      ],
+      "pageInfo": {
+        "endCursor": "MQ",
+        "hasNextPage": false
+      },
+      "totalCount": 1
+    },
+    "fullDatabaseId": "2443548063",
+    "headRefName": "add-purpose-id-11",
+    "headRefOid": "2cad56c9b0c7285375d2fb1cd846b00b572c91e1",
+    "headRepository": {
+      "databaseId": 263343620,
+      "nameWithOwner": "peczenyj/go-gdpr"
+    },
+    "headRepositoryOwner": {
+      "id": "MDQ6VXNlcjU5NDM4",
+      "login": "peczenyj"
+    },
+    "id": "PR_kwDOB-wgI86RpZWf",
+    "includesCreatedEdit": false,
+    "isCrossRepository": true,
+    "isDraft": false,
+    "labels": {
+      "nodes": [],
+      "pageInfo": {
+        "endCursor": null,
+        "hasNextPage": false
+      },
+      "totalCount": 0
+    },
+    "lastEditedAt": null,
+    "maintainerCanModify": false,
+    "mergeCommit": {
+      "oid": "07c5fca782fe01166796f2311facf7bb6297fa4c"
+    },
+    "mergeStateStatus": "UNKNOWN",
+    "mergeable": "UNKNOWN",
+    "mergedAt": "2026-09-14T07:10:37Z",
+    "mergedBy": {
+      "__typename": "User",
+      "databaseId": 37686606,
+      "id": "MDQ6VXNlcjM3Njg2NjA2",
+      "login": "karwaankit32"
+    },
+    "milestone": null,
+    "number": 42,
+    "potentialMergeCommit": null,
+    "publishedAt": "2025-04-07T14:46:04Z",
+    "reviewDecision": "APPROVED",
+    "reviewRequests": {
+      "nodes": [
+        {
+          "asCodeOwner": false,
+          "databaseId": 3633310714,
+          "id": "RR_kwDOB-wgI87Yj-v6",
+          "requestedReviewer": {
+            "__typename": "User",
+            "databaseId": 122366082,
+            "id": "U_kgDOB0sogg",
+            "login": "anishb-ms"
+          }
+        },
+        {
+          "asCodeOwner": false,
+          "databaseId": 3633310827,
+          "id": "RR_kwDOB-wgI87Yj-xr",
+          "requestedReviewer": {
+            "__typename": "User",
+            "databaseId": 37686606,
+            "id": "MDQ6VXNlcjM3Njg2NjA2",
+            "login": "karwaankit32"
+          }
+        }
+      ],
+      "pageInfo": {
+        "endCursor": "Y3Vyc29yOnYyOpHO2I_saw==",
+        "hasNextPage": false
+      },
+      "totalCount": 2
+    },
+    "reviews": {
+      "nodes": [
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 37686606,
+            "id": "MDQ6VXNlcjM3Njg2NjA2",
+            "login": "karwaankit32"
+          },
+          "authorAssociation": "MEMBER",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 0
+          },
+          "commit": {
+            "oid": "2cad56c9b0c7285375d2fb1cd846b00b572c91e1"
+          },
+          "createdAt": "2026-07-06T06:31:59Z",
+          "editor": null,
+          "fullDatabaseId": "4633353748",
+          "id": "PRR_kwDOB-wgI88AAAABFCteFA",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-07-06T06:31:59Z",
+          "state": "APPROVED",
+          "submittedAt": "2026-07-06T06:31:59Z",
+          "updatedAt": "2026-07-06T06:31:59Z"
+        },
+        {
+          "author": {
+            "__typename": "User",
+            "databaseId": 122366082,
+            "id": "U_kgDOB0sogg",
+            "login": "anishb-ms"
+          },
+          "authorAssociation": "MEMBER",
+          "authorCanPushToRepository": true,
+          "comments": {
+            "totalCount": 0
+          },
+          "commit": {
+            "oid": "2cad56c9b0c7285375d2fb1cd846b00b572c91e1"
+          },
+          "createdAt": "2026-07-06T11:54:01Z",
+          "editor": null,
+          "fullDatabaseId": "4635547560",
+          "id": "PRR_kwDOB-wgI88AAAABFEzXqA",
+          "includesCreatedEdit": false,
+          "lastEditedAt": null,
+          "publishedAt": "2026-07-06T11:54:01Z",
+          "state": "APPROVED",
+          "submittedAt": "2026-07-06T11:54:01Z",
+          "updatedAt": "2026-07-06T11:54:01Z"
+        }
+      ],
+      "pageInfo": {
+        "endCursor": "Y3Vyc29yOnYyOpO0MjAyNi0wNy0wNlQxMTo1NDowMVq0MjAyNi0wNy0wNlQxMTo1NDowMVrPAAAAARRM16g=",
+        "hasNextPage": false
+      },
+      "totalCount": 2
+    },
+    "stack": null,
+    "stackEntry": null,
+    "state": "MERGED",
+    "title": "add human readable constant to represent tcf v2 purpose id 11",
+    "totalCommentsCount": 1,
+    "updatedAt": "2026-09-14T07:10:37Z",
+    "userLinkedClosingIssues": {
+      "nodes": [],
+      "pageInfo": {
+        "endCursor": null,
+        "hasNextPage": false
+      },
+      "totalCount": 0
+    }
+  },
+  "document_sha256": "3527b3fa77b23d4166d3a8a063506be04f20c8bec7cee75e2bf801d0d608c26c",
+  "errors": [],
+  "extra": {},
+  "headers": {
+    "date": "Tue, 20 Oct 2026 23:36:35 GMT",
+    "x-ratelimit-limit": "5000",
+    "x-ratelimit-remaining": "4975",
+    "x-ratelimit-reset": "1792541966",
+    "x-ratelimit-resource": "graphql",
+    "x-ratelimit-used": "25"
+  },
+  "key": {
+    "name": "go-gdpr",
+    "number": 42,
+    "owner": "prebid"
+  },
+  "kind": "pull_request",
+  "recorded_at": "2026-10-20T23:36:30Z",
+  "source": "live"
+}
