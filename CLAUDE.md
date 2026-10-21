@@ -65,8 +65,8 @@ uv run pytest                      # CI also runs Python 3.12, `alembic check`, 
 **Not implemented yet:** the REST sampler (Step 3b-2b-1) and `verify` (Step 3b-2b-2). The
 tracked `github_activity.db` stays frozen at the first schema (D26).
 
-**Planned in the redesign plan:** the REST sampler (Step 3b-2b-1) and verify (Step 3b-2b-2); GitHub Issues and
-closing-issue links (Step 4); scheduled sync and release publication (Step 6).
+**Planned in the redesign plan:** the REST sampler (Step 3b-2b-1) and verify (Step 3b-2b-2);
+GitHub Issues and closing-issue links (Step 4); scheduled sync and release publication (Step 6).
 
 **Out of Scope (Future):**
 - Webhooks / real-time sync
