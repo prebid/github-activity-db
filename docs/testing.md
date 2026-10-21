@@ -47,7 +47,9 @@ tests/
 ├── sync/                    # Planner, deletions, writer, and run records over seeded databases
 │   ├── engine_support.py    # A migrated database and a scenario model, synced by the engine
 │   ├── test_engine.py       # The engine's cases (redesign plan Step 3b-2a-2b-2)
-│   └── test_first_sync.py   # go-gdpr's first sync from its recordings, without the model
+│   ├── test_first_sync.py   # go-gdpr's first sync from its recordings, without the model
+│   ├── test_seeded_runs.py  # Seeded random changes over several runs, each checked against...
+│   └── expected_state.py    # ...the database the model and its history give, never the writer
 ├── fixtures/source/
 │   ├── recorded/            # Units recorded from public repositories (scripts/record_fixtures.py)
 │   ├── first_sync/          # Every unit go-gdpr's first sync asked for (--only first-sync)
@@ -225,6 +227,14 @@ run must see GitHub as the test left it.
   stored rows, the `sync_runs` row, the `repo_sync_state` rows the run wrote (`ended`), and the
   exit code. The `world` fixture fails a test that leaves an `AccountMissing` failure, except the
   one that fakes the writer's refusal.
+- **Seeded runs**: `tests/sync/test_seeded_runs.py` gives each of a few fixed seeds a small world
+  and five runs, with random changes through the model's methods and random clock gaps between
+  them. After each run `tests/sync/expected_state.py` computes the database the plan requires from
+  the model and from what earlier runs stored (D28's kept references, the 24-hour refresh, gap 90,
+  a batch's lookups and sightings, in-place updates, step 7), never from the writer, and compares
+  every table on every column except row ids (mapped to natural keys), the stamps taken from
+  `Date` headers (compared as set or not), and the run counters. Each seed asserts the rules it
+  was chosen to reach, so a driver change that loses coverage fails.
 
 ---
 
