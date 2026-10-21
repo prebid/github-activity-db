@@ -180,3 +180,78 @@ def test_an_error_line_is_the_reports_own_markup_and_github_text_is_not() -> Non
         "Hydrated 0 items; GraphQL points 0, REST calls 0, 0 s",
         "Error: UnexpectedResponse: [/broken] GitHub said :thumbsup:",
     ]
+
+
+def test_each_entry_prints_on_one_line_with_control_characters_escaped() -> None:
+    """A newline in an error page, a tab, a carriage return, and a terminal escape sequence are
+    shown as escapes: no entry splits, and no forged line appears."""
+    report = SyncReport(
+        dry_run=False,
+        run_id=7,
+        status="complete",
+        exit_code=2,
+        repositories=(),
+        untracked=(),
+        planned=(),
+        in_place_updates=(),
+        deletions=(),
+        pruned=(),
+        prune_refused=None,
+        failures=(),
+        accepted_not_failed=(),
+        second_node_ids=(),
+        refresh_failures=("HTTP 502: <html>\nRun 7: complete, exit 0\r\t\x1b[1A\x1b[2K",),
+        items_hydrated=0,
+    )
+
+    lines = rendered(report)
+
+    assert lines[1] == (
+        "Refresh failed: HTTP 502: <html>\\nRun 7: complete, exit 0\\r\\t\\x1b[1A\\x1b[2K"
+    )
+    assert lines.count("Run 7: complete, exit 2") == 1
+    assert "Run 7: complete, exit 0" not in lines
+    assert len(lines) == 3
+
+
+def test_only_the_error_line_is_red() -> None:
+    report = SyncReport(
+        dry_run=False,
+        run_id=7,
+        status="failed",
+        exit_code=1,
+        repositories=(),
+        untracked=(),
+        planned=(),
+        in_place_updates=(),
+        deletions=(),
+        pruned=(),
+        prune_refused=None,
+        failures=(),
+        accepted_not_failed=(),
+        second_node_ids=(),
+        refresh_failures=("Error: not the report's own",),
+        items_hydrated=0,
+        error="UnexpectedResponse: GitHub answered 400",
+    )
+    buffer = io.StringIO()
+    console = Console(file=buffer, width=200, color_system="standard", force_terminal=True)
+
+    print_report(console, report, seconds=0)
+
+    lines = buffer.getvalue().splitlines()
+    red = "\x1b[31m"
+    (styled,) = [line for line in lines if red in line]
+    assert styled.startswith(f"{red}Error: UnexpectedResponse: GitHub answered 400\x1b[0m")
+    assert any(line.startswith("Refresh failed: Error: ") for line in lines)
+
+
+async def test_an_unarchived_repository_is_named(world: World) -> None:
+    repository, _ = project(world)
+    repository.data["isArchived"] = True
+    await world.sync()
+    repository.data["isArchived"] = False
+
+    lines = rendered(await world.sync(dry_run=True))
+
+    assert lines[1] == "prebid/Prebid.js: complete (no longer archived)"

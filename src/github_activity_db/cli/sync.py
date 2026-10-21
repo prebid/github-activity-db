@@ -8,7 +8,9 @@ report and exits with the engine's code: 0, 2, or 1 (5.3 step 8).
 
 from __future__ import annotations
 
+import contextlib
 import os
+import sys
 import time
 from collections.abc import Iterator
 from pathlib import Path
@@ -111,7 +113,13 @@ def sync(
         ),
         error_prefix="Sync did not start",
     )
-    print_report(console, report, seconds=time.monotonic() - started, break_lock=break_lock)
+    try:
+        print_report(console, report, seconds=time.monotonic() - started, break_lock=break_lock)
+    except (UnicodeEncodeError, OSError) as e:
+        # The run is recorded; an output that cannot take the report (an encoding without one of
+        # its characters, a closed pipe) never changes the exit code.
+        with contextlib.suppress(Exception):
+            sys.stderr.write(f"The report could not be printed: {type(e).__name__}\n")
     raise typer.Exit(report.exit_code)
 
 
@@ -147,11 +155,25 @@ def _configured(names: list[str], config: TrackingConfig) -> tuple[TrackedReposi
 def print_report(
     console: Console, report: SyncReport, *, seconds: float, break_lock: bool = False
 ) -> None:
-    """Print the report as plain text: no markup, emoji, highlighting, or wrapping, so GitHub's
-    text (labels, names, error messages) is printed as written, on one line each."""
+    """Print the report as plain text, one line per entry: no markup, emoji, highlighting, or
+    wrapping, and every character that does not print (a newline in an HTML error page, an escape
+    sequence) shown as its escape, so text from GitHub can neither split an entry nor reach the
+    terminal as a control."""
     for line in report_lines(report, seconds=seconds, break_lock=break_lock):
         style = "red" if line.startswith("Error: ") else None
-        console.print(line, style=style, markup=False, emoji=False, highlight=False, soft_wrap=True)
+        console.print(
+            _printable(line),
+            style=style,
+            markup=False,
+            emoji=False,
+            highlight=False,
+            soft_wrap=True,
+        )
+
+
+def _printable(text: str) -> str:
+    """``text`` with each character that does not print replaced by its escape (``\\n``)."""
+    return "".join(c if c.isprintable() else repr(c)[1:-1] for c in text)
 
 
 def report_lines(report: SyncReport, *, seconds: float, break_lock: bool = False) -> Iterator[str]:

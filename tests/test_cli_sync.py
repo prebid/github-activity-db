@@ -10,6 +10,7 @@ its row ``running`` with its committed items for a resume.
 from __future__ import annotations
 
 import hashlib
+import io
 import os
 import re
 import signal
@@ -20,6 +21,7 @@ from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
+import httpx
 import pytest
 from rich.console import Console
 from typer.testing import CliRunner
@@ -567,3 +569,42 @@ def test_label_text_never_changes_the_exit_code(replay: Replay, migrated_databas
     assert _runs(migrated_database)[-1] == {"id": 2, "status": "complete", "exit_code": 0}
     output = _plain(result.output)
     assert "-> x[/" in output and "-> y]" in output, output
+
+
+def test_an_html_error_page_prints_as_one_line(replay: Replay) -> None:
+    page = "<!DOCTYPE html>\n<html>\n<body>\nAccess denied\n</body>\n</html>\n"
+    replay.fault(
+        lambda request: httpx.Response(403, text=page, headers={"content-type": "text/html"}),
+        when=lambda seen: seen.operation == "Resolve",
+    )
+
+    result = _sync()
+
+    assert result.exit_code == 1, result.output
+    lines = [_ANSI_ESCAPE.sub("", line) for line in result.output.splitlines()]
+    (error,) = [line for line in lines if line.startswith("Error: ")]
+    assert error.startswith("Error: Forbidden: ")
+    assert "<!DOCTYPE html>\\n<html>\\n<body>" in error
+    assert "<html>" not in lines
+
+
+def test_an_output_that_cannot_take_the_report_keeps_the_exit_code(
+    replay: Replay, monkeypatch: pytest.MonkeyPatch, migrated_database: Path
+) -> None:
+    """The run is recorded before the report prints; a report the output cannot encode (an
+    emoji label on an ASCII stream) does not change the exit code."""
+    first = _sync()
+    assert first.exit_code == 0, first.output
+
+    def renamed(body: dict[str, Any]) -> None:
+        body["data"]["repository"]["labels"]["nodes"][0]["name"] = "bug \U0001f41b"
+
+    replay.modify(renamed, when=lambda seen: seen.operation == "Resolve")
+    ascii_out = io.TextIOWrapper(io.BytesIO(), encoding="ascii", errors="strict")
+    monkeypatch.setattr(sync_cli, "console", Console(file=ascii_out, width=200))
+
+    result = _sync()
+
+    assert result.exit_code == 0, result.output
+    assert "The report could not be printed: UnicodeEncodeError" in result.output
+    assert _runs(migrated_database)[-1] == {"id": 2, "status": "complete", "exit_code": 0}

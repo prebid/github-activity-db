@@ -261,6 +261,8 @@ async def test_recording_a_first_sync_of_its_recordings_gives_them_back() -> Non
     units = await record_first_sync("test-token", owner, name, inner=replay.transport())
     assert replay.problems == []
     produced = {(unit.kind, json.dumps(unit.key, sort_keys=True)): unit for unit in units}
+    # One unit each: the resolve before the sync and the sync's own count once.
+    assert len(units) == len(produced)
     assert produced.keys() == replay.units.keys()
     for key, unit in produced.items():
         original = replay.units[key]
