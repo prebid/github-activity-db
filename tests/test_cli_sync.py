@@ -397,3 +397,41 @@ def test_a_killed_run_stays_running_and_a_resume_keeps_its_writes(
     assert len(rows) == 11
     # The three items the killed run committed are the same rows, not rewritten.
     assert [row for row in rows if row["number"] in {r["number"] for r in committed}] == committed
+
+
+INTERRUPT_AFTER_THIRD_ITEM = """\
+import os, signal
+from github_activity_db.sync import writer
+written = writer.write_pull_request
+count = 0
+async def write_then_interrupt(*args, **kwargs):
+    global count
+    result = await written(*args, **kwargs)
+    count += 1
+    if count == 3:
+        os.kill(os.getpid(), signal.SIGINT)
+    return result
+writer.write_pull_request = write_then_interrupt
+"""
+
+
+def test_a_sigint_closes_the_run_aborted_and_exits_130(
+    migrated_database: Path, tracking: Path, tmp_path: Path
+) -> None:
+    """A first SIGINT under asyncio.run cancels the run's task: the engine closes the row aborted
+    with 130 and re-raises, and the command exits 130 (5.3); the next run claims normally."""
+    interrupted = _child(
+        [],
+        database=migrated_database,
+        tracking=tracking,
+        cwd=tmp_path,
+        plant=INTERRUPT_AFTER_THIRD_ITEM,
+    )
+    assert interrupted.returncode == 130, interrupted.stdout + interrupted.stderr
+    assert _runs(migrated_database) == [{"id": 1, "status": "aborted", "exit_code": 130}]
+    assert fetch(migrated_database, "SELECT count(*) AS n FROM pull_requests") == [{"n": 3}]
+
+    resumed = _child([], database=migrated_database, tracking=tracking, cwd=tmp_path)
+    assert resumed.returncode == 0, resumed.stdout + resumed.stderr
+    assert _runs(migrated_database)[-1] == {"id": 2, "status": "complete", "exit_code": 0}
+    assert fetch(migrated_database, "SELECT count(*) AS n FROM pull_requests") == [{"n": 11}]
