@@ -71,7 +71,7 @@ can send, and databases and files the project's own code wrote, and assert exact
 - `ghactivity sync` (Step 3b-2a-2c, `cli/sync.py`): the engine's run with the options of plan
   5.7; a run that never starts exits 1, and a run that starts exits with the engine's 0, 2, or 1
 
-**Not implemented yet:** D37 in the sync (Step 3b-2a-3: no silent failures, D38), the REST
+**Not implemented yet:** D37 in the sync (Step 3b-2a-3, D38), the REST
 sampler (Step 3b-2b-1), and `verify` (Step 3b-2b-2). The tracked `github_activity.db` stays
 frozen at the first schema (D26).
 
