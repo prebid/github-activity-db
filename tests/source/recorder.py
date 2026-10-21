@@ -204,12 +204,16 @@ async def record_first_sync(
     token: str, owner: str, name: str, *, inner: httpx.AsyncBaseTransport | None = None
 ) -> list[Unit]:
     """Run a first sync of ``owner/name`` into a scratch database through the recording
-    transport; every unit it asked for. A failed item, a run that does not exit 0, or a private
-    repository stops it."""
+    transport; every unit it asked for. A private repository is refused after its resolve and
+    before any other request; a failed item or a run that does not exit 0 stops it too."""
     if f"{owner}/{name}" in PRIVATE:
         raise PrivateRepository(f"{owner}/{name}")
     recorded_at = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
     recording = RecordingTransport(inner or httpx.AsyncHTTPTransport(), recorded_at)
+    async with GitHubSource(token, http_transport=recording) as source:
+        resolved = await source.resolve(owner, name)
+    if resolved.is_private:
+        raise PrivateRepository(resolved.full_name)
     config = first_sync_config(owner, name)
     with tempfile.TemporaryDirectory() as directory:
         database = Path(directory) / "first-sync.db"
@@ -226,9 +230,6 @@ async def record_first_sync(
             ),
             clock=SystemClock(),
         )
-    (repository,) = report.repositories
-    if repository.record is not None and repository.record.is_private:
-        raise PrivateRepository(repository.record.full_name)
     if report.exit_code != 0 or report.failures:
         raise RecordingFailed(f"first sync exited {report.exit_code}: {report.failures}")
     print(

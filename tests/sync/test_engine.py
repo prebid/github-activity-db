@@ -414,6 +414,7 @@ async def test_the_run_counters(world: World) -> None:
         run["items_deleted"],
         run["failures"],
     ) == (len(graphql) + 6, 3, 3, 2, 1, 1)
+    assert (report.graphql_points, report.rest_calls) == (run["graphql_points"], run["rest_calls"])
     assert world.failures() == [("prebid/Prebid.js", 2, "IdentityMismatch")]
     assert world.value("SELECT count(*) FROM pr_commits") == 251
     assert ended(world, report) == ("complete", 0, {"prebid/Prebid.js": "complete"})

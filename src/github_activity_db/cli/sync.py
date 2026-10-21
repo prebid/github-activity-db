@@ -22,6 +22,7 @@ import github_activity_db
 from github_activity_db.cli import common
 from github_activity_db.cli.common import console, run_async_command
 from github_activity_db.config import get_settings
+from github_activity_db.source import RepositoryRecord
 from github_activity_db.sync import engine, runs
 from github_activity_db.sync.deletions import AllowDeletionsError, parse_allow_deletions
 from github_activity_db.sync.engine import RepositoryReport, SyncOptions, SyncReport
@@ -56,7 +57,8 @@ def sync(
         typer.Option(
             "--allow-deletions",
             metavar="OWNER/NAME=N",
-            help="Delete up to N items of this configured repository past the delete guard.",
+            help="Delete all of this configured repository's deletion candidates when there "
+            "are at most N, past the delete guard.",
         ),
     ] = None,
     prune_untracked: Annotated[
@@ -109,8 +111,9 @@ def sync(
         ),
         error_prefix="Sync did not start",
     )
-    for line in report_lines(report, seconds=time.monotonic() - started):
-        console.print(line, highlight=False)
+    for line in report_lines(report, seconds=time.monotonic() - started, break_lock=break_lock):
+        # Markup is the report's own; GitHub's text is escaped, and :name: is not an emoji.
+        console.print(line, highlight=False, emoji=False)
     raise typer.Exit(report.exit_code)
 
 
@@ -143,9 +146,10 @@ def _configured(names: list[str], config: TrackingConfig) -> tuple[TrackedReposi
 # --------------------------------------------------------------------------------------------
 # The report
 # --------------------------------------------------------------------------------------------
-def report_lines(report: SyncReport, *, seconds: float) -> Iterator[str]:
-    """The report as console lines, GitHub's text escaped. A dry run lists each planned
-    hydration with its reasons, each in-place update, and each delete candidate (5.3 step 8)."""
+def report_lines(report: SyncReport, *, seconds: float, break_lock: bool = False) -> Iterator[str]:
+    """The report as console lines, GitHub's text escaped. Each repository's line names step 1's
+    updates; a dry run also lists each planned hydration with its reasons, each in-place update,
+    and each delete candidate (5.3 step 8)."""
     if report.dry_run:
         yield f"Dry run: the run would exit {report.exit_code}"
     else:
@@ -154,6 +158,9 @@ def report_lines(report: SyncReport, *, seconds: float) -> Iterator[str]:
         yield f"Reclaimed stale run {run_id} (marked aborted)"
     for run_id in report.broken:
         yield f"--break-lock marked run {run_id} aborted"
+    if break_lock and report.run_id is not None and not report.broken:
+        # 5.3: --break-lock with no blocking row proceeds and says so.
+        yield "--break-lock found no running sync to abort"
     deletions = {d.repository_github_id: d for d in report.deletions}
     for repository in report.repositories:
         yield _repository_line(repository)
@@ -235,8 +242,28 @@ def _repository_line(repository: RepositoryReport) -> str:
             notes.append(f"renamed from {escape(stored.full_name)}")
         if not stored.is_tracked:
             notes.append("tracked again")
+        if stored.default_branch != record.default_branch:
+            notes.append(
+                f"default branch {escape(stored.default_branch)} -> {escape(record.default_branch)}"
+            )
+        notes.extend(_label_changes(dict(stored.labels), record))
     if record.full_name.lower() != repository.configured.full_name.lower():
         notes.append(f"GitHub name {escape(record.full_name)}")
     shown = f" ({', '.join(notes)})" if notes else ""
     reason = f": {escape(repository.reason)}" if repository.reason else ""
     return f"{name}: {repository.outcome or 'no outcome'}{shown}{reason}"
+
+
+def _label_changes(stored: dict[str, str], record: RepositoryRecord) -> Iterator[str]:
+    """The labels step 1 adds, removes, and renames, by node id (D8)."""
+    resolved = {label.node_id: label.name for label in record.labels}
+    added = sorted(resolved[node] for node in resolved.keys() - stored.keys())
+    removed = sorted(stored[node] for node in stored.keys() - resolved.keys())
+    renamed = sorted(
+        f"{stored[node]} -> {resolved[node]}"
+        for node in stored.keys() & resolved.keys()
+        if stored[node] != resolved[node]
+    )
+    for verb, names in (("label added", added), ("label removed", removed)):
+        yield from (f"{verb} {escape(name)}" for name in names)
+    yield from (f"label renamed {escape(change)}" for change in renamed)

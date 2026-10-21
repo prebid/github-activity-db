@@ -49,7 +49,8 @@ BATCH_SIZE = 25
 INDEX_CLOSING_LINKS = 10
 REVIEWER_ACCOUNTS = ("User", "Bot", "Mannequin")
 
-# The stamps a run takes from Date headers or its own clock: compared as set or not.
+# The stamps a run takes from GitHub's Date headers (plan 5.1): compared as set or not. The ones
+# from the run's own clock (sync_runs' times, last_success_at) are compared exactly.
 STAMPS = frozenset(
     {
         ("repositories", "resolved_at"),
@@ -58,12 +59,6 @@ STAMPS = frozenset(
         ("account_profiles", "refreshed_at"),
         ("pull_requests", "hydrated_at"),
         ("repo_sync_state", "last_index_started_at"),
-        ("repo_sync_state", "last_success_at"),
-        ("sync_runs", "started_at"),
-        ("sync_runs", "deadline_at"),
-        ("sync_runs", "finished_at"),
-        ("sync_failures", "first_failed_at"),
-        ("sync_failures", "last_failed_at"),
     }
 )
 RUN_COUNTERS = frozenset(
@@ -266,6 +261,8 @@ class History:
     accounts: dict[str, StoredAccount] = field(default_factory=dict)
     pulls: dict[int, StoredPull] = field(default_factory=dict)
     runs: list[int] = field(default_factory=list)
+    # Each run's clock reading: its start and its close, since the clock does not move during it.
+    run_times: list[datetime] = field(default_factory=list)
     index_totals: dict[int, int] = field(default_factory=dict)
     # What the runs exercised, so a test can show its seeds reach the rules it checks.
     events: Counter[str] = field(default_factory=Counter)
@@ -277,6 +274,7 @@ class History:
     ) -> None:
         """What the run ``run_id``, at ``now``, stored over the model as it is."""
         self.runs.append(run_id)
+        self.run_times.append(now)
         self.seen_again.clear()
         planned: list[Planned] = []
         listed: dict[int, set[int]] = {}
@@ -358,7 +356,7 @@ class History:
         previous = self.pulls.get(github_id)
         stored = {account.github_id for account in self.accounts.values()}
         rows = pull_rows(repository.data, node, previous.rows if previous else {}, stored)
-        self.events["reference kept"] += kept_references(rows)
+        self.events.update(kept_references(rows))
         self.pulls[github_id] = StoredPull(repository.data["databaseId"], node, now, rows)
 
     def refresh(self, scenario: Scenario, linked: set[str], now: datetime) -> None:
@@ -414,7 +412,8 @@ class History:
                     "last_index_started_at": True,
                     "index_pr_total": self.index_totals[data["databaseId"]],
                     "index_issue_total": None,
-                    "last_success_at": True,
+                    # The finished_at of the latest run, every run being complete (5.1).
+                    "last_success_at": clock_stamp(self.run_times[-1]),
                     "last_run_id": run,
                     "last_outcome": "complete",
                     "halt_reason": None,
@@ -428,7 +427,9 @@ class History:
         for pull in self.pulls.values():
             for table, rows in pull.rows.items():
                 tables[table].extend(rows)
-        tables["sync_runs"] = [run_row(ordinal) for ordinal in range(1, run + 1)]
+        tables["sync_runs"] = [
+            run_row(ordinal, moment) for ordinal, moment in enumerate(self.run_times, 1)
+        ]
         tables["automation_accounts"] = [
             {**entry, "run_id": run} for entry in automation.get("accounts", [])
         ]
@@ -704,22 +705,26 @@ def pull_rows(
     }
 
 
-def kept_references(rows: Mapping[str, list[Row]]) -> int:
-    """References D28 kept in these rows: a reference GitHub returned no actor for that still
-    names the account stored before."""
+def kept_references(rows: Mapping[str, list[Row]]) -> Counter[str]:
+    """References D28 kept in these rows, by kind: a reference GitHub returned no actor for that
+    still names the account stored before. Only kinds that occur are counted."""
     (pull,) = rows["pull_requests"]
-    kept = [
-        not pull["author_reported"] and pull["author_id"] is not None,
-        not pull["merged_by_reported"] and pull["merged_by_id"] is not None,
-    ]
-    kept += [
-        not r["reviewer_reported"] and r["reviewer_id"] is not None for r in rows["pr_reviews"]
-    ]
-    kept += [not c["author_reported"] and c["author_id"] is not None for c in rows["pr_comments"]]
-    kept += [
-        c["linked_github_id"] is None and c["author_id"] is not None for c in rows["pr_commits"]
-    ]
-    return sum(kept)
+    kept: Counter[str] = Counter()
+    kept["kept: author"] += not pull["author_reported"] and pull["author_id"] is not None
+    kept["kept: merger"] += not pull["merged_by_reported"] and pull["merged_by_id"] is not None
+    for review in rows["pr_reviews"]:
+        kept["kept: reviewer"] += (
+            not review["reviewer_reported"] and review["reviewer_id"] is not None
+        )
+    for comment in rows["pr_comments"]:
+        kept["kept: commenter"] += (
+            not comment["author_reported"] and comment["author_id"] is not None
+        )
+    for commit in rows["pr_commits"]:
+        kept["kept: commit link"] += (
+            commit["linked_github_id"] is None and commit["author_id"] is not None
+        )
+    return +kept
 
 
 def repository_row(data: Node, group: str) -> Row:
@@ -776,13 +781,19 @@ def profile_row(account: StoredAccount) -> Row | None:
     return row
 
 
-def run_row(ordinal: int) -> Row:
-    """A run of these tests: complete, exit 0, without a deadline or deletions to approve."""
+def clock_stamp(value: datetime) -> str:
+    """A time the run took from its own clock, as UtcDateTime stores it."""
+    return value.strftime("%Y-%m-%d %H:%M:%S.%f")
+
+
+def run_row(ordinal: int, moment: datetime) -> Row:
+    """A run of these tests: complete, exit 0, without a deadline or deletions to approve, started
+    and finished at the clock's one reading during it."""
     return {
         "id": ordinal,
-        "started_at": True,
-        "deadline_at": False,
-        "finished_at": True,
+        "started_at": clock_stamp(moment),
+        "deadline_at": None,
+        "finished_at": clock_stamp(moment),
         "status": "complete",
         "exit_code": 0,
         "trigger": "manual",

@@ -95,7 +95,7 @@ uv run ghactivity github test --pr 4343       # The first repository in tracking
 uv run ghactivity sync --dry-run              # Resolve, index, and plan; write nothing
 uv run ghactivity sync --repo prebid/go-gdpr  # Only this configured repository (repeatable)
 uv run ghactivity sync --max-minutes 30       # Stop issuing requests after 30 minutes
-uv run ghactivity sync --allow-deletions prebid/Prebid.js=40  # Past the delete guard, up to 40
+uv run ghactivity sync --allow-deletions prebid/Prebid.js=40  # All candidates, if at most 40
 uv run ghactivity sync --prune-untracked      # Delete repositories already untracked
 uv run ghactivity sync --break-lock           # Mark a running sync aborted and claim the run
 ```

@@ -90,6 +90,8 @@ async def test_reads_every_stored_value_the_planner_compares(migrated_database: 
                 github_id=11,
                 full_name="prebid/Prebid.js",
                 is_tracked=True,
+                default_branch="master",
+                labels=frozenset({("LA_9", "stale")}),
                 pull_requests=(
                     _pr(ids["second"], 20, 2, closing_links=frozenset({(999, 5)})),
                     _pr(
@@ -113,6 +115,8 @@ async def test_reads_every_stored_value_the_planner_compares(migrated_database: 
                 github_id=12,
                 full_name="prebid/go-gdpr",
                 is_tracked=False,
+                default_branch="master",
+                labels=frozenset(),
                 pull_requests=(),
                 failures=frozenset(),
                 pending=frozenset(),
@@ -193,8 +197,8 @@ async def test_no_read_is_left_half_consumed(migrated_database: Path) -> None:
             commit_does_not_wait(migrated_database)
     finally:
         await engine.dispose()
-    # labels, closing links, pull requests, failures, pending, repositories
-    assert checked.reads == 6
+    # labels, closing links, pull requests, failures, pending, repository labels, repositories
+    assert checked.reads == 7
 
 
 async def test_the_lock_probe_sees_a_half_consumed_read(migrated_database: Path) -> None:

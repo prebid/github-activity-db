@@ -29,6 +29,9 @@ from github_activity_db.cli import sync as sync_cli
 from github_activity_db.cli.app import app
 from github_activity_db.config import get_settings
 from github_activity_db.source import GitHubSource
+from github_activity_db.sync import engine
+from github_activity_db.sync.deletions import parse_allow_deletions
+from github_activity_db.sync.engine import SyncOptions, SyncReport
 from tests.source.conftest import FakeClock
 from tests.source.recorder import FIRST_SYNC_REPOSITORY
 from tests.source.recordings import FIRST_SYNC
@@ -237,7 +240,8 @@ def test_a_first_sync_exits_0_and_prints_its_report(
     output = _plain(result.output)
     assert "Run 1: complete, exit 0" in output
     assert f"{OWNER}/{NAME}: complete (new) planned 11, in-place updates 0" in output
-    assert "Hydrated 11 items; GraphQL points" in output
+    # Resolve, index, the batch, and one account lookup, at the replay's cost of 1 each.
+    assert "Hydrated 11 items; GraphQL points 4, REST calls 0" in output
     assert _runs(migrated_database) == [{"id": 1, "status": "complete", "exit_code": 0}]
     assert fetch(migrated_database, "SELECT count(*) AS n FROM pull_requests") == [{"n": 11}]
 
@@ -395,8 +399,12 @@ def test_a_killed_run_stays_running_and_a_resume_keeps_its_writes(
         migrated_database, "SELECT id, number, hydrated_at FROM pull_requests ORDER BY number"
     )
     assert len(rows) == 11
-    # The three items the killed run committed are the same rows, not rewritten.
+    # The three items the killed run committed are the same rows, and the resume planned and
+    # wrote only the other eight: it did not rewrite them.
     assert [row for row in rows if row["number"] in {r["number"] for r in committed}] == committed
+    assert fetch(
+        migrated_database, "SELECT items_planned, items_hydrated FROM sync_runs WHERE id = 2"
+    ) == [{"items_planned": 8, "items_hydrated": 8}]
 
 
 INTERRUPT_AFTER_THIRD_ITEM = """\
@@ -435,3 +443,106 @@ def test_a_sigint_closes_the_run_aborted_and_exits_130(
     assert resumed.returncode == 0, resumed.stdout + resumed.stderr
     assert _runs(migrated_database)[-1] == {"id": 2, "status": "complete", "exit_code": 0}
     assert fetch(migrated_database, "SELECT count(*) AS n FROM pull_requests") == [{"n": 11}]
+
+
+# --------------------------------------------------------------------------------------------
+# Options reaching the engine
+# --------------------------------------------------------------------------------------------
+def test_an_invalid_tracking_config_exits_1(replay: Replay, tracking: Path) -> None:
+    tracking.write_text("not = [valid\n")
+
+    result = _sync()
+
+    assert result.exit_code == 1
+    assert "not valid TOML" in _plain(result.output)
+    assert replay.seen == []
+
+
+def test_break_lock_without_a_running_sync_proceeds_and_says_so(
+    replay: Replay, migrated_database: Path
+) -> None:
+    result = _sync("--break-lock")
+
+    assert result.exit_code == 0, result.output
+    assert "--break-lock found no running sync to abort" in _plain(result.output)
+    assert _runs(migrated_database) == [{"id": 1, "status": "complete", "exit_code": 0}]
+
+
+EMPTY_REPORT = SyncReport(
+    dry_run=False,
+    run_id=1,
+    status="complete",
+    exit_code=0,
+    repositories=(),
+    untracked=(),
+    planned=(),
+    in_place_updates=(),
+    deletions=(),
+    pruned=(),
+    prune_refused=None,
+    failures=(),
+    accepted_not_failed=(),
+    second_node_ids=(),
+    refresh_failures=(),
+    items_hydrated=0,
+)
+
+
+@pytest.mark.parametrize("dry_run", [False, True])
+def test_every_option_reaches_the_engine(
+    replay: Replay,
+    monkeypatch: pytest.MonkeyPatch,
+    tracking: Path,
+    migrated_database: Path,
+    dry_run: bool,
+) -> None:
+    """A spy in the engine's place records the options it is called with."""
+    tracking.write_text(
+        TRACKING + '\n[[repositories]]\nowner = "prebid"\nname = "other"\ngroup = "Client"\n'
+    )
+    called: list[SyncOptions] = []
+
+    async def spy(options: SyncOptions, **kwargs: Any) -> SyncReport:
+        called.append(options)
+        return EMPTY_REPORT
+
+    monkeypatch.setattr(engine, "sync", spy)
+    approval = f"{OWNER}/{NAME}=5"
+    args = ["--repo", "PREBID/OTHER", "--repo", f"{OWNER}/{NAME}", "--max-minutes", "30"]
+    args += ["--allow-deletions", approval, "--prune-untracked"]
+    args += ["--dry-run"] if dry_run else ["--break-lock"]
+
+    result = _sync(*args)
+
+    assert result.exit_code == 0, result.output
+    (options,) = called
+    config = get_settings().tracking_config().config
+    entries = config.repositories
+    assert options.repositories == entries  # tracking.toml order, both named
+    assert (options.max_minutes, options.prune_untracked) == (30, True)
+    assert options.allow_deletions == parse_allow_deletions(approval, config)
+    assert (options.dry_run, options.break_lock) == (dry_run, not dry_run)
+    assert (options.trigger, options.database_url) == (
+        "manual",
+        f"sqlite+aiosqlite:///{migrated_database}",
+    )
+    assert options.config.source == str(tracking)
+
+
+def test_repo_attempts_only_the_repositories_it_names(
+    replay: Replay, tracking: Path, migrated_database: Path
+) -> None:
+    """With a second configured repository the recordings cannot answer, --repo keeps the run to
+    go-gdpr: no request names the other, and the run completes."""
+    tracking.write_text(
+        TRACKING + '\n[[repositories]]\nowner = "prebid"\nname = "other"\ngroup = "Client"\n'
+    )
+
+    result = _sync("--repo", f"{OWNER}/{NAME}")
+
+    assert result.exit_code == 0, result.output
+    assert {seen.variables.get("name") for seen in replay.seen} - {None} == {NAME}
+    assert "prebid/other" not in _plain(result.output)
+    assert fetch(migrated_database, "SELECT full_name FROM repositories") == [
+        {"full_name": f"{OWNER}/{NAME}"}
+    ]

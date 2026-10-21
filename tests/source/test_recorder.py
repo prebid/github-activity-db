@@ -14,8 +14,15 @@ import pytest
 from github_activity_db.source.limits import RATE_LIMIT_FALLBACK_WAIT, SERVER_RETRY_DELAYS
 from tests.source import recorder
 from tests.source.conftest import FakeClock
-from tests.source.recorder import PrivateRepository, RecordingFailed, Scenario, record
-from tests.source.recordings import RECORDED, Unit
+from tests.source.recorder import (
+    FIRST_SYNC_REPOSITORY,
+    PrivateRepository,
+    RecordingFailed,
+    Scenario,
+    record,
+    record_first_sync,
+)
+from tests.source.recordings import FIRST_SYNC, RECORDED, Unit
 from tests.source.replay import Replay, synthetic
 
 
@@ -235,3 +242,98 @@ def test_an_oversized_unit_writes_nothing(monkeypatch: pytest.MonkeyPatch, tmp_p
     assert recorder.main([]) == 1
     assert [path.name for path in tmp_path.iterdir()] == ["recorded"]
     assert [path.name for path in target.iterdir()] == ["kept.json"]
+
+
+# --------------------------------------------------------------------------------------------
+# --only first-sync
+# --------------------------------------------------------------------------------------------
+def _batch_alias_error(body: dict[str, Any]) -> None:
+    body["data"]["repository"]["p0"] = None
+    body["errors"] = [
+        {"type": "FORBIDDEN", "message": "not accessible", "path": ["repository", "p0"]}
+    ]
+
+
+async def test_recording_a_first_sync_of_its_recordings_gives_them_back() -> None:
+    """The first sync asks for exactly the recorded units, and records each as it was."""
+    replay = Replay.from_directory(FIRST_SYNC)
+    owner, name = FIRST_SYNC_REPOSITORY
+    units = await record_first_sync("test-token", owner, name, inner=replay.transport())
+    assert replay.problems == []
+    produced = {(unit.kind, json.dumps(unit.key, sort_keys=True)): unit for unit in units}
+    assert produced.keys() == replay.units.keys()
+    for key, unit in produced.items():
+        original = replay.units[key]
+        assert (unit.document_sha256, unit.data, unit.errors, unit.headers) == (
+            original.document_sha256,
+            original.data,
+            original.errors,
+            original.headers,
+        ), key
+
+
+async def test_a_private_repository_stops_a_first_sync_after_its_resolve() -> None:
+    replay = Replay.from_directory(FIRST_SYNC)
+    owner, name = FIRST_SYNC_REPOSITORY
+    unit = replay.unit("resolve", owner=owner, name=name)
+    unit.data["isPrivate"] = True
+    replay.add(unit)
+    with pytest.raises(PrivateRepository, match=f"{owner}/{name}"):
+        await record_first_sync("test-token", owner, name, inner=replay.transport())
+    assert [seen.operation for seen in replay.seen] == ["Resolve"]
+
+
+async def test_a_first_sync_that_does_not_exit_0_stops_the_recording() -> None:
+    replay = Replay.from_directory(FIRST_SYNC)
+    replay.modify(
+        _batch_alias_error, when=lambda seen: seen.operation == "PullRequestBatch", times=2
+    )
+    owner, name = FIRST_SYNC_REPOSITORY
+    with pytest.raises(RecordingFailed, match="first sync exited 2"):
+        await record_first_sync("test-token", owner, name, inner=replay.transport())
+
+
+def _first_sync_units() -> list[Any]:
+    owner, name = FIRST_SYNC_REPOSITORY
+    replay = Replay.from_directory(FIRST_SYNC)
+    return asyncio.run(record_first_sync("test-token", owner, name, inner=replay.transport()))
+
+
+@pytest.mark.parametrize("oversized", [False, True])
+def test_only_first_sync_writes_its_directory_alone(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, oversized: bool
+) -> None:
+    """``--only first-sync`` replaces the first-sync directory with every unit, or with an
+    oversized unit writes nothing; the other recordings are never touched."""
+    units = _first_sync_units()
+
+    async def replayed(token: str, owner: str, name: str, **kwargs: Any) -> list[Any]:
+        return units
+
+    target = tmp_path / "first_sync"
+    target.mkdir()
+    (target / "stale.json").write_text("{}")
+    others = tmp_path / "recorded"
+    others.mkdir()
+    (others / "kept.json").write_text("{}")
+    monkeypatch.setattr(recorder, "FIRST_SYNC", target)
+    monkeypatch.setattr(recorder, "RECORDED", others)
+    monkeypatch.setattr(recorder, "record_first_sync", replayed)
+    if oversized:
+        monkeypatch.setattr(recorder, "MAX_FILE_BYTES", 10)
+    monkeypatch.setenv("GITHUB_TOKEN", "test-token")
+
+    code = recorder.main(["--only", "first-sync"])
+
+    assert sorted(path.name for path in tmp_path.iterdir()) == ["first_sync", "recorded"]
+    assert [path.name for path in others.iterdir()] == ["kept.json"]
+    if oversized:
+        assert code == 1
+        assert [path.name for path in target.iterdir()] == ["stale.json"]
+        return
+    assert code == 0
+    written = sorted(str(path.relative_to(target)) for path in target.rglob("*.json"))
+    committed = sorted(str(path.relative_to(FIRST_SYNC)) for path in FIRST_SYNC.rglob("*.json"))
+    assert written == committed
+    for unit in units:
+        assert (target / unit.path()).read_text() == unit.dumps()

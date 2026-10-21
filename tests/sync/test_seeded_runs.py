@@ -21,31 +21,45 @@ from tests.sync.engine_support import World
 from tests.sync.expected_state import History, differences, stored_tables
 
 RUNS = 5
-# What every seed must reach: D28's kept references, the 24-hour refresh changing a login and
-# finding an account gone, and a state change.
-CORE = frozenset(
-    {
-        "reference kept",
-        "refresh",
-        "login changed by a lookup",
-        "not found by the refresh",
-        "planned: state",
-    }
-)
+# What every seed must reach: a pull request's author D28 kept, the 24-hour refresh finding an
+# account gone, and a state change.
+CORE = frozenset({"kept: author", "refresh", "not found by the refresh", "planned: state"})
 # Seeds chosen from 1-120, every one of which left the expected state after each run, for the
-# rarer paths each reaches (``History.events``); together they reach every path it counts except
-# an unsettled item, which ``World.sync`` settles on purpose.
+# rarer paths each reaches (``History.events``, counted only when they happen); together they
+# reach every path it counts, each kind of reference D28 keeps included, except an unsettled
+# item, which ``World.sync`` settles on purpose.
 REACHES = {
+    9: CORE
+    | {
+        "login changed by a lookup",
+        "kept: reviewer",
+        "kept: commenter",
+        "inserted by a commit lookup",
+        "planned: links",
+    },
     35: CORE
     | {
+        "login changed by a lookup",
         "updated in place",
         "planned: links",
         "inserted by a commit lookup",
         "gap 90 lookup",
         "seen again by a lookup",
     },
+    56: CORE
+    | {
+        "kept: merger",
+        "kept: reviewer",
+        "kept: commit link",
+        "gap 90 lookup",
+        "inserted by a commit lookup",
+        "updated in place",
+        "planned: links",
+    },
     74: CORE
     | {
+        "login changed by a lookup",
+        "kept: merger",
         "commit link not found",
         "gap 90 lookup",
         "seen again by a sighting",
@@ -53,6 +67,7 @@ REACHES = {
     },
     93: CORE
     | {
+        "login changed by a lookup",
         "updated in place",
         "planned: links",
         "planned: label gone",
@@ -395,4 +410,5 @@ async def test_each_run_leaves_the_state_the_model_and_its_history_give(
         assert found == [], "\n".join([*log, f"after run {run}:", *found])
 
     # The seed still drives the runs through the rules it was chosen for.
-    assert REACHES[seed] <= set(history.events), "\n".join([*log, str(dict(history.events))])
+    reached = {event for event, count in history.events.items() if count > 0}
+    assert REACHES[seed] <= reached, "\n".join([*log, str(dict(history.events))])
