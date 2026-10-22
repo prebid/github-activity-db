@@ -9,6 +9,7 @@ import pytest
 from sqlalchemy import DateTime, insert, select, update
 from sqlalchemy.exc import StatementError
 
+from github_activity_db.db import types
 from github_activity_db.db.models import Base, GitHubUser, UserTag
 from github_activity_db.db.types import UtcDateTime, utc_now
 from tests.db.alembic_support import query
@@ -40,6 +41,11 @@ def _stored_refreshed_at(database: Path) -> str:
     return str(text)
 
 
+def _stored_created_at(database: Path) -> str:
+    ((text,),) = query(database, "SELECT created_at FROM user_tags")
+    return str(text)
+
+
 def test_no_column_uses_a_bare_datetime() -> None:
     types = {
         f"{table.name}.{column.name}": column.type
@@ -60,14 +66,17 @@ def test_no_column_uses_a_bare_datetime() -> None:
     ],
 )
 def test_a_naive_value_is_rejected(migrated_database: Path, value: datetime) -> None:
-    with pytest.raises(StatementError, match="naive datetime 2026-01-01T12:00:00"):
+    with pytest.raises(StatementError) as error:
         _write_refreshed_at(migrated_database, value)
+    assert type(error.value.orig) is ValueError
     assert query(migrated_database, "SELECT COUNT(*) FROM github_users") == [(0,)]
 
 
 def test_a_value_that_is_not_a_datetime_is_rejected(migrated_database: Path) -> None:
-    with pytest.raises(StatementError, match="expected a datetime, got str"):
+    with pytest.raises(StatementError) as error:
         _write_refreshed_at(migrated_database, "2026-01-01 12:00:00")
+    assert type(error.value.orig) is TypeError
+    assert query(migrated_database, "SELECT COUNT(*) FROM github_users") == [(0,)]
 
 
 def test_an_aware_value_is_stored_as_utc_and_read_back_aware(migrated_database: Path) -> None:
@@ -105,11 +114,27 @@ def test_null_passes_through(migrated_database: Path) -> None:
         assert connection.execute(select(GitHubUser.not_found_at)).scalar_one() is None
 
 
-def test_the_default_is_now_in_utc(migrated_database: Path) -> None:
-    before = utc_now()
+# A fixed instant for the clock the column default reads.
+NOW = datetime(2026, 1, 2, 3, 4, 5, 678901, tzinfo=UTC)
+
+
+class FixedClock(datetime):
+    """datetime as types.py sees it while a test runs: ``now`` is NOW in the zone asked for."""
+
+    @classmethod
+    def now(cls, tz: tzinfo | None = None) -> FixedClock:
+        assert tz is UTC
+        return cls.combine(NOW.date(), NOW.timetz())
+
+
+def test_the_default_is_now_in_utc(
+    migrated_database: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(types, "datetime", FixedClock)
+    assert utc_now() == NOW
     with connect(migrated_database) as connection:
         connection.execute(insert(UserTag).values(name="kept"))
         created_at = connection.execute(select(UserTag.created_at)).scalar_one()
-    assert before <= created_at <= utc_now()
+    assert created_at == NOW
     assert created_at.tzinfo is UTC
-    assert utc_now().tzinfo is UTC
+    assert _stored_created_at(migrated_database) == "2026-01-02 03:04:05.678901"

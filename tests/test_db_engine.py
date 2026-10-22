@@ -98,34 +98,50 @@ class TestSqliteConnectionSettings:
 
         assert foreign_keys == 1
 
-    def test_listener_failure_closes_the_connection(self) -> None:
-        class FailingCursor:
+    def test_an_interrupt_in_the_listener_closes_the_connection(self) -> None:
+        """An interrupt at a set point, the listener's first statement: the connection is
+        closed before the interrupt goes on, since SQLAlchemy would not close it."""
+        executed: list[str] = []
+
+        class InterruptedCursor:
+            closed = False
+
             def execute(self, statement: str) -> None:
-                raise sqlite3.OperationalError("database is locked")
+                executed.append(statement)
+                raise KeyboardInterrupt
 
             def close(self) -> None:
-                pass
+                self.closed = True
 
         class Connection:
             closed = False
 
-            def cursor(self) -> FailingCursor:
-                return FailingCursor()
+            def __init__(self) -> None:
+                self.cursors: list[InterruptedCursor] = []
+
+            def cursor(self) -> InterruptedCursor:
+                self.cursors.append(InterruptedCursor())
+                return self.cursors[-1]
 
             def close(self) -> None:
                 self.closed = True
 
         connection = Connection()
-        with pytest.raises(sqlite3.OperationalError, match="database is locked"):
+        with pytest.raises(KeyboardInterrupt):
             _apply_sqlite_pragmas(connection, None)
+        assert executed == ["PRAGMA foreign_keys=ON"]
+        assert [cursor.closed for cursor in connection.cursors] == [True]
         assert connection.closed
 
     async def test_foreign_key_violation_is_rejected(self, test_engine) -> None:
-        with pytest.raises(IntegrityError, match="FOREIGN KEY constraint failed"):
+        with pytest.raises(IntegrityError) as error:
             async with test_engine.begin() as conn:
                 await conn.execute(
                     text("INSERT INTO pr_user_tags (pr_id, user_tag_id) VALUES (999, 999)")
                 )
+        driver_error = error.value.orig
+        assert isinstance(driver_error, sqlite3.IntegrityError), repr(driver_error)
+        assert driver_error.sqlite_errorname == "SQLITE_CONSTRAINT_FOREIGNKEY"
 
     async def test_on_delete_cascade_removes_children(self, test_engine) -> None:
         async with test_engine.begin() as conn:

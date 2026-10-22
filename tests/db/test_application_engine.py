@@ -1,6 +1,7 @@
 """The application's own engine and sessions apply the SQLite connection settings."""
 
 import shutil
+import sqlite3
 from collections.abc import AsyncIterator
 from pathlib import Path
 
@@ -19,9 +20,10 @@ from github_activity_db.db.engine import (
 
 @pytest.fixture
 async def application_database(
-    migrated_database: Path, monkeypatch: pytest.MonkeyPatch
+    migrated_database: Path, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> AsyncIterator[Path]:
     """Point the settings at a database migrated to head; reset the cached engine around it."""
+    monkeypatch.chdir(tmp_path)  # the settings read no .env but this test's
     monkeypatch.setenv("DATABASE_URL", f"sqlite+aiosqlite:///{migrated_database}")
     get_settings.cache_clear()
     await dispose_engine()
@@ -46,11 +48,14 @@ async def test_every_application_session_gets_the_connection_settings(
 
 
 async def test_application_session_rejects_an_orphan_row(application_database: Path) -> None:
-    with pytest.raises(IntegrityError, match="FOREIGN KEY constraint failed"):
+    with pytest.raises(IntegrityError) as error:
         async with get_session() as session:
             await session.execute(
                 text("INSERT INTO pr_user_tags (pr_id, user_tag_id) VALUES (999, 999)")
             )
+    driver_error = error.value.orig
+    assert isinstance(driver_error, sqlite3.IntegrityError), repr(driver_error)
+    assert driver_error.sqlite_errorname == "SQLITE_CONSTRAINT_FOREIGNKEY"
 
 
 async def test_dispose_engine_makes_the_next_engine_read_the_settings_again(

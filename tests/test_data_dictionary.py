@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 import hashlib
-import json
 import sqlite3
 from contextlib import closing
 from pathlib import Path
 
 import pytest
+from alembic.script import ScriptDirectory
 
 from github_activity_db.db.models import Base
 from github_activity_db.db.schema import SCHEMA_VERSION
@@ -28,8 +28,16 @@ from tests.data_dictionary import (
     read_lock,
     view_digest,
 )
-from tests.db.alembic_support import alembic_config
+from tests.db.alembic_support import alembic_config, upgrade
 from tests.db.schema_support import frozen_views, views
+
+# Earlier versions of repository files, copied unchanged (tests/fixtures/history/README.md).
+HISTORY = Path(__file__).resolve().parent / "fixtures" / "history"
+STEP3A = "33f8570f6540"
+STEP3B1 = "94a52e4f1d57"
+LAST_RUN_ID = "2d2ba76b177c"
+# The commits that added 94a52e4f1d57 and 2d2ba76b177c, with the dictionary and lock of each.
+AT_STEP3B1, AT_LAST_RUN_ID = "21a4267", "77663a7"
 
 ENTRY = """\
 ## Tables
@@ -82,6 +90,26 @@ RUN_COUNTERS = (
 @pytest.fixture(scope="module")
 def entries() -> dict[str, dict[str, str]]:
     return read_dictionary(DICTIONARY.read_text())
+
+
+@pytest.fixture(scope="module")
+def revisions(tmp_path_factory: pytest.TempPathFactory) -> dict[str, dict[str, list[str]]]:
+    """The tables and views, with their columns, of databases the migrations built at Step 3a,
+    at Step 3b-1, and at the revision after it."""
+    folder = tmp_path_factory.mktemp("revisions")
+    columns = {}
+    for revision in (STEP3A, STEP3B1, LAST_RUN_ID):
+        upgrade(folder / f"{revision}.db", revision)
+        columns[revision] = database_columns(folder / f"{revision}.db")
+    return columns
+
+
+def dictionary_at(commit: str) -> dict[str, dict[str, str]]:
+    return read_dictionary((HISTORY / commit / "docs" / "data-dictionary.md").read_text())
+
+
+def lock_at(commit: str) -> dict[str, LockEntry]:
+    return parse_lock((HISTORY / commit / "tests" / "schema_versions.json").read_text())
 
 
 class TestDictionary:
@@ -171,21 +199,31 @@ class TestDictionary:
                 expected = "consumer" if (table.name, column.name) in joins else "internal"
                 assert entries[table.name][column.name] == expected, (table.name, column.name)
 
-    @pytest.mark.parametrize(
-        ("database", "expected"),
-        [
-            ({"t": ["id", "name"], "v_t": ["name"]}, []),
-            ({"t": ["id", "name", "added"], "v_t": ["name"]}, ["no entry for t.added"]),
-            ({"t": ["id"], "v_t": ["name"]}, ["t.name is not at head"]),
-            ({"t": ["id", "name"], "v_t": ["name"], "v_new": ["x"]}, ["no entry for v_new"]),
-            ({"t": ["id", "name"]}, ["v_t is not at head"]),
-        ],
-        ids=["equal", "column at head only", "entry only", "view at head only", "view entry only"],
-    )
-    def test_differences_are_reported_both_ways(
-        self, database: dict[str, list[str]], expected: list[str]
+    def test_each_commit_s_dictionary_matched_its_schema(
+        self, revisions: dict[str, dict[str, list[str]]]
     ) -> None:
-        assert differences(read_dictionary(ENTRY), database) == expected
+        assert differences(dictionary_at(AT_STEP3B1), revisions[STEP3B1]) == []
+        assert differences(dictionary_at(AT_LAST_RUN_ID), revisions[LAST_RUN_ID]) == []
+
+    def test_differences_are_reported_both_ways(
+        self, revisions: dict[str, dict[str, list[str]]], head_template: Path
+    ) -> None:
+        """Each commit's dictionary against another revision's database: a column only one of
+        them has, and the views Step 3b-1 drops and the tables and views it adds."""
+        assert differences(dictionary_at(AT_LAST_RUN_ID), revisions[STEP3B1]) == [
+            "sync_failures.last_run_id is not at head"
+        ]
+        assert differences(dictionary_at(AT_STEP3B1), revisions[LAST_RUN_ID]) == [
+            "no entry for sync_failures.last_run_id"
+        ]
+        script = ScriptDirectory.from_config(alembic_config(head_template))
+        dropped = script.get_revision(STEP3B1).module.DROPPED_VIEWS
+        added = revisions[STEP3B1].keys() - revisions[STEP3A].keys()
+        found = differences(dictionary_at(AT_STEP3B1), revisions[STEP3A])
+        assert [line for line in found if "." not in line] == [
+            *(f"no entry for {name}" for name in sorted(dropped)),
+            *(f"{name} is not at head" for name in sorted(added)),
+        ]
 
     @pytest.mark.parametrize(
         ("text", "message"),
@@ -236,7 +274,7 @@ class TestDictionary:
 def test_database_columns_reads_every_user_object(tmp_path: Path) -> None:
     """Names that look like SQLite's own are kept, SQLite's own are not, generated columns
     are listed."""
-    path = tmp_path / "planted.db"
+    path = tmp_path / "scratch.db"
     with closing(sqlite3.connect(path)) as connection:
         connection.execute("CREATE TABLE sqliteXstats (x INTEGER)")
         connection.execute("CREATE TABLE SQLite1 (x INTEGER)")
@@ -289,55 +327,30 @@ class TestSchemaLock:
     def test_the_lock_reads_without_repeated_keys(self) -> None:
         assert parse_lock('{"1": [["t", "c"]]}') == {"1": ({("t", "c")}, {})}
 
-    @pytest.mark.parametrize(
-        ("before", "after"),
-        [
-            pytest.param(
-                "CREATE VIEW v AS SELECT 'a  b' AS value",
-                "CREATE VIEW v AS SELECT 'a b' AS value",
-                id="whitespace in a literal",
-            ),
-            pytest.param(
-                "CREATE VIEW v AS SELECT 1 AS value -- explanation\nWHERE 0",
-                "CREATE VIEW v AS SELECT 1 AS value -- explanation WHERE 0",
-                id="the end of a line comment",
-            ),
-        ],
-    )
-    def test_a_view_returning_other_rows_fails_the_lock(self, before: str, after: str) -> None:
-        """Two definitions that differ only in whitespace but return different rows get different
-        digests, so the checker reports the view as changed."""
-
-        def rows(sql: str) -> list[tuple[object, ...]]:
-            with closing(sqlite3.connect(":memory:")) as connection:
-                connection.execute(sql)
-                return connection.execute("SELECT * FROM v").fetchall()
-
-        def entry(sql: str) -> dict[str, LockEntry]:
-            return parse_lock(
-                json.dumps({"2": {"columns": [["v", "value"]], "views": {"v": view_digest(sql)}}})
-            )
-
-        assert rows(before) != rows(after)
-        assert lock_checker().schema_problems(entry(before), entry(after)) == [
-            "schema version 2 changed view v; a change to a view's rows or derivation needs a "
-            "new schema version"
-        ]
-
-    def test_the_digest_is_of_the_exact_sql(self) -> None:
+    def test_the_digest_is_of_the_exact_sql(self, head_template: Path) -> None:
         sql = "CREATE VIEW v AS SELECT a FROM t"
         assert view_digest(sql) == hashlib.sha256(sql.encode()).hexdigest()
         assert view_digest(sql) != view_digest("CREATE VIEW v AS\n  SELECT a\nFROM t")
+        # Each view at head, its SQL hashed as the revision embeds it, nothing normalized.
+        frozen = frozen_views(alembic_config(head_template))
+        assert len(frozen) == len(views(head_template))
+        assert {name: view_digest(sql) for name, sql in frozen.items()} == {
+            name: hashlib.sha256(sql.encode()).hexdigest() for name, sql in frozen.items()
+        }
 
-    def test_a_listed_pair_that_is_not_consumer_at_head_is_reported(self) -> None:
-        consumer = consumer_pairs(read_dictionary(ENTRY))
-        entry = [*consumer, ["t", "id"], ["v_t", "gone"]]
-        assert lock_differences(entry, consumer) == [
-            "t.id is not a consumer column at head",
-            "v_t.gone is not a consumer column at head",
+    def test_each_commit_s_lock_entry_matched_its_dictionary(self) -> None:
+        for commit in (AT_STEP3B1, AT_LAST_RUN_ID):
+            entry = lock_columns(lock_at(commit)["2"])
+            assert lock_differences(entry, consumer_pairs(dictionary_at(commit))) == [], commit
+
+    def test_lock_differences_are_reported_both_ways(self) -> None:
+        """Schema version 2 as one commit's lock lists it, against the other commit's consumer
+        columns: 2d2ba76b177c added sync_failures.last_run_id to both."""
+        older = lock_columns(lock_at(AT_STEP3B1)["2"])
+        newer = lock_columns(lock_at(AT_LAST_RUN_ID)["2"])
+        assert lock_differences(older, consumer_pairs(dictionary_at(AT_LAST_RUN_ID))) == [
+            "sync_failures.last_run_id is missing from the entry"
         ]
-
-    def test_a_consumer_pair_missing_from_the_entry_is_reported(self) -> None:
-        consumer = consumer_pairs(read_dictionary(ENTRY))
-        assert consumer == [["t", "name"], ["v_t", "name"]]
-        assert lock_differences([["t", "name"]], consumer) == ["v_t.name is missing from the entry"]
+        assert lock_differences(newer, consumer_pairs(dictionary_at(AT_STEP3B1))) == [
+            "sync_failures.last_run_id is not a consumer column at head"
+        ]

@@ -235,13 +235,34 @@ class TestShape:
         seed.assignee(pr, author)
         seed.sync_run(id=next(ids))
         row_ids = set(range(7_000_000_001, next(ids)))
-        for view in COLUMNS:
-            values = {value for row in rows(seed, f"SELECT * FROM {view}") for value in row}
-            assert values, view
+        # Every id drawn is a row id the file holds.
+        assert {
+            value
+            for table in (
+                "github_users",
+                "repositories",
+                "pull_requests",
+                "pr_reviews",
+                "pr_comments",
+                "sync_runs",
+            )
+            for (value,) in rows(seed, f"SELECT id FROM {table}")
+        } == row_ids
+        read = {view: rows(seed, f"SELECT * FROM {view}") for view in COLUMNS}
+        # The rows compared: one per seeded account, profile, review, comment, and commit, and
+        # one per relationship of the pull request (author, merger, editor, reviewer, review
+        # editor, commenter, comment editor, commit author, requested reviewer, assignee).
+        assert {view: len(table) for view, table in read.items()} == {
+            "v_github_users": 2,
+            "v_account_profiles": 1,
+            "v_pr_reviews": 1,
+            "v_pr_comments": 1,
+            "v_commit_authors": 1,
+            "v_pr_relationships": 10,
+        }
+        for view, table in read.items():
+            values = {value for row in table for value in row}
             assert values.isdisjoint(row_ids), (view, values & row_ids)
-        # Positive control: a row id projected under a consumer name is caught.
-        renamed = {value for (value,) in rows(seed, "SELECT id AS pr_number FROM pull_requests")}
-        assert renamed & row_ids
 
 
 class Scenario:
@@ -1209,22 +1230,23 @@ def vm_steps(database: Path, sql: str) -> int:
     return steps
 
 
-# One index per foreign-key column instead, created in the order the migration once created
-# them. With two single-column candidates the planner took the one created last, the account's,
-# and read every row of the account for each PR (observed on SQLite 3.45.3 and 3.47.1).
-SINGLE_COLUMN_INDEXES = (
-    "DROP INDEX ix_pr_reviews_pr_id_reviewer_id_github_id",
-    "DROP INDEX ix_pr_reviews_reviewer_id",
-    "CREATE INDEX ix_pr_reviews_pr_id ON pr_reviews (pr_id)",
-    "CREATE INDEX ix_pr_reviews_reviewer_id ON pr_reviews (reviewer_id)",
-)
-
-
 class TestConcentratedParticipation:
     """Four times the PRs costs v_pr_comments about four times the work, not sixteen times:
-    ``author_also_reviewed`` is an index lookup on (PR, account) (plan 5.1)."""
+    ``author_also_reviewed`` is an index lookup on (PR, account) (plan 5.1). With one index per
+    foreign-key column instead, the planner took the account's and read every row of the
+    account for each PR (observed on SQLite 3.45.3 and 3.47.1)."""
 
     SIZES = (100, 400)
+
+    @staticmethod
+    def rows_read(prs: int) -> dict[str, int]:
+        """The rows each view returns for ``prs`` pull requests of the seed loop: a review and
+        two comments on each, and in v_pr_relationships an author row for each as well."""
+        return {
+            "v_pr_reviews": prs,
+            "v_pr_comments": 2 * prs,
+            "v_pr_relationships": prs + prs + 2 * prs,
+        }
 
     @pytest.fixture(scope="class")
     def databases(
@@ -1236,27 +1258,17 @@ class TestConcentratedParticipation:
             built[prs] = folder / f"{prs}.db"
             shutil.copyfile(head_template, built[prs])
             _one_account_on_every_pull_request(built[prs], prs)
+            built[prs].chmod(0o444)
         return built
 
-    def growth(self, databases: dict[int, Path], tmp_path: Path, view: str, *alter: str) -> float:
-        work = []
-        for prs in self.SIZES:
-            database = tmp_path / f"{prs}.db"
-            shutil.copyfile(databases[prs], database)
-            with closing(sqlite3.connect(database)) as connection, connection:
-                for statement in alter:
-                    connection.execute(statement)
-            work.append(vm_steps(database, f"SELECT * FROM {view}"))
+    def growth(self, databases: dict[int, Path], view: str) -> float:
+        work = [vm_steps(databases[prs], f"SELECT * FROM {view}") for prs in self.SIZES]
         return work[1] / work[0]
 
     @pytest.mark.parametrize("view", ["v_pr_reviews", "v_pr_comments", "v_pr_relationships"])
-    def test_work_grows_with_the_pull_requests(
-        self, databases: dict[int, Path], tmp_path: Path, view: str
-    ) -> None:
-        assert self.growth(databases, tmp_path, view) < 6
-
-    def test_a_lookup_by_the_account_alone_is_reported(
-        self, databases: dict[int, Path], tmp_path: Path
-    ) -> None:
-        """Positive control: with single-column indexes the same measure grows with the square."""
-        assert self.growth(databases, tmp_path, "v_pr_comments", *SINGLE_COLUMN_INDEXES) > 10
+    def test_work_grows_with_the_pull_requests(self, databases: dict[int, Path], view: str) -> None:
+        for prs in self.SIZES:
+            assert query(databases[prs], f"SELECT COUNT(*) FROM {view}") == [
+                (self.rows_read(prs)[view],)
+            ], prs
+        assert self.growth(databases, view) < 6
