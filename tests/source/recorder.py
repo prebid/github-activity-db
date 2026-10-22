@@ -229,19 +229,32 @@ def first_sync_config(owner: str, name: str) -> TrackingConfig:
 
 
 async def record_first_sync(
-    token: str, owner: str, name: str, *, inner: httpx.AsyncBaseTransport | None = None
+    token: str,
+    owner: str,
+    name: str,
+    *,
+    inner: httpx.AsyncBaseTransport | None = None,
+    clock: Clock | None = None,
 ) -> list[Unit]:
     """Run a first sync of ``owner/name`` into a scratch database through the recording
     transport; every unit it asked for. A private repository is refused after the sync's resolve
     (its label pages included) and before any other request; a failed item or a run that does not
-    exit 0 stops it too."""
+    exit 0 stops it too.
+
+    ``clock`` is the run's clock, the system clock by default. A replay of recorded units passes a
+    fixed one: the sync's 24-hour refresh measures each account from its recorded ``Date``, so on
+    the system clock a replay asks for lookups the recording does not hold once a day has
+    passed."""
     _refuse_listed(owner, name)
+    run_clock = clock or SystemClock()
     recorded_at = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
     recording = RecordingTransport(inner or httpx.AsyncHTTPTransport(), recorded_at)
     opened: list[PublicOnlySource] = []
 
     def open_source(deadline: datetime | None) -> PublicOnlySource:
-        opened.append(PublicOnlySource(token, http_transport=recording, deadline=deadline))
+        opened.append(
+            PublicOnlySource(token, http_transport=recording, clock=run_clock, deadline=deadline)
+        )
         return opened[-1]
 
     config = first_sync_config(owner, name)
@@ -256,7 +269,7 @@ async def record_first_sync(
                 code_version="recorder",
             ),
             open_source=open_source,
-            clock=SystemClock(),
+            clock=run_clock,
         )
     # The engine fails the run on the refusal, before the index.
     refused = [source.refused for source in opened if source.refused is not None]
