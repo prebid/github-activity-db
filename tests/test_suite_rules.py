@@ -428,3 +428,70 @@ def test_flags_each_shape_it_does_not_model(tmp_path: Path, source: str, flagged
     path = tmp_path / "pkg" / "module.py"
     path.write_text(source)
     assert bool(subprocess_problems(path)) is flagged
+
+
+def _module(tmp_path: Path, source: str) -> Path:
+    (tmp_path / "pkg").mkdir()
+    path = tmp_path / "pkg" / "module.py"
+    path.write_text(source)
+    return path
+
+
+@pytest.mark.parametrize(
+    ("source", "problems"),
+    [
+        ("from datetime import datetime\nnow = datetime.now()\n", ["2: datetime.now"]),
+        ("import datetime\nnow = datetime.datetime.utcnow()\n", ["2: datetime.datetime.utcnow"]),
+        ("from datetime import date\ntoday = date.today()\n", ["2: date.today"]),
+        ("from datetime import datetime as dt\n", ["1: datetime.datetime imported as dt"]),
+        ("import time\nstarted = time.monotonic()\n", ["2: time.monotonic"]),
+        ("from time import sleep\n", ["1: imports time.sleep"]),
+        ("import time as clock\n", ["1: time imported as clock"]),
+        ("import time\nclock = time\n", ["2: the time module used as a value"]),
+        ("import random\nvalue = random.random()\n", ["2: random.random"]),
+        ("import random\nrng = random.Random()\n", ["2: random.Random without a seed"]),
+        ("from random import Random\nrng = Random(None)\n", ["2: Random without a seed"]),
+        ("import secrets\ntoken = secrets.token_hex()\n", ["2: secrets.token_hex"]),
+        ("import asyncio\n\n\nasync def f():\n    await asyncio.sleep(1)\n", ["5: asyncio.sleep"]),
+        ("from asyncio import sleep\n", ["1: imports asyncio.sleep"]),
+        ("import os.path\nkey = os.urandom(8)\n", ["2: os.urandom"]),
+        ("import uuid\nkey = uuid.uuid4()\n", ["2: uuid.uuid4"]),
+        (
+            "import time\nfrom typing import Annotated\n\n\n"
+            "def f(x: Annotated[float, time.time] = 0.0) -> None:\n    pass\n",
+            ["5: time.time"],
+        ),
+        ("import time\ntime.tzset()\n", []),
+        ("import random\nrng = random.Random(7)\n", []),
+        ("import random\n\n\ndef f(rng: random.Random) -> None:\n    pass\n", []),
+        ("import asyncio\n\n\nasync def f():\n    await asyncio.sleep(0)\n", []),
+        ("import uuid\nkey = uuid.uuid5(uuid.NAMESPACE_URL, 'x')\n", []),
+        ("from datetime import UTC, datetime\nwhen = datetime(2026, 1, 1, tzinfo=UTC)\n", []),
+        ("clock = make_clock()\nclock.now()\n", []),
+    ],
+)
+def test_the_determinism_scan_reports_each_spelling(
+    tmp_path: Path, source: str, problems: list[str]
+) -> None:
+    assert determinism_problems(_module(tmp_path, source)) == [
+        f"pkg/module.py:{problem}" for problem in problems
+    ]
+
+
+@pytest.mark.parametrize(
+    ("source", "problems"),
+    [
+        (
+            "def test_outer():\n    def test_inner():\n        pass\n",
+            ["2: test_inner inside test_outer"],
+        ),
+        ("def helper():\n    class TestNested:\n        pass\n", ["2: TestNested inside helper"]),
+        ("def test_a():\n    pass\n\n\nclass TestB:\n    def test_c(self):\n        pass\n", []),
+    ],
+)
+def test_the_collection_scan_reports_each_nested_test(
+    tmp_path: Path, source: str, problems: list[str]
+) -> None:
+    assert uncollected_tests(_module(tmp_path, source)) == [
+        f"pkg/module.py:{problem}" for problem in problems
+    ]
