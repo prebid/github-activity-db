@@ -285,6 +285,19 @@ def test_a_first_sync_exits_0_and_prints_its_report(
     assert fetch(migrated_database, "SELECT count(*) AS n FROM pull_requests") == [{"n": 11}]
 
 
+def test_the_report_times_the_run_on_its_clock(replay: Replay, migrated_database: Path) -> None:
+    """The report's seconds come from the clock the run reads (D40): seven seconds pass on the
+    fake clock while the resolve is answered, and the report says 7 s."""
+    clock = common.clock()
+    assert isinstance(clock, FakeClock)  # the replay fixture's
+    replay.modify(lambda body: clock.advance(7), when=lambda seen: seen.operation == "Resolve")
+
+    result = _sync()
+
+    assert result.exit_code == 0, result.output
+    assert "Hydrated 11 items; GraphQL points 4, REST calls 0, 7 s" in _plain(result.output)
+
+
 def test_an_item_failure_exits_2_and_is_reported(replay: Replay, migrated_database: Path) -> None:
     replay.modify(_alias_error, when=lambda seen: seen.operation == "PullRequestBatch", times=2)
 

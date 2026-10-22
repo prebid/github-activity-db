@@ -10,6 +10,7 @@ from collections.abc import Iterator
 from importlib import metadata
 from pathlib import Path
 
+import pydantic_settings.sources.providers.dotenv as dotenv_source
 import pytest
 import typer
 from typer.testing import CliRunner
@@ -222,26 +223,36 @@ class TestInstalledEntryPoint:
         assert "invalid settings" in _words(result.stderr)
         assert "Traceback" not in result.stderr
 
-    @pytest.mark.parametrize(
-        ("dotenv", "mode"),
-        [
-            pytest.param(b"LOG_LEVEL=\xff\n", 0o644, id="not UTF-8"),
-            pytest.param(b"", 0o000, id="unreadable"),
-        ],
-    )
-    def test_an_unreadable_env_file_exits_1_without_a_traceback(
-        self, tmp_path: Path, dotenv: bytes, mode: int
-    ) -> None:
-        env_file = tmp_path / ".env"
-        env_file.write_bytes(dotenv)
-        env_file.chmod(mode)
-        try:
-            result = _installed("github", "rate-limit", env={}, cwd=tmp_path)
-        finally:
-            env_file.chmod(0o644)
+    def test_an_env_file_that_is_not_utf8_exits_1_without_a_traceback(self, tmp_path: Path) -> None:
+        (tmp_path / ".env").write_bytes(b"LOG_LEVEL=\xff\n")
+        result = _installed("github", "rate-limit", env={}, cwd=tmp_path)
         assert result.returncode == 1
         assert "invalid settings" in _words(result.stderr)
         assert "Traceback" not in result.stderr
+
+
+def test_an_env_file_the_os_refuses_to_read_exits_1(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A .env the OS refuses to read: the read answers PermissionError, as it does for a file
+    the user may not read, whatever uid runs the tests (D40), and the command exits 1."""
+    (tmp_path / ".env").write_text("LOG_LEVEL=INFO\n")
+    read: list[Path] = []
+
+    def refused(path: Path, **_: object) -> dict[str, str | None]:
+        read.append(Path(path))
+        raise PermissionError(13, "Permission denied", str(path))
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(dotenv_source, "dotenv_values", refused)
+    get_settings.cache_clear()
+    try:
+        result = runner.invoke(app, ["github", "rate-limit"])
+    finally:
+        get_settings.cache_clear()
+    assert read == [Path(".env")]
+    assert result.exit_code == 1, result.output
+    assert isinstance(result.exception, SystemExit), result.exception
 
     @pytest.mark.parametrize(
         "env",

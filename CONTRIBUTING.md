@@ -254,7 +254,7 @@ measures how many such flaws are found. A test's or an acceptance's inputs are G
 responses; stubs of a response GitHub or the environment can send (a status, a body, a timeout, an
 interrupt, a failing `git`, a clock), which a test may build in memory from a recorded unit changed
 into that shape; calls the code under test must refuse, and configuration it must refuse or that
-names a state GitHub can produce (a repository that does not resolve, one no longer listed); valid
+names a state GitHub can produce (a repository that does not resolve, one no longer listed); a timing setting a test shortens (SQLite's busy timeout), which changes how long a wait lasts and no outcome; valid
 rows a test writes (through the models with `tests/db/seed.py`, or in SQL); and databases and files
 this project's own code wrote, at any revision. Each test asserts the exact result. A check over
 stored data, files, or source that only a defect of this code could fail is tested on its passing
