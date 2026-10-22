@@ -676,6 +676,7 @@ class TestTransactionControl:
         connection still usable: that error ends the upgrade, and the authorizer allows
         env.py's ROLLBACK and no other transaction statement."""
         connections: list[RecordingConnection] = []
+        invalidated: list[BaseException | None] = []
         real_connect = sqlite3.dbapi2.connect
 
         def connect(*args: Any, **kwargs: Any) -> sqlite3.Connection:
@@ -683,14 +684,22 @@ class TestTransactionControl:
             connections.append(connection)
             return connection
 
+        def record(_dbapi_connection: Any, _record: Any, exception: BaseException | None) -> None:
+            invalidated.append(exception)
+
         with closing(sqlite3.connect(step3a_database)) as connection, connection:
             connection.execute(STEP3A_ROWS["repositories"])
         before = snapshot(step3a_database)
         monkeypatch.setattr(sqlite3.dbapi2, "connect", connect)
-        with pytest.raises(RuntimeError, match=r"rows would be lost \(repositories 1\)") as error:
+        with (
+            listening("invalidate", record, Pool),
+            pytest.raises(RuntimeError, match=r"rows would be lost \(repositories 1\)") as error,
+        ):
             upgrade(step3a_database)
         monkeypatch.undo()
         assert type(error.value) is RuntimeError
+        # Between statements, so SQLAlchemy never invalidated the connection.
+        assert invalidated == []
         (recorded,) = connections
         assert {
             name: recorded.authorizer(*REFUSED_WHILE_OPEN[name])

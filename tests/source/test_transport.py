@@ -693,16 +693,14 @@ class TestCredentials:
         """A ValueError raised inside the client outside githubkit's rate-limit readers.
 
         githubkit's OAuth token auth refreshes a missing token inside the client and parses the
-        token endpoint's answer with response.json(). Here the endpoint answers 200 with a body in
-        its documented default format, form-encoded, rather than JSON.
+        token endpoint's answer with response.json(). Here something between the client and
+        GitHub, a captive portal or a proxy's block page, answers the refresh 200 with HTML.
         """
         endpoint = "https://github.com/login/oauth/access_token"
-        body = "access_token=test-token&scope=repo&token_type=bearer"
+        body = "<html><body>Sign in to this network to continue.</body></html>"
         replay.fault(
             lambda request: httpx.Response(
-                200,
-                content=body.encode(),
-                headers={"content-type": "application/x-www-form-urlencoded; charset=utf-8"},
+                200, content=body.encode(), headers={"content-type": "text/html; charset=utf-8"}
             ),
             when=lambda seen: seen.path == endpoint,
         )
