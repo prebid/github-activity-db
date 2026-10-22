@@ -94,6 +94,7 @@ Within scope the database collects and distinguishes data and never interprets i
 | D37 | Decision of 2026-10-21 (the maintainer): an error is better than a silent failure or silently wrong data. Where the code cannot check something, or cannot accept what GitHub returned, it reports a failure that stops publication or turns the run red, never a pass. For verify: an unchecked item and an unverified repository fail verify in both modes, not only `--exact`, and a lookup whose answer verify cannot accept is an error (5.4, 5.8, gap 97), so D25 does not publish a database verify could not check. |
 | D38 | Decisions of 2026-10-21 applying D37 to the sync and to the steps not yet built (gaps 98-110). The sync exits 2 when a 24-hour account refresh fails, when the run reaches its deadline, and when a hydration contradicts the run's own index after one retry (Step 3b-2a-3); the failures a batch made final before a deadline are recorded, not left pending. An `accepted_failures` entry accepts one error class and one cause, the first line of the failure's message, of an item, an account's refresh, or from Step 4b a compare, so a permanent failure can be accepted without turning every run red while a new cause is not. A PR with more closing links than the index carries is hydrated every run. Every node id a sighting, a lookup, or a commit link reports for a stored account is stored, and `sync_runs` records the `--repo` filter, each configured entry's `github_id`, and its first commit-link lookups and those GitHub answered `NOT_FOUND`. The source refuses what it cannot read (gap 104), and the run records refuse what they cannot write and mark `-unknown` what they cannot determine (gap 105). Step 4b marks a compare file list at GitHub's 300-file cap and counts it in verify's report and the manifest, completes an activity read only at the floor or at the log's first event, as a read in ascending order finds it, fails a history read whose count still differs after a rescan, and records a compare that still fails, which an entry can accept. Step 5 measures which edits leave `updatedAt` unchanged. Step 6 compares the App's reads with the token's before any App run publishes to `db`, pins the database file the job checked, tests that every exit-code `if:` compares a non-empty string, and ties a snapshot to the job's own sync. A schedule that stops is the one silent case this repository cannot see: no run starts, so nothing turns red; 5.6 states the staleness rule a consumer applies, and building it belongs to the dashboard's integration (section 9). Left as they are, because the stored data already says what happened: a commit-linked account a lookup answers `NOT_FOUND` (D28; now counted per run and in the manifest, and from Step 6a a run whose `links_not_found` exceeds the share of its `link_lookups` Step 5 sets, with at least Step 5's minimum number of lookups, exits 2 (an account an earlier lookup answered `NOT_FOUND` counted in neither), since a lookup form GitHub stopped resolving would look the same per link), a compare at GitHub's 300-file cap and one GitHub refuses (marked by `files_at_cap` and `http_status`, counted in verify's report and the manifest), a REST git author without a name or email (stored null, as GitHub reports none), deletions recorded as a count (`items_deleted`, and from Step 4b `events_deleted` and `history_commits_deleted`; the snapshots retained for 7 days hold the identities; older ones are not kept), which accounts failed a refresh (printed; the count is stored, the run is red unless an account entry accepts the failure, and the accounts are retried), an `author_association` difference (verify reports it as drift with its own count: GitHub computes association when read and changes it without moving `updatedAt`, section 7, so no read tells a change from a defect), and the merge state as of `hydrated_at` (D32). New tables and columns of GitHub-derived data on a populated file follow gap 110's rule (5.1). |
 | D39 | Decision of 2026-10-21 (the maintainer). Nothing is planted or tampered, no flaw is seeded, and there is no mutation testing, under any name. No test, review, or acceptance changes a file or a copy of one (other than a stub or configuration the inputs below allow), or writes a file, a row, a revision, a call site, or a decoy holding a flaw, to see whether something catches it, and none measures how many such flaws are found. A test's or an acceptance's inputs are GitHub's recorded responses; stubs of a response GitHub or the environment can send (a status, a body, a timeout, an interrupt, a failing `git`, a clock), which a test may build in memory from a recorded unit changed into that shape; calls the code under test must refuse, and configuration it must refuse or that names a state GitHub can produce (a repository that does not resolve, one no longer listed); valid rows a test writes (through the models with `tests/db/seed.py`, or in SQL); and databases and files this project's own code wrote, at any revision. Each test asserts the exact result. A check over stored data, files, or source that only a defect of this code could fail is tested on its passing side, with the exact count of the rows, files, or values it compared, so it cannot pass on nothing; a check that GitHub, the environment, or a caller can fail is tested on both sides. A fix comes with a regression test that fails against the parent commit's code. Tests merged before D39 that change a file or a copy of one, or write a file, a revision, a call, a connection, or a decoy holding a flaw, to see whether a check catches it are replaced in Step 3b-2a-2d. |
+| D40 | Decision of 2026-10-22 (the maintainer). Tests are software that gives the same result every time. The same code gives every test the same outcome on any machine, on any date, and in any run order: a test, and every code path it runs, reads no wall clock (a fixed clock such as `FakeClock` stands in), reaches no network (GitHub answers from recordings and stubs), uses no unseeded randomness, depends on no state outside its own temporary directory, the repository, and the session's database template, and bounds every wait with a timeout. A test exercises code and asserts on what the code returns, writes, or exits with: where the code gives a structured value (an exit code, rows, parsed fields, an exception's class and fields), the test asserts on it rather than on printed wording, and no test checks the wording of a document. Where a test needs an input the code cannot easily be given, the project builds software that produces it (a fake clock, the scenario model, the replay, a recorder mode), never a planted file (D39). Evidence is what software reproduces: an acceptance criterion names a test, a check, or a command whose output shows it, and a search of text, a reading, or a review finds work to do but is never acceptance. `tests/test_suite_rules.py` enforces the rules it can model, and `scripts/check_junit.py --same-as` compares two runs of the suite test by test (Step 3b-2a-2d). |
 
 ## 3. Coverage rule
 
@@ -1581,7 +1582,7 @@ Every Step 3 test of a GitHub interaction runs through the real `GitHubSource` o
 schema comparison. Evidence is direct, with inputs at and on each side of every boundary the design
 states (the coverage floor, the 10-minute unsettled window, 10 minutes past `deadline_at` for the
 lock, the 24-hour refresh, the delete guard's max(25, 2%)) and regression tests that fail against
-the parent's code. D39 governs every test. Nothing is planted or tampered, no flaw is seeded, and
+the parent's code. D39 and D40 govern every test. Nothing is planted or tampered, no flaw is seeded, and
 there is no mutation testing, under any name. No test, review, or acceptance changes a file or a
 copy of one (other than a stub or configuration the inputs below allow), or writes a file, a row, a revision, a call
 site, or a decoy holding a flaw, to see whether something catches it, and none measures how many
@@ -1938,12 +1939,15 @@ syncs, the pull request records that PR's `updatedAt` and `mergeStateStatus` fro
 8). An adversarial review of the change, by reviewers who did not write it, finds no invariant
 check without a test that targets it; CI passes on the exact PR head.
 
-#### Step 3b-2a-2d: Tests without planted inputs (D39)
+#### Step 3b-2a-2d: Tests without planted inputs, deterministic (D39, D40)
 
 Prerequisite: Step 3b-2a-2c has merged, and D39 is on `main`.
 
-Scope: tests and `docs/testing.md`; nothing under `src/`, `scripts/`, or `alembic/` changes, and no
-rule loses its test. Every test merged before D39 that changes a file or a copy of one, or writes a
+Scope: tests, `docs/testing.md`, and `scripts/check_junit.py`'s `--same-as`; nothing under `src/`
+or `alembic/` changes, and no rule loses its test. Every test meets D40, and
+`tests/test_suite_rules.py` gains the determinism rules it can model: no wall-clock read, no real
+network transport, and no unseeded randomness in a test file, each rule tested on its passing side
+over every file under `tests/`, the files it scanned counted against `git ls-files`. Every test merged before D39 that changes a file or a copy of one, or writes a
 file, a revision, a call, a connection, or a decoy holding a flaw, to see whether a check catches it,
 is replaced under D39: a check that GitHub, the environment, or a caller can fail keeps a refusing
 side built from D39's inputs, and a check that only a defect of this code could fail is tested on
@@ -1983,14 +1987,9 @@ environment, or a caller can fail it, or on its passing side with the exact coun
 pull request lists each test it replaces or removes, with the rule it held and the test that now
 holds it.
 
-Acceptance: the pull request lists every test under `tests/**/*.py` that writes a source file,
-a revision, a row, a database, or a package copy, changes a recorded unit, patches a call or a
-constant, or runs a call or a query holding a flaw, with the D39 input it uses or the test that
-replaced it; a search of `tests/**/*.py`
-(recorded GitHub text under `tests/fixtures/` is outside it) for `plant`, `tamper`, `decoy`,
-`corrupt`, and `mutat` finds none; an adversarial review of the change, by reviewers who did not
-write it, finds no rule that lost its test and no test that holds a flaw; CI
-passes on the exact PR head.
+Acceptance: `tests/test_suite_rules.py`'s determinism and subprocess rules pass over every test file
+and report the files they scanned; two runs of the full suite give the same outcome for every test,
+compared by `scripts/check_junit.py --same-as`; CI passes on the exact PR head.
 
 #### Step 3b-2a-3: D37 in the sync
 
@@ -2110,8 +2109,9 @@ gone-item, leaving-coverage, and 11-link tests; in `tests/sync/test_runs.py` the
 `trigger`, and `code_version` tests; and in `tests/test_tracking_config.py` the defaults without `[automation]`
 and the accepted-failure entries.
 
-Acceptance: an adversarial review of the change, by reviewers who did not write it, finds no rule of
-this step without a test that targets it; CI passes on the exact PR head.
+Acceptance: the step's tests, run on the parent commit's code, fail for each rule the step adds or
+changes and pass on the head, and the pull request records the command and its output (D40); CI
+passes on the exact PR head.
 
 #### Step 3b-2b-1: REST sampler
 
@@ -2153,8 +2153,9 @@ and with `--only documents` leaving the mode's directory, REST and GraphQL units
 sampler reading only the
 repositories `--repo` names and refusing `prebid-agent-skills` before any request.
 
-Acceptance: an adversarial review of the change, by reviewers who did not write it, finds no rule
-of the sampler without a test that targets it; CI passes on the exact PR head.
+Acceptance: the step's tests, run on the parent commit's code, fail for each rule the step adds or
+changes and pass on the head, and the pull request records the command and its output (D40); CI
+passes on the exact PR head.
 
 #### Step 3b-2b-2: Verify
 
@@ -2232,9 +2233,10 @@ closing-link error verify reports, with its PR and link (for a difference in the
 found by reading the PR's full closing list; section 8). `verify --exact` exits 0, or
 exits 2 with no failing difference but such closing-link errors, each with REST evidence that
 GitHub changed the link without changing the PR's `updatedAt`. A live item failure that
-cannot pass is listed in `[sync].accepted_failures` with REST evidence of why, as in Step 5. An
-adversarial review of the change, by reviewers who did not write it, finds no invariant check
-without a test that targets it; CI passes on the exact PR head.
+cannot pass is listed in `[sync].accepted_failures` with REST evidence of why, as in Step 5. The
+step's tests, run on the parent commit's code, fail for each rule the step adds or changes and
+pass on the head, and the pull request records the command and its output (D40); CI passes on the
+exact PR head.
 
 ### Step 4: Issues, closing-issue links, and default-branch activity
 
