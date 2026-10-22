@@ -2,17 +2,16 @@
 
 from __future__ import annotations
 
-import hashlib
+import re
 import sqlite3
 from pathlib import Path
 from typing import Any, cast
 
 import pytest
-from sqlalchemy import select, update
+from sqlalchemy import event
 from sqlalchemy.ext.asyncio import AsyncConnection
 
 from github_activity_db.db.engine import build_engine
-from github_activity_db.db.models import PullRequest
 from github_activity_db.sync.snapshot import (
     Snapshot,
     StoredPullRequest,
@@ -20,6 +19,7 @@ from github_activity_db.sync.snapshot import (
     read_snapshot,
 )
 from tests.db.seed import Seed, connect
+from tests.sync.records import fetch
 from tests.sync.support import (
     HYDRATED,
     LINKED_REPO,
@@ -141,38 +141,42 @@ async def test_an_empty_database(migrated_database: Path) -> None:
     assert await snapshot_of(migrated_database) == Snapshot(repositories=())
 
 
-def _digest(database: Path) -> str:
-    return hashlib.sha256(database.read_bytes()).hexdigest()
-
-
-async def _commit_after(database: Path, statement: Any | None) -> None:
-    """Run ``read_snapshot`` or ``statement`` on an application connection, then commit, so a
-    write either made lands in the file."""
+async def _read_then_commit(database: Path) -> Snapshot:
+    """Run ``read_snapshot`` on an application connection, then commit, so a write it made
+    would land in the file."""
     engine = build_engine(f"sqlite+aiosqlite:///{database}")
     try:
         async with engine.connect() as connection:
-            if statement is None:
-                await read_snapshot(connection)
-            else:
-                await connection.execute(statement)
+            snapshot = await read_snapshot(connection)
             await connection.commit()
     finally:
         await engine.dispose()
+    return snapshot
+
+
+def _pages(database: Path) -> int:
+    """The file's size in bytes as SQLite counts it: its pages times the page size."""
+    connection = sqlite3.connect(database)
+    try:
+        (count,) = connection.execute("PRAGMA page_count").fetchone()
+        (size,) = connection.execute("PRAGMA page_size").fetchone()
+    finally:
+        connection.close()
+    return int(count) * int(size)
 
 
 async def test_writes_nothing(migrated_database: Path) -> None:
+    """Every byte of the file is unchanged after the reader's statements and a commit, over a
+    file whose every page is compared and whose pull requests the reader read."""
     _seed(migrated_database)
-    before = _digest(migrated_database)
-    await _commit_after(migrated_database, None)
-    assert _digest(migrated_database) == before
-
-
-async def test_the_digest_sees_a_committed_write(migrated_database: Path) -> None:
-    """Positive control: an UPDATE committed on the same kind of connection changes the file."""
-    _seed(migrated_database)
-    before = _digest(migrated_database)
-    await _commit_after(migrated_database, update(PullRequest).values(is_draft=False))
-    assert _digest(migrated_database) != before
+    before = migrated_database.read_bytes()
+    snapshot = await _read_then_commit(migrated_database)
+    assert migrated_database.read_bytes() == before
+    assert len(before) == _pages(migrated_database)
+    assert (
+        sum(repository.item_rows for repository in snapshot.repositories)
+        == fetch(migrated_database, "SELECT count(*) AS n FROM pull_requests")[0]["n"]
+    )
 
 
 class _CheckedConnection:
@@ -192,8 +196,16 @@ class _CheckedConnection:
 
 
 async def test_no_read_is_left_half_consumed(migrated_database: Path) -> None:
+    """After each statement the reader sends, and after it returns, another connection commits
+    at once; the statements, one per table, are counted as they reach the database."""
     _seed(migrated_database)
+    sent: list[str] = []
+
+    def record(connection: Any, cursor: Any, statement: str, *args: Any) -> None:
+        sent.append(statement)
+
     engine = build_engine(f"sqlite+aiosqlite:///{migrated_database}")
+    event.listen(engine.sync_engine, "before_cursor_execute", record)
     try:
         async with engine.connect() as connection:
             checked = _CheckedConnection(connection, migrated_database)
@@ -201,21 +213,26 @@ async def test_no_read_is_left_half_consumed(migrated_database: Path) -> None:
             commit_does_not_wait(migrated_database)
     finally:
         await engine.dispose()
-    # labels, closing links, pull requests, failures, pending, repository labels, repositories
-    assert checked.reads == 7
+    tables = [re.search(r"\bFROM (\w+)", statement) for statement in sent]
+    assert checked.reads == len(sent) > 0
+    assert all(statement.startswith("SELECT ") for statement in sent)
+    assert len({table.group(1) for table in tables if table is not None}) == len(sent)
 
 
-async def test_the_lock_probe_sees_a_half_consumed_read(migrated_database: Path) -> None:
-    """Positive control: a server-side cursor left half-read blocks the probe's commit."""
+async def test_the_lock_probe_refuses_while_another_connection_reads(
+    migrated_database: Path,
+) -> None:
+    """The probe's commit is refused at once while another process holds a read open, and
+    succeeds once it ends."""
     _seed(migrated_database)
-    engine = build_engine(f"sqlite+aiosqlite:///{migrated_database}")
+    reader = sqlite3.connect(migrated_database, isolation_level=None)
     try:
-        async with engine.connect() as connection:
-            stream = await connection.stream(select(PullRequest.id))
-            assert await stream.fetchone() is not None
-            with pytest.raises(sqlite3.OperationalError, match="database is locked"):
-                commit_does_not_wait(migrated_database)
-            await stream.close()
+        reader.execute("BEGIN")
+        reader.execute("SELECT count(*) FROM sync_runs").fetchone()
+        with pytest.raises(sqlite3.OperationalError) as raised:
             commit_does_not_wait(migrated_database)
+        assert raised.value.sqlite_errorname == "SQLITE_BUSY"
+        reader.execute("ROLLBACK")
     finally:
-        await engine.dispose()
+        reader.close()
+    commit_does_not_wait(migrated_database)

@@ -7,7 +7,8 @@ import sqlite3
 from pathlib import Path
 
 import pytest
-from sqlalchemy import insert, select, text, update
+from sqlalchemy import select, text, update
+from sqlalchemy.exc import DBAPIError
 
 from github_activity_db.db.models import SyncRun
 from github_activity_db.sync import connection as connection_module
@@ -41,7 +42,7 @@ def _write_is_refused(database: Path) -> bool:
         other.execute("ROLLBACK")
         return False
     except sqlite3.OperationalError as e:
-        assert "locked" in str(e)
+        assert e.sqlite_errorname == "SQLITE_BUSY"
         return True
     finally:
         other.close()
@@ -109,20 +110,41 @@ async def test_the_body_s_exception_rolls_back(migrated_database: Path) -> None:
         with pytest.raises(KeyError):
             async with transaction(writer, run_id):
                 await writer.execute(update(SyncRun).values(rest_calls=7))
-                raise KeyError("planted")
+                raise KeyError("the body's own error")
     assert fetch(migrated_database, "SELECT rest_calls FROM sync_runs") == [{"rest_calls": 0}]
 
 
-async def test_a_constraint_failure_is_a_local_database_error(migrated_database: Path) -> None:
+def _sqlite_errorname(error: LocalDatabaseError) -> str:
+    """The SQLite error under the ``DBAPIError`` the writer turned into ``error``."""
+    cause = error.__cause__
+    assert isinstance(cause, DBAPIError)
+    assert isinstance(cause.orig, sqlite3.Error)
+    return cause.orig.sqlite_errorname
+
+
+async def test_a_begin_that_fails_on_a_lock_is_a_local_database_error(
+    migrated_database: Path,
+) -> None:
+    """Another process holds the write lock through the busy timeout: the BEGIN IMMEDIATE fails,
+    which is a LocalDatabaseError, the body never runs, and the next transaction on the same
+    connection runs once that process has gone."""
     run_id = _run(migrated_database)
-    async with open_writer(_url(migrated_database)) as writer:
-        with pytest.raises(LocalDatabaseError, match="IntegrityError"):
-            async with transaction(writer, run_id):
-                await writer.execute(update(SyncRun).values(rest_calls=5))
-                await writer.execute(insert(SyncRun).values(status="bogus"))
+    entered: list[str] = []
+    async with open_writer(_url(migrated_database), busy_timeout_ms=50) as writer:
+        holder = sqlite3.connect(migrated_database, isolation_level=None)
+        holder.execute("BEGIN IMMEDIATE")
+        try:
+            with pytest.raises(LocalDatabaseError) as raised:
+                async with transaction(writer, run_id):
+                    entered.append("body")
+        finally:
+            holder.execute("ROLLBACK")
+            holder.close()
         async with transaction(writer, run_id):
-            rest_calls = (await writer.execute(select(SyncRun.rest_calls))).scalar_one()
-    assert rest_calls == 0
+            await writer.execute(update(SyncRun).values(rest_calls=5))
+    assert _sqlite_errorname(raised.value) == "SQLITE_BUSY"
+    assert entered == []
+    assert fetch(migrated_database, "SELECT rest_calls FROM sync_runs") == [{"rest_calls": 5}]
 
 
 async def test_a_commit_that_fails_on_a_lock_leaves_the_connection_usable(
@@ -137,12 +159,13 @@ async def test_a_commit_that_fails_on_a_lock_leaves_the_connection_usable(
         reader.execute("BEGIN")
         assert reader.execute("SELECT count(*) FROM sync_runs").fetchone() == (1,)
         try:
-            with pytest.raises(LocalDatabaseError, match="database is locked"):
+            with pytest.raises(LocalDatabaseError) as raised:
                 async with transaction(writer, run_id):
                     await writer.execute(update(SyncRun).values(rest_calls=3))
         finally:
             reader.execute("ROLLBACK")
             reader.close()
+        assert _sqlite_errorname(raised.value) == "SQLITE_BUSY"
         async with transaction(writer, run_id):
             await writer.execute(update(SyncRun).values(items_planned=4))
     assert fetch(migrated_database, "SELECT rest_calls, items_planned FROM sync_runs") == [

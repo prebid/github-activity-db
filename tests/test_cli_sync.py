@@ -33,10 +33,12 @@ from github_activity_db.cli import common
 from github_activity_db.cli import sync as sync_cli
 from github_activity_db.cli.app import app
 from github_activity_db.config import get_settings
+from github_activity_db.db.schema import HEAD_REVISION, MIGRATION_REVISIONS
 from github_activity_db.source import client
 from github_activity_db.sync import engine
 from github_activity_db.sync.deletions import parse_allow_deletions
 from github_activity_db.sync.engine import SyncOptions, SyncReport
+from tests.db.alembic_support import upgrade
 from tests.source.conftest import FakeClock
 from tests.source.recorder import FIRST_SYNC_REPOSITORY
 from tests.source.recordings import FIRST_SYNC
@@ -106,8 +108,12 @@ def replay(
     """``ghactivity sync`` reads GitHub through go-gdpr's first-sync recordings, on the fake clock,
     into a migrated database; the replay must answer every request it gets. ``common.open_source``
     and ``GitHubSource`` are the command's own, with the replay as their HTTP transport; the
-    report prints on a plain console, so ``_ReportConsole`` runs only in the child tests."""
+    report prints on a plain console, so ``_ReportConsole`` runs only in the child tests.
+    ``GITHUB_SHA`` names the code version, so no git runs, and ``GITHUB_EVENT_NAME`` is unset, so
+    the trigger is ``manual`` whatever the shell or workflow running the tests sets."""
     monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("GITHUB_SHA", "test")
+    monkeypatch.delenv("GITHUB_EVENT_NAME", raising=False)
     monkeypatch.setenv("GITHUB_TOKEN", "test-token")
     monkeypatch.setenv("DATABASE_URL", f"sqlite+aiosqlite:///{migrated_database}")
     monkeypatch.setenv("TRACKING_CONFIG_PATH", str(tracking))
@@ -210,14 +216,23 @@ def test_a_missing_database_file_exits_1_and_creates_none(
     assert replay.seen == []
 
 
-def test_a_database_not_at_head_exits_1(replay: Replay, migrated_database: Path) -> None:
-    _execute(migrated_database, "UPDATE alembic_version SET version_num = 'older'")
+def test_a_database_not_at_head_exits_1(
+    replay: Replay, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A file the migrations built to the revision before head, as the code before it did."""
+    older = tmp_path / "older.db"
+    upgrade(older, MIGRATION_REVISIONS[-2])
+    monkeypatch.setenv("DATABASE_URL", f"sqlite+aiosqlite:///{older}")
+    get_settings.cache_clear()
 
     result = _sync()
 
     assert result.exit_code == 1
-    assert "not the code's head" in _plain(result.output)
-    assert _runs(migrated_database) == []
+    assert (
+        f"Sync did not start: the database is at revision {MIGRATION_REVISIONS[-2]}, not the "
+        f"code's head {HEAD_REVISION}" in _plain(result.output)
+    )
+    assert _runs(older) == []
     assert replay.seen == []
 
 
@@ -255,6 +270,18 @@ def test_a_first_sync_exits_0_and_prints_its_report(
     # Resolve, index, the batch, and one account lookup, at the replay's cost of 1 each.
     assert "Hydrated 11 items; GraphQL points 4, REST calls 0" in output
     assert _runs(migrated_database) == [{"id": 1, "status": "complete", "exit_code": 0}]
+    assert fetch(
+        migrated_database,
+        "SELECT items_hydrated, graphql_points, rest_calls, trigger, code_version FROM sync_runs",
+    ) == [
+        {
+            "items_hydrated": 11,
+            "graphql_points": 4,
+            "rest_calls": 0,
+            "trigger": "manual",
+            "code_version": "test",
+        }
+    ]
     assert fetch(migrated_database, "SELECT count(*) AS n FROM pull_requests") == [{"n": 11}]
 
 
@@ -311,7 +338,7 @@ build_github = client.build_github
 client.build_github = lambda auth, *, http_transport=None: build_github(
     auth, http_transport=replay.transport()
 )
-{plant}
+{setup}
 from github_activity_db.cli.app import app
 app({args!r}, prog_name="ghactivity")
 """
@@ -345,23 +372,26 @@ def _child(
     database: Path,
     tracking: Path,
     cwd: Path,
-    plant: str = "",
+    setup: str = "",
     stdout: int = subprocess.PIPE,
     stderr: int = subprocess.PIPE,
     preexec_fn: Callable[[], None] | None = None,
 ) -> subprocess.CompletedProcess[str]:
     """Run the installed package in an isolated interpreter (``-I``: no user site, no
-    PYTHONPATH, no working directory on the path), over the recordings; its stdout and stderr
-    are captured unless ``stdout`` or ``stderr`` names a file descriptor, and ``preexec_fn``
-    runs in the child before the interpreter starts."""
-    base = {key: value for key, value in os.environ.items() if key in ("PATH", "HOME")}
+    PYTHONPATH, no working directory on the path), over the recordings, after ``setup``; its
+    stdout and stderr are captured unless ``stdout`` or ``stderr`` names a file descriptor, and
+    ``preexec_fn`` runs in the child before the interpreter starts. The environment is built
+    from fixed values and ``PATH``: ``HOME`` is ``cwd``, and ``GITHUB_SHA`` names the code
+    version, so no git runs."""
     env = {
-        **base,
+        "PATH": os.environ["PATH"],
+        "HOME": str(cwd),
+        "GITHUB_SHA": "test",
         "GITHUB_TOKEN": "test-token",
         "DATABASE_URL": f"sqlite+aiosqlite:///{database}",
         "TRACKING_CONFIG_PATH": str(tracking),
     }
-    script = CHILD.format(root=str(ROOT), plant=plant, args=["sync", *args])
+    script = CHILD.format(root=str(ROOT), setup=setup, args=["sync", *args])
     return subprocess.run(
         [sys.executable, "-I", "-c", script],
         stdout=stdout,
@@ -379,10 +409,13 @@ def test_the_installed_command_exits_with_the_engines_code(
     migrated_database: Path, tracking: Path, tmp_path: Path
 ) -> None:
     failed = _child(
-        [], database=migrated_database, tracking=tracking, cwd=tmp_path, plant=FAIL_ONE_ITEM
+        [], database=migrated_database, tracking=tracking, cwd=tmp_path, setup=FAIL_ONE_ITEM
     )
     assert failed.returncode == 2, failed.stderr
     assert "Run 1: complete, exit 2" in _plain(failed.stdout)
+    assert fetch(migrated_database, "SELECT trigger, code_version FROM sync_runs") == [
+        {"trigger": "manual", "code_version": "test"}
+    ]
 
     usage = _child(
         ["--dry-run", "--break-lock"], database=migrated_database, tracking=tracking, cwd=tmp_path
@@ -392,9 +425,9 @@ def test_the_installed_command_exits_with_the_engines_code(
     assert _runs(migrated_database) == [{"id": 1, "status": "complete", "exit_code": 2}]
 
 
-@pytest.mark.parametrize(("plant", "code"), [("", 0), (FAIL_ONE_ITEM, 2)], ids=["0", "2"])
+@pytest.mark.parametrize(("setup", "code"), [("", 0), (FAIL_ONE_ITEM, 2)], ids=["0", "2"])
 def test_a_closed_stdout_keeps_the_runs_exit_code(
-    migrated_database: Path, tracking: Path, tmp_path: Path, plant: str, code: int
+    migrated_database: Path, tracking: Path, tmp_path: Path, setup: str, code: int
 ) -> None:
     """A reader that closed the pipe before the report (``ghactivity sync | true``): the report
     is not printed, stderr says so, and the command exits with the run's code."""
@@ -406,7 +439,7 @@ def test_a_closed_stdout_keeps_the_runs_exit_code(
             database=migrated_database,
             tracking=tracking,
             cwd=tmp_path,
-            plant=plant,
+            setup=setup,
             stdout=write,
         )
     finally:
@@ -417,9 +450,9 @@ def test_a_closed_stdout_keeps_the_runs_exit_code(
     assert _runs(migrated_database) == [{"id": 1, "status": "complete", "exit_code": code}]
 
 
-@pytest.mark.parametrize(("plant", "code"), [("", 0), (FAIL_ONE_ITEM, 2)], ids=["0", "2"])
+@pytest.mark.parametrize(("setup", "code"), [("", 0), (FAIL_ONE_ITEM, 2)], ids=["0", "2"])
 def test_closed_stdout_and_stderr_keep_the_runs_exit_code(
-    migrated_database: Path, tracking: Path, tmp_path: Path, plant: str, code: int
+    migrated_database: Path, tracking: Path, tmp_path: Path, setup: str, code: int
 ) -> None:
     """``ghactivity sync 2>&1 | true``: neither stream can be written, and the command still
     exits with the run's code, not the interpreter's 120 for output it could not flush."""
@@ -431,7 +464,7 @@ def test_closed_stdout_and_stderr_keep_the_runs_exit_code(
             database=migrated_database,
             tracking=tracking,
             cwd=tmp_path,
-            plant=plant,
+            setup=setup,
             stdout=write,
             stderr=write,
         )
@@ -442,9 +475,9 @@ def test_closed_stdout_and_stderr_keep_the_runs_exit_code(
     assert _runs(migrated_database) == [{"id": 1, "status": "complete", "exit_code": code}]
 
 
-@pytest.mark.parametrize(("plant", "code"), [("", 0), (FAIL_ONE_ITEM, 2)], ids=["0", "2"])
+@pytest.mark.parametrize(("setup", "code"), [("", 0), (FAIL_ONE_ITEM, 2)], ids=["0", "2"])
 def test_a_stdout_closed_at_start_keeps_the_runs_exit_code(
-    migrated_database: Path, tracking: Path, tmp_path: Path, plant: str, code: int
+    migrated_database: Path, tracking: Path, tmp_path: Path, setup: str, code: int
 ) -> None:
     """``ghactivity sync >&-``: with fd 1 closed when the interpreter starts, ``sys.stdout`` is
     None and the report goes nowhere; the command exits with the run's code."""
@@ -453,7 +486,7 @@ def test_a_stdout_closed_at_start_keeps_the_runs_exit_code(
         database=migrated_database,
         tracking=tracking,
         cwd=tmp_path,
-        plant=plant,
+        setup=setup,
         preexec_fn=functools.partial(os.close, 1),
     )
 
@@ -462,9 +495,9 @@ def test_a_stdout_closed_at_start_keeps_the_runs_exit_code(
     assert _runs(migrated_database) == [{"id": 1, "status": "complete", "exit_code": code}]
 
 
-@pytest.mark.parametrize(("plant", "code"), [("", 0), (FAIL_ONE_ITEM, 2)], ids=["0", "2"])
+@pytest.mark.parametrize(("setup", "code"), [("", 0), (FAIL_ONE_ITEM, 2)], ids=["0", "2"])
 def test_a_stdout_file_that_cannot_grow_keeps_the_runs_exit_code(
-    migrated_database: Path, tracking: Path, tmp_path: Path, plant: str, code: int
+    migrated_database: Path, tracking: Path, tmp_path: Path, setup: str, code: int
 ) -> None:
     """``ghactivity sync > report.txt`` where the file cannot grow (it is at the child's
     RLIMIT_FSIZE, so a write fails as on a full disk): what the failed write left buffered is
@@ -483,7 +516,7 @@ def test_a_stdout_file_that_cannot_grow_keeps_the_runs_exit_code(
             database=migrated_database,
             tracking=tracking,
             cwd=tmp_path,
-            plant=plant,
+            setup=setup,
             stdout=stdout,
             preexec_fn=functools.partial(resource.setrlimit, resource.RLIMIT_FSIZE, (limit, limit)),
         )
@@ -500,7 +533,7 @@ def test_a_killed_run_stays_running_and_a_resume_keeps_its_writes(
     migrated_database: Path, tracking: Path, tmp_path: Path
 ) -> None:
     killed = _child(
-        [], database=migrated_database, tracking=tracking, cwd=tmp_path, plant=KILL_AFTER_THIRD_ITEM
+        [], database=migrated_database, tracking=tracking, cwd=tmp_path, setup=KILL_AFTER_THIRD_ITEM
     )
     assert killed.returncode == -signal.SIGKILL, killed.stderr
     assert _runs(migrated_database) == [{"id": 1, "status": "running", "exit_code": None}]
@@ -537,7 +570,7 @@ def test_a_killed_run_stays_running_and_a_resume_keeps_its_writes(
 
 
 # A child started with SIGINT ignored (a suite started with & from a non-interactive shell)
-# inherits that; Python then installs no handler of its own, so the plant installs Python's
+# inherits that; Python then installs no handler of its own, so the setup installs Python's
 # default, as at a terminal.
 INTERRUPT_AFTER_THIRD_ITEM = """\
 import os, signal
@@ -566,7 +599,7 @@ def test_a_sigint_closes_the_run_aborted_and_exits_130(
         database=migrated_database,
         tracking=tracking,
         cwd=tmp_path,
-        plant=INTERRUPT_AFTER_THIRD_ITEM,
+        setup=INTERRUPT_AFTER_THIRD_ITEM,
     )
     assert interrupted.returncode == 130, interrupted.stdout + interrupted.stderr
     assert _runs(migrated_database) == [{"id": 1, "status": "aborted", "exit_code": 130}]
@@ -655,8 +688,9 @@ def test_every_option_reaches_the_engine(
     assert (options.max_minutes, options.prune_untracked) == (30, True)
     assert options.allow_deletions == parse_allow_deletions(approval, config)
     assert (options.dry_run, options.break_lock) == (dry_run, not dry_run)
-    assert (options.trigger, options.database_url) == (
+    assert (options.trigger, options.code_version, options.database_url) == (
         "manual",
+        "test",
         f"sqlite+aiosqlite:///{migrated_database}",
     )
     assert options.config.source == str(tracking)

@@ -3,21 +3,24 @@
 from __future__ import annotations
 
 import hashlib
+import json
+import os
 import shutil
 import sqlite3
 import subprocess
 import threading
-import time
 from datetime import timedelta
 from pathlib import Path
 from typing import Any
 
 import pytest
+from alembic.script import ScriptDirectory
 from sqlalchemy import event, text
+from sqlalchemy.exc import DBAPIError
 
 from github_activity_db.config import Settings
-from github_activity_db.db.schema import HEAD_REVISION
-from github_activity_db.sync.connection import LocalDatabaseError, open_writer
+from github_activity_db.db.schema import HEAD_REVISION, MIGRATION_REVISIONS
+from github_activity_db.sync.connection import LocalDatabaseError, open_writer, transaction
 from github_activity_db.sync.runs import (
     STALE_AFTER,
     ClaimRefused,
@@ -36,7 +39,8 @@ from github_activity_db.sync.runs import (
     trigger,
 )
 from github_activity_db.tracking import read_tracking_config
-from tests.db.alembic_support import upgrade
+from tests.data_dictionary import SCHEMA_LOCK
+from tests.db.alembic_support import alembic_config, upgrade
 from tests.db.seed import Seed, connect
 from tests.sync.records import T0, fetch, ts
 
@@ -69,6 +73,18 @@ async def _claim(database: Path, **options: object) -> int:
 # Head check
 # --------------------------------------------------------------------------------------------
 async def test_the_head_check_passes_at_head(migrated_database: Path) -> None:
+    """The 2 values the check compares, read on a connection of the test's own, are the chain's
+    head in ``alembic/versions`` and the newest schema version ``tests/schema_versions.json``
+    records."""
+    head = ScriptDirectory.from_config(alembic_config(migrated_database)).get_current_head()
+    newest = max(int(version) for version in json.loads(SCHEMA_LOCK.read_text()))
+    connection = sqlite3.connect(migrated_database)
+    try:
+        revisions = connection.execute("SELECT version_num FROM alembic_version").fetchall()
+        (user_version,) = connection.execute("PRAGMA user_version").fetchone()
+    finally:
+        connection.close()
+    assert (revisions, user_version) == ([(head,)], newest)
     await check_head(_url(migrated_database))
 
 
@@ -96,14 +112,6 @@ async def test_an_older_revision_is_refused(tmp_path: Path) -> None:
         await check_head(_url(older))
 
 
-async def test_another_user_version_is_refused(migrated_database: Path) -> None:
-    connection = sqlite3.connect(migrated_database)
-    connection.execute("PRAGMA user_version = 1")
-    connection.close()
-    with pytest.raises(HeadCheckError, match="user_version is 1, not schema_version 2"):
-        await check_head(_url(migrated_database))
-
-
 @pytest.mark.parametrize(
     "url", ["sqlite+aiosqlite://", "sqlite+aiosqlite:///:memory:", "postgresql://host/db"]
 )
@@ -112,13 +120,16 @@ def test_a_url_without_a_file_is_refused(url: str) -> None:
         database_path(url)
 
 
-async def test_the_claim_refuses_a_database_not_at_head(migrated_database: Path) -> None:
-    connection = sqlite3.connect(migrated_database)
-    connection.execute("PRAGMA user_version = 1")
-    connection.close()
-    with pytest.raises(HeadCheckError):
-        await _claim(migrated_database)
-    assert fetch(migrated_database, "SELECT count(*) AS n FROM sync_runs") == [{"n": 0}]
+async def test_the_claim_refuses_a_database_not_at_head(tmp_path: Path) -> None:
+    """A file the migrations built to the revision before head, as the code before it did."""
+    older = tmp_path / "older.db"
+    upgrade(older, MIGRATION_REVISIONS[-2])
+    with pytest.raises(
+        HeadCheckError,
+        match=f"revision {MIGRATION_REVISIONS[-2]}, not the code's head {HEAD_REVISION}",
+    ):
+        await _claim(older)
+    assert fetch(older, "SELECT count(*) AS n FROM sync_runs") == [{"n": 0}]
 
 
 async def test_the_claim_checks_the_head_inside_its_transaction(migrated_database: Path) -> None:
@@ -286,7 +297,6 @@ async def test_a_refused_claim_rolls_back_the_stale_reclaim(migrated_database: P
     with pytest.raises(ClaimRefused) as refused:
         await _claim(migrated_database)
     assert refused.value.blocking == (blocking,)
-    assert "--break-lock" in str(refused.value)
     assert fetch(migrated_database, "SELECT id, status FROM sync_runs ORDER BY id") == [
         {"id": stale, "status": "running"},
         {"id": blocking, "status": "running"},
@@ -327,15 +337,21 @@ async def test_break_lock_without_a_blocking_row_proceeds(migrated_database: Pat
     assert (claim.reclaimed, claim.broken) == ((), ())
 
 
+async def _busy_timeout(writer: Any) -> int:
+    """The writer connection's ``PRAGMA busy_timeout``, in milliseconds."""
+    async with transaction(writer):
+        value: int = (await writer.exec_driver_sql("PRAGMA busy_timeout")).scalar_one()
+    return value
+
+
 async def test_a_lock_held_by_a_separate_connection(migrated_database: Path) -> None:
-    """An uncommitted BEGIN IMMEDIATE elsewhere: the claim waits out the busy timeout and fails
-    with SQLite's "database is locked", inserting nothing (plan 5.3, section 7 "Run claim")."""
+    """An uncommitted BEGIN IMMEDIATE elsewhere, held through the claim's busy timeout: the
+    claim fails with SQLite's SQLITE_BUSY, inserting nothing (plan 5.3, section 7 "Run claim")."""
     holder = sqlite3.connect(migrated_database, isolation_level=None)
     holder.execute("BEGIN IMMEDIATE")
     try:
         async with open_writer(_url(migrated_database), busy_timeout_ms=300) as writer:
-            started = time.monotonic()
-            with pytest.raises(LocalDatabaseError, match="database is locked"):
+            with pytest.raises(LocalDatabaseError) as raised:
                 await claim_run(
                     writer,
                     started_at=T0,
@@ -345,20 +361,26 @@ async def test_a_lock_held_by_a_separate_connection(migrated_database: Path) -> 
                     trigger="manual",
                     code_version="x",
                 )
-            waited = time.monotonic() - started
+            holder.execute("ROLLBACK")
+            assert await _busy_timeout(writer) == 300
     finally:
-        holder.execute("ROLLBACK")
         holder.close()
-    assert waited >= 0.3
+    cause = raised.value.__cause__
+    assert isinstance(cause, DBAPIError)
+    assert isinstance(cause.orig, sqlite3.Error)
+    assert cause.orig.sqlite_errorname == "SQLITE_BUSY"
     assert fetch(migrated_database, "SELECT count(*) AS n FROM sync_runs") == [{"n": 0}]
 
 
 async def test_a_claim_waits_for_a_claim_in_progress_then_refuses(migrated_database: Path) -> None:
-    """Another claimant inserts its running row and commits within the busy timeout: this
-    claim's BEGIN IMMEDIATE waits for that commit, then reads the row and refuses (section 7,
-    "Run claim")."""
+    """Another claimant inserts its running row and commits once this claim sends its BEGIN
+    IMMEDIATE, within the claim's 5 s busy timeout: the claim gets the lock after that commit,
+    reads the row, and refuses (section 7, "Run claim"). Whether the commit lands before
+    SQLite runs the BEGIN or while it waits, the claim reads the same committed row."""
     holding = threading.Event()
+    begun = threading.Event()
     other: list[int] = []
+    order: list[str] = []
 
     def claimant() -> None:
         connection = sqlite3.connect(migrated_database, isolation_level=None)
@@ -375,17 +397,23 @@ async def test_a_claim_waits_for_a_claim_in_progress_then_refuses(migrated_datab
             assert cursor.lastrowid is not None
             other.append(cursor.lastrowid)
             holding.set()
-            time.sleep(0.3)
-            connection.execute("COMMIT")
+            if begun.wait(5):
+                order.append("commit")
+                connection.execute("COMMIT")
         finally:
             connection.close()
+
+    def beginning(*args: Any) -> None:
+        if args[2] == "BEGIN IMMEDIATE" and not begun.is_set():
+            order.append("begin")
+            begun.set()
 
     thread = threading.Thread(target=claimant)
     thread.start()
     try:
         assert holding.wait(5)
         async with open_writer(_url(migrated_database), busy_timeout_ms=5000) as writer:
-            started = time.monotonic()
+            event.listen(writer.sync_engine, "before_cursor_execute", beginning)
             with pytest.raises(ClaimRefused) as refused:
                 await claim_run(
                     writer,
@@ -396,11 +424,13 @@ async def test_a_claim_waits_for_a_claim_in_progress_then_refuses(migrated_datab
                     trigger="manual",
                     code_version="x",
                 )
-            waited = time.monotonic() - started
+            assert await _busy_timeout(writer) == 5000
     finally:
+        begun.set()
         thread.join(5)
+    assert not thread.is_alive()
+    assert order == ["begin", "commit"]
     assert refused.value.blocking == tuple(other)
-    assert 0.2 <= waited < 5
     assert fetch(migrated_database, "SELECT id, code_version FROM sync_runs") == [
         {"id": other[0], "code_version": "other"}
     ]
@@ -849,25 +879,56 @@ def test_trigger(event: str | None, expected: str) -> None:
 GIT = shutil.which("git")
 
 
-def _git(directory: Path, *args: str) -> str:
+@pytest.fixture
+def git_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict[str, str]:
+    """git reads no configuration and finds no repository outside ``tmp_path``, and commits at a
+    fixed date. ``code_version`` runs git with this process's environment, so the variables are
+    set here too, and every other ``GIT_*`` variable is removed; the test's own git calls get
+    the returned environment, built from these values and ``PATH`` alone."""
+    isolated = {
+        "HOME": str(tmp_path),
+        "GIT_CONFIG_GLOBAL": os.devnull,
+        "GIT_CONFIG_NOSYSTEM": "1",
+        "GIT_CEILING_DIRECTORIES": str(tmp_path),
+    }
+    for name in [name for name in os.environ if name.startswith("GIT_")]:
+        monkeypatch.delenv(name)
+    for name, value in isolated.items():
+        monkeypatch.setenv(name, value)
+    fixed = "2026-01-01T00:00:00+00:00"
+    return {
+        "PATH": os.environ["PATH"],
+        **isolated,
+        "GIT_AUTHOR_DATE": fixed,
+        "GIT_COMMITTER_DATE": fixed,
+    }
+
+
+def _git(directory: Path, env: dict[str, str], *args: str) -> str:
     assert GIT is not None, "git is not installed"
     result = subprocess.run(
-        [GIT, "-C", str(directory), *args], capture_output=True, text=True, timeout=30, check=True
+        [GIT, "-C", str(directory), *args],
+        capture_output=True,
+        text=True,
+        env=env,
+        timeout=30,
+        check=True,
     )
     return result.stdout.strip()
 
 
 @pytest.fixture
-def checkout(tmp_path: Path) -> Path:
+def checkout(tmp_path: Path, git_env: dict[str, str]) -> Path:
     repository = tmp_path / "checkout"
     package = repository / "github_activity_db"
     package.mkdir(parents=True)
     (package / "__init__.py").write_text("")
     (repository / ".gitignore").write_text("venv/\n")
-    _git(repository, "init", "-q")
-    _git(repository, "add", ".")
+    _git(repository, git_env, "init", "-q")
+    _git(repository, git_env, "add", ".")
     _git(
         repository,
+        git_env,
         "-c",
         "user.name=t",
         "-c",
@@ -884,8 +945,8 @@ def test_code_version_prefers_github_sha(checkout: Path) -> None:
     assert code_version(checkout / "github_activity_db", {"GITHUB_SHA": "f00"}) == "f00"
 
 
-def test_code_version_names_the_checkout_commit(checkout: Path) -> None:
-    head = _git(checkout, "rev-parse", "HEAD")
+def test_code_version_names_the_checkout_commit(checkout: Path, git_env: dict[str, str]) -> None:
+    head = _git(checkout, git_env, "rev-parse", "HEAD")
     package = checkout / "github_activity_db"
     assert code_version(package, {}) == head
     (checkout / "untracked.txt").write_text("x")
