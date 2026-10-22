@@ -23,22 +23,22 @@ How the test suite is built and what it counts as evidence. The plan of record i
   rows, files, or values it compared, so it cannot pass on nothing. A fix comes with a regression
   test that fails against the parent commit's code.
 - **The same result every time** (redesign plan D40). The same code gives every test the same
-  outcome on any machine, on any date, and in any run order: no result a test asserts comes from the
-  wall clock (a fixed clock such as `FakeClock` stands in; a timeout that bounds a wait and a log
-  record's time are not results), the network (GitHub answers from recordings and stubs), unseeded
-  randomness, or state outside the test's temporary directory, the repository, and the session's
-  database template, and every wait is bounded by a timeout. A test exercises code and asserts on
-  what the code returns, writes, or exits with: where the code gives a structured value (an exit
-  code, rows, parsed fields, an exception's class and fields), the test asserts on it rather than on
-  printed wording, and no test checks the wording of a document. Where a test needs an input the
-  code cannot easily be given, the project builds software that produces it (a fake clock, the
-  scenario model, the replay, a recorder mode) or the test builds the input itself (D39); no test
-  changes the project's real files. Evidence is what software reproduces: an acceptance criterion
-  names a test, a check, or a command whose output shows it, and a search of text, a reading, or a
-  review finds work to do but is never acceptance. `tests/determinism.py` refuses network
-  connections, host-name lookups, the real clocks, and the unseeded random source in every test,
-  `tests/test_suite_rules.py` enforces the rules it can model in source, and `scripts/check_junit.py
-  --same-as` compares two runs of the suite test by test (Step 3b-2a-2d).
+  outcome on any machine, on any date, and in any run order: a test, and every code path it runs,
+  reads no wall clock (a fixed clock such as `FakeClock` stands in), reaches no network (GitHub
+  answers from recordings and stubs), uses no unseeded randomness, depends on no state outside its
+  own temporary directory, the repository, and the session's database template, and bounds every
+  wait with a timeout. A test exercises code and asserts on what the code returns, writes, or exits
+  with: where the code gives a structured value (an exit code, rows, parsed fields, an exception's
+  class and fields), the test asserts on it rather than on printed wording, and no test checks the
+  wording of a document. Where a test needs an input the code cannot easily be given, the project
+  builds software that produces it (a fake clock, the scenario model, the replay, a recorder mode)
+  or the test builds the input itself (D39); no test changes the project's real files. Evidence is
+  what software reproduces: an acceptance criterion names a test, a check, or a command whose output
+  shows it, and a search of text, a reading, or a review finds work to do but is never acceptance.
+  `tests/determinism.py` refuses network connections, host-name lookups, the real clocks, and the
+  unseeded random source in every test, `tests/test_suite_rules.py` enforces the rules it can model
+  in source, and `scripts/check_junit.py --same-as` compares two runs of the suite test by test
+  (Step 3b-2a-2d).
 - **No skipped tests** (D22). CI runs `scripts/check_junit.py --max-skipped 0`, which fails a run
   where any test was skipped (pytest reports `xfail` as skipped) or none ran.
 - **Time.** Source tests pass a `FakeClock`, so waits and retries are asserted, never slept.
@@ -56,8 +56,10 @@ How the test suite is built and what it counts as evidence. The plan of record i
   or the system settings is refused at GitHub's own host on every machine. Each refusal is also
   recorded and checked after every test and at the end of the session, so a test fails even where
   the code under test caught the exception (a refusal in a wider fixture's teardown fails the next
-  check); each refusal and that check's failing side have tests. Not refused: a socket's other ways
-  to reach a host (`sendto`, `bind`), and processes a test starts, which run without these patches.
+  check); each refusal and that check's failing side have tests. Not refused, and so not enforced at
+  run time: a socket's other ways to reach a host (`sendto`, `bind`); processes a test starts, which
+  run without these patches; the event loop's and the standard library's own clocks behind a
+  timeout; and the time loguru gives a log record, which no test asserts.
   `tests/test_suite_rules.py` reads source: no test file reads the wall clock, sleeps on it, or
   draws unseeded random numbers (`random.Random` takes a seed, `asyncio.sleep` takes `0`); the
   package reads them only in its two real clocks, and `alembic/` and `scripts/` read none; and no
@@ -142,7 +144,10 @@ tests/
   from the views at head, and on pull requests the CI step that checks the hydration-version
   lock rejects a removed entry, a pair removed from one, and a view digest removed or changed in
   one, so removing or renaming a consumer column, or changing a view, needs a new schema
-  version. Pairs and views may be added to the newest entry only.
+  version. Pairs and views may be added to the newest entry only. CI checks out one commit
+  with no history, so the lock, dictionary, recordings, and dependency tests read earlier
+  versions of repository files from `tests/fixtures/history/`, each the git blob its README
+  row records (`tests/test_history_fixtures.py`).
 
 ## GitHub Source Layer: Recorded Responses
 

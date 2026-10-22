@@ -317,6 +317,7 @@ tests/
 ├── db/                  # Migrations, schema comparison, views, timestamp type, tracked file
 ├── source/              # Source layer against recorded GitHub responses
 ├── sync/                # Planner, deletions, and writer over seeded databases; the engine over the scenario model
+├── fixtures/history/    # Repository files as earlier commits hold them
 ├── fixtures/source/     # Recorded and synthetic GitHub responses
 ├── data_dictionary.py   # Reader for docs/data-dictionary.md
 ├── query_versions.json  # Hydration-version lock

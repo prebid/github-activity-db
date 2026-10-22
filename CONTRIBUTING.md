@@ -260,19 +260,19 @@ or values it compared, so it cannot pass on nothing. A fix comes with a regressi
 against the parent commit's code. See the [Testing Guide](docs/testing.md#principles).
 
 **4. Write tests that give the same result every time** (redesign plan D40). The same code gives
-every test the same outcome on any machine, on any date, and in any run order: no result a test
-asserts comes from the wall clock (a fixed clock such as `FakeClock` stands in; a timeout that
-bounds a wait and a log record's time are not results), the network (GitHub answers from recordings
-and stubs), unseeded randomness, or state outside the test's temporary directory, the repository,
-and the session's database template, and every wait is bounded by a timeout. A test exercises code
-and asserts on what the code returns, writes, or exits with: where the code gives a structured value
-(an exit code, rows, parsed fields, an exception's class and fields), the test asserts on it rather
-than on printed wording, and no test checks the wording of a document. Where a test needs an input
-the code cannot easily be given, the project builds software that produces it (a fake clock, the
-scenario model, the replay, a recorder mode) or the test builds the input itself (D39); no test
-changes the project's real files. Evidence is what software reproduces: an acceptance criterion
-names a test, a check, or a command whose output shows it, and a search of text, a reading, or a
-review finds work to do but is never acceptance.
+every test the same outcome on any machine, on any date, and in any run order: a test, and every
+code path it runs, reads no wall clock (a fixed clock such as `FakeClock` stands in), reaches no
+network (GitHub answers from recordings and stubs), uses no unseeded randomness, depends on no state
+outside its own temporary directory, the repository, and the session's database template, and bounds
+every wait with a timeout. A test exercises code and asserts on what the code returns, writes, or
+exits with: where the code gives a structured value (an exit code, rows, parsed fields, an
+exception's class and fields), the test asserts on it rather than on printed wording, and no test
+checks the wording of a document. Where a test needs an input the code cannot easily be given, the
+project builds software that produces it (a fake clock, the scenario model, the replay, a recorder
+mode) or the test builds the input itself (D39); no test changes the project's real files. Evidence
+is what software reproduces: an acceptance criterion names a test, a check, or a command whose
+output shows it, and a search of text, a reading, or a review finds work to do but is never
+acceptance.
 
 ### Running Tests
 

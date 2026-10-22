@@ -70,7 +70,8 @@ converted to UTC, and returns aware UTC values. Defaults are `utc_now()`, never 
 - An upgrade runs on one driver connection. Once it is open, env.py refuses and closes any
   other the engine would open: a second connection a revision asks for, or the one SQLAlchemy
   would open after it invalidated the first for an interrupt or an error it reads as a
-  disconnect. The upgrade then ends with that error, and the file keeps its revision.
+  disconnect. The upgrade then fails, even when a revision catches the refusal and goes on, and
+  nothing is committed.
 - Refused: offline `--sql` mode, databases other than SQLite, SQLite URI filenames
   (`?uri=true`), a caller-supplied connection or `sqlalchemy.url`, and the tracked
   `github_activity.db`. The connect listener asks SQLite which file it opened, so the tracked

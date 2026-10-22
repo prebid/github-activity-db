@@ -1609,10 +1609,13 @@ async def test_a_run_ending_after_step_7_keeps_its_halt_reason(
     if ending == "fatal":
         report = await world.sync(prune_untracked=True)
         assert ended(world, report) == ("failed", 1, {"prebid/Prebid.js": "failed"})
+        assert report.error == "RuntimeError: prune failed"
     else:
         with pytest.raises(KeyboardInterrupt):
             await world.sync(prune_untracked=True)
-        assert world.value("SELECT status FROM sync_runs ORDER BY id DESC LIMIT 1") == "aborted"
+        assert world.rows("SELECT status, exit_code FROM sync_runs ORDER BY id DESC LIMIT 1") == [
+            {"status": "aborted", "exit_code": 130}
+        ]
     assert halt_reasons(world) == {
         "prebid/Prebid.js": "26 deletion candidates exceed the delete guard's 25 (26 stored "
         "rows before the run)"
@@ -2885,8 +2888,9 @@ async def test_an_interrupted_close_that_does_not_land_leaves_the_row_running(
     assert world.rows("SELECT status, exit_code FROM sync_runs") == [
         {"status": "running", "exit_code": None}
     ]
-    with pytest.raises(ClaimRefused):
+    with pytest.raises(ClaimRefused) as refused:
         await world.sync()
+    assert refused.value.blocking == (world.value("SELECT id FROM sync_runs"),)
 
 
 async def test_an_interrupted_close_whose_commit_fails_on_a_lock_leaves_the_row_running(

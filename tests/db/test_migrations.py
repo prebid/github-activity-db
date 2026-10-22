@@ -807,6 +807,36 @@ class TestOneTransaction:
         assert snapshot(migrated_database) == before
         assert revision_of(migrated_database) == HEAD_REVISION
 
+    def test_a_revision_that_catches_the_refusal_still_fails_the_upgrade(
+        self, migrated_database: Path, tmp_path: Path
+    ) -> None:
+        """A revision that catches the refusal of a second connection and goes on: the upgrade
+        fails before the commit, and the file keeps its revision and contents."""
+        versions = tmp_path / "versions"
+        write_revision(
+            versions,
+            TEST_REVISION,
+            HEAD_REVISION,
+            """
+            try:
+                op.get_bind().engine.connect()
+            except RuntimeError:
+                pass
+            op.execute("CREATE TABLE after_the_refusal (x INTEGER)")
+            """,
+        )
+        before = snapshot(migrated_database)
+        with pytest.raises(RuntimeError) as error:
+            upgrade(migrated_database, test_versions=versions)
+        assert type(error.value).__name__ == "MigrationRefused"
+        assert str(error.value) == (
+            "the upgrade runs on one driver connection: no other is opened, after SQLAlchemy "
+            "invalidated it or for a second connection to the same engine; a revision went on "
+            "after the refusal, so nothing was committed"
+        )
+        assert snapshot(migrated_database) == before
+        assert revision_of(migrated_database) == HEAD_REVISION
+
     def test_the_chain_commits_a_file_of_seeded_rows(self, step3b1_database: Path) -> None:
         """The foreign-key check before the upgrade's commit passes a file of valid rows, and
         each table it reads holds the rows the seed wrote."""

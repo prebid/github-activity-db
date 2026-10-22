@@ -337,7 +337,12 @@ def test_the_migrations_read_no_wall_clock_or_randomness() -> None:
 def test_the_scripts_read_no_wall_clock_or_randomness() -> None:
     """Over ``scripts/``, whose checks the suite also runs in process, the scan finds nothing."""
     files = _python_files(SCRIPTS)
-    assert [path.name for path in files if path.name in ("check_junit.py", "count_suppressions.py")]
+    assert [path.name for path in files] == sorted(
+        path.name for path in SCRIPTS.iterdir() if path.suffix == ".py"
+    )
+    assert {"check_junit.py", "count_suppressions.py", "record_fixtures.py"} <= {
+        path.name for path in files
+    }
     assert determinism_problems(*files) == []
 
 

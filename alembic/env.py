@@ -236,15 +236,27 @@ def configure_connection(dbapi_connection: sqlite3.Connection, record: Connectio
         raise
 
 
-def refuse_another_connection(dbapi_connection: sqlite3.Connection, _: ConnectionPoolEntry) -> None:
-    """Once the upgrade's connection is open, no other is: closed and refused before anything
-    runs on it. Without this, a statement after SQLAlchemy invalidated the upgrade's connection
-    and a ``rollback()`` reconnects, outside the transaction and the authorizer's state."""
-    dbapi_connection.close()
-    raise MigrationRefused(
-        "the upgrade runs on one driver connection: no other is opened, after SQLAlchemy "
-        "invalidated it or for a second connection to the same engine"
-    )
+ONE_CONNECTION = (
+    "the upgrade runs on one driver connection: no other is opened, after SQLAlchemy "
+    "invalidated it or for a second connection to the same engine"
+)
+
+
+def refuse_another_connection(
+    refused: list[str],
+) -> Callable[[sqlite3.Connection, ConnectionPoolEntry], None]:
+    """The connect listener for once the upgrade's connection is open: any other is closed and
+    refused before anything runs on it, and the refusal is recorded in ``refused``, so a revision
+    that catches it still fails the upgrade before the commit. Without it, a statement after
+    SQLAlchemy invalidated the upgrade's connection and a ``rollback()`` reconnects, outside the
+    transaction and the authorizer's state."""
+
+    def refuse(dbapi_connection: sqlite3.Connection, _: ConnectionPoolEntry) -> None:
+        dbapi_connection.close()
+        refused.append(ONE_CONNECTION)
+        raise MigrationRefused(ONE_CONNECTION)
+
+    return refuse
 
 
 def begin_immediate(connection: Connection) -> None:
@@ -281,7 +293,8 @@ def run_migrations_online() -> None:
         event.listen(engine, "connect", configure_connection, insert=True)
         event.listen(engine, "begin", begin_immediate)
         with engine.connect() as connection:
-            event.listen(engine, "connect", refuse_another_connection, insert=True)
+            refused: list[str] = []
+            event.listen(engine, "connect", refuse_another_connection(refused), insert=True)
             context.configure(
                 connection=connection,
                 target_metadata=Base.metadata,
@@ -296,6 +309,11 @@ def run_migrations_online() -> None:
             with context.begin_transaction():
                 try:
                     context.run_migrations()
+                    if refused:
+                        raise MigrationRefused(
+                            f"{refused[0]}; a revision went on after the refusal, so nothing was "
+                            "committed"
+                        )
                     check_foreign_keys(connection)
                 except BaseException:
                     state[TRANSACTION_STATE] = "failed"
