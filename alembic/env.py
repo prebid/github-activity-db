@@ -36,6 +36,11 @@
   SQLite ending one by itself (``INSERT OR ROLLBACK``, ``RAISE(ROLLBACK)``). SQLite authorizes a
   statement when it prepares it, so the connection keeps no prepared statements: each execute is
   prepared, and checked, again.
+- An upgrade runs on one driver connection, which holds its transaction and the state the
+  authorizer reads. Once it is open, a connect listener closes and refuses any other before
+  anything runs on it, so a statement after SQLAlchemy invalidated the connection cannot
+  reconnect outside both. SQLAlchemy raises that statement's refusal wrapped in
+  ``StatementError``.
 - Nothing runs on the connection before ``context.configure()``: alembic would treat the
   transaction as the caller's and never commit it.
 - ``legacy_alter_table`` stays off, so batch-altering a table a view reads fails unless the
@@ -231,6 +236,17 @@ def configure_connection(dbapi_connection: sqlite3.Connection, record: Connectio
         raise
 
 
+def refuse_another_connection(dbapi_connection: sqlite3.Connection, _: ConnectionPoolEntry) -> None:
+    """Once the upgrade's connection is open, no other is: closed and refused before anything
+    runs on it. Without this, a statement after SQLAlchemy invalidated the upgrade's connection
+    and a ``rollback()`` reconnects, outside the transaction and the authorizer's state."""
+    dbapi_connection.close()
+    raise MigrationRefused(
+        "the upgrade runs on one driver connection: no other is opened, after SQLAlchemy "
+        "invalidated it or for a second connection to the same engine"
+    )
+
+
 def begin_immediate(connection: Connection) -> None:
     """Open the upgrade's transaction, taking the write lock at once."""
     connection.exec_driver_sql("BEGIN IMMEDIATE")
@@ -265,6 +281,7 @@ def run_migrations_online() -> None:
         event.listen(engine, "connect", configure_connection, insert=True)
         event.listen(engine, "begin", begin_immediate)
         with engine.connect() as connection:
+            event.listen(engine, "connect", refuse_another_connection, insert=True)
             context.configure(
                 connection=connection,
                 target_metadata=Base.metadata,
@@ -273,7 +290,8 @@ def run_migrations_online() -> None:
             )
             # The mapping the authorizer reads, held before the upgrade runs: SQLAlchemy
             # invalidates the connection when an interrupt, or an error it reads as a disconnect,
-            # ends a statement, and Connection.info then raises in place of that exception.
+            # ends a statement, and Connection.info then raises in place of that exception. No
+            # other connection is opened, so this is the live connection's mapping.
             state = connection.info
             with context.begin_transaction():
                 try:

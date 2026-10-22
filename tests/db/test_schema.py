@@ -3,7 +3,8 @@
 ``alembic check`` compares neither views nor CHECK constraints, so these tests compare a
 database migrated to head with one ``metadata.create_all`` builds, structurally, and each view
 with the newest migration's frozen SQL. Where the readings must tell two schemas apart, the two
-are databases the migrations built at neighbouring revisions; a shape no revision has is read
+are databases the migrations built at neighbouring revisions, or the head template and a copy of
+it that a test changed with its own statements (``_tampered``); a shape no revision has is read
 from a scratch database of valid SQL.
 """
 

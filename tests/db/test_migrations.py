@@ -26,7 +26,13 @@ from alembic import command
 from alembic.script import ScriptDirectory
 from sqlalchemy import create_engine, event
 from sqlalchemy.engine import Engine
-from sqlalchemy.exc import OperationalError
+from sqlalchemy.exc import (
+    DatabaseError,
+    DBAPIError,
+    OperationalError,
+    ProgrammingError,
+    StatementError,
+)
 from sqlalchemy.pool import Pool
 
 from github_activity_db.config import get_settings
@@ -94,34 +100,9 @@ BOUND_INSERT = (
     "VALUES (?, ?, 'LA_bound')\", (999, {!r}))"
 )
 
-
-def revision_source_problems(path: Path) -> list[str]:
-    """Plan 5.1's rules for a revision file: it imports only the standard library, alembic, and
-    SQLAlchemy (no application code, no relative import), and its ``VIEWS`` is a literal."""
-    tree = ast.parse(path.read_bytes())
-    problems = [
-        f"{path.name}:{line}: imports {module}"
-        for line, module in imported_modules(path)
-        if module.split(".")[0] not in REVISION_IMPORTS | sys.stdlib_module_names
-    ]
-    problems += [
-        f"{path.name}:{node.lineno}: relative import"
-        for node in ast.walk(tree)
-        if isinstance(node, ast.ImportFrom) and node.level > 0
-    ]
-    for node in tree.body:
-        if isinstance(node, ast.Assign):
-            targets, value = node.targets, node.value
-        elif isinstance(node, ast.AnnAssign) and node.value is not None:
-            targets, value = [node.target], node.value
-        else:
-            continue
-        if any(isinstance(t, ast.Name) and t.id == "VIEWS" for t in targets):
-            try:
-                ast.literal_eval(value)
-            except ValueError:
-                problems.append(f"{path.name}:{node.lineno}: VIEWS is not a literal")
-    return problems
+# A revision's first lines: the driver connection under SQLAlchemy closed, so the next statement
+# fails with an error the pysqlite dialect reads as a disconnect.
+CLOSED_CONNECTION = "bind = op.get_bind()\nbind.connection.dbapi_connection.close()\n"
 
 
 def snapshot(database: Path) -> tuple[Any, ...]:
@@ -149,11 +130,20 @@ def refusal(error: pytest.ExceptionInfo[BaseException]) -> str:
     return str(error.value)
 
 
-def sqlite_error_name(error: pytest.ExceptionInfo[OperationalError]) -> str:
+def sqlite_error_name(error: pytest.ExceptionInfo[DBAPIError]) -> str:
     """The SQLite result code of the driver error SQLAlchemy's error wraps."""
     driver_error = error.value.orig
     assert isinstance(driver_error, sqlite3.Error), repr(driver_error)
     return str(driver_error.sqlite_errorname)
+
+
+def is_closed(connection: sqlite3.Connection) -> bool:
+    """Whether the driver connection is closed: a closed one runs nothing."""
+    try:
+        connection.execute("SELECT 1")
+    except sqlite3.ProgrammingError:
+        return True
+    return False
 
 
 def foreign_key_rows(database: Path) -> dict[str, int]:
@@ -397,40 +387,51 @@ class TestStep3Migration:
         assert digest(TRACKED) == tracked_digest
 
     @pytest.mark.parametrize(
-        ("inserts", "held"),
+        ("insert", "held"),
         [
             pytest.param(
-                (
-                    "INSERT INTO user_tags (name, created_at) "
-                    "VALUES ('keep', '2026-01-01 00:00:00')",
-                ),
+                "INSERT INTO user_tags (name, created_at) VALUES ('keep', '2026-01-01 00:00:00')",
                 "user_tags 1, pr_user_tags 0",
                 id="user_tags",
             ),
             pytest.param(
-                (
-                    "INSERT INTO user_tags (id, name, created_at) "
-                    "VALUES (1, 'keep', '2026-01-01 00:00:00')",
-                    "INSERT INTO user_tags (id, name, created_at) "
-                    "VALUES (2, 'other', '2026-01-01 00:00:00')",
-                    # The template's pull request 1, tagged.
-                    "INSERT INTO pr_user_tags (pr_id, user_tag_id) VALUES (1, 1)",
-                ),
-                "user_tags 2, pr_user_tags 1",
+                # Foreign keys are off on this connection: a link whose tag row is missing.
+                "INSERT INTO pr_user_tags (pr_id, user_tag_id) VALUES (1, 99)",
+                "user_tags 0, pr_user_tags 1",
                 id="pr_user_tags",
             ),
         ],
     )
     def test_aborts_while_a_tag_table_holds_rows(
-        self, first_schema: Path, inserts: tuple[str, ...], held: str
+        self, first_schema: Path, insert: str, held: str
     ) -> None:
         with closing(sqlite3.connect(first_schema)) as connection, connection:
+            connection.execute(insert)
+        before = snapshot(first_schema)
+        with pytest.raises(RuntimeError, match=rf"tag rows would be lost \({held}\)"):
+            upgrade(first_schema)
+        assert snapshot(first_schema) == before
+
+    def test_aborts_while_a_pull_request_is_tagged_in_a_valid_file(
+        self, first_schema: Path
+    ) -> None:
+        """Two tags and a link from the template's pull request to one, every reference intact:
+        the file passes the foreign-key check, and the upgrade refuses it for its tag rows."""
+        with closing(sqlite3.connect(first_schema)) as connection, connection:
             connection.execute("PRAGMA foreign_keys=ON")
-            for insert in inserts:
+            for insert in (
+                "INSERT INTO user_tags (id, name, created_at) "
+                "VALUES (1, 'keep', '2026-01-01 00:00:00')",
+                "INSERT INTO user_tags (id, name, created_at) "
+                "VALUES (2, 'other', '2026-01-01 00:00:00')",
+                "INSERT INTO pr_user_tags (pr_id, user_tag_id) VALUES (1, 1)",
+            ):
                 connection.execute(insert)
         assert query(first_schema, "PRAGMA foreign_key_check") == []
         before = snapshot(first_schema)
-        with pytest.raises(RuntimeError, match=rf"tag rows would be lost \({held}\)"):
+        with pytest.raises(
+            RuntimeError, match=r"tag rows would be lost \(user_tags 2, pr_user_tags 1\)"
+        ):
             upgrade(first_schema)
         assert snapshot(first_schema) == before
 
@@ -659,12 +660,20 @@ def table_definitions(database: Path) -> dict[str, str]:
 
 
 class TestOneTransaction:
-    def test_an_interrupt_after_the_second_revision_applies_none(self, first_schema: Path) -> None:
-        """An interrupt at a set point inside a statement, once the second of the revisions after
-        the first schema has run: the interrupt itself ends the upgrade, and the file stays at the
-        revision the upgrade started from."""
+    @pytest.mark.parametrize(
+        "raised",
+        [
+            pytest.param(KeyboardInterrupt(), id="KeyboardInterrupt"),
+            pytest.param(SystemExit(3), id="SystemExit"),
+        ],
+    )
+    def test_an_interrupt_after_the_second_revision_applies_none(
+        self, first_schema: Path, raised: BaseException
+    ) -> None:
+        """An interrupt, or a SystemExit, at a set point inside a statement, once the second of
+        the revisions after the first schema has run: that exception itself ends the upgrade,
+        and the file stays at the revision the upgrade started from."""
         second = AFTER_THE_FIRST_SCHEMA[1]
-        raised = KeyboardInterrupt()
         invalidated: list[BaseException | None] = []
 
         def interrupt(_connection: Any, _cursor: Any, statement: str, *_rest: Any) -> None:
@@ -679,15 +688,112 @@ class TestOneTransaction:
         with (
             listening("after_cursor_execute", interrupt),
             listening("invalidate", record, Pool),
-            pytest.raises(KeyboardInterrupt) as error,
+            pytest.raises(type(raised)) as error,
         ):
             upgrade(first_schema)
-        assert type(error.value) is KeyboardInterrupt
         assert error.value is raised
         # Inside a statement, so SQLAlchemy invalidated the connection for it, once.
         assert invalidated == [raised]
         assert snapshot(first_schema) == before
         assert revision_of(first_schema) == FIRST_SCHEMA_HEAD
+
+    def test_an_error_read_as_a_disconnect_applies_none(
+        self, migrated_database: Path, tmp_path: Path
+    ) -> None:
+        """A test-only revision closes its driver connection and runs a statement: SQLAlchemy
+        reads the driver's error as a disconnect and invalidates the connection, once, and that
+        error ends the upgrade."""
+        versions = tmp_path / "versions"
+        write_revision(
+            versions, TEST_REVISION, HEAD_REVISION, f"{CLOSED_CONNECTION}op.execute('SELECT 1')"
+        )
+        invalidated: list[BaseException | None] = []
+
+        def record(_dbapi_connection: Any, _record: Any, exception: BaseException | None) -> None:
+            invalidated.append(exception)
+
+        before = snapshot(migrated_database)
+        with listening("invalidate", record, Pool), pytest.raises(ProgrammingError) as error:
+            upgrade(migrated_database, test_versions=versions)
+        assert type(error.value) is ProgrammingError
+        assert type(error.value.orig) is sqlite3.ProgrammingError
+        assert error.value.statement == "SELECT 1"
+        assert error.value.connection_invalidated is True
+        assert invalidated == [error.value.orig]
+        assert snapshot(migrated_database) == before
+        assert revision_of(migrated_database) == HEAD_REVISION
+
+    @pytest.mark.parametrize(
+        "after",
+        [
+            pytest.param("", id="the revision goes on"),
+            pytest.param("raise RuntimeError('after the reconnect')", id="the revision raises"),
+        ],
+    )
+    def test_no_statement_reconnects_after_the_connection_is_invalidated(
+        self, migrated_database: Path, tmp_path: Path, after: str
+    ) -> None:
+        """After SQLAlchemy invalidated the upgrade's connection, a rollback() would let the next
+        statement reconnect on a second connection, outside the upgrade's transaction and the
+        state its authorizer reads. env.py refuses that connection and closes it: the statement
+        fails with the refusal, which SQLAlchemy wraps as it wraps any error raised while it
+        reconnects, and nothing is applied."""
+        versions = tmp_path / "versions"
+        write_revision(
+            versions,
+            TEST_REVISION,
+            HEAD_REVISION,
+            f"{CLOSED_CONNECTION}"
+            "try:\n    op.execute('SELECT 1')\nexcept Exception:\n    pass\n"
+            "bind.rollback()\n"
+            f"op.execute('CREATE TABLE late (x INTEGER)')\n{after}",
+        )
+        connections: list[sqlite3.Connection] = []
+        invalidated: list[BaseException | None] = []
+
+        def connected(dbapi_connection: sqlite3.Connection, _record: Any) -> None:
+            connections.append(dbapi_connection)
+
+        def record(_dbapi_connection: Any, _record: Any, exception: BaseException | None) -> None:
+            invalidated.append(exception)
+
+        before = snapshot(migrated_database)
+        with (
+            listening("connect", connected, Pool),
+            listening("invalidate", record, Pool),
+            pytest.raises(StatementError) as error,
+        ):
+            upgrade(migrated_database, test_versions=versions)
+        assert type(error.value) is StatementError
+        assert error.value.statement == "CREATE TABLE late (x INTEGER)"
+        assert error.value.orig is error.value.__cause__
+        assert type(error.value.orig).__name__ == "MigrationRefused"
+        assert "runs on one driver connection" in str(error.value.orig)
+        assert [type(exception) for exception in invalidated] == [sqlite3.ProgrammingError]
+        # The upgrade's connection, closed by the revision, and the refused one, closed by env.py.
+        assert [is_closed(connection) for connection in connections] == [True, True]
+        assert snapshot(migrated_database) == before
+        assert revision_of(migrated_database) == HEAD_REVISION
+
+    def test_a_revision_gets_no_second_connection(
+        self, migrated_database: Path, tmp_path: Path
+    ) -> None:
+        """A second connection a revision asks the engine for would hold no part of the
+        upgrade's transaction: env.py refuses it before anything runs on it, and closes it."""
+        versions = tmp_path / "versions"
+        write_revision(versions, TEST_REVISION, HEAD_REVISION, "op.get_bind().engine.connect()")
+        connections: list[sqlite3.Connection] = []
+
+        def connected(dbapi_connection: sqlite3.Connection, _record: Any) -> None:
+            connections.append(dbapi_connection)
+
+        before = snapshot(migrated_database)
+        with listening("connect", connected, Pool), pytest.raises(RuntimeError) as error:
+            upgrade(migrated_database, test_versions=versions)
+        assert "runs on one driver connection" in refusal(error)
+        assert [is_closed(connection) for connection in connections] == [True, True]
+        assert snapshot(migrated_database) == before
+        assert revision_of(migrated_database) == HEAD_REVISION
 
     def test_the_chain_commits_a_file_of_seeded_rows(self, step3b1_database: Path) -> None:
         """The foreign-key check before the upgrade's commit passes a file of valid rows, and
@@ -1058,8 +1164,10 @@ class TestTransactionControl:
         versions = tmp_path / "versions"
         write_revision(versions, TEST_REVISION, HEAD_REVISION, body)
         before = snapshot(first_schema)
-        with pytest.raises(Exception, match="not authorized"):
+        with pytest.raises(DatabaseError) as error:
             upgrade(first_schema, test_versions=versions)
+        assert type(error.value) is DatabaseError
+        assert sqlite_error_name(error) == "SQLITE_AUTH"
         assert snapshot(first_schema) == before
 
     @pytest.mark.parametrize(
@@ -1095,8 +1203,10 @@ class TestTransactionControl:
         config = alembic_config(migrated_database, test_versions=versions)
         config.attributes["database_url"] += url_query
         before = snapshot(migrated_database)
-        with pytest.raises(Exception, match="not authorized"):
+        with pytest.raises(DatabaseError) as error:
             command.upgrade(config, "head")
+        assert type(error.value) is DatabaseError
+        assert sqlite_error_name(error) == "SQLITE_AUTH"
         assert snapshot(migrated_database) == before
 
     @pytest.mark.parametrize(
@@ -1126,8 +1236,10 @@ class TestTransactionControl:
         versions = tmp_path / "versions"
         write_revision(versions, TEST_REVISION, HEAD_REVISION, f"op.execute({statement!r})")
         before = snapshot(migrated_database)
-        with pytest.raises(Exception, match="not authorized"):
+        with pytest.raises(DatabaseError) as error:
             upgrade(migrated_database, test_versions=versions)
+        assert type(error.value) is DatabaseError
+        assert sqlite_error_name(error) == "SQLITE_AUTH"
         assert snapshot(migrated_database) == before
 
     def test_a_revision_cannot_attach_another_database(
@@ -1146,8 +1258,10 @@ class TestTransactionControl:
             "op.execute('CREATE TABLE other.probe (x INTEGER)')",
         )
         before = snapshot(migrated_database)
-        with pytest.raises(Exception, match="not authorized"):
+        with pytest.raises(DatabaseError) as error:
             upgrade(migrated_database, test_versions=versions)
+        assert type(error.value) is DatabaseError
+        assert sqlite_error_name(error) == "SQLITE_AUTH"
         assert snapshot(migrated_database) == before
         assert not other.exists()
 
@@ -1632,26 +1746,45 @@ class TestRevisionSources:
         assert newest.name.startswith(STEP3B1)
 
     @pytest.mark.parametrize(
-        ("source", "flagged"),
+        ("source", "problems", "imports", "views"),
         [
-            ("import json\nimport sqlalchemy as sa\nfrom alembic import op\n", False),
-            ("VIEWS = (('v', 'CREATE VIEW v AS SELECT 1'),)\n", False),
-            ("from typing import Final\nVIEWS: Final = (('v', 'SELECT 1'),)\n", False),
-            ("from github_activity_db.db import models\n", True),
-            ("import githubkit\n", True),
-            ("from . import shared\n", True),
-            ("import importlib\nimportlib.import_module('github_activity_db')\n", True),
-            ("VIEWS = SHARED_VIEWS\n", True),
-            ("VIEWS: tuple = tuple(view for view in ())\n", True),
-            ("VIEWS = (('v', 'CREATE VIEW v AS SELECT ' + '1'),)\n", True),
+            ("import json\nimport sqlalchemy as sa\nfrom alembic import op\n", [], 3, 0),
+            ("VIEWS = (('v', 'CREATE VIEW v AS SELECT 1'),)\n", [], 0, 1),
+            ("from typing import Final\nVIEWS: Final = (('v', 'SELECT 1'),)\n", [], 1, 1),
+            (
+                "from github_activity_db.db import models\n",
+                ["1: imports github_activity_db.db", "1: imports github_activity_db.db.models"],
+                1,
+                0,
+            ),
+            ("import githubkit\n", ["1: imports githubkit"], 1, 0),
+            ("from . import shared\n", ["1: relative import"], 1, 0),
+            (
+                "import importlib\nimportlib.import_module('github_activity_db')\n",
+                ["2: imports github_activity_db"],
+                1,
+                0,
+            ),
+            ("VIEWS = SHARED_VIEWS\n", ["1: VIEWS is not a literal"], 0, 1),
+            ("VIEWS: tuple = tuple(view for view in ())\n", ["1: VIEWS is not a literal"], 0, 1),
+            (
+                "VIEWS = (('v', 'CREATE VIEW v AS SELECT ' + '1'),)\n",
+                ["1: VIEWS is not a literal"],
+                0,
+                1,
+            ),
         ],
     )
     def test_flags_each_rule_on_planted_files(
-        self, tmp_path: Path, source: str, flagged: bool
+        self, tmp_path: Path, source: str, problems: list[str], imports: int, views: int
     ) -> None:
+        """The checker the real revisions run through, on a file the test writes: the exact
+        problems, and the import statements and ``VIEWS`` assignments it read."""
         path = tmp_path / "f00000000001_planted.py"
         path.write_text(source)
-        assert bool(revision_source_problems(path)) is flagged
+        assert revision_source(path) == RevisionSource(
+            [f"{path.name}:{problem}" for problem in problems], imports, views
+        )
 
 
 def test_a_generated_revision_raises_in_downgrade_and_follows_the_rules(tmp_path: Path) -> None:
