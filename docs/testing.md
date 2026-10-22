@@ -23,19 +23,22 @@ How the test suite is built and what it counts as evidence. The plan of record i
   rows, files, or values it compared, so it cannot pass on nothing. A fix comes with a regression
   test that fails against the parent commit's code.
 - **The same result every time** (redesign plan D40). The same code gives every test the same
-  outcome on any machine, on any date, and in any run order: a test, and every code path it runs,
-  reads no wall clock (a fixed clock such as `FakeClock` stands in), reaches no network (GitHub
-  answers from recordings and stubs), uses no unseeded randomness, depends on no state outside its
-  own temporary directory, the repository, and the session's database template, and bounds every
-  wait with a timeout. A test exercises code and asserts on what the code returns, writes, or exits
-  with: where the code gives a structured value (an exit code, rows, parsed fields, an exception's
-  class and fields), the test asserts on it rather than on printed wording, and no test checks the
-  wording of a document. Where a test needs an input the code cannot easily be given, the project builds software that produces it (a fake clock, the scenario model, the replay, a recorder mode) or the test builds the input itself (D39); no test changes the project's real files. Evidence is what software reproduces: an acceptance criterion names a
-  test, a check, or a command whose output shows it, and a search of text, a reading, or a review
-  finds work to do but is never acceptance. `tests/determinism.py` refuses the network, the real
-  clock, and its unseeded random source in every test, `tests/test_suite_rules.py` enforces the
-  rules it can model in source, and `scripts/check_junit.py --same-as` compares two runs of the
-  suite test by test (Step 3b-2a-2d).
+  outcome on any machine, on any date, and in any run order: no result a test asserts comes from the
+  wall clock (a fixed clock such as `FakeClock` stands in; a timeout that bounds a wait and a log
+  record's time are not results), the network (GitHub answers from recordings and stubs), unseeded
+  randomness, or state outside the test's temporary directory, the repository, and the session's
+  database template, and every wait is bounded by a timeout. A test exercises code and asserts on
+  what the code returns, writes, or exits with: where the code gives a structured value (an exit
+  code, rows, parsed fields, an exception's class and fields), the test asserts on it rather than on
+  printed wording, and no test checks the wording of a document. Where a test needs an input the
+  code cannot easily be given, the project builds software that produces it (a fake clock, the
+  scenario model, the replay, a recorder mode) or the test builds the input itself (D39); no test
+  changes the project's real files. Evidence is what software reproduces: an acceptance criterion
+  names a test, a check, or a command whose output shows it, and a search of text, a reading, or a
+  review finds work to do but is never acceptance. `tests/determinism.py` refuses network
+  connections, host-name lookups, the real clocks, and the unseeded random source in every test,
+  `tests/test_suite_rules.py` enforces the rules it can model in source, and `scripts/check_junit.py
+  --same-as` compares two runs of the suite test by test (Step 3b-2a-2d).
 - **No skipped tests** (D22). CI runs `scripts/check_junit.py --max-skipped 0`, which fails a run
   where any test was skipped (pytest reports `xfail` as skipped) or none ran.
 - **Time.** Source tests pass a `FakeClock`, so waits and retries are asserted, never slept.
@@ -45,19 +48,24 @@ How the test suite is built and what it counts as evidence. The plan of record i
   `sys.modules`) and process APIs outside `subprocess` (`os.system`, `asyncio` subprocesses)
   are outside its scan.
 - **What enforces D40.** In the pytest process, from collection on, `tests/determinism.py`
-  (installed by `tests/conftest.py`) refuses a network connection other than a Unix socket, every
-  host-name lookup the `socket` module offers, and `SystemClock`'s `now`, `sleep`, and unseeded
-  random source, by raising `NotDeterministic`. It sets `no_proxy` to `*`, so a client that reads
-  proxies from the environment or the system settings is refused at GitHub's own host on every
-  machine. Each refusal is also recorded and checked after every test and at the end of the
-  session, so a test fails even where the code under test caught the exception (a refusal in a
-  wider fixture's teardown fails the next check). `tests/test_suite_rules.py` reads source: no test
-  file reads the wall clock, sleeps on it, or draws unseeded random numbers (`random.Random` takes
-  a seed, `asyncio.sleep` takes `0`); the package reads them only in its two real clocks,
-  `SystemClock` and `db.types.utc_now`; and no test function is defined inside another function,
-  where pytest never collects it. Processes a test starts run without the run-time refusals, and
-  the order of a set of strings changes with `PYTHONHASHSEED` from one process to the next: two
-  runs compared by `scripts/check_junit.py --same-as` show whether an outcome depends on either.
+  (installed by `tests/conftest.py`) refuses a connection other than to a Unix socket, each
+  host-name lookup function the `socket` module offers, the package's two real clocks
+  (`source/clock.py`'s readings and `asyncio.sleep`, behind `SystemClock`, and `db.types.utc_now`'s
+  wall clock), and every draw from `SystemClock`'s unseeded random source, by raising
+  `NotDeterministic`. It sets `no_proxy` to `*`, so a client that reads proxies from the environment
+  or the system settings is refused at GitHub's own host on every machine. Each refusal is also
+  recorded and checked after every test and at the end of the session, so a test fails even where
+  the code under test caught the exception (a refusal in a wider fixture's teardown fails the next
+  check); each refusal and that check's failing side have tests. Not refused: a socket's other ways
+  to reach a host (`sendto`, `bind`), and processes a test starts, which run without these patches.
+  `tests/test_suite_rules.py` reads source: no test file reads the wall clock, sleeps on it, or
+  draws unseeded random numbers (`random.Random` takes a seed, `asyncio.sleep` takes `0`); the
+  package reads them only in its two real clocks, and `alembic/` and `scripts/` read none; and no
+  test function is defined inside a function or in a class whose name does not start with `Test`,
+  where pytest never collects it. CI runs the suite a second time with the tests in reverse order
+  under another `PYTHONHASHSEED` and compares the two runs with `scripts/check_junit.py --same-as`:
+  a dependence on run order or on the order of a set of strings shows where it changes an outcome
+  between those two runs, and two runs that agree do not show that no such dependence exists.
 
 ---
 
@@ -66,7 +74,8 @@ How the test suite is built and what it counts as evidence. The plan of record i
 ```
 tests/
 ├── conftest.py              # The session template database and its copies; the scenario fixture
-├── determinism.py           # Network, real clock, and unseeded randomness refused in every test
+├── determinism.py           # Connections, lookups, real clocks, unseeded randomness refused
+├── pytest_runs.py           # pytest over files a test writes; check_junit loaded to read it
 ├── db/
 │   ├── alembic_support.py   # Running the real migrations; test-only revisions after head
 │   ├── schema_support.py    # Structural schema readings for the model comparison
@@ -88,6 +97,7 @@ tests/
 │   ├── test_first_sync.py   # go-gdpr's first sync from its recordings, without the model
 │   ├── test_seeded_runs.py  # Seeded random changes over several runs, each checked against...
 │   └── expected_state.py    # ...the database the model and its history give, never the writer
+├── fixtures/history/       # Repository files as earlier commits hold them; README records blobs
 ├── fixtures/source/
 │   ├── recorded/            # Units recorded from public repositories (scripts/record_fixtures.py)
 │   ├── first_sync/          # Every unit go-gdpr's first sync asked for (--only first-sync)
@@ -315,15 +325,18 @@ uv run pytest --junitxml="${TMPDIR:-/tmp}/junit.xml" \
   && uv run python scripts/check_junit.py "${TMPDIR:-/tmp}/junit.xml" --max-skipped 0
 ```
 
-Two runs of the suite give the same outcome for every test (D40). To compare them:
+Two runs of the suite give the same outcome for every test (D40). CI compares a run in order
+with one in reverse order under another hash seed:
 
 ```bash
-uv run pytest --junitxml="${TMPDIR:-/tmp}/first.xml"
-uv run pytest --junitxml="${TMPDIR:-/tmp}/second.xml"
-uv run python scripts/check_junit.py "${TMPDIR:-/tmp}/first.xml" --same-as "${TMPDIR:-/tmp}/second.xml"
+PYTHONHASHSEED=1 uv run pytest --junitxml="${TMPDIR:-/tmp}/first.xml"
+PYTHONHASHSEED=2 uv run pytest --reverse-order --junitxml="${TMPDIR:-/tmp}/second.xml"
+uv run python scripts/check_junit.py "${TMPDIR:-/tmp}/first.xml" --max-skipped 0 \
+  --same-as "${TMPDIR:-/tmp}/second.xml"
 ```
 
-The comparison fails on each test whose outcome differs, or that only one run holds.
+The comparison fails on each test whose outcome differs, or that only one run holds. A test
+pytest reports twice (a failure, then a teardown error) has the outcome `error+failed`.
 
 ---
 
@@ -349,10 +362,11 @@ uv run pre-commit install
   all files; on pull requests, the base commit's `scripts/check_query_lock.py` (the pull
   request's own copy where the base has none) against the hydration-version and schema-version
   locks.
-- `tests (Python 3.12 / 3.13)`: pytest with JUnit output; `scripts/check_junit.py --max-skipped 0`,
-  which fails unless at least one test ran and none failed, errored, or was skipped (pytest
-  reports `xfail` as skipped, so an `xfail` also fails the job); and `alembic upgrade head` plus
-  `alembic check` on a fresh database.
+- `tests (Python 3.12 / 3.13)`: pytest with JUnit output under `PYTHONHASHSEED=1`;
+  `scripts/check_junit.py --max-skipped 0`, which fails unless at least one test ran and none
+  failed, errored, or was skipped (pytest reports `xfail` as skipped, so an `xfail` also fails the
+  job); pytest again with `--reverse-order` under `PYTHONHASHSEED=2`, and `check_junit.py --same-as`
+  over the two reports; and `alembic upgrade head` plus `alembic check` on a fresh database.
 - `built wheel`: builds the wheel with build dependencies hash-checked against
   `build-constraints.txt`, installs the `uv.lock` dependencies with hash checking and
   then the wheel into a new environment, runs `uv pip check`, and runs `scripts/wheel_smoke.py`

@@ -27,7 +27,8 @@ process to the next. CI runs the suite twice, the second time last to first (``-
 ``tests/conftest.py``) under another ``PYTHONHASHSEED``, and compares the two runs with
 ``scripts/check_junit.py --same-as``: that shows a dependence on run order or on the seed only where
 it changed an outcome between those two runs. The same scan over the package finds its reads only in
-its two real clocks, and over ``alembic/``, which every database test runs in process, finds none;
+its two real clocks, and over ``alembic/`` and ``scripts/``, which the suite runs in process, finds
+none;
 at run time ``tests/determinism.py`` refuses both clocks, network connections other than Unix
 sockets, and the ``socket`` module's host-name lookups, in every test.
 

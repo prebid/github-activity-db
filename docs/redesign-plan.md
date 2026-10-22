@@ -94,7 +94,7 @@ Within scope the database collects and distinguishes data and never interprets i
 | D37 | Decision of 2026-10-21 (the maintainer): an error is better than a silent failure or silently wrong data. Where the code cannot check something, or cannot accept what GitHub returned, it reports a failure that stops publication or turns the run red, never a pass. For verify: an unchecked item and an unverified repository fail verify in both modes, not only `--exact`, and a lookup whose answer verify cannot accept is an error (5.4, 5.8, gap 97), so D25 does not publish a database verify could not check. |
 | D38 | Decisions of 2026-10-21 applying D37 to the sync and to the steps not yet built (gaps 98-110). The sync exits 2 when a 24-hour account refresh fails, when the run reaches its deadline, and when a hydration contradicts the run's own index after one retry (Step 3b-2a-3); the failures a batch made final before a deadline are recorded, not left pending. An `accepted_failures` entry accepts one error class and one cause, the first line of the failure's message, of an item, an account's refresh, or from Step 4b a compare, so a permanent failure can be accepted without turning every run red while a new cause is not. A PR with more closing links than the index carries is hydrated every run. Every node id a sighting, a lookup, or a commit link reports for a stored account is stored, and `sync_runs` records the `--repo` filter, each configured entry's `github_id`, and its first commit-link lookups and those GitHub answered `NOT_FOUND`. The source refuses what it cannot read (gap 104), and the run records refuse what they cannot write and mark `-unknown` what they cannot determine (gap 105). Step 4b marks a compare file list at GitHub's 300-file cap and counts it in verify's report and the manifest, completes an activity read only at the floor or at the log's first event, as a read in ascending order finds it, fails a history read whose count still differs after a rescan, and records a compare that still fails, which an entry can accept. Step 5 measures which edits leave `updatedAt` unchanged. Step 6 compares the App's reads with the token's before any App run publishes to `db`, pins the database file the job checked, tests that every exit-code `if:` compares a non-empty string, and ties a snapshot to the job's own sync. A schedule that stops is the one silent case this repository cannot see: no run starts, so nothing turns red; 5.6 states the staleness rule a consumer applies, and building it belongs to the dashboard's integration (section 9). Left as they are, because the stored data already says what happened: a commit-linked account a lookup answers `NOT_FOUND` (D28; now counted per run and in the manifest, and from Step 6a a run whose `links_not_found` exceeds the share of its `link_lookups` Step 5 sets, with at least Step 5's minimum number of lookups, exits 2 (an account an earlier lookup answered `NOT_FOUND` counted in neither), since a lookup form GitHub stopped resolving would look the same per link), a compare at GitHub's 300-file cap and one GitHub refuses (marked by `files_at_cap` and `http_status`, counted in verify's report and the manifest), a REST git author without a name or email (stored null, as GitHub reports none), deletions recorded as a count (`items_deleted`, and from Step 4b `events_deleted` and `history_commits_deleted`; the snapshots retained for 7 days hold the identities; older ones are not kept), which accounts failed a refresh (printed; the count is stored, the run is red unless an account entry accepts the failure, and the accounts are retried), an `author_association` difference (verify reports it as drift with its own count: GitHub computes association when read and changes it without moving `updatedAt`, section 7, so no read tells a change from a defect), and the merge state as of `hydrated_at` (D32). New tables and columns of GitHub-derived data on a populated file follow gap 110's rule (5.1). |
 | D39 | Decision of 2026-10-21 (the maintainer), clarified on 2026-10-22: the first wording also banned negative tests, and Step 3b-2a-2d removed some before the clarification restored them. No mutation testing, under any name: the code under test and the checks are never changed, on disk or in memory, to see whether a test notices. No false content is planted in the project's real files or documents (the plan, a document, review material, a tracked lock or database) to see whether a check or a reviewer catches it, and no reviewer or agent is scored on how many seeded flaws it finds. Negative tests are expected: a test builds its own invalid or failing input on purpose (a sample test that fails, an invalid configuration, a malformed or edited copy of a file or database in its temporary directory, a test-only revision that raises, a stub or fake that raises, a recorded GitHub response changed in memory) and feeds it to the unchanged code. Each test asserts the exact result. Every check is tested on both sides, and its passing side states the exact count of the rows, files, or values it compared, so it cannot pass on nothing. A fix comes with a regression test that fails against the parent commit's code. |
-| D40 | Decision of 2026-10-22 (the maintainer). Tests are software that gives the same result every time. The same code gives every test the same outcome on any machine, on any date, and in any run order: a test, and every code path it runs, reads no wall clock (a fixed clock such as `FakeClock` stands in), reaches no network (GitHub answers from recordings and stubs), uses no unseeded randomness, depends on no state outside its own temporary directory, the repository, and the session's database template, and bounds every wait with a timeout. A test exercises code and asserts on what the code returns, writes, or exits with: where the code gives a structured value (an exit code, rows, parsed fields, an exception's class and fields), the test asserts on it rather than on printed wording, and no test checks the wording of a document. Where a test needs an input the code cannot easily be given, the project builds software that produces it (a fake clock, the scenario model, the replay, a recorder mode) or the test builds the input itself (D39); no test changes the project's real files. Evidence is what software reproduces: an acceptance criterion names a test, a check, or a command whose output shows it, and a search of text, a reading, or a review finds work to do but is never acceptance. `tests/determinism.py` refuses the network, the real clock, and its unseeded random source in every test, `tests/test_suite_rules.py` enforces the rules it can model in source, and `scripts/check_junit.py --same-as` compares two runs of the suite test by test (Step 3b-2a-2d). |
+| D40 | Decision of 2026-10-22 (the maintainer). Tests are software that gives the same result every time. The same code gives every test the same outcome on any machine, on any date, and in any run order: no result a test asserts comes from the wall clock (a fixed clock such as `FakeClock` stands in; a timeout that bounds a wait and a log record's time are not results), the network (GitHub answers from recordings and stubs), unseeded randomness, or state outside the test's temporary directory, the repository, and the session's database template, and every wait is bounded by a timeout. A test exercises code and asserts on what the code returns, writes, or exits with: where the code gives a structured value (an exit code, rows, parsed fields, an exception's class and fields), the test asserts on it rather than on printed wording, and no test checks the wording of a document. Where a test needs an input the code cannot easily be given, the project builds software that produces it (a fake clock, the scenario model, the replay, a recorder mode) or the test builds the input itself (D39); no test changes the project's real files. Evidence is what software reproduces: an acceptance criterion names a test, a check, or a command whose output shows it, and a search of text, a reading, or a review finds work to do but is never acceptance. `tests/determinism.py` refuses network connections, host-name lookups, the real clocks, and the unseeded random source in every test, `tests/test_suite_rules.py` enforces the rules it can model in source, and `scripts/check_junit.py --same-as` compares two runs of the suite test by test, which CI runs in two orders under two hash seeds (Step 3b-2a-2d). |
 
 ## 3. Coverage rule
 
@@ -1937,35 +1937,53 @@ check without a test that targets it; CI passes on the exact PR head.
 
 Prerequisite: Step 3b-2a-2c has merged, and D39 is on `main`.
 
-Scope: tests, `docs/testing.md`, `scripts/check_junit.py`'s `--same-as`, and one change under
-`src/`: `ghactivity sync` times its report on the run's clock, not `time.monotonic` (D40); and one
-under `alembic/`: `env.py` records a failed upgrade's state without asking SQLAlchemy for the
-connection again, so an interrupt inside a statement, which SQLAlchemy answers by invalidating the
-connection, propagates instead of a `PendingRollbackError`. No rule loses its test. Every test meets
-D40.
-`tests/determinism.py` refuses, in the pytest process from collection on, a network connection
-other than a Unix socket, every host-name lookup the `socket` module offers, and this project's
-real clock and unseeded random source (`SystemClock`), with `no_proxy` set so the machine's proxy
-settings change nothing, and records each refusal, so a test fails even where the code under test
-caught it; each refusal, and the Unix socket it lets through, has a test. `tests/test_suite_rules.py` gains the rules it can model in source: no test file reads the
-wall clock, sleeps on it, or draws unseeded random numbers; the package reads them only in its two
-real clocks (`SystemClock` and `db.types.utc_now`); and no test function is defined inside another
-function, where pytest never collects it. Each is tested on both sides: on sample source the test writes holding each
-spelling it refuses, and over every file under `tests/` or `src/github_activity_db/`, the files it scanned counted by a second walk of the
-directory, and the package scan with the exact list of reads it found. Every test on `main` before this step whose input the test built itself (a test-only revision that
-fails, a changed copy of a database or file in its temporary directory, an edited lock entry, a
-sample file holding each spelling a checker flags, a stub or fake that raises) is kept, under D39 as
-clarified, beside the tests this step adds that read real earlier revisions (`upgrade(path,
-"<revision>")`) and real earlier files (`tests/fixtures/history/`). A test this step removes is one
-D40 refuses: it read the wall clock or depended on the uid, or it checked a document's wording.
+Scope: tests; `docs/testing.md`, `docs/database.md`, `docs/development.md`, `CLAUDE.md`, and
+`CONTRIBUTING.md`; `scripts/check_junit.py`'s `--same-as`; the tests job of
+`.github/workflows/check.yml`, which runs the suite a second time in reverse order under another
+`PYTHONHASHSEED` and compares the two runs; `pyproject.toml`, where ruff skips
+`tests/fixtures/history/`; two changes under `src/`: `ghactivity sync` times its report on the run's
+clock, not `time.monotonic`, and `db.types.utc_now` reads the time through `_wall_clock`, which a
+test replaces or refuses (D40); and one under `alembic/`: `env.py` runs an upgrade on one driver
+connection and records a failed upgrade's state on that connection's mapping without asking
+SQLAlchemy for the connection again, so an interrupt, a `SystemExit`, or an error SQLAlchemy reads
+as a disconnect propagates itself instead of a `PendingRollbackError`. No rule loses its test. Every
+test meets D40.
+
+`tests/determinism.py` refuses, in the pytest process from collection on, a connection other than to
+a Unix socket, each host-name lookup function the `socket` module offers, the package's two real
+clocks (`source/clock.py`'s readings and sleep, and `db.types.utc_now`'s wall clock), and every draw
+from `SystemClock`'s unseeded random source, with `no_proxy` set so the machine's proxy settings
+change nothing, and records each refusal, so a test fails even where the code under test caught it;
+each refusal, the Unix socket it lets through, and the after-test check's failing side have tests.
+`tests/test_suite_rules.py` gains the rules it can model in source: no test file reads the wall
+clock, sleeps on it, or draws unseeded random numbers; the package reads them only in its two real
+clocks, and `alembic/` and `scripts/` read none; and no test function is defined inside a function
+or a class whose name does not start with `Test`, where pytest never collects it. Each is tested on
+both sides: on sample source the test writes holding each spelling it refuses, and over every file
+under `tests/`, `src/github_activity_db/`, `alembic/`, or `scripts/`, the files it scanned counted
+by a second walk of the directory, and the package scan with the exact list of reads it found.
+
+Every test on `main` before this step whose input the test built itself (a test-only revision that
+fails, a changed copy of a database or file in its temporary directory, a trigger in its own
+database, an edited lock entry, a sample file holding each spelling a checker flags, a stub or fake
+that raises) is kept under its name, under D39 as clarified. Where this step had rewritten such a
+test under its name, main's body is back, and the rewrite keeps a name of its own where it holds
+more (a real earlier file or revision, an exact count). The tests this step adds read real earlier
+revisions (`upgrade(path, "<revision>")`) and real earlier files (`tests/fixtures/history/`, each
+copy's git blob id in its README, checked by `tests/test_history_fixtures.py`). Six tests on `main`
+are not kept: one depended on the uid and one checked a document's wording (D40), and four are held
+by tests over real inputs (two assignee tests by `test_an_assignee_github_id_under_two_node_ids`,
+with GitHub's ids for one bot; two query-lock cases by
+`test_the_verdict_does_not_depend_on_how_the_checker_runs`).
 
 Tests: every test on `main` before this step is at head under its name, or the pull request names
-the test that replaced it and the reason; each check has a test on both sides.
+the test that holds its rule and the reason; each check has a test on both sides.
 
-Acceptance: `tests/test_suite_rules.py`'s rules pass over every test file and package module and
-count the files they scanned; each refusal of `tests/determinism.py` has a test; two runs of the
-full suite give the same outcome for every test, compared by `scripts/check_junit.py --same-as`;
-CI passes on the exact PR head.
+Acceptance: `tests/test_suite_rules.py`'s rules pass over every file under `tests/`,
+`src/github_activity_db/`, `alembic/`, and `scripts/`, and count the files they scanned; each
+refusal of `tests/determinism.py` has a test; CI runs the full suite in order and in reverse order
+under two hash seeds, and `scripts/check_junit.py --same-as` finds every outcome the same; CI passes
+on the exact PR head.
 
 #### Step 3b-2a-3: D37 in the sync
 
@@ -2179,8 +2197,7 @@ another issue, a link difference made by a closing keyword with no event, a diff
 link totals alone with enough connected events, with only a disconnected event, and with too few, a
 synthetic
 disconnected event, an event at the boundary counted and one a second before it not (under the measured `since`
-and whole-second times, verify's own `createdAt` filter drops no entry the lookup returns, so it
-is tested on its passing side, every returned entry counted), a stored link no longer indexed on a PR whose index lists every link matched only by an
+and whole-second times, verify's own `createdAt` filter drops no entry the lookup returns; it is tested on its passing side, every returned entry counted, and on a lookup answer the test changes in memory to hold an entry before `since`, which the filter drops), a stored link no longer indexed on a PR whose index lists every link matched only by an
 event naming it, a filtered page whose `totalCount` differs from its entries, counted by its
 entries, a lookup whose entries differ from its `filteredCount` after its retry and one whose
 response the typed models reject, each an error, one that differs once and matches on its retry, classed by its events, and a
