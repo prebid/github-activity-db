@@ -18,6 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 
 from github_activity_db.config import Settings
 from github_activity_db.db.engine import build_engine
+from tests import determinism
 from tests.db.alembic_support import upgrade
 
 if TYPE_CHECKING:
@@ -30,6 +31,24 @@ for _size in ("COLUMNS", "LINES"):
 
 # Settings reads each field's name, in any letter case, and a nested field as NAME__FIELD.
 SETTINGS_VARIABLES = frozenset(name.upper() for name in Settings.model_fields)
+
+
+@pytest.fixture(autouse=True, scope="session")
+def no_network_or_wall_clock() -> Iterator[None]:
+    """Every test runs with the network, the real clock, and its random source refused
+    (``tests/determinism.py``, redesign plan D40)."""
+    with pytest.MonkeyPatch.context() as patch:
+        determinism.install(patch)
+        yield
+
+
+@pytest.fixture(autouse=True)
+def nothing_refused(no_network_or_wall_clock: None) -> Iterator[None]:
+    """A test fails when it reached something ``tests/determinism.py`` refuses, even where the code
+    under test caught the refusal."""
+    determinism.REFUSED.clear()
+    yield
+    assert [(refused.what, refused.detail) for refused in determinism.REFUSED] == []
 
 
 @pytest.fixture(autouse=True)

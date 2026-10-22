@@ -26,7 +26,7 @@ How the test suite is built and what it counts as evidence. The plan of record i
   cannot pass on nothing; a check that GitHub, the environment, or a caller can fail is tested on
   both sides. A fix comes with a regression test that fails against the parent commit's code. Tests
   merged before D39 that change a file or a copy of one, or write a file, a revision, a call, a
-  connection, or a decoy holding a flaw, to see whether a check catches it are replaced in Step 3b-2a-2d.
+  connection, or a decoy holding a flaw, to see whether a check catches it were replaced in Step 3b-2a-2d.
 - **The same result every time** (redesign plan D40). The same code gives every test the same
   outcome on any machine, on any date, and in any run order: a test, and every code path it runs,
   reads no wall clock (a fixed clock such as `FakeClock` stands in), reaches no network (GitHub
@@ -39,9 +39,10 @@ How the test suite is built and what it counts as evidence. The plan of record i
   builds software that produces it (a fake clock, the scenario model, the replay, a recorder mode),
   never a planted file (D39). Evidence is what software reproduces: an acceptance criterion names a
   test, a check, or a command whose output shows it, and a search of text, a reading, or a review
-  finds work to do but is never acceptance. `tests/test_suite_rules.py` enforces the rules it can
-  model, and `scripts/check_junit.py --same-as` compares two runs of the suite test by test (Step
-  3b-2a-2d).
+  finds work to do but is never acceptance. `tests/determinism.py` refuses the network, the real
+  clock, and its unseeded random source in every test, `tests/test_suite_rules.py` enforces the
+  rules it can model in source, and `scripts/check_junit.py --same-as` compares two runs of the
+  suite test by test (Step 3b-2a-2d).
 - **No skipped tests** (D22). CI runs `scripts/check_junit.py --max-skipped 0`, which fails a run
   where any test was skipped (pytest reports `xfail` as skipped) or none ran.
 - **Time.** Source tests pass a `FakeClock`, so waits and retries are asserted, never slept.
@@ -50,6 +51,18 @@ How the test suite is built and what it counts as evidence. The plan of record i
   The module reached without an import statement (`importlib.import_module`, `__import__`,
   `sys.modules`) and process APIs outside `subprocess` (`os.system`, `asyncio` subprocesses)
   are outside its scan.
+- **What enforces D40.** In the pytest process, `tests/determinism.py` (installed for the session
+  by `tests/conftest.py`) refuses a network connection other than a Unix socket, every host-name
+  lookup, and `SystemClock`'s `now`, `sleep`, and unseeded random source, by raising
+  `NotDeterministic`; the refusal is also recorded, and a test that reached one fails after it
+  runs even where the code under test caught the exception. `tests/test_suite_rules.py` reads
+  source: no test file reads the wall clock, sleeps on it, or draws unseeded random numbers
+  (`random.Random` takes a seed, `asyncio.sleep` takes `0`); the package reads them only in its
+  two real clocks, `SystemClock` and `db.types.utc_now`; and no test function is defined inside
+  another function, where pytest never collects it. Processes a test starts run without the
+  run-time refusals, and the order of a set of strings changes with `PYTHONHASHSEED` from one
+  process to the next: two runs compared by `scripts/check_junit.py --same-as` show whether an
+  outcome depends on either.
 
 ---
 
@@ -58,6 +71,7 @@ How the test suite is built and what it counts as evidence. The plan of record i
 ```
 tests/
 ├── conftest.py              # The session template database and its copies; the scenario fixture
+├── determinism.py           # Network, real clock, and unseeded randomness refused in every test
 ├── db/
 │   ├── alembic_support.py   # Running the real migrations; test-only revisions after head
 │   ├── schema_support.py    # Structural schema readings for the model comparison
@@ -302,6 +316,16 @@ uv run pytest tests/db/test_views.py -k relationships
 uv run pytest --junitxml="${TMPDIR:-/tmp}/junit.xml" \
   && uv run python scripts/check_junit.py "${TMPDIR:-/tmp}/junit.xml" --max-skipped 0
 ```
+
+Two runs of the suite give the same outcome for every test (D40). To compare them:
+
+```bash
+uv run pytest --junitxml="${TMPDIR:-/tmp}/first.xml"
+uv run pytest --junitxml="${TMPDIR:-/tmp}/second.xml"
+uv run python scripts/check_junit.py "${TMPDIR:-/tmp}/first.xml" --same-as "${TMPDIR:-/tmp}/second.xml"
+```
+
+The comparison fails on each test whose outcome differs, or that only one run holds.
 
 ---
 

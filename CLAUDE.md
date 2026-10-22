@@ -56,7 +56,7 @@ defect of this code could fail is tested on its passing side, with the exact cou
 files, or values it compared, so it cannot pass on nothing; a check that GitHub, the environment, or
 a caller can fail is tested on both sides. A fix comes with a regression test that fails against the
 parent commit's code. Tests merged before D39 that change a file or a copy of one, or write a file,
-a revision, a call, a connection, or a decoy holding a flaw, to see whether a check catches it are replaced in Step 3b-2a-2d. See [Testing](docs/testing.md).
+a revision, a call, a connection, or a decoy holding a flaw, to see whether a check catches it were replaced in Step 3b-2a-2d. See [Testing](docs/testing.md).
 
 ## Deterministic Tests
 
@@ -72,9 +72,10 @@ checks the wording of a document. Where a test needs an input the code cannot ea
 project builds software that produces it (a fake clock, the scenario model, the replay, a recorder
 mode), never a planted file (D39). Evidence is what software reproduces: an acceptance criterion
 names a test, a check, or a command whose output shows it, and a search of text, a reading, or a
-review finds work to do but is never acceptance. `tests/test_suite_rules.py` enforces the rules it
-can model, and `scripts/check_junit.py --same-as` compares two runs of the suite test by test (Step
-3b-2a-2d).
+review finds work to do but is never acceptance. `tests/determinism.py` refuses the network, the
+real clock, and its unseeded random source in every test, `tests/test_suite_rules.py` enforces the
+rules it can model in source, and `scripts/check_junit.py --same-as` compares two runs of the suite
+test by test (Step 3b-2a-2d).
 
 ## Current Scope
 
@@ -97,14 +98,15 @@ can model, and `scripts/check_junit.py --same-as` compares two runs of the suite
   planner, and the writer, and `--dry-run`
 - `ghactivity sync` (Step 3b-2a-2c, `cli/sync.py`): the engine's run with the options of plan
   5.7; a run that never starts exits 1, and a run that starts exits with the engine's 0, 2, or 1
+- Tests without planted inputs, deterministic (Step 3b-2a-2d, D39, D40): `tests/determinism.py`
+  refuses the network, the real clock, and its unseeded random source in every test;
+  `tests/test_suite_rules.py`'s source rules; `scripts/check_junit.py --same-as`
 
-**Not implemented yet:** tests without planted inputs (Step 3b-2a-2d, D39), D37 in the sync
-(Step 3b-2a-3, D38), the REST
-sampler (Step 3b-2b-1), and `verify` (Step 3b-2b-2). The tracked `github_activity.db` stays
+**Not implemented yet:** D37 in the sync (Step 3b-2a-3, D38), the REST sampler (Step 3b-2b-1),
+and `verify` (Step 3b-2b-2). The tracked `github_activity.db` stays
 frozen at the first schema (D26).
 
-**Planned in the redesign plan:** tests without planted inputs (Step 3b-2a-2d), D37 in the sync
-(Step 3b-2a-3), the REST sampler (Step
+**Planned in the redesign plan:** D37 in the sync (Step 3b-2a-3), the REST sampler (Step
 3b-2b-1), and verify (Step 3b-2b-2); GitHub Issues, closing-issue links, and default-branch
 activity (Step 4); the full bootstrap (Step 5); scheduled sync and release publication (Step 6).
 

@@ -262,7 +262,7 @@ side, with the exact count of the rows, files, or values it compared, so it cann
 a check that GitHub, the environment, or a caller can fail is tested on both sides. A fix comes with
 a regression test that fails against the parent commit's code. Tests merged before D39 that change a
 file or a copy of one, or write a file, a revision, a call, a connection, or a decoy holding a flaw,
-to see whether a check catches it are replaced in Step 3b-2a-2d. See the [Testing
+to see whether a check catches it were replaced in Step 3b-2a-2d. See the [Testing
 Guide](docs/testing.md#principles).
 
 **4. Write tests that give the same result every time** (redesign plan D40). The same code gives

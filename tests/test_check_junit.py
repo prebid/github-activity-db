@@ -2,7 +2,8 @@
 
 Every report is one pytest wrote, in a run over a test file written for it, or is built in memory
 from one with its counters changed into a shape a run can leave: failures, errors, skips, no test
-executed, several suites merged, a file cut short, or no suite at all.
+executed, several suites merged, a file cut short, or no suite at all. ``--same-as`` compares two
+reports pytest wrote, in runs over test files written for them.
 """
 
 import ast
@@ -160,3 +161,70 @@ def test_report_written_by_pytest(
     result = _gate(tmp_path / "junit.xml")
     assert result.returncode == gate_exit
     assert _printed(result) == {"tests": 1, "failures": 0, "errors": 0, "skipped": skipped}
+
+
+def _written_report(root: Path, test_body: str) -> Path:
+    """The report pytest wrote for one run over ``test_body``."""
+    root.mkdir()
+    _pytest(root, test_body)
+    return root / "junit.xml"
+
+
+PASSES = "def test_a():\n    pass\n"
+
+
+def test_two_runs_with_the_same_outcomes_agree(tmp_path: Path) -> None:
+    body = PASSES + "\n\ndef test_b():\n    pass\n"
+    first = _written_report(tmp_path / "first", body)
+    second = _written_report(tmp_path / "second", body)
+    result = _gate(first, "--same-as", str(second))
+    assert result.returncode == 0, result.stderr
+    assert _printed(result) == {"tests": 2, "failures": 0, "errors": 0, "skipped": 0}
+    assert result.stderr == ""
+
+
+@pytest.mark.parametrize(
+    ("second_body", "difference"),
+    [
+        ("@pytest.mark.skip\ndef test_a():\n    pass\n", "passed vs skipped"),
+        ("def test_a():\n    assert False\n", "passed vs failed"),
+        (
+            "@pytest.fixture\ndef broken():\n    raise RuntimeError\n\n\n"
+            "def test_a(broken):\n    pass\n",
+            "passed vs error",
+        ),
+        ("def test_c():\n    pass\n", "passed vs absent"),
+    ],
+    ids=["skipped", "failed", "error", "absent"],
+)
+def test_a_test_whose_outcome_differs_between_runs_fails(
+    tmp_path: Path, second_body: str, difference: str
+) -> None:
+    """The first run passes, so each failure printed is a difference between the runs."""
+    first = _written_report(tmp_path / "first", PASSES)
+    second = _written_report(tmp_path / "second", second_body)
+    result = _gate(first, "--same-as", str(second))
+    assert result.returncode == 1
+    assert _printed(result) == {"tests": 1, "failures": 0, "errors": 0, "skipped": 0}
+    expected = [f"FAIL: differs: test_sample::test_a: {difference}"]
+    if difference == "passed vs absent":
+        expected.append("FAIL: differs: test_sample::test_c: absent vs passed")
+    assert result.stderr.splitlines() == expected
+
+
+@pytest.mark.parametrize("shape", ["missing", "a test twice"])
+def test_an_unreadable_second_report_fails(tmp_path: Path, written: bytes, shape: str) -> None:
+    """A second report that is missing, or that holds a test twice (two suites merged from the
+    same run), cannot be compared."""
+    first = tmp_path / "first.xml"
+    first.write_bytes(written)
+    second = tmp_path / "missing.xml"
+    problem = f"[Errno 2] No such file or directory: '{second}'"
+    if shape == "a test twice":
+        second = _report(tmp_path, written, (1, 0, 0, 0), (1, 0, 0, 0))
+        problem = f"test_sample::test_a appears twice in {second}"
+    result = _gate(first, "--same-as", str(second))
+    assert result.returncode == 1
+    # The counters are printed only after both reports are read.
+    assert result.stdout == ""
+    assert result.stderr == f"cannot read JUnit report: {problem}\n"
