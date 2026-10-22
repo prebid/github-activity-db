@@ -42,12 +42,15 @@ uv run pytest                      # CI also runs Python 3.12, `alembic check`, 
 
 ## Test Evidence
 
-Nothing is planted, seeded, or tampered, and there is no mutation testing, under any name
-(redesign plan D39): no test, review, or acceptance changes a copy of the code, a test, the plan, a
-database, or a file to see whether something catches the change, or measures how many such
-changes are found. Tests use recorded GitHub responses, stubs of what GitHub or the environment
-can send, and databases and files the project's own code wrote, and assert exact results
-([Testing](docs/testing.md)).
+Nothing is planted or tampered, no flaw is seeded, and there is no mutation testing, under any
+name (redesign plan D39): no test, review, or acceptance changes a file or a copy of one, or writes
+a file, a row, a revision, a call site, or a decoy holding a flaw, to see whether something catches
+it, and none measures how many such flaws are found. Test inputs are GitHub's recorded responses;
+stubs of what GitHub or the environment can send, built in memory; calls and configuration the code
+must refuse; valid rows (`tests/db/seed.py`); and databases and files the project's own code wrote.
+Tests assert exact results; a check that only a defect of this code could fail is tested on its
+passing side with the exact count it compared. Tests merged before D39 that plant are replaced in
+Step 7 ([Testing](docs/testing.md)).
 
 ## Current Scope
 

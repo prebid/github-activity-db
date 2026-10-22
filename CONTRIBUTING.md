@@ -246,10 +246,13 @@ def test_reviewers(migrated_database: Path) -> None:  # a copy of the alembic-bu
         pr = seed.pull_request(seed.repository("prebid/Prebid.js"), 13481, seed.user("author"))
 ```
 
-**3. Test on recorded GitHub responses, stubs of what GitHub can send, and files the project's
-own code wrote, never on planted or tampered inputs** (redesign plan D39): a check on both sides of
-its boundary with the exact result asserted, and a fix with a test that fails against the parent
-commit's code ([Testing Guide](docs/testing.md#principles)).
+**3. Never plant, tamper, or seed a flaw** (redesign plan D39). Test on GitHub's recorded
+responses; stubs of what GitHub or the environment can send, built in memory; calls and
+configuration the code must refuse; valid rows (`tests/db/seed.py`); and databases and files the
+project's own code wrote, with the exact result asserted. A check GitHub, the environment, or a caller can fail is tested on
+both sides of its boundary; one only a defect of this code could fail is tested on its passing side
+with the exact count it compared; a fix comes with a test that fails against the parent commit's
+code ([Testing Guide](docs/testing.md#principles)).
 
 ### Running Tests
 

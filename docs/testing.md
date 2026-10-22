@@ -11,13 +11,15 @@ How the test suite is built and what it counts as evidence. The plan of record i
   over `httpx.MockTransport`, answering from responses recorded from public repositories.
   Databases are real SQLite files built by `alembic upgrade head`.
 - **Direct evidence, nothing planted** (redesign plan D39). A test's inputs are GitHub's recorded
-  responses, stubs of what GitHub or the environment can send, calls and configuration the code
-  must refuse, and databases and files the project's own code wrote; it asserts the exact result.
-  No test changes a copy of the code, a test, a database, or a file to see whether a check catches
-  it, and none measures how many such changes are caught: there is no mutation testing, under any
-  name. A check that only a defect of this code could fail is tested on its passing side, with the
-  exact count of what it compared. A fix comes with a regression test that fails against the parent
-  commit's code. Tests merged before D39 that change a copy of a database or a file are replaced in
+  responses; stubs of what GitHub or the environment can send, which a test may build in memory
+  from a recorded unit; calls and configuration the code must refuse; valid rows (`tests/db/seed.py`);
+  and databases and files the project's own code wrote. Each test asserts the exact result. No
+  test changes a file or a copy of one, or writes a file, a row, a revision, a call site, or a decoy
+  holding a flaw, to see whether a check catches it, and none measures how many such flaws are
+  caught: there is no mutation testing, under any name. A check that only a defect of this code
+  could fail is tested on its passing side, with the exact count of what it compared; one GitHub,
+  the environment, or a caller can fail is tested on both sides. A fix comes with a regression test
+  that fails against the parent commit's code. Tests merged before D39 that plant are replaced in
   Step 7.
 - **No skipped tests** (D22). CI runs `scripts/check_junit.py --max-skipped 0`, which fails a run
   where any test was skipped (pytest reports `xfail` as skipped) or none ran.
@@ -80,14 +82,15 @@ tests/
 - **The real environment.** Migration tests run the repository's `alembic.ini`, `env.py`, and
   revisions. `write_revision` adds a test-only revision after the head through
   `version_locations`, which is how a planted failure, a foreign-key violation, and a batch alter
-  under the views are run through `env.py`. `env.py` is loaded fresh by every command, so its
+  under the views are run through `env.py` (tests from before D39, which Step 7 replaces). `env.py` is loaded fresh by every command, so its
   `MigrationRefused` is matched by class name.
 - **Seeding.** `tests/db/seed.py` writes rows through the models' tables with every column a
   test does not care about filled with a valid default; GitHub ids come from one process-wide
   counter, so separate transactions never collide.
 - **Schema comparison.** `schema_of` reads columns (`PRAGMA table_xinfo`), indexes, foreign keys,
   and every item of each table's definition, which is where constraint names and CHECK text
-  live; each reading is tested against planted differences.
+  live; each reading is tested against planted differences (tests from before D39, which Step 7
+  replaces).
 - **Dictionary and schema version.** `tests/test_data_dictionary.py` compares
   `docs/data-dictionary.md` with a migrated database in both directions.
   `tests/schema_versions.json` maps each schema version (`PRAGMA user_version`) to its consumer
