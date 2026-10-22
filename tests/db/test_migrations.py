@@ -68,6 +68,62 @@ PULL_REQUEST_INDEXES = (
 )
 
 
+PLANTED_LABEL = "INSERT INTO pr_labels (pr_id, name, label_node_id) VALUES (999, {!r}, 'x')"
+
+ORPHAN = f"op.execute({PLANTED_LABEL.format('orphan')!r})"
+
+SWALLOWED_ROLLBACK = (
+    "try:\n"
+    '    op.execute("INSERT OR ROLLBACK INTO alembic_version "\n'
+    f"               \"VALUES ('{HEAD_REVISION}')\")\n"
+    "except Exception:\n"
+    "    pass\n"
+)
+
+STOP_TRIGGER = (
+    "CREATE TRIGGER stop BEFORE INSERT ON pr_labels WHEN NEW.name = 'stop' "
+    "BEGIN SELECT RAISE(ROLLBACK, 'stop'); END"
+)
+
+STOPPED_INSERT = (
+    f"try:\n    op.execute({PLANTED_LABEL.format('stop')!r})\nexcept Exception:\n    pass\n"
+)
+
+BOUND_INSERT = (
+    'op.get_bind().exec_driver_sql("INSERT INTO pr_labels (pr_id, name, label_node_id) '
+    "VALUES (?, ?, 'LA_bound')\", (999, {!r}))"
+)
+
+
+def revision_source_problems(path: Path) -> list[str]:
+    """Plan 5.1's rules for a revision file: it imports only the standard library, alembic, and
+    SQLAlchemy (no application code, no relative import), and its ``VIEWS`` is a literal."""
+    tree = ast.parse(path.read_bytes())
+    problems = [
+        f"{path.name}:{line}: imports {module}"
+        for line, module in imported_modules(path)
+        if module.split(".")[0] not in REVISION_IMPORTS | sys.stdlib_module_names
+    ]
+    problems += [
+        f"{path.name}:{node.lineno}: relative import"
+        for node in ast.walk(tree)
+        if isinstance(node, ast.ImportFrom) and node.level > 0
+    ]
+    for node in tree.body:
+        if isinstance(node, ast.Assign):
+            targets, value = node.targets, node.value
+        elif isinstance(node, ast.AnnAssign) and node.value is not None:
+            targets, value = [node.target], node.value
+        else:
+            continue
+        if any(isinstance(t, ast.Name) and t.id == "VIEWS" for t in targets):
+            try:
+                ast.literal_eval(value)
+            except ValueError:
+                problems.append(f"{path.name}:{node.lineno}: VIEWS is not a literal")
+    return problems
+
+
 def snapshot(database: Path) -> tuple[Any, ...]:
     """Everything an upgrade could change: the schema, every table's rows, and user_version."""
     with closing(sqlite3.connect(database)) as connection:
@@ -228,6 +284,78 @@ class TestChain:
         config.attributes["database_url"] = "sqlite+aiosqlite://"
         command.upgrade(config, "head")
         assert list(tmp_path.iterdir()) == []
+
+    @pytest.mark.parametrize(
+        "run",
+        [
+            pytest.param(command.current, id="current"),
+            pytest.param(command.check, id="check"),
+            pytest.param(lambda config: command.stamp(config, "head"), id="stamp head"),
+            pytest.param(lambda config: command.upgrade(config, "head"), id="upgrade at head"),
+        ],
+    )
+    def test_every_command_refuses_a_file_holding_a_foreign_key_violation(
+        self, migrated_database: Path, run: Any
+    ) -> None:
+        """No command commits a file that fails the check, whether it ran a revision or not."""
+        with closing(sqlite3.connect(migrated_database)) as connection, connection:
+            connection.execute(PLANTED_LABEL.format("orphan"))
+        before = snapshot(migrated_database)
+        with pytest.raises(RuntimeError) as error:
+            run(alembic_config(migrated_database))
+        assert "1 foreign-key violations in the file before the commit" in refusal(error)
+        assert snapshot(migrated_database) == before
+
+    @pytest.mark.parametrize(
+        ("run", "statement"),
+        [
+            *(
+                pytest.param(run, statement, id=f"{change}, {name}")
+                for change, statement in (
+                    ("a row", ORPHAN),
+                    # The seeded pull request's author row goes with the table.
+                    ("the schema", 'op.execute("DROP TABLE github_users")'),
+                )
+                for name, run in (
+                    ("current", command.current),
+                    ("stamp head", lambda config: command.stamp(config, "head")),
+                    ("upgrade at head", lambda config: command.upgrade(config, "head")),
+                )
+            ),
+            # With the table gone, check's own comparison fails before the commit instead.
+            pytest.param(command.check, ORPHAN, id="a row, check"),
+        ],
+    )
+    def test_revision_module_code_that_breaks_a_reference_is_refused(
+        self, migrated_database: Path, tmp_path: Path, run: Any, statement: str
+    ) -> None:
+        """alembic loads each revision module inside the transaction, so code at a module's top
+        level runs even when no upgrade() does."""
+        with connect(migrated_database) as seeded:
+            seed = Seed(seeded)
+            seed.pull_request(seed.repository(), 1, seed.user("author"))
+        versions = tmp_path / "versions"
+        versions.mkdir()
+        (versions / f"{TEST_REVISION}_module_level.py").write_text(
+            "from alembic import op\n\n"
+            f"revision = {TEST_REVISION!r}\n"
+            f"down_revision = {HEAD_REVISION!r}\n"
+            "branch_labels = None\n"
+            "depends_on = None\n\n"
+            f"{statement}\n\n\n"
+            "def upgrade() -> None:\n"
+            "    pass\n\n\n"
+            "def downgrade() -> None:\n"
+            "    raise RuntimeError('test-only revision')\n"
+        )
+        # At the test revision already, so no command runs a revision or finds the file behind.
+        with closing(sqlite3.connect(migrated_database)) as connection, connection:
+            connection.execute("UPDATE alembic_version SET version_num = ?", (TEST_REVISION,))
+        before = snapshot(migrated_database)
+        with pytest.raises(RuntimeError) as error:
+            run(alembic_config(migrated_database, test_versions=versions))
+        assert "1 foreign-key violations" in refusal(error)
+        assert snapshot(migrated_database) == before
 
 
 class TestStep3Migration:
@@ -426,6 +554,42 @@ class TestStep3b1Migration:
             "account_profiles",
         }
 
+    def test_the_definition_reading_sees_a_changed_table(
+        self, step3a_database: Path, tmp_path: Path
+    ) -> None:
+        """Positive control: a column added to a table is a changed definition."""
+        changed = tmp_path / "changed.db"
+        shutil.copyfile(step3a_database, changed)
+        with closing(sqlite3.connect(changed)) as connection, connection:
+            connection.execute("ALTER TABLE pr_files ADD COLUMN probe INTEGER")
+        assert (
+            table_definitions(changed)["pr_files"] != table_definitions(step3a_database)["pr_files"]
+        )
+
+    def test_the_definition_reading_sees_a_literal_s_whitespace(
+        self, step3a_database: Path, tmp_path: Path
+    ) -> None:
+        """Whitespace inside a literal is data: a CHECK on 'a b' and one on 'a  b' differ."""
+
+        def defined(literal: str, name: str) -> str:
+            copy = tmp_path / f"{name}.db"
+            shutil.copyfile(step3a_database, copy)
+            with closing(sqlite3.connect(copy)) as connection, connection:
+                ((sql,),) = connection.execute(
+                    "SELECT sql FROM sqlite_master WHERE name = 'pr_files'"
+                ).fetchall()
+                assert "path TEXT NOT NULL" in sql
+                connection.execute("DROP TABLE pr_files")
+                connection.execute(
+                    sql.replace(
+                        "path TEXT NOT NULL", f"path TEXT NOT NULL CHECK (path != {literal})"
+                    )
+                )
+            return table_definitions(copy)["pr_files"]
+
+        assert defined("'a b'", "one") == defined("'a b'", "again")
+        assert defined("'a  b'", "two") != defined("'a b'", "one")
+
 
 class TestSyncFailuresLastRunIdMigration:
     FAILURE = (
@@ -567,6 +731,72 @@ class TestOneTransaction:
         )
         upgrade(migrated_database, test_versions=versions)
         assert query(migrated_database, "SELECT * FROM probe") == [(0, 0, 1, 1)]
+
+    def test_a_failure_in_the_second_revision_applies_neither(
+        self, first_schema: Path, tmp_path: Path
+    ) -> None:
+        versions = tmp_path / "versions"
+        write_revision(
+            versions, TEST_REVISION, HEAD_REVISION, "raise RuntimeError('planted failure')"
+        )
+        before = snapshot(first_schema)
+        with pytest.raises(RuntimeError, match="planted failure"):
+            upgrade(first_schema, test_versions=versions)
+        assert snapshot(first_schema) == before
+        assert revision_of(first_schema) == FIRST_SCHEMA_HEAD
+
+    def test_a_foreign_key_violation_fails_the_upgrade_before_commit(
+        self, migrated_database: Path, tmp_path: Path
+    ) -> None:
+        versions = tmp_path / "versions"
+        write_revision(
+            versions,
+            TEST_REVISION,
+            HEAD_REVISION,
+            ORPHAN,
+        )
+        before = snapshot(migrated_database)
+        with pytest.raises(RuntimeError) as error:
+            upgrade(migrated_database, test_versions=versions)
+        assert "1 foreign-key violations in the file before the commit" in refusal(error)
+        assert "('pr_labels', 1, 'pull_requests', 0)" in refusal(error)
+        assert snapshot(migrated_database) == before
+
+    @pytest.mark.parametrize(
+        ("foreign_keys", "message"),
+        [
+            pytest.param("ON", "PRAGMA foreign_keys reads 1 after turning it off", id="fk on"),
+            pytest.param("OFF", "already inside a transaction", id="fk off"),
+        ],
+    )
+    def test_a_connection_already_inside_a_transaction_is_refused(
+        self,
+        first_schema: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        foreign_keys: str,
+        message: str,
+    ) -> None:
+        """Planted through env.py's own engine: the DBAPI connect function SQLAlchemy calls."""
+        real_connect = sqlite3.dbapi2.connect
+        planted: list[sqlite3.Connection] = []
+
+        def connect_inside_a_transaction(*args: Any, **kwargs: Any) -> sqlite3.Connection:
+            connection = real_connect(*args, **kwargs)
+            connection.execute(f"PRAGMA foreign_keys={foreign_keys}")
+            connection.execute("BEGIN")
+            planted.append(connection)
+            return connection
+
+        before = snapshot(first_schema)
+        monkeypatch.setattr(sqlite3.dbapi2, "connect", connect_inside_a_transaction)
+        with pytest.raises(RuntimeError) as error:
+            upgrade(first_schema)
+        monkeypatch.undo()
+        assert message in refusal(error)
+        assert len(planted) == 1
+        with pytest.raises(sqlite3.ProgrammingError, match="closed database"):
+            planted[0].execute("SELECT 1")
+        assert snapshot(first_schema) == before
 
 
 Authorizer = Callable[[int, str | None, str | None, str | None, str | None], int]
@@ -794,15 +1024,148 @@ class TestTransactionControl:
         assert received == [0]
         assert revision_of(first_schema) == HEAD_REVISION
 
+    @pytest.mark.parametrize(
+        "body",
+        [
+            pytest.param(f"{ORPHAN}\nop.execute('COMMIT')", id="COMMIT"),
+            pytest.param(f"{ORPHAN}\nop.execute('END')", id="END"),
+            pytest.param(f"{ORPHAN}\nop.execute('ROLLBACK')\n{ORPHAN}", id="ROLLBACK"),
+            pytest.param(f"op.execute('BEGIN')\n{ORPHAN}", id="BEGIN"),
+            pytest.param(
+                f"with op.get_context().autocommit_block():\n    {ORPHAN}", id="autocommit_block"
+            ),
+            pytest.param(
+                "op.execute('CREATE TABLE early (x INTEGER)')\n"
+                f"{SWALLOWED_ROLLBACK}"
+                f"op.execute('CREATE TABLE late (x INTEGER)')\n{ORPHAN}",
+                id="INSERT OR ROLLBACK",
+            ),
+            pytest.param(
+                "op.execute('CREATE TRIGGER stop BEFORE INSERT ON pr_labels "
+                "BEGIN SELECT RAISE(ROLLBACK, \\'stop\\'); END')\n"
+                "try:\n"
+                f"    {ORPHAN}\n"
+                "except Exception:\n"
+                "    pass\n"
+                "op.execute('CREATE TABLE late (x INTEGER)')",
+                id="RAISE(ROLLBACK)",
+            ),
+        ],
+    )
+    def test_a_revision_cannot_end_the_transaction(
+        self, first_schema: Path, tmp_path: Path, body: str
+    ) -> None:
+        versions = tmp_path / "versions"
+        write_revision(versions, TEST_REVISION, HEAD_REVISION, body)
+        before = snapshot(first_schema)
+        with pytest.raises(Exception, match="not authorized"):
+            upgrade(first_schema, test_versions=versions)
+        assert snapshot(first_schema) == before
 
-def _batch_alter_revision(views_sql: tuple[tuple[str, str], ...]) -> str:
-    """A revision that batch-recreates pull_requests, dropping and recreating the views reading
-    it from ``views_sql``, a frozen copy, as plan 5.1 requires."""
+    @pytest.mark.parametrize(
+        ("body", "url_query"),
+        [
+            pytest.param(f"{ORPHAN}\n{SWALLOWED_ROLLBACK}{ORPHAN}", "", id="INSERT OR ROLLBACK"),
+            pytest.param(
+                f"{ORPHAN}\n{STOPPED_INSERT}{ORPHAN}",
+                "",
+                id="RAISE(ROLLBACK) of a trigger in the file",
+            ),
+            pytest.param(
+                f"{BOUND_INSERT.format('a')}\n{SWALLOWED_ROLLBACK}{BOUND_INSERT.format('b')}",
+                "",
+                id="bound parameters",
+            ),
+            pytest.param(
+                f"{ORPHAN}\n{SWALLOWED_ROLLBACK}{ORPHAN}",
+                "?cached_statements=128",
+                id="statement cache asked for by the URL",
+            ),
+        ],
+    )
+    def test_a_statement_run_before_sqlite_ended_the_transaction_is_refused_after(
+        self, migrated_database: Path, tmp_path: Path, body: str, url_query: str
+    ) -> None:
+        """SQLite authorizes a statement when it prepares it. A data-only upgrade changes no
+        schema, so SQLite's own rollback expires nothing the driver could reuse by its text."""
+        with closing(sqlite3.connect(migrated_database)) as connection, connection:
+            connection.execute(STOP_TRIGGER)
+        versions = tmp_path / "versions"
+        write_revision(versions, TEST_REVISION, HEAD_REVISION, body)
+        config = alembic_config(migrated_database, test_versions=versions)
+        config.attributes["database_url"] += url_query
+        before = snapshot(migrated_database)
+        with pytest.raises(Exception, match="not authorized"):
+            command.upgrade(config, "head")
+        assert snapshot(migrated_database) == before
+
+    @pytest.mark.parametrize(
+        "statement",
+        [
+            # The rollback of a failed upgrade could not restore pages spilled to the file.
+            "PRAGMA journal_mode=OFF",
+            "PRAGMA main.JOURNAL_MODE=OFF",
+            # A batch alter under a view would pass (gap 71).
+            "PRAGMA legacy_alter_table=ON",
+            # Rows the named CHECK constraints refuse would be committed.
+            "PRAGMA ignore_check_constraints=ON",
+            "PRAGMA writable_schema=ON",
+            "SAVEPOINT early",
+            "CREATE TEMP TABLE scratch (x INTEGER)",
+            # Schema-qualified, these reach SQLite as the main database's action codes.
+            "CREATE TABLE temp.scratch (x INTEGER)",
+            "CREATE VIEW temp.scratch AS SELECT 1 AS x",
+            "CREATE TRIGGER temp.drop_labels BEFORE INSERT ON pr_labels "
+            "BEGIN SELECT RAISE(IGNORE); END",
+            "ANALYZE",
+        ],
+    )
+    def test_a_revision_runs_only_the_actions_the_authorizer_lists(
+        self, migrated_database: Path, tmp_path: Path, statement: str
+    ) -> None:
+        versions = tmp_path / "versions"
+        write_revision(versions, TEST_REVISION, HEAD_REVISION, f"op.execute({statement!r})")
+        before = snapshot(migrated_database)
+        with pytest.raises(Exception, match="not authorized"):
+            upgrade(migrated_database, test_versions=versions)
+        assert snapshot(migrated_database) == before
+
+    def test_a_revision_cannot_attach_another_database(
+        self, migrated_database: Path, tmp_path: Path
+    ) -> None:
+        """ATTACH would let a revision write a file the refusals never saw, such as another
+        checkout's github_activity.db."""
+        other = tmp_path / "other-checkout" / "github_activity.db"
+        other.parent.mkdir()
+        versions = tmp_path / "versions"
+        write_revision(
+            versions,
+            TEST_REVISION,
+            HEAD_REVISION,
+            f'op.execute("ATTACH DATABASE {str(other)!r} AS other")\n'
+            "op.execute('CREATE TABLE other.probe (x INTEGER)')",
+        )
+        before = snapshot(migrated_database)
+        with pytest.raises(Exception, match="not authorized"):
+            upgrade(migrated_database, test_versions=versions)
+        assert snapshot(migrated_database) == before
+        assert not other.exists()
+
+
+def _batch_alter_revision(views_sql: tuple[tuple[str, str], ...] | None) -> str:
+    """A revision that batch-recreates pull_requests; with ``views_sql`` it drops and recreates
+    the views reading it, from that frozen copy, as plan 5.1 requires."""
+    drop = recreate = ""
+    if views_sql is not None:
+        drop = (
+            f"for name in {VIEWS_READING_PULL_REQUESTS!r}:\n    op.execute(f'DROP VIEW {{name}}')\n"
+        )
+        recreate = f"for _name, sql in {views_sql!r}:\n    op.execute(sql)\n"
     return (
-        f"for name in {VIEWS_READING_PULL_REQUESTS!r}:\n    op.execute(f'DROP VIEW {{name}}')\n"
-        "with op.batch_alter_table('pull_requests', recreate='always') as batch:\n"
-        "    batch.add_column(sa.Column('probe', sa.Integer(), nullable=True))\n"
-        f"for _name, sql in {views_sql!r}:\n    op.execute(sql)\n"
+        drop
+        + "with op.batch_alter_table('pull_requests', recreate='always') as batch:\n"
+        + "    batch.add_column(sa.Column('probe', sa.Integer(), nullable=True))\n"
+        + recreate
     )
 
 
@@ -911,6 +1274,17 @@ class TestBatchAlter:
             "ck_pull_requests_merged_at_iff_merged",
         } <= constraints.keys()
         assert query(migrated_database, PULL_REQUEST_INDEXES) == indexes
+
+    def test_a_batch_alter_under_a_view_fails_and_applies_nothing(
+        self, migrated_database: Path, tmp_path: Path
+    ) -> None:
+        """legacy_alter_table stays off, so a view left in place fails the migration (gap 71)."""
+        versions = tmp_path / "versions"
+        write_revision(versions, TEST_REVISION, HEAD_REVISION, _batch_alter_revision(None))
+        before = snapshot(migrated_database)
+        with pytest.raises(Exception, match=r"error in view v_\w+"):
+            upgrade(migrated_database, test_versions=versions)
+        assert snapshot(migrated_database) == before
 
 
 class TestRefusals:
@@ -1256,6 +1630,28 @@ class TestRevisionSources:
             if defines_views(path)
         )
         assert newest.name.startswith(STEP3B1)
+
+    @pytest.mark.parametrize(
+        ("source", "flagged"),
+        [
+            ("import json\nimport sqlalchemy as sa\nfrom alembic import op\n", False),
+            ("VIEWS = (('v', 'CREATE VIEW v AS SELECT 1'),)\n", False),
+            ("from typing import Final\nVIEWS: Final = (('v', 'SELECT 1'),)\n", False),
+            ("from github_activity_db.db import models\n", True),
+            ("import githubkit\n", True),
+            ("from . import shared\n", True),
+            ("import importlib\nimportlib.import_module('github_activity_db')\n", True),
+            ("VIEWS = SHARED_VIEWS\n", True),
+            ("VIEWS: tuple = tuple(view for view in ())\n", True),
+            ("VIEWS = (('v', 'CREATE VIEW v AS SELECT ' + '1'),)\n", True),
+        ],
+    )
+    def test_flags_each_rule_on_planted_files(
+        self, tmp_path: Path, source: str, flagged: bool
+    ) -> None:
+        path = tmp_path / "f00000000001_planted.py"
+        path.write_text(source)
+        assert bool(revision_source_problems(path)) is flagged
 
 
 def test_a_generated_revision_raises_in_downgrade_and_follows_the_rules(tmp_path: Path) -> None:

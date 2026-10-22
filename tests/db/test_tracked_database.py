@@ -159,6 +159,19 @@ class TestFrozenContent:
         mode, _blob, stage_and_path = entry.split(" ")
         assert (mode, stage_and_path) == ("100644", "0\tgithub_activity.db")
 
+    def test_a_changed_copy_fails(self, tmp_path: Path) -> None:
+        copy = tmp_path / "changed.db"
+        shutil.copyfile(REPO_ROOT / "github_activity.db", copy)
+        connection = sqlite3.connect(copy)
+        try:
+            connection.execute("PRAGMA user_version = 1")
+        finally:
+            connection.close()
+        result = _frozen(REPO_ROOT / "github_activity.db", copy)
+        assert result.returncode == 1
+        assert f"{copy}: sha256 " in result.stdout
+        assert "differs from the pinned" in result.stdout
+
 
 class TestGitignore:
     """Only the repository-root github_activity.db escapes the *.db rule (D26)."""

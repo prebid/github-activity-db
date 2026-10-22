@@ -27,6 +27,14 @@ PR_KEYS = [
 ]
 
 
+SINGLE_COLUMN_INDEXES = (
+    "DROP INDEX ix_pr_reviews_pr_id_reviewer_id_github_id",
+    "DROP INDEX ix_pr_reviews_reviewer_id",
+    "CREATE INDEX ix_pr_reviews_pr_id ON pr_reviews (pr_id)",
+    "CREATE INDEX ix_pr_reviews_reviewer_id ON pr_reviews (reviewer_id)",
+)
+
+
 def account(prefix: str) -> list[str]:
     return [
         f"{prefix}_github_id",
@@ -1272,3 +1280,17 @@ class TestConcentratedParticipation:
                 (self.rows_read(prs)[view],)
             ], prs
         assert self.growth(databases, view) < 6
+
+    def test_a_lookup_by_the_account_alone_is_reported(
+        self, databases: dict[int, Path], tmp_path: Path
+    ) -> None:
+        """With single-column indexes in place of the (PR, account) one, the same measure grows
+        with the square of the pull requests."""
+        altered = {}
+        for prs in self.SIZES:
+            altered[prs] = tmp_path / f"{prs}.db"
+            shutil.copyfile(databases[prs], altered[prs])
+            with closing(sqlite3.connect(altered[prs])) as connection, connection:
+                for statement in SINGLE_COLUMN_INDEXES:
+                    connection.execute(statement)
+        assert self.growth(altered, "v_pr_comments") > 10

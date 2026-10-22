@@ -111,8 +111,9 @@ tests/
   as the other side of the model comparison.
 - **The real environment.** Migration tests run the repository's `alembic.ini`, `env.py`, and
   revisions. `write_revision` adds a test-only revision after the head through
-  `version_locations`: one records the settings of the connection `env.py` gives a revision, and
-  one runs a batch alter under the views. Earlier schemas come from the real revisions
+  `version_locations`: revisions that fail, leave a foreign-key violation, try to end the
+  transaction, or batch-alter a table under the views show what `env.py` refuses and rolls back,
+  and one records the settings of the connection `env.py` gives a revision. Earlier schemas come from the real revisions
   (`upgrade(path, "<revision>")`). `env.py` is loaded fresh by every command, so its
   `MigrationRefused` is matched by class name.
 - **Seeding.** `tests/db/seed.py` writes rows through the models' tables with every column a
@@ -121,7 +122,8 @@ tests/
 - **Schema comparison.** `schema_of` reads columns (`PRAGMA table_xinfo`), indexes, foreign keys,
   and every item of each table's definition, which is where constraint names and CHECK text
   live; the readings are tested on a scratch database of valid SQL holding what no pragma
-  reports, at head against the models' declarations, and between real revisions.
+  reports, at head against the models' declarations, between real revisions, and on changed
+  copies of a migrated database, where each difference is reported.
 - **Dictionary and schema version.** `tests/test_data_dictionary.py` compares
   `docs/data-dictionary.md` with a migrated database in both directions.
   `tests/schema_versions.json` maps each schema version (`PRAGMA user_version`) to its consumer

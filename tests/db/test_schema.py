@@ -12,6 +12,7 @@ from __future__ import annotations
 import ast
 import os
 import re
+import shutil
 import sqlite3
 import tokenize
 from collections.abc import Callable
@@ -57,6 +58,22 @@ STEP3A = "33f8570f6540"
 STEP3B1 = "94a52e4f1d57"
 LAST_RUN_ID = "2d2ba76b177c"
 SQLITE = sqlite.dialect()
+
+
+def _tampered(source: Path, target: Path, *statements: str) -> Path:
+    shutil.copyfile(source, target)
+    with closing(sqlite3.connect(target)) as connection, connection:
+        for statement in statements:
+            connection.execute(statement)
+    return target
+
+
+def _redefined(database: Path, table: str, old: str, new: str) -> tuple[str, str]:
+    """Statements that recreate ``table`` with ``old`` replaced by ``new`` in its definition."""
+    with closing(sqlite3.connect(database)) as connection:
+        ((sql,),) = connection.execute("SELECT sql FROM sqlite_master WHERE name = ?", (table,))
+    assert old in sql, (old, sql)
+    return f"DROP TABLE {table}", sql.replace(old, new)
 
 
 @pytest.fixture(scope="module")
@@ -298,6 +315,145 @@ class TestModelsComparison:
         assert old["github_users"]["definition"] != new["github_users"]["definition"]
         assert old["pull_requests"]["definition"] != new["pull_requests"]["definition"]
 
+    @pytest.mark.parametrize(
+        ("table", "old", "new"),
+        [
+            pytest.param(
+                "automation_emails",
+                "CONSTRAINT ck_automation_emails_email_lowercase CHECK",
+                "CONSTRAINT ck_automation_emails_lower CHECK",
+                id="renamed CHECK",
+            ),
+            pytest.param(
+                "automation_emails",
+                "email = lower(email)",
+                "email = upper(email)",
+                id="changed CHECK text",
+            ),
+            pytest.param(
+                "automation_emails",
+                "CONSTRAINT ck_automation_emails_email_lowercase ",
+                "",
+                id="unnamed CHECK",
+            ),
+            pytest.param("pr_files", "path TEXT NOT NULL", "path TEXT", id="nullability"),
+            pytest.param(
+                "pr_commits",
+                "authored_at DATETIME NOT NULL",
+                "authored_at TEXT NOT NULL",
+                id="column type",
+            ),
+            pytest.param("pr_labels", " ON DELETE CASCADE", "", id="foreign key action"),
+            pytest.param(
+                "pr_labels",
+                "CONSTRAINT fk_pr_labels_pr_id_pull_requests",
+                "CONSTRAINT fk_pr_labels_pr",
+                id="foreign key name",
+            ),
+            pytest.param(
+                "pr_reviews",
+                "CONSTRAINT uq_pr_reviews_github_id UNIQUE",
+                "UNIQUE",
+                id="unnamed UNIQUE",
+            ),
+        ],
+    )
+    def test_a_planted_difference_is_reported(
+        self,
+        head_template: Path,
+        models_database: Path,
+        tmp_path: Path,
+        table: str,
+        old: str,
+        new: str,
+    ) -> None:
+        tampered = _tampered(
+            head_template, tmp_path / "tampered.db", *_redefined(head_template, table, old, new)
+        )
+        assert schema_of(tampered)[table] != schema_of(models_database)[table]
+
+    def test_a_missing_index_is_reported(
+        self, head_template: Path, models_database: Path, tmp_path: Path
+    ) -> None:
+        tampered = _tampered(
+            head_template, tmp_path / "tampered.db", "DROP INDEX ix_pr_reviews_reviewer_id"
+        )
+        assert schema_of(tampered)["pr_reviews"] != schema_of(models_database)["pr_reviews"]
+
+    @pytest.mark.parametrize(
+        ("first", "second"),
+        [
+            pytest.param(
+                ["CREATE INDEX ix_probe ON pr_labels (name) WHERE name <> 'a'"],
+                ["CREATE INDEX ix_probe ON pr_labels (name) WHERE name <> 'b'"],
+                id="partial index WHERE",
+            ),
+            pytest.param(
+                ["CREATE INDEX ix_probe ON pr_labels (lower(name))"],
+                ["CREATE INDEX ix_probe ON pr_labels (upper(name))"],
+                id="expression index",
+            ),
+            pytest.param(
+                [],
+                ["CREATE TRIGGER tr_probe AFTER DELETE ON pr_labels BEGIN SELECT 1; END"],
+                id="trigger",
+            ),
+        ],
+    )
+    def test_index_sql_and_triggers_are_compared(
+        self, head_template: Path, tmp_path: Path, first: list[str], second: list[str]
+    ) -> None:
+        """Shapes no pragma reports: a partial index's WHERE, an expression, a trigger."""
+        one = _tampered(head_template, tmp_path / "one.db", *first)
+        two = _tampered(head_template, tmp_path / "two.db", *second)
+        assert schema_of(one)["pr_labels"] != schema_of(two)["pr_labels"]
+
+    @pytest.mark.parametrize("kind", ["check", "index", "trigger"])
+    def test_whitespace_inside_a_literal_is_a_difference(
+        self, head_template: Path, tmp_path: Path, kind: str
+    ) -> None:
+        """Two schemas whose SQL differs only in a literal's whitespace read differently."""
+
+        def read(literal: str, name: str) -> dict[str, Any]:
+            statements: tuple[str, ...]
+            if kind == "check":
+                statements = _redefined(
+                    head_template,
+                    "pr_files",
+                    "path TEXT NOT NULL",
+                    f"path TEXT NOT NULL CHECK (path != {literal})",
+                )
+            elif kind == "index":
+                statements = (f"CREATE INDEX ix_probe ON pr_files (path) WHERE path != {literal}",)
+            else:
+                statements = (
+                    "CREATE TRIGGER tr_probe BEFORE INSERT ON pr_files "
+                    f"BEGIN SELECT RAISE(ABORT, {literal}); END",
+                )
+            tampered = _tampered(head_template, tmp_path / f"{name}.db", *statements)
+            return schema_of(tampered)["pr_files"]
+
+        one, again, two = read("'a b'", "one"), read("'a b'", "again"), read("'a  b'", "two")
+        assert one == again
+        # The difference is read where the kind's SQL is: a table's items, an index, a trigger.
+        assert [key for key in one if one[key] != two[key]] == [
+            {"check": "definition", "index": "indexes", "trigger": "triggers"}[kind]
+        ]
+
+    @pytest.mark.parametrize("option", ["STRICT", "WITHOUT ROWID"])
+    def test_a_table_option_is_reported(
+        self, head_template: Path, models_database: Path, tmp_path: Path, option: str
+    ) -> None:
+        tampered = _tampered(
+            head_template,
+            tmp_path / "tampered.db",
+            *_redefined(head_template, "pr_labels", "\n)", f"\n) {option}"),
+        )
+        assert (
+            schema_of(tampered)["pr_labels"]["flags"]
+            != schema_of(models_database)["pr_labels"]["flags"]
+        )
+
 
 class TestViews:
     def test_views_match_the_newest_frozen_sql(self, head_template: Path) -> None:
@@ -326,6 +482,37 @@ class TestViews:
             *(f"differs {name}" for name in sorted(step3b1.REPLACED_VIEWS)),
         ]
         assert view_differences(revisions[STEP3B1], at_step3b1) == []
+
+    def test_a_changed_view_is_reported(self, head_template: Path, tmp_path: Path) -> None:
+        tampered = _tampered(
+            head_template,
+            tmp_path / "tampered.db",
+            "DROP VIEW v_github_users",
+            "CREATE VIEW v_github_users AS SELECT github_id, login FROM github_users",
+            "CREATE VIEW v_extra AS SELECT 1 AS one",
+            "DROP VIEW v_commit_authors",
+        )
+        assert view_differences(tampered, frozen_views(alembic_config(head_template))) == [
+            "missing v_commit_authors",
+            "not frozen v_extra",
+            "differs v_github_users",
+        ]
+
+    def test_whitespace_inside_a_literal_is_a_difference(
+        self, head_template: Path, tmp_path: Path
+    ) -> None:
+        tampered = _tampered(
+            head_template,
+            tmp_path / "tampered.db",
+            "CREATE VIEW v_literal AS SELECT 'a  b' AS value",
+            "CREATE VIEW v_kept AS SELECT 'a b' AS value",
+        )
+        frozen = {
+            **frozen_views(alembic_config(head_template)),
+            "v_literal": "\nCREATE VIEW v_literal AS SELECT 'a b' AS value\n",
+            "v_kept": "\nCREATE VIEW v_kept AS SELECT 'a b' AS value\n",
+        }
+        assert view_differences(tampered, frozen) == ["differs v_literal"]
 
 
 class TestObjectsOutsideTheComparison:
@@ -356,6 +543,23 @@ class TestObjectsOutsideTheComparison:
         dropped = revision_module(revisions[STEP3B1], STEP3B1).DROPPED_VIEWS
         assert objects_outside_the_comparison(revisions[STEP3A], frozen) == [
             ("view", name) for name in sorted(dropped)
+        ]
+
+    def test_each_planted_object_is_reported(self, head_template: Path, tmp_path: Path) -> None:
+        tampered = _tampered(
+            head_template,
+            tmp_path / "tampered.db",
+            "CREATE TRIGGER tr_view INSTEAD OF DELETE ON v_github_users BEGIN SELECT 1; END",
+            "CREATE INDEX ix_version ON alembic_version (version_num)",
+            "CREATE TRIGGER tr_version AFTER UPDATE ON alembic_version BEGIN SELECT 1; END",
+            "ANALYZE",
+        )
+        frozen = frozen_views(alembic_config(head_template))
+        assert objects_outside_the_comparison(tampered, frozen) == [
+            ("index", "ix_version"),
+            ("table", "sqlite_stat1"),
+            ("trigger", "tr_version"),
+            ("trigger", "tr_view"),
         ]
 
 
@@ -602,6 +806,75 @@ class TestPlanRules:
             ("c", "a", "q", "SET NULL"),
         }
 
+    def test_a_changed_rule_is_reported(self, head_template: Path, tmp_path: Path) -> None:
+        tampered = _tampered(
+            head_template,
+            tmp_path / "tampered.db",
+            *_redefined(head_template, "pr_files", "path TEXT NOT NULL", "path TEXT"),
+            *_redefined(
+                head_template,
+                "pr_reviews",
+                "REFERENCES github_users (id) ON DELETE SET NULL, \n\t"
+                "CONSTRAINT uq_pr_reviews_github_id UNIQUE (github_id)",
+                "REFERENCES github_users (id) ON DELETE CASCADE",
+            ),
+            *_redefined(
+                head_template,
+                "sync_failures",
+                "REFERENCES sync_runs (id), \n\tCONSTRAINT uq_sync_failures",
+                "REFERENCES sync_runs (id) ON DELETE CASCADE, \n\tCONSTRAINT uq_sync_failures",
+            ),
+        )
+        assert nullable_columns(tampered) - NULLABLE == {("pr_files", "path")}
+        assert unique_sets(tampered)["pr_reviews"] == set()
+        assert delete_rule_problems(tampered) == (
+            {("pr_reviews", "editor_id", "CASCADE"), ("sync_failures", "last_run_id", "CASCADE")},
+            OUTSIDE_THE_DELETE_RULE,
+        )
+
+    def test_a_primary_key_reference_set_null_is_reported(
+        self, head_template: Path, tmp_path: Path
+    ) -> None:
+        """The cascade exception is read per column: SET NULL on pr_assignees.account_id breaks
+        it."""
+        tampered = _tampered(
+            head_template,
+            tmp_path / "tampered.db",
+            *_redefined(
+                head_template,
+                "pr_assignees",
+                "REFERENCES github_users (id) ON DELETE CASCADE",
+                "REFERENCES github_users (id) ON DELETE SET NULL",
+            ),
+        )
+        assert delete_rule_problems(tampered) == (
+            {("pr_assignees", "account_id", "SET NULL")},
+            OUTSIDE_THE_DELETE_RULE,
+        )
+
+    def test_a_primary_key_column_and_a_second_reference_are_read(
+        self, head_template: Path, tmp_path: Path
+    ) -> None:
+        """SQLite holds a composite primary key's columns NOT NULL only as declared, and one
+        column can carry two foreign keys."""
+        tampered = _tampered(
+            head_template,
+            tmp_path / "tampered.db",
+            *_redefined(head_template, "pr_labels", "name TEXT NOT NULL", "name TEXT"),
+            *_redefined(
+                head_template,
+                "pr_reviews",
+                "ON DELETE SET NULL, \n\t",
+                "ON DELETE SET NULL, \n\t"
+                "FOREIGN KEY(reviewer_id) REFERENCES github_users (id) ON DELETE CASCADE, \n\t",
+            ),
+        )
+        assert nullable_columns(tampered) - NULLABLE == {("pr_labels", "name")}
+        assert delete_rule_problems(tampered) == (
+            {("pr_reviews", "reviewer_id", "CASCADE")},
+            OUTSIDE_THE_DELETE_RULE,
+        )
+
 
 class TestForeignKeyIndexes:
     # Kept from the first schema unchanged (plan 5.1).
@@ -628,6 +901,12 @@ class TestForeignKeyIndexes:
             for entry in unindexed_foreign_keys(head_template)
             if entry[0] in ("pr_labels", "repo_sync_state")
         }
+
+    def test_a_missing_index_is_reported(self, head_template: Path, tmp_path: Path) -> None:
+        tampered = _tampered(
+            head_template, tmp_path / "tampered.db", "DROP INDEX ix_pr_comments_author_id"
+        )
+        assert unindexed_foreign_keys(tampered) == self.EXEMPT | {("pr_comments", ("author_id",))}
 
 
 def _sync_run(seed: Seed, **values: object) -> int:
@@ -857,3 +1136,20 @@ class TestBuiltByMigrations:
         assert len(uses) == names
         assert texts
         assert texts.isdisjoint(uses)
+
+    @pytest.mark.parametrize(
+        ("source", "flagged"),
+        [
+            ("Base.metadata.create_all(engine)\n", True),
+            ("conn.run_sync(Base.metadata.create_all)\n", True),
+            ("def f():\n    metadata.create_all(bind=engine)\n", True),
+            ('DECOY = "Base.metadata.create_all(engine)"\n', False),
+            ("# Base.metadata.create_all(engine)\n", False),
+            ("Base.metadata.drop_all(engine)\n", False),
+        ],
+    )
+    def test_flags_every_use_and_no_text(self, tmp_path: Path, source: str, flagged: bool) -> None:
+        package = tmp_path / "pkg"
+        package.mkdir()
+        (package / "module.py").write_text(source)
+        assert bool(create_all_uses(package)[0]) is flagged
