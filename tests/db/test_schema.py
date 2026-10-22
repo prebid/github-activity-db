@@ -11,7 +11,6 @@ from a scratch database of valid SQL.
 from __future__ import annotations
 
 import ast
-import os
 import re
 import shutil
 import sqlite3
@@ -35,7 +34,7 @@ from github_activity_db.db.models import (
     SyncPending,
 )
 from github_activity_db.source.records import AccountType, ReviewState
-from tests.db.alembic_support import alembic_config, query, upgrade
+from tests.db.alembic_support import LAST_RUN_ID, STEP3A, STEP3B1, alembic_config, query
 from tests.db.schema_support import (
     ALEMBIC_OBJECTS,
     check_constraints,
@@ -54,10 +53,8 @@ from tests.db.schema_support import (
     views,
 )
 from tests.db.seed import T0, Seed, connect
+from tests.support import files_under, sqlite_error_name
 
-STEP3A = "33f8570f6540"
-STEP3B1 = "94a52e4f1d57"
-LAST_RUN_ID = "2d2ba76b177c"
 SQLITE = sqlite.dialect()
 
 
@@ -89,16 +86,10 @@ def models_database(tmp_path_factory: pytest.TempPathFactory) -> Path:
 
 
 @pytest.fixture(scope="module")
-def revisions(tmp_path_factory: pytest.TempPathFactory) -> dict[str, Path]:
+def revisions(revision_template: Callable[[str], Path]) -> dict[str, Path]:
     """Databases the migrations built at Step 3a, at Step 3b-1, and at the revision after it;
     read-only, so no test changes one."""
-    folder = tmp_path_factory.mktemp("revisions")
-    built = {}
-    for revision in (STEP3A, STEP3B1, LAST_RUN_ID):
-        built[revision] = folder / f"{revision}.db"
-        upgrade(built[revision], revision)
-        built[revision].chmod(0o444)
-    return built
+    return {revision: revision_template(revision) for revision in (STEP3A, STEP3B1, LAST_RUN_ID)}
 
 
 def revision_module(database: Path, revision: str) -> Any:
@@ -957,7 +948,7 @@ def failed_check(error: pytest.ExceptionInfo[IntegrityError]) -> str:
     constraint's name is in SQLite's fixed ``CHECK constraint failed: <name>`` form."""
     driver_error = error.value.orig
     assert isinstance(driver_error, sqlite3.IntegrityError), repr(driver_error)
-    assert driver_error.sqlite_errorname == "SQLITE_CONSTRAINT_CHECK"
+    assert sqlite_error_name(error.value) == "SQLITE_CONSTRAINT_CHECK"
     named = re.fullmatch(r"CHECK constraint failed: (\w+)", str(driver_error))
     assert named is not None, str(driver_error)
     return named[1]
@@ -1125,11 +1116,9 @@ class TestBuiltByMigrations:
     def test_create_all_is_used_only_by_the_comparison(self) -> None:
         roots = [ROOT / name for name in ROOTS]
         uses, files = create_all_uses(*roots)
+        # By the name's ending, as rglob("*.py") matches: a file named ".py" has no suffix.
         assert files == sum(
-            name.endswith(".py")
-            for root in roots
-            for _directory, _subdirectories, names in os.walk(root)
-            for name in names
+            path.name.endswith(".py") for root in roots for path in files_under(root, None)
         )
         assert [use.split(":")[0] for use in uses] == ["tests/db/test_schema.py"], uses
         # Each use is a name the tokenizer reads too; the text in strings and comments is none.

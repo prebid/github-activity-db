@@ -8,13 +8,14 @@ there, which git ignores, is not one of them.
 from __future__ import annotations
 
 import hashlib
-import os
 import re
 import shutil
 import subprocess
 from pathlib import Path
 
 import pytest
+
+from tests.support import git_environment
 
 HISTORY = Path(__file__).resolve().parent / "fixtures" / "history"
 README = "README.md"
@@ -90,12 +91,7 @@ def tracked_files(directory: Path, home: Path) -> list[str]:
         cwd=directory,
         capture_output=True,
         check=True,
-        env={
-            "PATH": os.environ["PATH"],
-            "HOME": str(home),
-            "GIT_CONFIG_GLOBAL": os.devnull,
-            "GIT_CONFIG_NOSYSTEM": "1",
-        },
+        env=git_environment(home),
         timeout=60,
     )
     names = result.stdout.decode().split("\0")
@@ -213,12 +209,7 @@ def test_only_the_files_git_tracks_are_compared(tmp_path: Path) -> None:
     (copies / README).write_text("rows\n")
     (copies / "abc1234" / "kept.toml").write_text("kept = 1\n")
     (copies / ".gitignore").write_text("ignored.txt\n")
-    environment = {
-        "PATH": os.environ["PATH"],
-        "HOME": str(home),
-        "GIT_CONFIG_GLOBAL": os.devnull,
-        "GIT_CONFIG_NOSYSTEM": "1",
-    }
+    environment = git_environment(home)
     for args in (
         ["init", "-q"],
         ["add", "history/README.md", "history/abc1234/kept.toml"],

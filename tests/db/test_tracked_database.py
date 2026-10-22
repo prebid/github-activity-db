@@ -16,23 +16,13 @@ from pathlib import Path
 import pytest
 
 from tests.db.alembic_support import FIRST_SCHEMA_HEAD, upgrade
+from tests.support import git_environment
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 TRACKED = REPO_ROOT / "github_activity.db"
 SCRIPT = REPO_ROOT / "scripts" / "check_db_journal.py"
 # The scripts' whole environment: they read no variable, and run from this interpreter's path.
 SCRIPT_ENVIRONMENT = {"PATH": os.environ["PATH"]}
-
-
-def git_environment(home: Path) -> dict[str, str]:
-    """A git or pre-commit process's whole environment: a home of the test's own, so no
-    user-level ignore file applies, and no global or system configuration."""
-    return {
-        "PATH": os.environ["PATH"],
-        "HOME": str(home),
-        "GIT_CONFIG_GLOBAL": os.devnull,
-        "GIT_CONFIG_NOSYSTEM": "1",
-    }
 
 
 def _check(path: Path) -> subprocess.CompletedProcess[str]:

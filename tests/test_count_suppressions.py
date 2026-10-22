@@ -12,6 +12,8 @@ from types import ModuleType
 
 import pytest
 
+from tests.support import files_under
+
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "scripts" / "count_suppressions.py"
 SRC = ROOT / "src"
@@ -173,15 +175,10 @@ def _load() -> ModuleType:
 
 
 def _walk(root: Path) -> list[Path]:
-    """Every regular file at or under ``root``, listed with os.walk rather than a glob."""
+    """Every regular file at or under ``root``."""
     if root.is_file():
         return [root]
-    return sorted(
-        Path(directory, name)
-        for directory, _, names in os.walk(root)
-        for name in names
-        if Path(directory, name).is_file()
-    )
+    return [path for path in files_under(root, None) if path.is_file()]
 
 
 def _python_files(root: Path) -> list[Path]:

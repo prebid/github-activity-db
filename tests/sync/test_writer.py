@@ -9,8 +9,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from sqlalchemy import event, text
-from sqlalchemy.engine import Engine
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncConnection
 
 from github_activity_db.source.records import (
@@ -61,6 +60,7 @@ from github_activity_db.sync.writer import (
 )
 from github_activity_db.tracking import TrackedRepository
 from tests.db.seed import Seed, connect
+from tests.support import listening
 from tests.sync.records import (
     HYDRATED,
     T0,
@@ -326,11 +326,8 @@ async def _sent_during[T](write: Awaitable[T]) -> tuple[T, list[str]]:
     def record(connection: Any, cursor: Any, statement: str, *args: Any) -> None:
         sent.append(statement)
 
-    event.listen(Engine, "before_cursor_execute", record)
-    try:
+    with listening("before_cursor_execute", record):
         result = await write
-    finally:
-        event.remove(Engine, "before_cursor_execute", record)
     return result, sent
 
 

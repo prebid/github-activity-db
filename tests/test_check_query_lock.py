@@ -8,7 +8,6 @@ file (tests/fixtures/history), placed over a base that holds a later one.
 from __future__ import annotations
 
 import json
-import os
 import shutil
 import subprocess
 import sys
@@ -17,6 +16,8 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+
+from tests.support import git_environment
 
 SCRIPT = Path(__file__).resolve().parent.parent / "scripts" / "check_query_lock.py"
 HISTORY = Path(__file__).resolve().parent / "fixtures" / "history"
@@ -37,14 +38,8 @@ def edit_entry(work: Path) -> None:
 def environment(directory: Path) -> dict[str, str]:
     """A git, checker, or step process's whole environment: the directory it runs in, inside
     the test's own, as its home; no global or system git configuration; fixed commit dates."""
-    return {
-        "PATH": os.environ["PATH"],
-        "HOME": str(directory),
-        "GIT_CONFIG_GLOBAL": os.devnull,
-        "GIT_CONFIG_NOSYSTEM": "1",
-        "GIT_AUTHOR_DATE": "2026-01-01T00:00:00Z",
-        "GIT_COMMITTER_DATE": "2026-01-01T00:00:00Z",
-    }
+    fixed = "2026-01-01T00:00:00Z"
+    return git_environment(directory, GIT_AUTHOR_DATE=fixed, GIT_COMMITTER_DATE=fixed)
 
 
 def git(repo: Path, *args: str) -> None:

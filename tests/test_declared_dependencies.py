@@ -11,7 +11,6 @@ sibling must not stand in for an undeclared provider.
 from __future__ import annotations
 
 import ast
-import os
 import re
 import sys
 import tomllib
@@ -23,6 +22,8 @@ from pathlib import Path
 import pytest
 from packaging.requirements import Requirement
 from packaging.utils import canonicalize_name
+
+from tests.support import files_under
 
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src"
@@ -100,11 +101,6 @@ def _explain(found: list[Undeclared]) -> str:
     )
 
 
-def _python_file_count(root: Path) -> int:
-    """The .py files under ``root``, counted with os.walk rather than the glob."""
-    return sum(Path(name).suffix == ".py" for _, _, names in os.walk(root) for name in names)
-
-
 def _importers(name: str) -> list[str]:
     """The files under src/ with a statement importing ``name``, found in their text."""
     statement = re.compile(rf"^[ \t]*(?:from|import)[ \t]+{re.escape(name)}\b", re.MULTILINE)
@@ -125,7 +121,7 @@ def _requirement_names(pyproject: Path) -> set[str]:
 
 def test_every_third_party_import_in_src_is_declared() -> None:
     scanned, found = undeclared_imports(SRC, ROOT / "pyproject.toml")
-    assert scanned == _python_file_count(SRC)
+    assert scanned == len(files_under(SRC, {".py"}))
     assert found == [], _explain(found)
 
 
@@ -140,7 +136,7 @@ def test_reports_what_an_earlier_pyproject_did_not_declare() -> None:
         for path in _importers(name.replace("-", "_"))
     ]
     scanned, found = undeclared_imports(SRC, BEFORE_HTTPX)
-    assert scanned == _python_file_count(SRC)
+    assert scanned == len(files_under(SRC, {".py"}))
     assert sorted(found) == sorted(expected)
 
 
@@ -167,7 +163,7 @@ def test_src_s_imports_of_a_name_several_distributions_install_need_all_of_them_
     else:
         owners["sqlalchemy"] = installers
     scanned, found = undeclared_imports(SRC, ROOT / "pyproject.toml", owners)
-    assert scanned == _python_file_count(SRC)
+    assert scanned == len(files_under(SRC, {".py"}))
     importers = _importers("sqlalchemy")
     assert importers
     assert sorted(found) == (

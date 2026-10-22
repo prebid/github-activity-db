@@ -75,9 +75,10 @@ How the test suite is built and what it counts as evidence. The plan of record i
 
 ```
 tests/
-├── conftest.py              # The session template database and its copies; the scenario fixture
+├── conftest.py              # The session template databases and copies; the scenario fixture
 ├── determinism.py           # Connections, lookups, real clocks, unseeded randomness refused
 ├── pytest_runs.py           # pytest over files a test writes; check_junit loaded to read it
+├── support.py               # Files by os.walk, SQLite error names, git environments, listeners
 ├── db/
 │   ├── alembic_support.py   # Running the real migrations; test-only revisions after head
 │   ├── schema_support.py    # Structural schema readings for the model comparison
@@ -119,8 +120,9 @@ tests/
 - **One template per session.** `head_template` (`tests/conftest.py`) is built once by
   `alembic upgrade head` and made read-only; `migrated_database` is a writable copy per test,
   and `test_engine` the application engine (`build_engine`) over it, so foreign keys and the
-  busy timeout match production. `metadata.create_all` appears only in `tests/db/test_schema.py`,
-  as the other side of the model comparison.
+  busy timeout match production. `revision_template(revision)` gives a read-only database at an
+  earlier revision, built once per session the first time a test asks for it. `metadata.create_all`
+  appears only in `tests/db/test_schema.py`, as the other side of the model comparison.
 - **The real environment.** Migration tests run the repository's `alembic.ini`, `env.py`, and
   revisions. `write_revision` adds a test-only revision after the head through
   `version_locations`: revisions that fail, leave a foreign-key violation, try to end the

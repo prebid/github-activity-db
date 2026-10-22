@@ -40,8 +40,9 @@ from github_activity_db.sync.runs import (
 )
 from github_activity_db.tracking import read_tracking_config
 from tests.data_dictionary import SCHEMA_LOCK
-from tests.db.alembic_support import alembic_config, upgrade
+from tests.db.alembic_support import STEP3A, alembic_config, upgrade
 from tests.db.seed import Seed, connect
+from tests.support import git_environment
 from tests.sync.records import T0, fetch, ts
 
 PACKAGED = read_tracking_config()
@@ -111,11 +112,11 @@ async def test_an_empty_file_is_refused(tmp_path: Path) -> None:
 
 async def test_an_older_revision_is_refused(tmp_path: Path) -> None:
     older = tmp_path / "older.db"
-    upgrade(older, "33f8570f6540")
+    upgrade(older, STEP3A)
     with pytest.raises(HeadCheckError) as refused:
         await check_head(_url(older))
     assert str(refused.value) == (
-        f"the database is at revision 33f8570f6540, not the code's head {HEAD_REVISION}; "
+        f"the database is at revision {STEP3A}, not the code's head {HEAD_REVISION}; "
         "run `alembic upgrade head`"
     )
 
@@ -904,23 +905,14 @@ def git_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict[str, str]:
     fixed date. ``code_version`` runs git with this process's environment, so the variables are
     set here too, and every other ``GIT_*`` variable is removed; the test's own git calls get
     the returned environment, built from these values and ``PATH`` alone."""
-    isolated = {
-        "HOME": str(tmp_path),
-        "GIT_CONFIG_GLOBAL": os.devnull,
-        "GIT_CONFIG_NOSYSTEM": "1",
-        "GIT_CEILING_DIRECTORIES": str(tmp_path),
-    }
+    environment = git_environment(tmp_path, GIT_CEILING_DIRECTORIES=str(tmp_path))
     for name in [name for name in os.environ if name.startswith("GIT_")]:
         monkeypatch.delenv(name)
-    for name, value in isolated.items():
-        monkeypatch.setenv(name, value)
+    for name, value in environment.items():
+        if name != "PATH":
+            monkeypatch.setenv(name, value)
     fixed = "2026-01-01T00:00:00+00:00"
-    return {
-        "PATH": os.environ["PATH"],
-        **isolated,
-        "GIT_AUTHOR_DATE": fixed,
-        "GIT_COMMITTER_DATE": fixed,
-    }
+    return {**environment, "GIT_AUTHOR_DATE": fixed, "GIT_COMMITTER_DATE": fixed}
 
 
 def _git(directory: Path, env: dict[str, str], *args: str) -> str:

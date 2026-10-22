@@ -14,10 +14,11 @@ commit as well.
 from __future__ import annotations
 
 import ast
-import os
 from pathlib import Path
 
 import pytest
+
+from tests.support import files_under
 
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src"
@@ -49,10 +50,7 @@ def server_side_cursors(files: list[Path]) -> list[str]:
 
 def test_no_server_side_cursor_in_src() -> None:
     files = sorted(SRC.rglob("*.py"))
-    # Counted with os.walk rather than the glob, so the scan cannot pass on fewer files.
-    assert len(files) == sum(
-        Path(name).suffix == ".py" for _, _, names in os.walk(SRC) for name in names
-    )
+    assert len(files) == len(files_under(SRC, {".py"}))
     assert SRC / "github_activity_db" / "sync" / "snapshot.py" in files
     assert server_side_cursors(files) == []
 

@@ -16,7 +16,7 @@ import subprocess
 import sys
 import tokenize
 from collections.abc import Callable, Iterator
-from contextlib import closing, contextmanager
+from contextlib import closing
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -24,11 +24,9 @@ from typing import Any
 import pytest
 from alembic import command
 from alembic.script import ScriptDirectory
-from sqlalchemy import create_engine, event
-from sqlalchemy.engine import Engine
+from sqlalchemy import create_engine
 from sqlalchemy.exc import (
     DatabaseError,
-    DBAPIError,
     OperationalError,
     ProgrammingError,
     StatementError,
@@ -40,7 +38,10 @@ from github_activity_db.db.models import Base
 from github_activity_db.db.schema import HEAD_REVISION, MIGRATION_REVISIONS, SCHEMA_VERSION
 from tests.db.alembic_support import (
     FIRST_SCHEMA_HEAD,
+    LAST_RUN_ID,
     REPO_ROOT,
+    STEP3A,
+    STEP3B1,
     alembic_config,
     query,
     revision_of,
@@ -56,6 +57,7 @@ from tests.db.schema_support import (
     views,
 )
 from tests.db.seed import T0, Seed, connect
+from tests.support import listening, sqlite_error_name
 from tests.test_import_boundaries import imported_modules
 
 TRACKED = REPO_ROOT / "github_activity.db"
@@ -130,13 +132,6 @@ def refusal(error: pytest.ExceptionInfo[BaseException]) -> str:
     return str(error.value)
 
 
-def sqlite_error_name(error: pytest.ExceptionInfo[DBAPIError]) -> str:
-    """The SQLite result code of the driver error SQLAlchemy's error wraps."""
-    driver_error = error.value.orig
-    assert isinstance(driver_error, sqlite3.Error), repr(driver_error)
-    return str(driver_error.sqlite_errorname)
-
-
 def is_closed(connection: sqlite3.Connection) -> bool:
     """Whether the driver connection is closed: a closed one runs nothing."""
     try:
@@ -154,18 +149,6 @@ def foreign_key_rows(database: Path) -> dict[str, int]:
             ((rows,),) = query(database, f'SELECT COUNT(*) FROM "{table}"')
             counted[table] = int(str(rows))
     return counted
-
-
-@contextmanager
-def listening(
-    name: str, listener: Callable[..., None], target: type[Engine | Pool] = Engine
-) -> Iterator[None]:
-    """``listener`` on the ``name`` event of every engine, or every pool, env.py's own included."""
-    event.listen(target, name, listener)
-    try:
-        yield
-    finally:
-        event.remove(target, name, listener)
 
 
 @pytest.fixture(scope="module")
@@ -436,7 +419,6 @@ class TestStep3Migration:
         assert snapshot(first_schema) == before
 
 
-STEP3A = "33f8570f6540"
 STEP3A_ROWS = {
     "repositories": (
         "INSERT INTO repositories (id, github_id, owner, name, full_name, repo_group, is_private, "
@@ -473,10 +455,6 @@ def step3a_database(tmp_path: Path) -> Path:
     upgrade(database, STEP3A)
     assert revision_of(database) == STEP3A
     return database
-
-
-STEP3B1 = "94a52e4f1d57"
-LAST_RUN_ID = "2d2ba76b177c"
 
 
 @pytest.fixture
@@ -1112,7 +1090,7 @@ class TestTransactionControl:
                 command.upgrade(config, "head")
         finally:
             reader.close()
-        assert sqlite_error_name(error) == "SQLITE_BUSY"
+        assert sqlite_error_name(error.value) == "SQLITE_BUSY"
         assert statements[-1] == "PRAGMA foreign_key_check"
         assert snapshot(step3b1_database) == before
         assert revision_of(step3b1_database) == STEP3B1
@@ -1140,7 +1118,7 @@ class TestTransactionControl:
                 command.upgrade(config, "head")
         finally:
             holder.close()
-        assert sqlite_error_name(error) == "SQLITE_BUSY"
+        assert sqlite_error_name(error.value) == "SQLITE_BUSY"
         assert statements == ["BEGIN IMMEDIATE"]
         assert snapshot(step3b1_database) == before
         assert revision_of(step3b1_database) == STEP3B1
@@ -1209,7 +1187,7 @@ class TestTransactionControl:
         with pytest.raises(DatabaseError) as error:
             upgrade(first_schema, test_versions=versions)
         assert type(error.value) is DatabaseError
-        assert sqlite_error_name(error) == "SQLITE_AUTH"
+        assert sqlite_error_name(error.value) == "SQLITE_AUTH"
         assert snapshot(first_schema) == before
 
     @pytest.mark.parametrize(
@@ -1248,7 +1226,7 @@ class TestTransactionControl:
         with pytest.raises(DatabaseError) as error:
             command.upgrade(config, "head")
         assert type(error.value) is DatabaseError
-        assert sqlite_error_name(error) == "SQLITE_AUTH"
+        assert sqlite_error_name(error.value) == "SQLITE_AUTH"
         assert snapshot(migrated_database) == before
 
     @pytest.mark.parametrize(
@@ -1281,7 +1259,7 @@ class TestTransactionControl:
         with pytest.raises(DatabaseError) as error:
             upgrade(migrated_database, test_versions=versions)
         assert type(error.value) is DatabaseError
-        assert sqlite_error_name(error) == "SQLITE_AUTH"
+        assert sqlite_error_name(error.value) == "SQLITE_AUTH"
         assert snapshot(migrated_database) == before
 
     def test_a_revision_cannot_attach_another_database(
@@ -1303,7 +1281,7 @@ class TestTransactionControl:
         with pytest.raises(DatabaseError) as error:
             upgrade(migrated_database, test_versions=versions)
         assert type(error.value) is DatabaseError
-        assert sqlite_error_name(error) == "SQLITE_AUTH"
+        assert sqlite_error_name(error.value) == "SQLITE_AUTH"
         assert snapshot(migrated_database) == before
         assert not other.exists()
 

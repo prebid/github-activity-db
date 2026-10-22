@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 from sqlalchemy import insert, select, text, update
-from sqlalchemy.exc import DBAPIError, IntegrityError
+from sqlalchemy.exc import IntegrityError
 
 from github_activity_db.db.models import SyncRun
 from github_activity_db.sync import connection as connection_module
@@ -21,6 +21,7 @@ from github_activity_db.sync.connection import (
 )
 from github_activity_db.sync.snapshot import read_snapshot
 from tests.db.seed import Seed, connect
+from tests.support import sqlite_error_name
 from tests.sync.records import fetch
 from tests.sync.support import commit_does_not_wait
 
@@ -114,14 +115,6 @@ async def test_the_body_s_exception_rolls_back(migrated_database: Path) -> None:
     assert fetch(migrated_database, "SELECT rest_calls FROM sync_runs") == [{"rest_calls": 0}]
 
 
-def _sqlite_errorname(error: LocalDatabaseError) -> str:
-    """The SQLite error under the ``DBAPIError`` the writer turned into ``error``."""
-    cause = error.__cause__
-    assert isinstance(cause, DBAPIError)
-    assert isinstance(cause.orig, sqlite3.Error)
-    return cause.orig.sqlite_errorname
-
-
 async def test_a_begin_that_fails_on_a_lock_is_a_local_database_error(
     migrated_database: Path,
 ) -> None:
@@ -142,7 +135,7 @@ async def test_a_begin_that_fails_on_a_lock_is_a_local_database_error(
             holder.close()
         async with transaction(writer, run_id):
             await writer.execute(update(SyncRun).values(rest_calls=5))
-    assert _sqlite_errorname(raised.value) == "SQLITE_BUSY"
+    assert sqlite_error_name(raised.value.__cause__) == "SQLITE_BUSY"
     assert entered == []
     assert fetch(migrated_database, "SELECT rest_calls FROM sync_runs") == [{"rest_calls": 5}]
 
@@ -165,7 +158,7 @@ async def test_a_commit_that_fails_on_a_lock_leaves_the_connection_usable(
         finally:
             reader.execute("ROLLBACK")
             reader.close()
-        assert _sqlite_errorname(raised.value) == "SQLITE_BUSY"
+        assert sqlite_error_name(raised.value.__cause__) == "SQLITE_BUSY"
         async with transaction(writer, run_id):
             await writer.execute(update(SyncRun).values(items_planned=4))
     assert fetch(migrated_database, "SELECT rest_calls, items_planned FROM sync_runs") == [
@@ -213,5 +206,5 @@ async def test_a_constraint_failure_is_a_local_database_error(migrated_database:
             rest_calls = (await writer.execute(select(SyncRun.rest_calls))).scalar_one()
     assert isinstance(raised.value.__cause__, IntegrityError)
     # The row has no started_at, whose NOT NULL SQLite tests before the status CHECK.
-    assert _sqlite_errorname(raised.value) == "SQLITE_CONSTRAINT_NOTNULL"
+    assert sqlite_error_name(raised.value.__cause__) == "SQLITE_CONSTRAINT_NOTNULL"
     assert rest_calls == 0

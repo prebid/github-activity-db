@@ -42,7 +42,6 @@ from __future__ import annotations
 
 import ast
 import asyncio
-import os
 import socket
 from datetime import UTC, datetime, tzinfo
 from pathlib import Path
@@ -57,6 +56,7 @@ from tests import determinism
 from tests.determinism import NotDeterministic
 from tests.pytest_runs import load_check_junit, run_pytest
 from tests.source.conftest import FakeClock
+from tests.support import files_under
 
 TESTS = Path(__file__).resolve().parent
 SRC = TESTS.parent / "src" / "github_activity_db"
@@ -290,10 +290,7 @@ def uncollected_tests(*paths: Path) -> list[str]:
 
 def _python_files(root: Path) -> list[Path]:
     files = sorted(root.rglob("*.py"))
-    # Counted with os.walk rather than the glob, so a scan cannot pass on fewer files, or on none.
-    assert len(files) == sum(
-        Path(name).suffix == ".py" for _, _, names in os.walk(root) for name in names
-    )
+    assert len(files) == len(files_under(root, {".py"}))
     assert files, f"no Python file under {root}"
     return files
 

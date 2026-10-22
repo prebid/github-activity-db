@@ -19,8 +19,6 @@ from pathlib import Path
 from typing import Any, Final
 
 import pytest
-from sqlalchemy import event
-from sqlalchemy.engine import Engine
 
 from github_activity_db.db import engine as db_engine
 from github_activity_db.db.schema import HEAD_REVISION, MIGRATION_REVISIONS
@@ -33,6 +31,7 @@ from github_activity_db.sync.writer import Pruned
 from tests.db.alembic_support import upgrade
 from tests.source.replay import synthetic
 from tests.source.scenario import Scenario
+from tests.support import listening
 from tests.sync.engine_support import World, ended, outcomes, planned, project
 from tests.sync.records import fetch
 
@@ -87,11 +86,8 @@ def database_errors(after: Callable[[], None] = lambda: None) -> Iterator[list[s
             names.append(error.sqlite_errorname)
             after()
 
-    event.listen(Engine, "handle_error", record)
-    try:
+    with listening("handle_error", record):
         yield names
-    finally:
-        event.remove(Engine, "handle_error", record)
 
 
 def batches(scenario: Scenario) -> list[list[int]]:
@@ -1651,9 +1647,11 @@ async def test_a_run_ending_at_the_prune_s_delete_keeps_step_7_s_halt_reason(
             raise KeyboardInterrupt
         reader.hold()
 
-    event.listen(Engine, "before_cursor_execute", at_the_prune)
     try:
-        with database_errors(reader.release) as errors:
+        with (
+            listening("before_cursor_execute", at_the_prune),
+            database_errors(reader.release) as errors,
+        ):
             if ending == "fatal":
                 report = await world.sync(prune_untracked=True)
                 assert ended(world, report) == ("failed", 1, {"prebid/Prebid.js": "failed"})
@@ -1665,7 +1663,6 @@ async def test_a_run_ending_at_the_prune_s_delete_keeps_step_7_s_halt_reason(
                     == "aborted"
                 )
     finally:
-        event.remove(Engine, "before_cursor_execute", at_the_prune)
         reader.release()
 
     assert len(deletes) == 1
@@ -2430,12 +2427,10 @@ async def test_a_close_whose_commit_fails_on_a_lock_leaves_the_row_running_and_e
         if statement.startswith("UPDATE sync_runs SET finished_at") and reader.connection is None:
             reader.hold()
 
-    event.listen(Engine, "before_cursor_execute", at_the_close)
     try:
-        with database_errors() as errors:
+        with listening("before_cursor_execute", at_the_close), database_errors() as errors:
             report = await world.sync()
     finally:
-        event.remove(Engine, "before_cursor_execute", at_the_close)
         reader.release()
 
     assert errors == ["SQLITE_BUSY"]
@@ -2773,8 +2768,7 @@ async def test_an_interrupt_during_the_close_closes_the_row_aborted(
         assert run is not None
         run.cancel()
 
-    event.listen(Engine, "before_cursor_execute", interrupt_the_close)
-    try:
+    with listening("before_cursor_execute", interrupt_the_close):
         if interrupt == "keyboard":
             with pytest.raises(KeyboardInterrupt):
                 await world.sync()
@@ -2782,8 +2776,6 @@ async def test_an_interrupt_during_the_close_closes_the_row_aborted(
             run = asyncio.create_task(world.sync())
             with pytest.raises(asyncio.CancelledError):
                 await run
-    finally:
-        event.remove(Engine, "before_cursor_execute", interrupt_the_close)
 
     assert len(interrupted) == 1
     (row,) = world.rows("SELECT id, status, exit_code, finished_at FROM sync_runs")
@@ -2872,12 +2864,12 @@ async def test_an_interrupted_close_that_does_not_land_leaves_the_row_running(
         interrupted.append(status)
         raise KeyboardInterrupt(status)
 
-    event.listen(Engine, "before_cursor_execute", interrupt)
-    try:
-        with database_errors() as errors, pytest.raises(KeyboardInterrupt) as raised:
-            await world.sync()
-    finally:
-        event.remove(Engine, "before_cursor_execute", interrupt)
+    with (
+        listening("before_cursor_execute", interrupt),
+        database_errors() as errors,
+        pytest.raises(KeyboardInterrupt) as raised,
+    ):
+        await world.sync()
 
     expected = ["complete", "aborted"] if cleanup == "second interrupt" else ["complete"]
     assert interrupted == expected
@@ -2916,12 +2908,14 @@ async def test_an_interrupted_close_whose_commit_fails_on_a_lock_leaves_the_row_
         reader.hold()
         raise KeyboardInterrupt("complete")
 
-    event.listen(Engine, "before_cursor_execute", interrupt)
     try:
-        with database_errors() as errors, pytest.raises(KeyboardInterrupt) as raised:
+        with (
+            listening("before_cursor_execute", interrupt),
+            database_errors() as errors,
+            pytest.raises(KeyboardInterrupt) as raised,
+        ):
             await world.sync()
     finally:
-        event.remove(Engine, "before_cursor_execute", interrupt)
         reader.release()
 
     assert interrupted == ["complete"]

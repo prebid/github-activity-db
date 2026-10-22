@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import sqlite3
+from collections.abc import Callable
 from contextlib import closing
 from pathlib import Path
 
@@ -29,14 +30,11 @@ from tests.data_dictionary import (
     read_lock,
     view_digest,
 )
-from tests.db.alembic_support import alembic_config, upgrade
+from tests.db.alembic_support import LAST_RUN_ID, STEP3A, STEP3B1, alembic_config
 from tests.db.schema_support import frozen_views, views
 
 # Earlier versions of repository files, copied unchanged (tests/fixtures/history/README.md).
 HISTORY = Path(__file__).resolve().parent / "fixtures" / "history"
-STEP3A = "33f8570f6540"
-STEP3B1 = "94a52e4f1d57"
-LAST_RUN_ID = "2d2ba76b177c"
 # The commits that added 94a52e4f1d57 and 2d2ba76b177c, with the dictionary and lock of each.
 AT_STEP3B1, AT_LAST_RUN_ID = "21a4267", "77663a7"
 
@@ -94,15 +92,13 @@ def entries() -> dict[str, dict[str, str]]:
 
 
 @pytest.fixture(scope="module")
-def revisions(tmp_path_factory: pytest.TempPathFactory) -> dict[str, dict[str, list[str]]]:
+def revisions(revision_template: Callable[[str], Path]) -> dict[str, dict[str, list[str]]]:
     """The tables and views, with their columns, of databases the migrations built at Step 3a,
     at Step 3b-1, and at the revision after it."""
-    folder = tmp_path_factory.mktemp("revisions")
-    columns = {}
-    for revision in (STEP3A, STEP3B1, LAST_RUN_ID):
-        upgrade(folder / f"{revision}.db", revision)
-        columns[revision] = database_columns(folder / f"{revision}.db")
-    return columns
+    return {
+        revision: database_columns(revision_template(revision))
+        for revision in (STEP3A, STEP3B1, LAST_RUN_ID)
+    }
 
 
 def dictionary_at(commit: str) -> dict[str, dict[str, str]]:

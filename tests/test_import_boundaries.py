@@ -17,13 +17,14 @@ from __future__ import annotations
 
 import ast
 import io
-import os
 import re
 import tokenize
 from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
+
+from tests.support import files_under
 
 ROOT = Path(__file__).resolve().parents[1]
 PACKAGE = ROOT / "src" / "github_activity_db"
@@ -120,10 +121,7 @@ def database_imports(files: list[Path], src: Path) -> list[str]:
 
 
 def _file_count(root: Path) -> int:
-    """The .py and .pyi files under ``root``, counted with os.walk rather than a glob."""
-    return sum(
-        Path(name).suffix in {".py", ".pyi"} for _, _, names in os.walk(root) for name in names
-    )
+    return len(files_under(root, {".py", ".pyi"}))
 
 
 def _import_lines(path: Path, *, relative: bool) -> set[int]:

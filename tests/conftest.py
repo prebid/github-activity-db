@@ -1,15 +1,16 @@
 """Shared test fixtures.
 
 Databases come from one template per test session, built by ``alembic upgrade head`` and copied
-for each test (redesign plan Step 3); ``metadata.create_all`` is used only by the schema
-comparison in ``tests/db/test_schema.py``.
+for each test (redesign plan Step 3), and from read-only templates at earlier revisions, each
+built once; ``metadata.create_all`` is used only by the schema comparison in
+``tests/db/test_schema.py``.
 """
 
 from __future__ import annotations
 
 import os
 import shutil
-from collections.abc import AsyncIterator, Iterator
+from collections.abc import AsyncIterator, Callable, Iterator
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -95,6 +96,24 @@ def head_template(tmp_path_factory: pytest.TempPathFactory) -> Path:
     upgrade(path)
     path.chmod(0o444)
     return path
+
+
+@pytest.fixture(scope="session")
+def revision_template(tmp_path_factory: pytest.TempPathFactory) -> Callable[[str], Path]:
+    """The database migrated to a revision, built the first time a test asks for that revision
+    and read-only, like ``head_template``."""
+    folder = tmp_path_factory.mktemp("revisions")
+    built: dict[str, Path] = {}
+
+    def template(revision: str) -> Path:
+        if revision not in built:
+            path = folder / f"{revision}.db"
+            upgrade(path, revision)
+            path.chmod(0o444)
+            built[revision] = path
+        return built[revision]
+
+    return template
 
 
 @pytest.fixture
