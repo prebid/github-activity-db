@@ -26,7 +26,8 @@ from alembic import command
 from alembic.script import ScriptDirectory
 from sqlalchemy import create_engine, event
 from sqlalchemy.engine import Engine
-from sqlalchemy.exc import OperationalError, PendingRollbackError
+from sqlalchemy.exc import OperationalError
+from sqlalchemy.pool import Pool
 
 from github_activity_db.config import get_settings
 from github_activity_db.db.models import Base
@@ -110,13 +111,15 @@ def foreign_key_rows(database: Path) -> dict[str, int]:
 
 
 @contextmanager
-def listening(name: str, listener: Callable[..., None]) -> Iterator[None]:
-    """``listener`` on the ``name`` event of every engine, env.py's own included."""
-    event.listen(Engine, name, listener)
+def listening(
+    name: str, listener: Callable[..., None], target: type[Engine | Pool] = Engine
+) -> Iterator[None]:
+    """``listener`` on the ``name`` event of every engine, or every pool, env.py's own included."""
+    event.listen(target, name, listener)
     try:
         yield
     finally:
-        event.remove(Engine, name, listener)
+        event.remove(target, name, listener)
 
 
 @pytest.fixture(scope="module")
@@ -493,27 +496,32 @@ def table_definitions(database: Path) -> dict[str, str]:
 
 class TestOneTransaction:
     def test_an_interrupt_after_the_second_revision_applies_none(self, first_schema: Path) -> None:
-        """An interrupt at a set point, once the second of the revisions after the first schema
-        has run: the file stays at the revision the upgrade started from."""
+        """An interrupt at a set point inside a statement, once the second of the revisions after
+        the first schema has run: the interrupt itself ends the upgrade, and the file stays at the
+        revision the upgrade started from."""
         second = AFTER_THE_FIRST_SCHEMA[1]
+        raised = KeyboardInterrupt()
+        invalidated: list[BaseException | None] = []
 
         def interrupt(_connection: Any, _cursor: Any, statement: str, *_rest: Any) -> None:
             if statement.startswith(f"UPDATE alembic_version SET version_num='{second}'"):
-                raise KeyboardInterrupt
+                raise raised
+
+        def record(_dbapi_connection: Any, _record: Any, exception: BaseException | None) -> None:
+            invalidated.append(exception)
 
         before = snapshot(first_schema)
-        # Both caught, so an interrupt that reached here would fail this test, not end the run.
+        # Caught here, so a test that fails another way still does not end the run.
         with (
             listening("after_cursor_execute", interrupt),
-            pytest.raises((PendingRollbackError, KeyboardInterrupt)) as error,
+            listening("invalidate", record, Pool),
+            pytest.raises(KeyboardInterrupt) as error,
         ):
             upgrade(first_schema)
-        # SQLAlchemy invalidates the connection for the interrupt; env.py's handler then reads
-        # connection.info, which raises on it with the interrupt as its context.
-        assert [type(error.value), type(error.value.__context__)] == [
-            PendingRollbackError,
-            KeyboardInterrupt,
-        ]
+        assert type(error.value) is KeyboardInterrupt
+        assert error.value is raised
+        # Inside a statement, so SQLAlchemy invalidated the connection for it, once.
+        assert invalidated == [raised]
         assert snapshot(first_schema) == before
         assert revision_of(first_schema) == FIRST_SCHEMA_HEAD
 
@@ -661,6 +669,40 @@ class TestTransactionControl:
             "ROLLBACK": sqlite3.SQLITE_OK,
         }
 
+    def test_a_revision_that_refuses_leaves_env_py_only_its_rollback(
+        self, step3a_database: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The real chain's refusal of a repositories row, raised between statements on a
+        connection still usable: that error ends the upgrade, and the authorizer allows
+        env.py's ROLLBACK and no other transaction statement."""
+        connections: list[RecordingConnection] = []
+        real_connect = sqlite3.dbapi2.connect
+
+        def connect(*args: Any, **kwargs: Any) -> sqlite3.Connection:
+            connection = real_connect(*args, factory=RecordingConnection, **kwargs)
+            connections.append(connection)
+            return connection
+
+        with closing(sqlite3.connect(step3a_database)) as connection, connection:
+            connection.execute(STEP3A_ROWS["repositories"])
+        before = snapshot(step3a_database)
+        monkeypatch.setattr(sqlite3.dbapi2, "connect", connect)
+        with pytest.raises(RuntimeError, match=r"rows would be lost \(repositories 1\)") as error:
+            upgrade(step3a_database)
+        monkeypatch.undo()
+        assert type(error.value) is RuntimeError
+        (recorded,) = connections
+        assert {
+            name: recorded.authorizer(*REFUSED_WHILE_OPEN[name])
+            for name in ("BEGIN", "COMMIT", "ROLLBACK")
+        } == {
+            "BEGIN": sqlite3.SQLITE_DENY,
+            "COMMIT": sqlite3.SQLITE_DENY,
+            "ROLLBACK": sqlite3.SQLITE_OK,
+        }
+        assert snapshot(step3a_database) == before
+        assert revision_of(step3a_database) == STEP3A
+
     def test_a_failed_commit_rolls_back_cleanly(self, step3b1_database: Path) -> None:
         """A reader's lock makes the COMMIT fail once the check has run; the rollback that
         follows is env.py's own, so the error is the commit's, not the authorizer's."""
@@ -715,6 +757,33 @@ class TestTransactionControl:
         assert statements == ["BEGIN IMMEDIATE"]
         assert snapshot(step3b1_database) == before
         assert revision_of(step3b1_database) == STEP3B1
+
+    @pytest.mark.parametrize(
+        "url_query",
+        [
+            pytest.param("", id="no statement cache asked for"),
+            pytest.param("?cached_statements=128", id="statement cache asked for by the URL"),
+        ],
+    )
+    def test_the_driver_keeps_no_prepared_statements(
+        self, first_schema: Path, monkeypatch: pytest.MonkeyPatch, url_query: str
+    ) -> None:
+        """SQLite authorizes a statement when it prepares it, so the driver is asked for no
+        statement cache, whatever the caller's URL asks for, and the real chain runs on it."""
+        received: list[object] = []
+        real_connect = sqlite3.dbapi2.connect
+
+        def connect(*args: Any, **kwargs: Any) -> sqlite3.Connection:
+            received.append(kwargs.get("cached_statements"))
+            return real_connect(*args, **kwargs)
+
+        config = alembic_config(first_schema)
+        config.attributes["database_url"] += url_query
+        monkeypatch.setattr(sqlite3.dbapi2, "connect", connect)
+        command.upgrade(config, "head")
+        monkeypatch.undo()
+        assert received == [0]
+        assert revision_of(first_schema) == HEAD_REVISION
 
 
 def _batch_alter_revision(views_sql: tuple[tuple[str, str], ...]) -> str:

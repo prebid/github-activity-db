@@ -271,12 +271,16 @@ def run_migrations_online() -> None:
                 transactional_ddl=True,
                 render_as_batch=True,  # autogenerate: SQLite alters tables through batch mode
             )
+            # The mapping the authorizer reads, held before the upgrade runs: SQLAlchemy
+            # invalidates the connection when an interrupt, or an error it reads as a disconnect,
+            # ends a statement, and Connection.info then raises in place of that exception.
+            state = connection.info
             with context.begin_transaction():
                 try:
                     context.run_migrations()
                     check_foreign_keys(connection)
                 except BaseException:
-                    connection.info[TRANSACTION_STATE] = "failed"
+                    state[TRANSACTION_STATE] = "failed"
                     raise
     finally:
         engine.dispose()
