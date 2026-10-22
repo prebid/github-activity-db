@@ -57,8 +57,7 @@ defect of this code could fail is tested on its passing side, with the exact cou
 files, or values it compared, so it cannot pass on nothing; a check that GitHub, the environment, or
 a caller can fail is tested on both sides. A fix comes with a regression test that fails against the
 parent commit's code. Tests merged before D39 that change a file or a copy of one, or write a file,
-a revision, a call, a connection, or a decoy holding a flaw, to see whether a check catches it are
-replaced in Step 7. See [Testing](docs/testing.md).
+a revision, a call, a connection, or a decoy holding a flaw, to see whether a check catches it are replaced in Step 3b-2a-2d. See [Testing](docs/testing.md).
 
 ## Current Scope
 
@@ -82,11 +81,13 @@ replaced in Step 7. See [Testing](docs/testing.md).
 - `ghactivity sync` (Step 3b-2a-2c, `cli/sync.py`): the engine's run with the options of plan
   5.7; a run that never starts exits 1, and a run that starts exits with the engine's 0, 2, or 1
 
-**Not implemented yet:** D37 in the sync (Step 3b-2a-3, D38), the REST
+**Not implemented yet:** tests without planted inputs (Step 3b-2a-2d, D39), D37 in the sync
+(Step 3b-2a-3, D38), the REST
 sampler (Step 3b-2b-1), and `verify` (Step 3b-2b-2). The tracked `github_activity.db` stays
 frozen at the first schema (D26).
 
-**Planned in the redesign plan:** D37 in the sync (Step 3b-2a-3), the REST sampler (Step
+**Planned in the redesign plan:** tests without planted inputs (Step 3b-2a-2d), D37 in the sync
+(Step 3b-2a-3), the REST sampler (Step
 3b-2b-1), and verify (Step 3b-2b-2); GitHub Issues, closing-issue links, and default-branch
 activity (Step 4); the full bootstrap (Step 5); scheduled sync and release publication (Step 6).
 

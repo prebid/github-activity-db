@@ -35,7 +35,7 @@ audited for silent failures and silently wrong data under D37, and D38 records t
 |------|-------|--------|
 | 1 | Guardrails | done (PR #5) |
 | 2 | GitHub source layer | done (PR #7) |
-| 3 | New schema, PR sync engine, cutover (pull requests 3a, 3b-1, 3b-2a-1, 3b-2a-2a, 3b-2a-2b-1, 3b-2a-2b-2, 3b-2a-2c, 3b-2a-3, 3b-2b-1, and 3b-2b-2) | in progress: 3a done (PR #11), 3b-1 done (PR #14), 3b-2a-1 done (PR #19), 3b-2a-2a done (PR #21), 3b-2a-2b-1 done (PR #24), 3b-2a-2b-2 done (PR #25), 3b-2a-2c done (PR #26) |
+| 3 | New schema, PR sync engine, cutover (pull requests 3a, 3b-1, 3b-2a-1, 3b-2a-2a, 3b-2a-2b-1, 3b-2a-2b-2, 3b-2a-2c, 3b-2a-2d, 3b-2a-3, 3b-2b-1, and 3b-2b-2) | in progress: 3a done (PR #11), 3b-1 done (PR #14), 3b-2a-1 done (PR #19), 3b-2a-2a done (PR #21), 3b-2a-2b-1 done (PR #24), 3b-2a-2b-2 done (PR #25), 3b-2a-2c done (PR #26) |
 | 4 | Issues, closing-issue links, and default-branch activity (pull requests 4a and 4b) | not started |
 | 5 | Full bootstrap and verification (pull request 5, and 5b when Step 5 does not show that every measured edit kind changes `updatedAt`, or finds an index contradiction that recurs) | not started |
 | 6 | Scheduled sync and publication | not started |
@@ -93,7 +93,7 @@ Within scope the database collects and distinguishes data and never interprets i
 | D36 | Verify decisions of 2026-10-21: Step 3b-2b is two pull requests, the REST sampler and then verify with the live acceptance (section 6). Verify writes nothing to the database and claims no run: before any request it reads `sync_runs` and exits 1 while a row holds the lock by the claim's rule, so a stale or crashed run stays for the next claim or `sync --break-lock` (5.3). `--repo` limits verify to the repositories it names, as it limits a sync (D27). A verify that never starts writes no report; once it starts, `--report` is written on every exit verify's own code handles, and one that cannot be written turns an exit 0 or 2 into 1, because Step 6a reads it, while an interrupt exits 130 either way; verify's printed output follows sync's rule (5.3 step 8). Every repository failure 5.3 gives a resolve, an index, or a hydration batch, a repository error during a timeline lookup, and from Step 4b a log or history read verify cannot complete make a repository unverified, and a verify in which every repository it attempts is unverified, the deadline having stopped none, is fatal. verify reads each repository's stored rows in two statements before indexing it, and from Step 4b its stored events and default-branch commits in one statement each before the first request of its log and history reads, and its report records its own points, REST calls, and time (5.4, gap 94). |
 | D37 | Decision of 2026-10-21 (the maintainer): an error is better than a silent failure or silently wrong data. Where the code cannot check something, or cannot accept what GitHub returned, it reports a failure that stops publication or turns the run red, never a pass. For verify: an unchecked item and an unverified repository fail verify in both modes, not only `--exact`, and a lookup whose answer verify cannot accept is an error (5.4, 5.8, gap 97), so D25 does not publish a database verify could not check. |
 | D38 | Decisions of 2026-10-21 applying D37 to the sync and to the steps not yet built (gaps 98-110). The sync exits 2 when a 24-hour account refresh fails, when the run reaches its deadline, and when a hydration contradicts the run's own index after one retry (Step 3b-2a-3); the failures a batch made final before a deadline are recorded, not left pending. An `accepted_failures` entry accepts one error class and one cause, the first line of the failure's message, of an item, an account's refresh, or from Step 4b a compare, so a permanent failure can be accepted without turning every run red while a new cause is not. A PR with more closing links than the index carries is hydrated every run. Every node id a sighting, a lookup, or a commit link reports for a stored account is stored, and `sync_runs` records the `--repo` filter, each configured entry's `github_id`, and its first commit-link lookups and those GitHub answered `NOT_FOUND`. The source refuses what it cannot read (gap 104), and the run records refuse what they cannot write and mark `-unknown` what they cannot determine (gap 105). Step 4b marks a compare file list at GitHub's 300-file cap and counts it in verify's report and the manifest, completes an activity read only at the floor or at the log's first event, as a read in ascending order finds it, fails a history read whose count still differs after a rescan, and records a compare that still fails, which an entry can accept. Step 5 measures which edits leave `updatedAt` unchanged. Step 6 compares the App's reads with the token's before any App run publishes to `db`, pins the database file the job checked, tests that every exit-code `if:` compares a non-empty string, and ties a snapshot to the job's own sync. A schedule that stops is the one silent case this repository cannot see: no run starts, so nothing turns red; 5.6 states the staleness rule a consumer applies, and building it belongs to the dashboard's integration (section 9). Left as they are, because the stored data already says what happened: a commit-linked account a lookup answers `NOT_FOUND` (D28; now counted per run and in the manifest, and from Step 6a a run whose `links_not_found` exceeds the share of its `link_lookups` Step 5 sets, with at least Step 5's minimum number of lookups, exits 2 (an account an earlier lookup answered `NOT_FOUND` counted in neither), since a lookup form GitHub stopped resolving would look the same per link), a compare at GitHub's 300-file cap and one GitHub refuses (marked by `files_at_cap` and `http_status`, counted in verify's report and the manifest), a REST git author without a name or email (stored null, as GitHub reports none), deletions recorded as a count (`items_deleted`, and from Step 4b `events_deleted` and `history_commits_deleted`; the snapshots retained for 7 days hold the identities; older ones are not kept), which accounts failed a refresh (printed; the count is stored, the run is red unless an account entry accepts the failure, and the accounts are retried), and the merge state as of `hydrated_at` (D32). New tables and columns of GitHub-derived data on a populated file follow gap 110's rule (5.1). |
-| D39 | Decision of 2026-10-21 (the maintainer). Nothing is planted or tampered, no flaw is seeded, and there is no mutation testing, under any name. No test, review, or acceptance changes a file or a copy of one (other than a stub the inputs below allow), or writes a file, a row, a revision, a call site, or a decoy holding a flaw, to see whether something catches it, and none measures how many such flaws are found. A test's or an acceptance's inputs are GitHub's recorded responses; stubs of a response GitHub or the environment can send (a status, a body, a timeout, an interrupt, a failing `git`, a clock), which a test may build in memory from a recorded unit changed into that shape; calls the code under test must refuse, and configuration it must refuse or that names a state GitHub can produce (a repository that does not resolve, one no longer listed); valid rows a test writes (through the models with `tests/db/seed.py`, or in SQL); and databases and files this project's own code wrote, at any revision. Each test asserts the exact result. A check over stored data, files, or source that only a defect of this code could fail is tested on its passing side, with the exact count of the rows, files, or values it compared, so it cannot pass on nothing; a check that GitHub, the environment, or a caller can fail is tested on both sides. A fix comes with a regression test that fails against the parent commit's code. Tests merged before D39 that change a file or a copy of one, or write a file, a revision, a call, a connection, or a decoy holding a flaw, to see whether a check catches it are replaced in Step 7. |
+| D39 | Decision of 2026-10-21 (the maintainer). Nothing is planted or tampered, no flaw is seeded, and there is no mutation testing, under any name. No test, review, or acceptance changes a file or a copy of one (other than a stub the inputs below allow), or writes a file, a row, a revision, a call site, or a decoy holding a flaw, to see whether something catches it, and none measures how many such flaws are found. A test's or an acceptance's inputs are GitHub's recorded responses; stubs of a response GitHub or the environment can send (a status, a body, a timeout, an interrupt, a failing `git`, a clock), which a test may build in memory from a recorded unit changed into that shape; calls the code under test must refuse, and configuration it must refuse or that names a state GitHub can produce (a repository that does not resolve, one no longer listed); valid rows a test writes (through the models with `tests/db/seed.py`, or in SQL); and databases and files this project's own code wrote, at any revision. Each test asserts the exact result. A check over stored data, files, or source that only a defect of this code could fail is tested on its passing side, with the exact count of the rows, files, or values it compared, so it cannot pass on nothing; a check that GitHub, the environment, or a caller can fail is tested on both sides. A fix comes with a regression test that fails against the parent commit's code. Tests merged before D39 that change a file or a copy of one, or write a file, a revision, a call, a connection, or a decoy holding a flaw, to see whether a check catches it are replaced in Step 3b-2a-2d. |
 
 ## 3. Coverage rule
 
@@ -182,7 +182,7 @@ Every gap found in the audit, and where it is resolved.
 | 49 | An empty `TRACKING_CONFIG_PATH` became the working directory, and a directory or unreadable file raised a raw `OSError` | Step 1: empty means the packaged file; read errors raise `TrackingConfigError` |
 | 50 | `actions/checkout` left the job token in `.git/config` while the built-wheel job ran build-backend code from PyPI | Step 1: `persist-credentials: false` on every checkout |
 | 51 | `.env.example`, which the setup instructions copy, was deleted in `7899671` | Step 1: restored |
-| 52 | The migration test passed while migrating `DATABASE_URL` (by default the tracked database) if `alembic/env.py` ignored its URL override; two `tracking.toml` guards (unknown top-level keys, empty values) had no test | Step 1: decoy URL and head-revision check; guard tests |
+| 52 | The migration test passed while migrating `DATABASE_URL` (by default the tracked database) if `alembic/env.py` ignored its URL override; two `tracking.toml` guards (unknown top-level keys, empty values) had no test | Step 1: the migration test checks the file it migrates and the head revision; guard tests |
 | 53 | Suppression counting missed `.pyi` files, `@no_type_check`, and `# isort: skip_file` / `# isort: off`; the Any-alias hook missed `type X = Any` | Step 1 |
 | 54 | `check-added-large-files` checked nothing in CI: with `--all-files` no file is newly added | Step 1: `--enforce-all`; `github_activity.db` exempt until Step 6 |
 | 55 | Build inputs not pinned: the hatchling build backend and its dependencies, `pre-commit-hooks` by tag, wheel-job dependencies installed without hashes | Step 1: hatchling pinned in `pyproject.toml` and, with its dependencies, hash-pinned in `build-constraints.txt` (a test keeps the two pins equal); `pre-commit-hooks` by SHA; `--require-hashes` installs |
@@ -198,7 +198,7 @@ Every gap found in the audit, and where it is resolved.
 | 65 | `docs/development.md` said `build_engine` sets the rollback journal; `docs/roadmap.md` Phases 2-3 contradict this plan; other docs describe removed or nonexistent modules, commands, and counts | The plan audit corrected `docs/development.md` and marked `docs/roadmap.md` as history; Step 7 rewrites the rest |
 | 66 | The rollback-journal guard does not see a hot `-journal` beside the tracked file, which a commit would separate from it | Step 3 pins the tracked file's content (D26), so CI rejects any change to it; 6c removes it |
 | 67 | The JUnit skip allowance (D22) is a count, so once raised any test may use it | Accepted while the allowance is 0; the first raised allowance names its tests instead |
-| 68 | `scripts/count_suppressions.py` does not count ruff's `# ruff: disable[...]` range suppression, which ruff 0.14.11 honors only in preview | Dormant while `preview` is off (`pyproject.toml` sets none). Resolved before Step 3: the counter counts each `# ruff: disable` in any letter case, never `# ruff: enable`, with tests for the spellings section 7 lists as honored, a string decoy, and an `enable` decoy (section 7, "Range suppressions"). It refuses (exit 1) a file it may read differently from ruff: any non-UTF-8 coding declaration, a lone CR, a file pre-commit's file tagging (identify) marks python or pyi without a lowercase `.py` or `.pyi` suffix, such as `module.PY`, `app.wsgi`, or an executable with a `#!/usr/bin/env python3` shebang, or a file identify cannot read (section 7, "Counter file forms") |
+| 68 | `scripts/count_suppressions.py` does not count ruff's `# ruff: disable[...]` range suppression, which ruff 0.14.11 honors only in preview | Dormant while `preview` is off (`pyproject.toml` sets none). Resolved before Step 3: the counter counts each `# ruff: disable` in any letter case, never `# ruff: enable`, and counts the spellings section 7 lists as honored (section 7, "Range suppressions"). It refuses (exit 1) a file it may read differently from ruff: any non-UTF-8 coding declaration, a lone CR, a file pre-commit's file tagging (identify) marks python or pyi without a lowercase `.py` or `.pyi` suffix, such as `module.PY`, `app.wsgi`, or an executable with a `#!/usr/bin/env python3` shebang, or a file identify cannot read (section 7, "Counter file forms") |
 | 69 | click exits 2 on every usage error (an unknown option or command, an out-of-range value), the code D25 publishes on, so a mistyped workflow input would publish the unchanged database | Step 3a: a run that never starts exits 1 (5.3 step 8) |
 | 70 | Under alembic's SQLite defaults each revision commits on its own and schema changes are not transactional: a revision that fails after dropping a table leaves it dropped, with the previous revision stamped. A statement executed on the migration connection before `context.configure()` makes alembic treat the transaction as external and never commit: `upgrade` exits 0 with no revision stamped | Step 3a: one transaction per upgrade, nothing executed before `context.configure()` (5.1) |
 | 71 | A batch alter of a table that a view reads fails ("error in view ...: no such table") | Step 3a: migrations drop and recreate the dependent views (5.1) |
@@ -210,7 +210,7 @@ Every gap found in the audit, and where it is resolved.
 | 77 | In rollback-journal mode a read left half-consumed on another connection blocks a commit until the busy timeout, which then raises "database is locked"; the comment on `SQLITE_BUSY_TIMEOUT_MS` in `db/engine.py` says a lock fails the item. Through the aiosqlite dialect a query fetches every row and closes its cursor inside `execute`, so only a server-side cursor leaves a result half-read; a reader in another process (an open `sqlite3` shell) can still hold the lock | Step 3b-2a-1: no code in `src/` reads through a server-side cursor (`stream`, `stream_scalars`, `stream_results=True`, `yield_per`), the snapshot reader first; Step 3b-2a-2b-2: a database error in the writer is fatal (5.3 step 4); Step 3b-2a-2a: the comment is corrected |
 | 78 | `source/users.py` checks a looked-up node's id against the requested node id, but not its `databaseId` against the commit link's, which only `sync/` holds | Step 3b-2a-2b-2: a mismatch fails the items waiting on the link (5.2) |
 | 79 | Hydration raises `RepositoryNotFound` or `RepositoryShapeError` when a batch's `repository` is null; 5.3 assigned repository failures only to resolve and index | Step 3b-2a-2b-2: a row of the 5.3 step 4 table |
-| 80 | Gap 44's rule (new code uses `{}` placeholders) has no gate, and ruff cannot be one: PLE1205 flags a correct `logger.warning("brace {}", value)` and passes `logger.warning("percent %s", value)` | Step 3a: an AST check over `src/`, run as a pre-commit hook (so CI's `--all-files` run checks it) and tested with planted calls and a string decoy |
+| 80 | Gap 44's rule (new code uses `{}` placeholders) has no gate, and ruff cannot be one: PLE1205 flags a correct `logger.warning("brace {}", value)` and passes `logger.warning("percent %s", value)` | Step 3a: an AST check over `src/`, run as a pre-commit hook (so CI's `--all-files` run checks it) |
 | 81 | At `6fedb05`, `v_pr_reviewers` and `v_pr_commenters` leave out the PR author's own reviews and comments, accounts of type `Bot`, accounts listed in `[automation]`, and reviews and comments with a null author, and `v_pr_commenters` also leaves out commenters who reviewed the PR | Step 3b-1: row-level views that keep every row and carry each condition as a column (5.1, D29) |
 | 82 | `v_pr_reviewers.final_verdict` reduces a reviewer's reviews to one state by a rule the database chose, ordered by review id, which does not follow submission order (section 7, "Review order") | Step 3b-1: removed; GitHub's own `reviewDecision` is stored on the PR (D29) |
 | 83 | `is_automation` merges GitHub's type `Bot` with the maintainer's lists into one flag, computed from the latest run's copy of `tracking.toml` | Step 3b-1: the account's type and the matching `[automation]` entry's reason as separate columns, and the run that copied the lists (5.2) |
@@ -1244,9 +1244,8 @@ enabled afterwards.
 `source/` is the only package that imports githubkit; from Step 3, when `github/` is gone, a test
 fails when another module does. It scans `src/` outside `source/`, `scripts/`, and `alembic/` for
 imports at any scope, `TYPE_CHECKING` blocks included, and for `importlib.import_module` and
-`__import__` called with a string literal, and fails when it scans no file; planted files test each
-spelling, and a string decoy is not flagged (a test from before D39, which Step 7 replaces with one
-on its passing side that asserts the exact count of files and imports it scanned). Tests are exempt, since they build githubkit's errors. A
+`__import__` called with a string literal, and fails when it scans no file; its test asserts the exact
+count of the files and imports it scanned (D39, Step 3b-2a-2d). Tests are exempt, since they build githubkit's errors. A
 second test fails when `source/` imports SQLAlchemy or `db/`, so fetchers cannot touch the database.
 
 | Disposition | Modules |
@@ -1461,7 +1460,8 @@ nested node.
 ## 6. Execution steps
 
 Each step is one pull request from a `feature/<slug>` branch, except Step 3 (pull requests 3a, 3b-1,
-3b-2a-1, 3b-2a-2a, 3b-2a-2b-1, 3b-2a-2b-2, 3b-2a-2c, 3b-2a-3, 3b-2b-1, and 3b-2b-2), Step 4 (pull
+3b-2a-1, 3b-2a-2a, 3b-2a-2b-1, 3b-2a-2b-2, 3b-2a-2c, 3b-2a-2d, 3b-2a-3, 3b-2b-1, and 3b-2b-2), Step
+4 (pull
 requests 4a and 4b),
 Step 5 (pull request 5, and 5b when its measurements call for the 5.3 step 3 rule or the retry
 delay Step 5 names), and Step 6 (pull requests 6a and 6c, with the 6b manual runs between them). A step, or a pull
@@ -1496,12 +1496,9 @@ Scope:
 Tests: pragma values and a rejected foreign-key violation, on a directly built engine and through
 the application's `get_session()`; `alembic check` on a fresh database; config loading for valid,
 invalid, and default cases; the JUnit gate for each condition, including a report written by a
-real all-skipped pytest run; the suppression counter for each spelling, string decoys, and each cap
-at and over its limit.
+real all-skipped pytest run; and the suppression counter.
 
-Acceptance: CI passes on the exact PR head with a non-empty job list; removing the model index makes
-CI fail; removing the pragma listener makes its test fail; routing `get_engine()` around
-`build_engine()` makes a test fail; a wheel without `tracking.toml` fails the built-wheel job.
+Acceptance: CI passes on the exact PR head with a non-empty job list.
 
 ### Step 2: GitHub source layer
 
@@ -1541,20 +1538,19 @@ between two windows; each query document's point cost, computed from GitHub's do
 equals its 5.8 figure.
 
 Acceptance: an adversarial review of the change, by reviewers who did not write it, finds no
-invariant check without a test that targets it; changing a query document without re-recording
-fails the suite; the lock check fails on an edited or removed entry (tested against a real git
-repository) and runs on the exact PR head; CI passes on the exact PR head.
+invariant check without a test that targets it; the lock check runs on the exact PR head; CI passes
+on the exact PR head.
 
 ### Step 3: New schema, PR sync engine, cutover
 
-Ten pull requests. 3a lands the schema and removes the old pipeline, which imports the old models
+Eleven pull requests. 3a lands the schema and removes the old pipeline, which imports the old models
 and so cannot outlive them; 3b-1 adds what the sync collects under D29 (the query documents, typed
 records, schema, and row-level views of D3-D6, D8, D14, and D28); 3b-2a-1 adds the planner and the
 configuration it reads; 3b-2a-2a adds the writer and the run records on that schema, so the writer
 is built against the final tables; 3b-2a-2b-1 adds the scenario model the engine's tests run
 against; 3b-2a-2b-2 adds the sync engine over the planner and the writer, `--dry-run`
-included; 3b-2a-2c adds `ghactivity sync`, the seeded runs, and the live acceptance; 3b-2a-3
-applies D37 to the sync (D38); 3b-2b-1 adds
+included; 3b-2a-2c adds `ghactivity sync`, the seeded runs, and the live acceptance; 3b-2a-2d
+replaces the tests that planted inputs (D39); 3b-2a-3 applies D37 to the sync (D38); 3b-2b-1 adds
 the REST sampler that checks what the sync wrote; and 3b-2b-2 adds verify, whose live acceptance
 runs the sampler. "Step 3b-2" elsewhere in this plan means 3b-2a-1, the parts of 3b-2a-2, 3b-2a-3,
 and the two parts of 3b-2b together; "Step 3b-2a" means 3b-2a-1, 3b-2a-2, and 3b-2a-3; "Step
@@ -1598,7 +1594,7 @@ count of the rows, files, or values it compared, so it cannot pass on nothing; a
 the environment, or a caller can fail is tested on both sides. A fix comes with a regression test
 that fails against the parent commit's code. Tests merged before D39 that change a file or a copy of
 one, or write a file, a revision, a call, a connection, or a decoy holding a flaw, to see whether a
-check catches it are replaced in Step 7. Each wait on a thread or subprocess has an explicit
+check catches it are replaced in Step 3b-2a-2d. Each wait on a thread or subprocess has an explicit
 timeout.
 
 #### Step 3a: New schema and cutover
@@ -1632,29 +1628,22 @@ to the dictionary); `docs/architecture.md`, `docs/data-model.md`, `docs/rate-lim
 and `docs/github-api-quirks.md` are marked as describing removed code until Step 7.
 
 Tests: the migration aborting when a tag table holds rows; its success on a seeded database at
-`b3c4d5e6f7g8` and on a scratch copy of the tracked file; a planted failure in the second of two
-revisions applied by one upgrade leaving the file at the revision the upgrade started from, with
-neither applied; the migration connection reporting `foreign_keys=0`, and the upgrade refused with
-nothing applied when env.py's connect listener reads anything else (the test plants, through
-env.py's own engine with its DBAPI connect function patched, a connection already inside a
-transaction with `foreign_keys=ON`; env.py accepts no caller-supplied connection, which would bypass
-the listener and the one-transaction setup); a batch alter of `pull_requests` keeping its child
+`b3c4d5e6f7g8` and on a scratch copy of the tracked file; the migration connection reporting
+`foreign_keys=0`; a batch alter of `pull_requests` keeping its child
 rows, through env.py with a test-only revision that drops and recreates the views; env.py refusing
 the tracked file; `downgrade()` raising; `PRAGMA user_version` holding `schema_version`, the
-`schema_version` lock failing on a consumer column or view column missing at head and on a consumer
-column at head missing from the current entry, and the CI lock
-step failing on a pair removed from a base entry (against a real git repository); the revision
+`schema_version` lock and the CI lock step; the revision
 tuple equal to the chain; the schema comparison (5.1), CHECK
 names included; every foreign-key column leading an index; the timestamp type rejecting a naive
 value and converting an aware one to UTC; view rows, on seeded data, for a null-author PR, a null
 reviewer, `final_verdict` (a later `DISMISSED`, a later `COMMENTED`, order by review id), and
 `v_pr_commenters` excluding reviewers; the dictionary in both directions; only `source/` importing
 githubkit, and `source/` importing neither SQLAlchemy nor `db/`; `scripts/check_frozen_db.py` on
-the pinned file and on a changed copy; `LOGGING__ROTATION` overriding `Settings().logging.rotation`;
+the pinned file; `LOGGING__ROTATION` overriding `Settings().logging.rotation`;
 a usage error, an invalid `tracking.toml` (printing no traceback), and a missing token exiting 1
 through the installed entry point; an unhandled exception through the installed entry point printing
 no local variable values, and every loguru handler configured with `diagnose` off (gap 75);
-`github rate-limit` and `github test`; the placeholder check on planted calls and a string decoy;
+`github rate-limit` and `github test`; the placeholder check;
 the default `DATABASE_URL` and `.env.example` naming `./github_activity.local.db`; and the anchored
 `.gitignore` exception (`github_activity.local.db` and a `github_activity.db` in a subdirectory
 ignored).
@@ -1705,8 +1694,7 @@ and a commit linked to no account told apart from one whose lookup returned `NOT
 (`last_edited_at` set) with no editor kept as an editor row, a request row carrying its request ids, a
 reference D28 kept carrying `*_reported` false, and a commit row an `[automation].emails` entry
 matches carrying its `email_automation_reason`; the lock
-failing on a changed
-view digest and on a removed view (against a real git repository); the dictionary in both directions.
+with view digests; the dictionary in both directions.
 
 Acceptance: an adversarial review of the change, by reviewers who did not write it, finds no
 invariant check without a test that targets it, no consumer surface that does what D29 forbids,
@@ -1791,7 +1779,7 @@ writer.
 Tests: the writer gets direct tests, over SQLite files built by `alembic upgrade head` and seeded
 rows, with records built from recorded or synthetic units; the planner's are 3b-2a-1's. Cases: each
 write rule of 5.1 and 5.3 step 6 on both sides (D28's kept references for each kind of reference,
-GitHub's value replacing the others, child rows replaced, and the validated totals), a planted
+GitHub's value replacing the others, child rows replaced, and the validated totals), a
 `pr_user_tags` row surviving re-hydration and removed when its PR is deleted (D17), every item
 write on the writer's one connection, a re-hydration that returns a null editor clearing the stored
 one while a null author is kept, the merge state and stack written from a hydration, review
@@ -1923,7 +1911,7 @@ returns, and the report a dry run prints. The seeded scenario runs below, and re
 Tests: `ghactivity sync` exiting 2 through a child interpreter that runs the installed package
 (`python -I -c`, the Step 3a pattern) with the replay patched in, while a usage error still exits
 1, as a refused claim does with no `sync_runs` row; crash mid-run then resume with committed
-items intact, by a child process that sends itself SIGKILL at a planted point under
+items intact, by a child process that sends itself SIGKILL at a set point under
 `subprocess.run(timeout=...)`, which leaves its row `running`. One test runs a first sync of go-gdpr
 from recordings made for it, without the model, and checks exit 0 and each stored item's child rows
 against the recording's totals and node lists. A few fixed seeds each drive several runs over random
@@ -1947,9 +1935,40 @@ syncs, the pull request records that PR's `updatedAt` and `mergeStateStatus` fro
 8). An adversarial review of the change, by reviewers who did not write it, finds no invariant
 check without a test that targets it; CI passes on the exact PR head.
 
+#### Step 3b-2a-2d: Tests without planted inputs (D39)
+
+Prerequisite: Step 3b-2a-2c has merged, and D39 is on `main`.
+
+Scope: tests and `docs/testing.md`; nothing under `src/`, `scripts/`, or `alembic/` changes, and no
+rule loses its test. Every test merged before D39 that changes a file or a copy of one, or writes a
+file, a revision, a call, a connection, or a decoy holding a flaw, to see whether a check catches it,
+is replaced under D39: a check that GitHub, the environment, or a caller can fail keeps a refusing
+side built from D39's inputs, and a check that only a defect of this code could fail is tested on
+its passing side, with the exact count of what it compared. Among them: the schema comparison's
+changed copies of a migrated database (`tests/db/test_schema.py`); the migration tests' revisions
+holding a failure, a foreign-key violation, or a batch alter that leaves a view in place, and their
+connection put inside a transaction (`tests/db/test_migrations.py`); the frozen-file check on a
+changed copy; the schema-version lock, the query lock, and the CI lock step on edited or removed
+entries; the placeholder check's planted calls and decoy, the suppression counter's planted
+spellings, decoys, and caps, and the import-boundary test's planted files (5.7); and the planted or
+tampered inputs a search finds in `tests/test_cli_sync.py`, `tests/test_cli_app.py`,
+`tests/test_declared_dependencies.py`, `tests/test_server_side_cursors.py`,
+`tests/test_data_dictionary.py`, `tests/sync/test_writer.py`, and `tests/sync/test_connection.py`.
+`docs/testing.md` drops its descriptions of the replaced tests.
+
+Tests: each rule a replaced test held has a test D39 allows, on both sides where GitHub, the
+environment, or a caller can fail it, or on its passing side with the exact count it compared; the
+pull request lists each test it replaces or removes, with the rule it held and the test that now
+holds it.
+
+Acceptance: a search of `tests/` for `plant`, `tamper`, `decoy`, `corrupt`, and `mutat` finds none,
+and each hit of a wider search the pull request runs is listed with why D39 allows it; an
+adversarial review of the change, by reviewers who did not write it, finds no rule that lost its
+test; CI passes on the exact PR head.
+
 #### Step 3b-2a-3: D37 in the sync
 
-Prerequisite: Step 3b-2a-2 has merged.
+Prerequisite: Step 3b-2a-2d has merged.
 
 Scope: the sync rules D38 changes, with a migration that adds `sync_runs.refresh_failures`,
 `link_lookups`, `links_not_found`, `repo_filter`, and `entries`, `unknown` to the `trigger` CHECK, and the `account_node_ids`
@@ -2441,12 +2460,6 @@ counts. A final audit of the whole repository, made once Steps 1-6 have landed, 
 - dependencies in `pyproject.toml` that nothing imports;
 - scripts, hooks, and CI steps for mechanisms a step removed;
 - tests and fixtures of removed paths, and fixtures no test reads;
-- tests merged before D39 that change a file or a copy of one, or write a file, a revision, a call,
-  a connection, or a decoy holding a flaw, to see whether a check catches it (among them
-  `tests/db/test_schema.py`'s planted differences, `tests/db/test_migrations.py`'s planted failure,
-  foreign-key violation, and the view-alter revision that leaves a view in place, the planted calls and decoys of the placeholder
-  check and the suppression counter, and 5.7's planted import files), each replaced under D39's
-  rule;
 - every note that defers something until a step that has landed (in code, docs, `.gitignore`,
   and hook comments).
 
