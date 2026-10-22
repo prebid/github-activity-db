@@ -2,11 +2,14 @@
 
 The CI job runs the script isolated (`-I`) against an installed wheel. These tests run it the same
 way in this environment, with only the environment variables each test sets, and with a separate
-directory as the checkout argument, so the import-location check passes.
+directory as the checkout argument, so the import-location check passes. The tests that import a
+copy of the package without its tracking.toml run it with ``-s`` instead, since ``-I`` ignores
+PYTHONPATH.
 """
 
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tomllib
@@ -23,6 +26,15 @@ SPELLINGS = ["TRACKING_CONFIG_PATH", "tracking_config_path", "Tracking_Config_Pa
 COUNT_LINE = re.compile(r"^tracked repositories from the packaged tracking\.toml: (\d+)$", re.M)
 
 
+@pytest.fixture
+def package_without_resource(tmp_path: Path) -> Path:
+    """A copy of the package with tracking.toml removed, importable through PYTHONPATH."""
+    root = tmp_path / "site"
+    shutil.copytree(REPO_ROOT / "src" / "github_activity_db", root / "github_activity_db")
+    (root / "github_activity_db" / "tracking.toml").unlink()
+    return root
+
+
 def _run(
     checkout: Path, cwd: Path, overrides: dict[str, str] | None = None
 ) -> subprocess.CompletedProcess[str]:
@@ -32,6 +44,25 @@ def _run(
         text=True,
         env={"PATH": os.environ.get("PATH", ""), **(overrides or {})},
         cwd=cwd,
+        timeout=60,
+    )
+
+
+def _run_package(
+    checkout: Path, package_root: Path, overrides: dict[str, str] | None = None
+) -> subprocess.CompletedProcess[str]:
+    """The check importing the package from ``package_root``: not isolated, since ``-I`` ignores
+    PYTHONPATH, but with no user site directory and only the variables it names."""
+    return subprocess.run(
+        [sys.executable, "-s", str(SCRIPT), str(SOURCE_TOML), str(checkout)],
+        capture_output=True,
+        text=True,
+        env={
+            "PATH": os.environ.get("PATH", ""),
+            "PYTHONPATH": str(package_root),
+            **(overrides or {}),
+        },
+        cwd=checkout.parent,
         timeout=60,
     )
 
@@ -98,3 +129,23 @@ def test_rejects_an_import_from_the_checkout(tmp_path: Path) -> None:
     assert result.returncode == 1
     assert _refused_value(result) == package_dir
     assert result.stderr == ""
+
+
+def test_fails_when_the_packaged_file_is_missing(
+    checkout: Path, package_without_resource: Path
+) -> None:
+    result = _run_package(checkout, package_without_resource)
+    output = result.stdout + result.stderr
+    assert result.returncode != 0
+    assert "tracking config not found" in output
+    # The error names the copy, so the resource-less package is the one that was imported.
+    assert str(package_without_resource) in output
+
+
+@pytest.mark.parametrize("spelling", SPELLINGS)
+def test_an_override_cannot_hide_a_missing_packaged_file(
+    checkout: Path, package_without_resource: Path, spelling: str
+) -> None:
+    result = _run_package(checkout, package_without_resource, {spelling: str(SOURCE_TOML)})
+    assert result.returncode == 1
+    assert "tracking_config_path is set" in result.stdout

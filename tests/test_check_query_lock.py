@@ -29,6 +29,10 @@ QUERY_LOCKS = ("c1f474b", "21a4267")
 SCHEMA_LOCKS = ("6fedb05", "21a4267", "77663a7")
 
 
+def edit_entry(work: Path) -> None:
+    write_lock(work, {"pull_request:1": "c" * 64})
+
+
 def environment(directory: Path) -> dict[str, str]:
     """A git, checker, or step process's whole environment: the directory it runs in, inside
     the test's own, as its home; no global or system git configuration; fixed commit dates."""
@@ -281,6 +285,16 @@ V2: dict[str, Any] = {
 }
 
 
+# Two entries with views, so a view can be edited in one that is not the newest at the base.
+V3: dict[str, Any] = {
+    **V2,
+    "3": {
+        "columns": V2["2"]["columns"],
+        "views": {"v_pr_reviews": "c" * 64, "v_github_users": "b" * 64},
+    },
+}
+
+
 def with_views(views: dict[str, str]) -> dict[str, Any]:
     """V2 with version 2's views replaced."""
     return {**V2, "2": {**V2["2"], "views": views}}
@@ -497,6 +511,140 @@ class TestSchemaLock:
             entries = len(json.loads((root / lock).read_text()))
             assert f"{lock}: {entries} entries at main kept; {entries} entries now" in result.stdout
 
+    def test_a_pair_added_to_a_superseded_entry_fails(self, repo: Path) -> None:
+        """Version 1 describes databases that never had a column version 2 added."""
+        write_schema_lock(repo, V1)
+        commit(repo)
+        write_schema_lock(
+            repo,
+            {"1": [*V1["1"], ["pull_requests", "title"]], "2": [["pull_requests", "number"]]},
+        )
+        result = check(repo)
+        assert result.returncode == 1
+        assert (
+            "schema version 1 gained pull_requests.title; only the newest version, 2, gains "
+            "columns" in result.stderr
+        )
+
+    def test_a_pair_removed_from_a_base_entry_fails(self, repo: Path) -> None:
+        write_schema_lock(repo, V1)
+        commit(repo)
+        write_schema_lock(repo, {"1": [["pull_requests", "number"]]})
+        result = check(repo)
+        assert result.returncode == 1
+        assert "schema version 1 lost v_pr_reviewers.final_verdict" in result.stderr
+
+    def test_a_renamed_pair_fails(self, repo: Path) -> None:
+        write_schema_lock(repo, V1)
+        commit(repo)
+        write_schema_lock(repo, {"1": [["pull_requests", "pr_number"], V1["1"][1]]})
+        result = check(repo)
+        assert result.returncode == 1
+        assert "schema version 1 lost pull_requests.number" in result.stderr
+
+    def test_a_pair_added_to_a_superseded_object_entry_fails(self, repo: Path) -> None:
+        write_schema_lock(repo, V2)
+        commit(repo)
+        columns = [*V2["2"]["columns"], ["pull_requests", "title"]]
+        write_schema_lock(repo, {**V2, "2": {**V2["2"], "columns": columns}, "3": V2["2"]})
+        result = check(repo)
+        assert result.returncode == 1
+        assert (
+            "schema version 2 gained pull_requests.title; only the newest version, 3, gains "
+            "columns" in result.stderr
+        )
+
+    @pytest.mark.parametrize(
+        ("current", "message"),
+        [
+            pytest.param(
+                {**with_views({**V2["2"]["views"], "v_pr_reviews": "c" * 64}), "3": V2["2"]},
+                "schema version 2 changed view v_pr_reviews",
+                id="changed digest",
+            ),
+            pytest.param(
+                {**with_views({"v_pr_reviews": "a" * 64}), "3": V2["2"]},
+                "schema version 2 lost view v_github_users",
+                id="removed view",
+            ),
+            pytest.param(
+                {**V2, "1": [["pull_requests", "number"]], "3": V2["2"]},
+                "schema version 1 lost v_pr_reviewers.final_verdict",
+                id="removed pair",
+            ),
+        ],
+    )
+    def test_an_edit_to_a_superseded_entry_fails(
+        self, repo: Path, current: dict[str, Any], message: str
+    ) -> None:
+        """An entry stays fixed once a newer one is added."""
+        write_schema_lock(repo, V2)
+        commit(repo)
+        write_schema_lock(repo, current)
+        result = check(repo)
+        assert result.returncode == 1
+        assert message in result.stderr
+
+    @pytest.mark.parametrize(
+        ("views", "message"),
+        [
+            pytest.param(
+                {**V2["2"]["views"], "v_pr_reviews": "d" * 64},
+                "schema version 2 changed view v_pr_reviews",
+                id="changed digest",
+            ),
+            pytest.param(
+                {"v_pr_reviews": "a" * 64},
+                "schema version 2 lost view v_github_users",
+                id="removed view",
+            ),
+        ],
+    )
+    def test_a_view_edit_below_the_newest_entry_at_the_base_fails(
+        self, repo: Path, views: dict[str, str], message: str
+    ) -> None:
+        """Views are kept in every base entry, not only in the base's newest one."""
+        write_schema_lock(repo, V3)
+        commit(repo)
+        write_schema_lock(repo, {**V3, "2": {**V3["2"], "views": views}})
+        result = check(repo)
+        assert result.returncode == 1
+        assert message in result.stderr
+
+    def test_a_changed_view_digest_fails(self, repo: Path) -> None:
+        write_schema_lock(repo, V2)
+        commit(repo)
+        write_schema_lock(repo, with_views({**V2["2"]["views"], "v_pr_reviews": "c" * 64}))
+        result = check(repo)
+        assert result.returncode == 1
+        assert "schema version 2 changed view v_pr_reviews" in result.stderr
+
+    def test_a_removed_view_fails(self, repo: Path) -> None:
+        write_schema_lock(repo, V2)
+        commit(repo)
+        write_schema_lock(repo, with_views({"v_pr_reviews": "a" * 64}))
+        result = check(repo)
+        assert result.returncode == 1
+        assert "schema version 2 lost view v_github_users" in result.stderr
+
+    def test_an_entry_rewritten_as_a_list_loses_its_views(self, repo: Path) -> None:
+        write_schema_lock(repo, V2)
+        commit(repo)
+        write_schema_lock(repo, {**V2, "2": V2["2"]["columns"]})
+        result = check(repo)
+        assert result.returncode == 1
+        assert "schema version 2 lost view v_github_users" in result.stderr
+        assert "schema version 2 lost view v_pr_reviews" in result.stderr
+
+    def test_a_view_added_to_a_superseded_entry_fails(self, repo: Path) -> None:
+        write_schema_lock(repo, V2)
+        commit(repo)
+        superseded = {"columns": V1["1"], "views": {"v_late": "d" * 64}}
+        write_schema_lock(repo, {**V2, "1": superseded, "3": V2["2"]})
+        result = check(repo)
+        assert result.returncode == 1
+        assert "schema version 1 gained view v_late; only the newest version, 3" in result.stderr
+
 
 # --------------------------------------------------------------------------------------------
 # The CI step itself, run against shallow merge checkouts like the one actions/checkout makes
@@ -676,3 +824,20 @@ def test_the_step_fails_without_a_merge_commit(tmp_path: Path, origin: Path) -> 
     git(tmp_path, "clone", "-q", "--depth=1", f"file://{origin}", str(checkout))
     result = run_step(checkout, tmp_path)
     assert result.returncode != 0
+
+
+def test_a_changed_entry_fails(repo: Path) -> None:
+    write_lock(repo, {"pull_request:1": "a" * 64})
+    commit(repo)
+    write_lock(repo, {"pull_request:1": "c" * 64})
+    result = check(repo)
+    assert result.returncode == 1
+    assert "pull_request:1 changed" in result.stderr
+
+
+def test_the_step_fails_an_edited_entry(tmp_path: Path, origin: Path) -> None:
+    work = work_clone(tmp_path, origin, "work")
+    push_main(work, checker=True, entries={"pull_request:1": "a" * 64})
+    result = run_step_on_merge(tmp_path, origin, work, edit_entry)
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert "pull_request:1 changed" in result.stderr

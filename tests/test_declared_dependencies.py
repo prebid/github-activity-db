@@ -173,3 +173,39 @@ def test_a_name_several_distributions_install_needs_all_of_them_declared(
     assert sorted(found) == (
         [] if reported is None else [Undeclared(path, "sqlalchemy", reported) for path in importers]
     )
+
+
+def test_reports_undeclared_imports_in_a_planted_package(tmp_path: Path) -> None:
+    (tmp_path / "pyproject.toml").write_text(
+        '[project]\nname = "planted"\ndependencies = [" rich>=13.0", "Pydantic-Settings>=2"]\n'
+    )
+    package = tmp_path / "src" / "planted"
+    package.mkdir(parents=True)
+    (package / "a.py").write_text(
+        "from __future__ import annotations\n"
+        "import json\n"
+        "import httpx\n"
+        "from click.exceptions import UsageError\n"
+        "from pydantic_settings import BaseSettings\n"
+        "from . import b\n"
+        "from github_activity_db import config\n"
+        "import __main__\n"
+    )
+    (package / "b.py").write_text(
+        "from typing import TYPE_CHECKING\n"
+        "if TYPE_CHECKING:\n"
+        "    import rich\n"
+        "    import httpx.Timeout\n"
+        "    from _typeshed import StrPath\n"
+        "def f() -> None:\n"
+        "    import not_an_installed_module_xyz\n"
+        'DECOY = "import sqlalchemy"\n'
+    )
+    scanned, found = undeclared_imports(tmp_path / "src", tmp_path / "pyproject.toml")
+    assert scanned == 2
+    assert found == [
+        Undeclared("planted/a.py", "click", ("click",)),
+        Undeclared("planted/a.py", "httpx", ("httpx",)),
+        Undeclared("planted/b.py", "httpx", ("httpx",)),
+        Undeclared("planted/b.py", "not_an_installed_module_xyz", ()),
+    ]

@@ -23,6 +23,8 @@ import tokenize
 from collections.abc import Iterator
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[1]
 PACKAGE = ROOT / "src" / "github_activity_db"
 GITHUBKIT_STATEMENT = re.compile(r"^[ \t]*(?:from|import)[ \t]+githubkit\b", re.MULTILINE)
@@ -207,3 +209,73 @@ def test_the_scan_finds_each_database_import_in_sync() -> None:
     files = _python_files(PACKAGE / "sync")
     found = database_imports(files, ROOT / "src")
     assert _sites(found) == _statement_sites(files, DATABASE_STATEMENT)
+
+
+def test_the_scan_sees_source_importing_githubkit() -> None:
+    """Positive control: the same matcher finds the imports source/ is allowed to make."""
+    assert githubkit_imports(_python_files(PACKAGE / "source"))
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "import githubkit\n",
+        "import githubkit.versions as versions\n",
+        "from githubkit import GitHub\n",
+        "from githubkit.exception import RequestFailed\n",
+        "def f():\n    from githubkit import GitHub\n",
+        "from typing import TYPE_CHECKING\nif TYPE_CHECKING:\n    from githubkit import GitHub\n",
+        "import importlib\nimportlib.import_module('githubkit')\n",
+        "from importlib import import_module\nimport_module('githubkit')\n",
+        "from importlib import import_module as load\nload('githubkit')\n",
+        "import builtins\nbuiltins.__import__('githubkit')\n",
+        "from builtins import __import__ as imp\nimp('githubkit')\n",
+        "import importlib\nimportlib.import_module(name='githubkit')\n",
+        "__import__(name='githubkit')\n",
+        "__import__('githubkit.versions')\n",
+        "class C:\n    import githubkit\n",
+    ],
+)
+def test_flags_every_githubkit_import_spelling(tmp_path: Path, source: str) -> None:
+    (tmp_path / "module.py").write_text(source)
+    assert len(githubkit_imports(_python_files(tmp_path))) >= 1
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        'DECOY = "import githubkit"\n',
+        "import githubkit_extensions\n",
+        "# import githubkit\n",
+        "import importlib\nname = 'githubkit'\nimportlib.import_module(name)\n",
+        "def load(name):\n    return name\nload('githubkit')\n",
+    ],
+)
+def test_does_not_flag_other_text(tmp_path: Path, source: str) -> None:
+    (tmp_path / "module.py").write_text(source)
+    assert githubkit_imports(_python_files(tmp_path)) == []
+
+
+@pytest.mark.parametrize(
+    ("name", "source", "flagged"),
+    [
+        ("transport.py", "import sqlalchemy\n", True),
+        ("transport.py", "from sqlalchemy.orm import Session\n", True),
+        ("transport.py", "from github_activity_db.db import models\n", True),
+        ("transport.py", "from github_activity_db.db.engine import get_session\n", True),
+        ("transport.py", "from ..db import engine\n", True),
+        ("transport.py", "from .. import db\n", True),
+        ("transport.py", "from .records import Account\n", False),
+        ("transport.py", "from ..tracking import load_tracking_config\n", False),
+        ("transport.py", "import sqlalchemy_utils\n", False),
+    ],
+)
+def test_flags_database_imports_from_source(
+    tmp_path: Path, name: str, source: str, flagged: bool
+) -> None:
+    package = tmp_path / "github_activity_db" / "source"
+    package.mkdir(parents=True)
+    (package / "__init__.py").write_text("")
+    (package / name).write_text(source)
+    found = database_imports(_python_files(package), tmp_path)
+    assert bool(found) is flagged, found

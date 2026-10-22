@@ -17,6 +17,8 @@ import ast
 import os
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src"
 CALLS = {"stream", "stream_scalars", "yield_per"}
@@ -53,3 +55,50 @@ def test_no_server_side_cursor_in_src() -> None:
     )
     assert SRC / "github_activity_db" / "sync" / "snapshot.py" in files
     assert server_side_cursors(files) == []
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "async def f(c, q):\n    return await c.stream(q)\n",
+        "async def f(s, q):\n    return await s.stream_scalars(q)\n",
+        "def f(r):\n    return r.yield_per(100)\n",
+        "def f(q):\n    return q.execution_options(yield_per=100)\n",
+        "def f(q):\n    return q.execution_options(stream_results=True)\n",
+        "def f(q, flag):\n    return q.execution_options(stream_results=flag)\n",
+        "def f(q):\n    return q.execution_options(**{'stream_results': True})\n",
+        "OPTIONS = {'yield_per': 10}\n",
+        "class Reader:\n    def read(self, c, q):\n        return c.stream(q)\n",
+    ],
+    ids=[
+        "stream",
+        "stream-scalars",
+        "yield-per-method",
+        "yield-per-option",
+        "stream-results-true",
+        "stream-results-variable",
+        "stream-results-dict",
+        "yield-per-dict",
+        "in-a-method",
+    ],
+)
+def test_flags_each_spelling(tmp_path: Path, source: str) -> None:
+    (tmp_path / "module.py").write_text(source)
+    assert len(server_side_cursors([tmp_path / "module.py"])) == 1
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "DECOY = 'connection.stream(query)'\n",
+        "# rows = await connection.stream(query)\n",
+        "def f(q):\n    return q.execution_options(stream_results=False)\n",
+        "def stream(x):\n    return x\nstream(1)\n",
+        "async def f(c, q):\n    return (await c.execute(q)).all()\n",
+        "OPTIONS = {'stream': True}\n",
+    ],
+    ids=["string", "comment", "stream-results-false", "a-function-named-stream", "execute", "key"],
+)
+def test_does_not_flag_other_code(tmp_path: Path, source: str) -> None:
+    (tmp_path / "module.py").write_text(source)
+    assert server_side_cursors([tmp_path / "module.py"]) == []

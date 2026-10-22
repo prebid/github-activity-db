@@ -168,3 +168,25 @@ class TestSqliteConnectionSettings:
             ).all()
 
         assert [tuple(row) for row in pull_requests] == [(5, None)]
+
+    def test_listener_failure_closes_the_connection(self) -> None:
+        class FailingCursor:
+            def execute(self, statement: str) -> None:
+                raise sqlite3.OperationalError("database is locked")
+
+            def close(self) -> None:
+                pass
+
+        class Connection:
+            closed = False
+
+            def cursor(self) -> FailingCursor:
+                return FailingCursor()
+
+            def close(self) -> None:
+                self.closed = True
+
+        connection = Connection()
+        with pytest.raises(sqlite3.OperationalError, match="database is locked"):
+            _apply_sqlite_pragmas(connection, None)
+        assert connection.closed

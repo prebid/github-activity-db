@@ -167,3 +167,10 @@ class TestGetSettings:
 
         # Should be the same object (cached)
         assert settings1 is settings2
+
+
+class TestDocumentedDatabaseUrl:
+    """The documented DATABASE_URL lines show the default, which names the local file (D26)."""
+
+    def test_the_field_default_is_the_local_database(self) -> None:
+        assert Settings.model_fields["database_url"].default == LOCAL_DATABASE_URL

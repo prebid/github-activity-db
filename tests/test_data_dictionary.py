@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import sqlite3
 from contextlib import closing
 from pathlib import Path
@@ -354,3 +355,51 @@ class TestSchemaLock:
         assert lock_differences(newer, consumer_pairs(dictionary_at(AT_STEP3B1))) == [
             "sync_failures.last_run_id is not a consumer column at head"
         ]
+
+    @pytest.mark.parametrize(
+        ("before", "after"),
+        [
+            pytest.param(
+                "CREATE VIEW v AS SELECT 'a  b' AS value",
+                "CREATE VIEW v AS SELECT 'a b' AS value",
+                id="whitespace in a literal",
+            ),
+            pytest.param(
+                "CREATE VIEW v AS SELECT 1 AS value -- explanation\nWHERE 0",
+                "CREATE VIEW v AS SELECT 1 AS value -- explanation WHERE 0",
+                id="the end of a line comment",
+            ),
+        ],
+    )
+    def test_a_view_returning_other_rows_fails_the_lock(self, before: str, after: str) -> None:
+        """Two definitions that differ only in whitespace but return different rows get different
+        digests, so the checker reports the view as changed."""
+
+        def rows(sql: str) -> list[tuple[object, ...]]:
+            with closing(sqlite3.connect(":memory:")) as connection:
+                connection.execute(sql)
+                return connection.execute("SELECT * FROM v").fetchall()
+
+        def entry(sql: str) -> dict[str, LockEntry]:
+            return parse_lock(
+                json.dumps({"2": {"columns": [["v", "value"]], "views": {"v": view_digest(sql)}}})
+            )
+
+        assert rows(before) != rows(after)
+        assert lock_checker().schema_problems(entry(before), entry(after)) == [
+            "schema version 2 changed view v; a change to a view's rows or derivation needs a "
+            "new schema version"
+        ]
+
+    def test_a_listed_pair_that_is_not_consumer_at_head_is_reported(self) -> None:
+        consumer = consumer_pairs(read_dictionary(ENTRY))
+        entry = [*consumer, ["t", "id"], ["v_t", "gone"]]
+        assert lock_differences(entry, consumer) == [
+            "t.id is not a consumer column at head",
+            "v_t.gone is not a consumer column at head",
+        ]
+
+    def test_a_consumer_pair_missing_from_the_entry_is_reported(self) -> None:
+        consumer = consumer_pairs(read_dictionary(ENTRY))
+        assert consumer == [["t", "name"], ["v_t", "name"]]
+        assert lock_differences([["t", "name"]], consumer) == ["v_t.name is missing from the entry"]

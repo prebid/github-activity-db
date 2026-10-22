@@ -391,3 +391,40 @@ def test_the_real_clocks_unseeded_jitter_is_refused() -> None:
     with pytest.raises(NotDeterministic) as refusal:
         SystemClock().jitter(8.0)
     assert _refused(refusal) == ("randomness", "SystemClock._random.uniform(0.0, 2.0)")
+
+
+@pytest.mark.parametrize(
+    ("source", "flagged"),
+    [
+        ("import subprocess\nsubprocess.run(['true'])\n", True),
+        ("import subprocess\nsubprocess.check_output(['true'], text=True)\n", True),
+        ("import subprocess\nsubprocess.run(['true'], timeout=None)\n", True),
+        ("import subprocess\nsubprocess.run(['true'], **options)\n", True),
+        ("from subprocess import run\nrun(['true'])\n", True),
+        ("from subprocess import run as go\ngo(['true'])\n", True),
+        ("from subprocess import run\nwait = run\n", True),
+        ("import subprocess as sp\nsp.run(['true'], timeout=60)\n", True),
+        ("from subprocess import *\nrun(['true'], timeout=60)\n", True),
+        ("from subprocess import Popen\n", True),
+        ("import subprocess\nsubprocess.Popen(['true']).communicate()\n", True),
+        ("import subprocess\nsubprocess.getoutput('true')\n", True),
+        ("import subprocess\nmodule = subprocess\n", True),
+        ("import subprocess\nsubprocess.run(['true'], timeout=60)\n", False),
+        ("from subprocess import run\nrun(['true'], timeout=60)\n", False),
+        (
+            "import subprocess\n"
+            "def f() -> subprocess.CompletedProcess[str]:\n"
+            "    try:\n"
+            "        return subprocess.run(['true'], timeout=60, stdout=subprocess.PIPE)\n"
+            "    except subprocess.CalledProcessError:\n"
+            "        raise\n",
+            False,
+        ),
+        ("def run(argv):\n    return argv\nrun(['true'])\n", False),
+    ],
+)
+def test_flags_each_shape_it_does_not_model(tmp_path: Path, source: str, flagged: bool) -> None:
+    (tmp_path / "pkg").mkdir()
+    path = tmp_path / "pkg" / "module.py"
+    path.write_text(source)
+    assert bool(subprocess_problems(path)) is flagged
