@@ -246,8 +246,24 @@ def test_reviewers(migrated_database: Path) -> None:  # a copy of the alembic-bu
         pr = seed.pull_request(seed.repository("prebid/Prebid.js"), 13481, seed.user("author"))
 ```
 
-**3. Prove a check with planted inputs on both sides of its boundary**, and a fix with a test
-that fails against the parent commit's code ([Testing Guide](docs/testing.md#principles)).
+**3. Never plant, tamper, or seed a flaw** (redesign plan D39). Nothing is planted or tampered, no
+flaw is seeded, and there is no mutation testing, under any name. No test, review, or acceptance
+changes a file or a copy of one (other than a stub or configuration the inputs below allow), or writes a file, a row,
+a revision, a call site, or a decoy holding a flaw, to see whether something catches it, and none
+measures how many such flaws are found. A test's or an acceptance's inputs are GitHub's recorded
+responses; stubs of a response GitHub or the environment can send (a status, a body, a timeout, an
+interrupt, a failing `git`, a clock), which a test may build in memory from a recorded unit changed
+into that shape; calls the code under test must refuse, and configuration it must refuse or that
+names a state GitHub can produce (a repository that does not resolve, one no longer listed); valid
+rows a test writes (through the models with `tests/db/seed.py`, or in SQL); and databases and files
+this project's own code wrote, at any revision. Each test asserts the exact result. A check over
+stored data, files, or source that only a defect of this code could fail is tested on its passing
+side, with the exact count of the rows, files, or values it compared, so it cannot pass on nothing;
+a check that GitHub, the environment, or a caller can fail is tested on both sides. A fix comes with
+a regression test that fails against the parent commit's code. Tests merged before D39 that change a
+file or a copy of one, or write a file, a revision, a call, a connection, or a decoy holding a flaw,
+to see whether a check catches it are replaced in Step 3b-2a-2d. See the [Testing
+Guide](docs/testing.md#principles).
 
 ### Running Tests
 

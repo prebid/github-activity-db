@@ -40,6 +40,24 @@ uv run pytest                      # CI also runs Python 3.12, `alembic check`, 
 | [Architecture](docs/architecture.md), [Data Model](docs/data-model.md) | History: the pipeline and schema Step 3a removed, kept until Step 7 |
 | [Roadmap](docs/roadmap.md) | History of earlier phases; superseded by the redesign plan |
 
+## Test Evidence
+
+Nothing is planted or tampered, no flaw is seeded, and there is no mutation testing, under any name
+(redesign plan D39). No test, review, or acceptance changes a file or a copy of one (other than a stub or configuration the inputs below allow), or writes a file, a row, a revision, a call site, or a decoy holding a
+flaw, to see whether something catches it, and none measures how many such flaws are found. A test's
+or an acceptance's inputs are GitHub's recorded responses; stubs of a response GitHub or the
+environment can send (a status, a body, a timeout, an interrupt, a failing `git`, a clock), which a
+test may build in memory from a recorded unit changed into that shape; calls the code under test
+must refuse, and configuration it must refuse or that names a state GitHub can produce (a repository
+that does not resolve, one no longer listed); valid rows a test writes (through the models with
+`tests/db/seed.py`, or in SQL); and databases and files this project's own code wrote, at any
+revision. Each test asserts the exact result. A check over stored data, files, or source that only a
+defect of this code could fail is tested on its passing side, with the exact count of the rows,
+files, or values it compared, so it cannot pass on nothing; a check that GitHub, the environment, or
+a caller can fail is tested on both sides. A fix comes with a regression test that fails against the
+parent commit's code. Tests merged before D39 that change a file or a copy of one, or write a file,
+a revision, a call, a connection, or a decoy holding a flaw, to see whether a check catches it are replaced in Step 3b-2a-2d. See [Testing](docs/testing.md).
+
 ## Current Scope
 
 **Implemented:**
@@ -62,11 +80,15 @@ uv run pytest                      # CI also runs Python 3.12, `alembic check`, 
 - `ghactivity sync` (Step 3b-2a-2c, `cli/sync.py`): the engine's run with the options of plan
   5.7; a run that never starts exits 1, and a run that starts exits with the engine's 0, 2, or 1
 
-**Not implemented yet:** the REST sampler (Step 3b-2b-1) and `verify` (Step 3b-2b-2). The
-tracked `github_activity.db` stays frozen at the first schema (D26).
+**Not implemented yet:** tests without planted inputs (Step 3b-2a-2d, D39), D37 in the sync
+(Step 3b-2a-3, D38), the REST
+sampler (Step 3b-2b-1), and `verify` (Step 3b-2b-2). The tracked `github_activity.db` stays
+frozen at the first schema (D26).
 
-**Planned in the redesign plan:** the REST sampler (Step 3b-2b-1) and verify (Step 3b-2b-2);
-GitHub Issues and closing-issue links (Step 4); scheduled sync and release publication (Step 6).
+**Planned in the redesign plan:** tests without planted inputs (Step 3b-2a-2d), D37 in the sync
+(Step 3b-2a-3), the REST sampler (Step
+3b-2b-1), and verify (Step 3b-2b-2); GitHub Issues, closing-issue links, and default-branch
+activity (Step 4); the full bootstrap (Step 5); scheduled sync and release publication (Step 6).
 
 **Out of Scope (Future):**
 - Webhooks / real-time sync

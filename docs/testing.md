@@ -10,9 +10,23 @@ How the test suite is built and what it counts as evidence. The plan of record i
 - **Real components, faked boundaries.** GitHub is the only fake: the real `GitHubSource` runs
   over `httpx.MockTransport`, answering from responses recorded from public repositories.
   Databases are real SQLite files built by `alembic upgrade head`.
-- **Direct evidence.** A check is tested with planted inputs on both sides of the boundary it
-  states, tampered databases and artifacts, and a positive control showing it sees what it
-  checks; a fix comes with a regression test that fails against the parent commit's code.
+- **Direct evidence, nothing planted** (redesign plan D39). Nothing is planted or tampered, no flaw
+  is seeded, and there is no mutation testing, under any name. No test, review, or acceptance
+  changes a file or a copy of one (other than a stub or configuration the inputs below allow), or writes a file, a
+  row, a revision, a call site, or a decoy holding a flaw, to see whether something catches it, and
+  none measures how many such flaws are found. A test's or an acceptance's inputs are GitHub's
+  recorded responses; stubs of a response GitHub or the environment can send (a status, a body, a
+  timeout, an interrupt, a failing `git`, a clock), which a test may build in memory from a recorded
+  unit changed into that shape; calls the code under test must refuse, and configuration it must
+  refuse or that names a state GitHub can produce (a repository that does not resolve, one no longer
+  listed); valid rows a test writes (through the models with `tests/db/seed.py`, or in SQL); and
+  databases and files this project's own code wrote, at any revision. Each test asserts the exact
+  result. A check over stored data, files, or source that only a defect of this code could fail is
+  tested on its passing side, with the exact count of the rows, files, or values it compared, so it
+  cannot pass on nothing; a check that GitHub, the environment, or a caller can fail is tested on
+  both sides. A fix comes with a regression test that fails against the parent commit's code. Tests
+  merged before D39 that change a file or a copy of one, or write a file, a revision, a call, a
+  connection, or a decoy holding a flaw, to see whether a check catches it are replaced in Step 3b-2a-2d.
 - **No skipped tests** (D22). CI runs `scripts/check_junit.py --max-skipped 0`, which fails a run
   where any test was skipped (pytest reports `xfail` as skipped) or none ran.
 - **Time.** Source tests pass a `FakeClock`, so waits and retries are asserted, never slept.
@@ -74,14 +88,15 @@ tests/
 - **The real environment.** Migration tests run the repository's `alembic.ini`, `env.py`, and
   revisions. `write_revision` adds a test-only revision after the head through
   `version_locations`, which is how a planted failure, a foreign-key violation, and a batch alter
-  under the views are run through `env.py`. `env.py` is loaded fresh by every command, so its
+  under the views are run through `env.py` (tests from before D39, which Step 3b-2a-2d replaces). `env.py` is loaded fresh by every command, so its
   `MigrationRefused` is matched by class name.
 - **Seeding.** `tests/db/seed.py` writes rows through the models' tables with every column a
   test does not care about filled with a valid default; GitHub ids come from one process-wide
   counter, so separate transactions never collide.
 - **Schema comparison.** `schema_of` reads columns (`PRAGMA table_xinfo`), indexes, foreign keys,
   and every item of each table's definition, which is where constraint names and CHECK text
-  live; each reading is tested against planted differences.
+  live; each reading is tested against planted differences (tests from before D39, which Step 3b-2a-2d
+  replaces).
 - **Dictionary and schema version.** `tests/test_data_dictionary.py` compares
   `docs/data-dictionary.md` with a migrated database in both directions.
   `tests/schema_versions.json` maps each schema version (`PRAGMA user_version`) to its consumer
