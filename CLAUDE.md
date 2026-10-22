@@ -43,8 +43,7 @@ uv run pytest                      # CI also runs Python 3.12, `alembic check`, 
 ## Test Evidence
 
 Nothing is planted or tampered, no flaw is seeded, and there is no mutation testing, under any name
-(redesign plan D39). No test, review, or acceptance changes a file or a copy of one (other than a
-stub the inputs below allow), or writes a file, a row, a revision, a call site, or a decoy holding a
+(redesign plan D39). No test, review, or acceptance changes a file or a copy of one (other than a stub or configuration the inputs below allow), or writes a file, a row, a revision, a call site, or a decoy holding a
 flaw, to see whether something catches it, and none measures how many such flaws are found. A test's
 or an acceptance's inputs are GitHub's recorded responses; stubs of a response GitHub or the
 environment can send (a status, a body, a timeout, an interrupt, a failing `git`, a clock), which a

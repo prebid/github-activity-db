@@ -12,7 +12,7 @@ How the test suite is built and what it counts as evidence. The plan of record i
   Databases are real SQLite files built by `alembic upgrade head`.
 - **Direct evidence, nothing planted** (redesign plan D39). Nothing is planted or tampered, no flaw
   is seeded, and there is no mutation testing, under any name. No test, review, or acceptance
-  changes a file or a copy of one (other than a stub the inputs below allow), or writes a file, a
+  changes a file or a copy of one (other than a stub or configuration the inputs below allow), or writes a file, a
   row, a revision, a call site, or a decoy holding a flaw, to see whether something catches it, and
   none measures how many such flaws are found. A test's or an acceptance's inputs are GitHub's
   recorded responses; stubs of a response GitHub or the environment can send (a status, a body, a
