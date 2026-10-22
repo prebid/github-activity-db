@@ -1113,6 +1113,29 @@ async def test_a_repository_gone_during_hydration_fails_for_the_rest_of_the_run(
 
 
 async def test_a_database_error_mid_batch_is_fatal_and_the_next_run_resumes(
+    world: World,
+) -> None:
+    repository, _ = project(world, pulls=2)
+    world.execute(
+        "CREATE TRIGGER refuse_second BEFORE INSERT ON pull_requests WHEN NEW.number = 2 "
+        "BEGIN SELECT RAISE(ABORT, 'refused by the test'); END"
+    )
+
+    failed = await world.sync()
+    assert failed.error == "LocalDatabaseError: IntegrityError: refused by the test"
+    assert ended(world, failed) == ("failed", 1, {"prebid/Prebid.js": "failed"})
+    assert world.numbers(repository) == [1]
+    run = world.run(failed.run_id)
+    assert (run["items_planned"], run["items_hydrated"]) == (2, 1)
+
+    world.execute("DROP TRIGGER refuse_second")
+    resumed = await world.sync()
+    assert planned(resumed) == [2]
+    assert world.numbers(repository) == [1, 2]
+    assert ended(world, resumed) == ("complete", 0, {"prebid/Prebid.js": "complete"})
+
+
+async def test_an_item_commit_that_fails_on_a_lock_is_fatal_and_the_next_run_resumes(
     world: World, short_busy_timeout: None
 ) -> None:
     """Another process starts reading once the second batch is answered and reads through the
@@ -1569,6 +1592,36 @@ async def test_a_run_another_process_aborted_exits_1_and_stays_aborted(world: Wo
 
 @pytest.mark.parametrize("ending", ["fatal", "interrupt"])
 async def test_a_run_ending_after_step_7_keeps_its_halt_reason(
+    world: World, monkeypatch: pytest.MonkeyPatch, ending: str
+) -> None:
+    repository, _ = project(world, pulls=26)
+    await world.sync()
+    for pull in repository.pulls.values():
+        pull.gone = True
+
+    async def failing_prune(*args: Any) -> Any:
+        if ending == "fatal":
+            raise RuntimeError("prune failed")
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(writer, "prune_repositories", failing_prune)
+
+    if ending == "fatal":
+        report = await world.sync(prune_untracked=True)
+        assert ended(world, report) == ("failed", 1, {"prebid/Prebid.js": "failed"})
+    else:
+        with pytest.raises(KeyboardInterrupt):
+            await world.sync(prune_untracked=True)
+        assert world.value("SELECT status FROM sync_runs ORDER BY id DESC LIMIT 1") == "aborted"
+    assert halt_reasons(world) == {
+        "prebid/Prebid.js": "26 deletion candidates exceed the delete guard's 25 (26 stored "
+        "rows before the run)"
+    }
+    assert len(world.numbers(repository)) == 26
+
+
+@pytest.mark.parametrize("ending", ["fatal", "interrupt"])
+async def test_a_run_ending_at_the_prune_s_delete_keeps_step_7_s_halt_reason(
     world: World, short_busy_timeout: None, ending: str
 ) -> None:
     """The prune of an untracked repository comes after step 7. Another process that starts
@@ -1638,7 +1691,22 @@ async def test_the_head_check_comes_before_the_claim_and_any_request(
     assert world.scenario.replay.seen == []
 
 
-async def test_a_database_not_at_head_starts_no_run(world: World, tmp_path: Path) -> None:
+async def test_a_database_not_at_head_starts_no_run(world: World) -> None:
+    project(world)
+    world.execute("UPDATE alembic_version SET version_num = 'older'")
+
+    with pytest.raises(
+        HeadCheckError, match=f"at revision older, not the code's head {HEAD_REVISION}"
+    ):
+        await world.sync()
+
+    assert world.rows("SELECT id FROM sync_runs") == []
+    assert world.scenario.replay.seen == []
+
+
+async def test_a_database_at_the_previous_revision_starts_no_run(
+    world: World, tmp_path: Path
+) -> None:
     """A file the migrations built to the revision before head, as the code before it did."""
     project(world)
     older = tmp_path / "older.db"
@@ -2318,7 +2386,25 @@ async def test_the_refresh_looks_up_the_oldest_first(world: World) -> None:
     assert ended(world, report) == ("complete", 0, {"prebid/Prebid.js": "complete"})
 
 
-async def test_a_close_that_fails_leaves_the_row_running_and_exits_1(
+async def test_a_close_that_fails_leaves_the_row_running_and_exits_1(world: World) -> None:
+    project(world)
+    world.execute(
+        "CREATE TRIGGER refuse_close BEFORE UPDATE OF status ON sync_runs "
+        "BEGIN SELECT RAISE(ABORT, 'close refused by the test'); END"
+    )
+
+    report = await world.sync()
+
+    run = world.run(report.run_id)
+    assert (run["status"], run["exit_code"]) == ("running", None)
+    assert (report.status, report.exit_code) == ("running", 1)
+    assert report.error == (
+        f"the close failed, so run {report.run_id} stays running: LocalDatabaseError: "
+        "IntegrityError: close refused by the test"
+    )
+
+
+async def test_a_close_whose_commit_fails_on_a_lock_leaves_the_row_running_and_exits_1(
     world: World, short_busy_timeout: None
 ) -> None:
     """Another process starts reading at the close's update and reads through the busy timeout:
@@ -2751,14 +2837,17 @@ async def test_the_refresh_reads_every_lookup_group(world: World, stopped: bool)
 
 @pytest.mark.parametrize("cleanup", ["second interrupt", "database error"])
 async def test_an_interrupted_close_that_does_not_land_leaves_the_row_running(
-    world: World, short_busy_timeout: None, cleanup: str
+    world: World, cleanup: str
 ) -> None:
-    """A second interrupt stops the interrupted close, and a database error in it (another
-    process reading from the first interrupt on, through the busy timeout, fails its commit) is
-    not raised over the interrupt; either way the row stays running for the stale-row rule or
+    """A second interrupt stops the interrupted close, and a database error in it is not raised
+    over the interrupt; either way the row stays running for the stale-row rule or
     --break-lock (5.3)."""
     project(world)
-    reader = Reader(world.database)
+    if cleanup == "database error":
+        world.execute(
+            "CREATE TRIGGER refuse_abort BEFORE UPDATE OF status ON sync_runs "
+            "WHEN NEW.status = 'aborted' BEGIN SELECT RAISE(ABORT, 'refused by the test'); END"
+        )
     interrupted: list[object] = []
 
     def interrupt(
@@ -2770,9 +2859,48 @@ async def test_an_interrupted_close_that_does_not_land_leaves_the_row_running(
         if status not in parameters or (status == "aborted" and cleanup != "second interrupt"):
             return
         interrupted.append(status)
-        if cleanup == "database error":
-            reader.hold()
         raise KeyboardInterrupt(status)
+
+    event.listen(Engine, "before_cursor_execute", interrupt)
+    try:
+        with pytest.raises(KeyboardInterrupt) as raised:
+            await world.sync()
+    finally:
+        event.remove(Engine, "before_cursor_execute", interrupt)
+
+    expected = ["complete", "aborted"] if cleanup == "second interrupt" else ["complete"]
+    assert interrupted == expected
+    # The interrupt re-raised is the latest one delivered.
+    assert raised.value.args == (expected[-1],)
+    assert world.rows("SELECT status, exit_code FROM sync_runs") == [
+        {"status": "running", "exit_code": None}
+    ]
+    with pytest.raises(ClaimRefused):
+        await world.sync()
+
+
+async def test_an_interrupted_close_whose_commit_fails_on_a_lock_leaves_the_row_running(
+    world: World, short_busy_timeout: None
+) -> None:
+    """Another process reads from the interrupt on, through the busy timeout, so the commit of
+    the interrupted close fails with SQLITE_BUSY; that database error is not raised over the
+    interrupt, and the row stays running for the stale-row rule or --break-lock (5.3)."""
+    project(world)
+    reader = Reader(world.database)
+    interrupted: list[object] = []
+
+    def interrupt(
+        connection: Any, cursor: Any, statement: str, parameters: Any, *args: Any
+    ) -> None:
+        if (
+            not statement.startswith("UPDATE sync_runs SET finished_at")
+            or "complete" not in parameters
+            or interrupted
+        ):
+            return
+        interrupted.append("complete")
+        reader.hold()
+        raise KeyboardInterrupt("complete")
 
     event.listen(Engine, "before_cursor_execute", interrupt)
     try:
@@ -2782,16 +2910,14 @@ async def test_an_interrupted_close_that_does_not_land_leaves_the_row_running(
         event.remove(Engine, "before_cursor_execute", interrupt)
         reader.release()
 
-    expected = ["complete", "aborted"] if cleanup == "second interrupt" else ["complete"]
-    assert interrupted == expected
-    assert errors == (["SQLITE_BUSY"] if cleanup == "database error" else [])
-    # The interrupt re-raised is the latest one delivered.
-    assert raised.value.args == (expected[-1],)
-    assert world.rows("SELECT status, exit_code FROM sync_runs") == [
-        {"status": "running", "exit_code": None}
-    ]
-    with pytest.raises(ClaimRefused):
+    assert interrupted == ["complete"]
+    assert errors == ["SQLITE_BUSY"]
+    assert raised.value.args == ("complete",)
+    (run,) = world.rows("SELECT id, status, exit_code FROM sync_runs")
+    assert (run["status"], run["exit_code"]) == ("running", None)
+    with pytest.raises(ClaimRefused) as refused:
         await world.sync()
+    assert refused.value.blocking == (run["id"],)
 
 
 def alias_error(alias: str) -> Any:

@@ -2,14 +2,13 @@
 
 from __future__ import annotations
 
-import hashlib
 import re
 import sqlite3
 from pathlib import Path
 from typing import Any, cast
 
 import pytest
-from sqlalchemy import event, select, update
+from sqlalchemy import Executable, event, select, update
 from sqlalchemy.ext.asyncio import AsyncConnection
 
 from github_activity_db.db.engine import build_engine
@@ -30,25 +29,6 @@ from tests.sync.support import (
     snapshot_of,
     stored_pr,
 )
-
-
-def _digest(database: Path) -> str:
-    return hashlib.sha256(database.read_bytes()).hexdigest()
-
-
-async def _commit_after(database: Path, statement: Any | None) -> None:
-    """Run ``read_snapshot`` or ``statement`` on an application connection, then commit, so a
-    write either made lands in the file."""
-    engine = build_engine(f"sqlite+aiosqlite:///{database}")
-    try:
-        async with engine.connect() as connection:
-            if statement is None:
-                await read_snapshot(connection)
-            else:
-                await connection.execute(statement)
-            await connection.commit()
-    finally:
-        await engine.dispose()
 
 
 def _seed(database: Path) -> dict[str, int]:
@@ -162,13 +142,15 @@ async def test_an_empty_database(migrated_database: Path) -> None:
     assert await snapshot_of(migrated_database) == Snapshot(repositories=())
 
 
-async def _read_then_commit(database: Path) -> Snapshot:
-    """Run ``read_snapshot`` on an application connection, then commit, so a write it made
-    would land in the file."""
+async def _read_then_commit(database: Path, write: Executable | None = None) -> Snapshot:
+    """Run ``read_snapshot`` on an application connection, then ``write`` when given, then
+    commit, so a write either made would land in the file."""
     engine = build_engine(f"sqlite+aiosqlite:///{database}")
     try:
         async with engine.connect() as connection:
             snapshot = await read_snapshot(connection)
+            if write is not None:
+                await connection.execute(write)
             await connection.commit()
     finally:
         await engine.dispose()
@@ -235,9 +217,17 @@ async def test_no_read_is_left_half_consumed(migrated_database: Path) -> None:
     finally:
         await engine.dispose()
     tables = [re.search(r"\bFROM (\w+)", statement) for statement in sent]
-    assert checked.reads == len(sent) > 0
+    assert checked.reads == len(sent) == 7
     assert all(statement.startswith("SELECT ") for statement in sent)
-    assert len({table.group(1) for table in tables if table is not None}) == len(sent)
+    assert sorted(table.group(1) for table in tables if table is not None) == [
+        "pr_closing_issues",
+        "pr_labels",
+        "pull_requests",
+        "repo_labels",
+        "repositories",
+        "sync_failures",
+        "sync_pending",
+    ]
 
 
 async def test_the_lock_probe_refuses_while_another_connection_reads(
@@ -260,11 +250,21 @@ async def test_the_lock_probe_refuses_while_another_connection_reads(
 
 
 async def test_the_digest_sees_a_committed_write(migrated_database: Path) -> None:
-    """Positive control: an UPDATE committed on the same kind of connection changes the file."""
+    """Positive control for ``test_writes_nothing``: through the same helper, an UPDATE sent
+    after the reader's statements is committed, and the file's bytes change."""
     _seed(migrated_database)
-    before = _digest(migrated_database)
-    await _commit_after(migrated_database, update(PullRequest).values(is_draft=False))
-    assert _digest(migrated_database) != before
+    query = "SELECT number, is_draft FROM pull_requests ORDER BY number"
+    assert fetch(migrated_database, query) == [
+        {"number": 2, "is_draft": 0},
+        {"number": 7, "is_draft": 1},
+    ]
+    before = migrated_database.read_bytes()
+    await _read_then_commit(migrated_database, update(PullRequest).values(is_draft=False))
+    assert migrated_database.read_bytes() != before
+    assert fetch(migrated_database, query) == [
+        {"number": 2, "is_draft": 0},
+        {"number": 7, "is_draft": 0},
+    ]
 
 
 async def test_the_lock_probe_sees_a_half_consumed_read(migrated_database: Path) -> None:
@@ -275,8 +275,9 @@ async def test_the_lock_probe_sees_a_half_consumed_read(migrated_database: Path)
         async with engine.connect() as connection:
             stream = await connection.stream(select(PullRequest.id))
             assert await stream.fetchone() is not None
-            with pytest.raises(sqlite3.OperationalError, match="database is locked"):
+            with pytest.raises(sqlite3.OperationalError) as raised:
                 commit_does_not_wait(migrated_database)
+            assert raised.value.sqlite_errorname == "SQLITE_BUSY"
             await stream.close()
             commit_does_not_wait(migrated_database)
     finally:

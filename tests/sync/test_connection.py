@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 from sqlalchemy import insert, select, text, update
-from sqlalchemy.exc import DBAPIError
+from sqlalchemy.exc import DBAPIError, IntegrityError
 
 from github_activity_db.db.models import SyncRun
 from github_activity_db.sync import connection as connection_module
@@ -205,10 +205,13 @@ async def test_a_reader_takes_no_lock(migrated_database: Path) -> None:
 async def test_a_constraint_failure_is_a_local_database_error(migrated_database: Path) -> None:
     run_id = _run(migrated_database)
     async with open_writer(_url(migrated_database)) as writer:
-        with pytest.raises(LocalDatabaseError, match="IntegrityError"):
+        with pytest.raises(LocalDatabaseError) as raised:
             async with transaction(writer, run_id):
                 await writer.execute(update(SyncRun).values(rest_calls=5))
                 await writer.execute(insert(SyncRun).values(status="bogus"))
         async with transaction(writer, run_id):
             rest_calls = (await writer.execute(select(SyncRun.rest_calls))).scalar_one()
+    assert isinstance(raised.value.__cause__, IntegrityError)
+    # The row has no started_at, whose NOT NULL SQLite tests before the status CHECK.
+    assert _sqlite_errorname(raised.value) == "SQLITE_CONSTRAINT_NOTNULL"
     assert rest_calls == 0

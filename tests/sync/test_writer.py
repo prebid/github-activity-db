@@ -357,6 +357,17 @@ async def test_a_default_branch_change_recomputes_targets_default_branch(w: Writ
 
 
 async def test_an_unchanged_default_branch_leaves_targets_default_branch(w: Writer) -> None:
+    """A planted wrong value stays: only a change of default branch recomputes it."""
+    await w.repository(repository(default_branch="master"))
+    await w.item(pull_request(1, 10, base_ref="master"))
+    with connect(w.database) as connection:
+        connection.execute(text("UPDATE pull_requests SET targets_default_branch = 0"))
+    result = await w.repository(repository(default_branch="master"))
+    assert not result.default_branch_changed
+    assert w.pr(1)["targets_default_branch"] == 0
+
+
+async def test_an_unchanged_default_branch_sends_no_update_of_pull_requests(w: Writer) -> None:
     """Only a change of default branch recomputes it: a write with the same default branch
     sends no update of the repository's pull requests, whose values stay what their base
     branches give."""

@@ -120,7 +120,16 @@ def test_a_url_without_a_file_is_refused(url: str) -> None:
         database_path(url)
 
 
-async def test_the_claim_refuses_a_database_not_at_head(tmp_path: Path) -> None:
+async def test_the_claim_refuses_a_database_not_at_head(migrated_database: Path) -> None:
+    connection = sqlite3.connect(migrated_database)
+    connection.execute("PRAGMA user_version = 1")
+    connection.close()
+    with pytest.raises(HeadCheckError, match="user_version is 1, not schema_version 2"):
+        await _claim(migrated_database)
+    assert fetch(migrated_database, "SELECT count(*) AS n FROM sync_runs") == [{"n": 0}]
+
+
+async def test_the_claim_refuses_a_database_at_the_previous_revision(tmp_path: Path) -> None:
     """A file the migrations built to the revision before head, as the code before it did."""
     older = tmp_path / "older.db"
     upgrade(older, MIGRATION_REVISIONS[-2])
