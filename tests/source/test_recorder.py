@@ -125,7 +125,9 @@ async def test_a_listed_private_repository_is_never_requested(owner: str, name: 
     with pytest.raises(PrivateRepository):
         await record("test-token", inner=replay.transport(), scenarios=scenarios)
     with pytest.raises(PrivateRepository):
-        await record_first_sync("test-token", owner, name, inner=replay.transport())
+        await record_first_sync(
+            "test-token", owner, name, inner=replay.transport(), clock=FakeClock()
+        )
     assert replay.seen == []
 
 
@@ -278,7 +280,9 @@ async def test_recording_a_first_sync_of_its_recordings_gives_them_back() -> Non
     """The first sync asks for exactly the recorded units, and records each as it was."""
     replay = Replay.from_directory(FIRST_SYNC)
     owner, name = FIRST_SYNC_REPOSITORY
-    units = await record_first_sync("test-token", owner, name, inner=replay.transport())
+    units = await record_first_sync(
+        "test-token", owner, name, inner=replay.transport(), clock=FakeClock()
+    )
     assert replay.problems == []
     # One resolve, the sync's own: the resolution the privacy check reads is the one it uses.
     assert [seen.operation for seen in replay.seen] == [
@@ -306,7 +310,9 @@ async def test_a_private_repository_stops_a_first_sync_after_its_resolve() -> No
     unit.data["isPrivate"] = True
     replay.add(unit)
     with pytest.raises(PrivateRepository, match=f"{owner}/{name}"):
-        await record_first_sync("test-token", owner, name, inner=replay.transport())
+        await record_first_sync(
+            "test-token", owner, name, inner=replay.transport(), clock=FakeClock()
+        )
     assert [seen.operation for seen in replay.seen] == ["Resolve"]
 
 
@@ -318,7 +324,9 @@ async def test_a_retried_item_records_one_unit_per_file(first_sync: bool) -> Non
     replay.modify(_batch_alias_error, when=lambda seen: seen.operation == "PullRequestBatch")
     if first_sync:
         owner, name = FIRST_SYNC_REPOSITORY
-        units = await record_first_sync("test-token", owner, name, inner=replay.transport())
+        units = await record_first_sync(
+            "test-token", owner, name, inner=replay.transport(), clock=FakeClock()
+        )
     else:
         units = await record("test-token", inner=replay.transport())
     batches = [seen.numbers for seen in replay.seen if seen.operation == "PullRequestBatch"]
@@ -371,7 +379,9 @@ async def test_a_first_sync_that_fails_names_why(
     change(replay)
     owner, name = FIRST_SYNC_REPOSITORY
     with pytest.raises(RecordingFailed) as raised:
-        await record_first_sync("test-token", owner, name, inner=replay.transport())
+        await record_first_sync(
+            "test-token", owner, name, inner=replay.transport(), clock=FakeClock()
+        )
     assert str(raised.value) == message
     assert [seen.operation for seen in replay.seen] == ["Resolve"]
 
@@ -383,13 +393,17 @@ async def test_a_first_sync_that_does_not_exit_0_stops_the_recording() -> None:
     )
     owner, name = FIRST_SYNC_REPOSITORY
     with pytest.raises(RecordingFailed, match="first sync exited 2"):
-        await record_first_sync("test-token", owner, name, inner=replay.transport())
+        await record_first_sync(
+            "test-token", owner, name, inner=replay.transport(), clock=FakeClock()
+        )
 
 
 def _first_sync_units() -> list[Any]:
     owner, name = FIRST_SYNC_REPOSITORY
     replay = Replay.from_directory(FIRST_SYNC)
-    return asyncio.run(record_first_sync("test-token", owner, name, inner=replay.transport()))
+    return asyncio.run(
+        record_first_sync("test-token", owner, name, inner=replay.transport(), clock=FakeClock())
+    )
 
 
 @pytest.mark.parametrize("oversized", [False, True])
