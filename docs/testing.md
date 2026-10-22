@@ -267,7 +267,8 @@ run must see GitHub as the test left it.
   template, and the `tracking.toml` entries a test adds; `World.sync()` runs the engine over them,
   first moving the clock past the unsettled window (`settle=False` keeps it). Each case checks the
   stored rows, the `sync_runs` row, the `repo_sync_state` rows the run wrote (`ended`), and the
-  exit code. The `world` fixture fails a test that leaves an `AccountMissing` failure.
+  exit code. The `world` fixture fails a test that leaves an `AccountMissing` failure, except the
+  one that fakes the writer's refusal.
 - **Seeded runs**: `tests/sync/test_seeded_runs.py` gives each of a few fixed seeds a small world
   and five runs, with random changes through the model's methods and random clock gaps between
   them. After each run `tests/sync/expected_state.py` computes the database the plan requires from

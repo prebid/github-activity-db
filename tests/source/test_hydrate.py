@@ -2068,3 +2068,22 @@ class TestBatches:
         assert all(isinstance(outcome, Hydrated) for outcome in outcomes[:-1])
         # The first round, then the solo retry's two continuations.
         assert overflow_sizes(replay) == [OVERFLOW_ALIASES_PER_REQUEST, 2]
+
+
+@pytest.mark.parametrize("overflow", [False, True], ids=["first-page", "overflow"])
+async def test_an_assignee_node_id_listed_twice_with_two_github_ids(
+    open_source, replay: Replay, overflow: bool
+) -> None:
+    # The github_ids differ, so only the node-id comparison can refuse this; its key is the
+    # node id, where the github_id comparison's is a number.
+    unit = pr_unit(replay, 15771)
+    first = dict(unit.data["assignedActors"]["nodes"][0])
+    second = {**first, "databaseId": first["databaseId"] + 999999}
+    if overflow:
+        second_page(replay, unit, "assignedActors", second)
+    else:
+        unit.data["assignedActors"]["nodes"][1] = second
+    replay.add(unit)
+    error = await failure(open_source, PREBID_JS, 15771)
+    assert type(error) is DuplicateEntry
+    assert (error.connection, error.key) == ("assignedActors", first["id"])

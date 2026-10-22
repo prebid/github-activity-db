@@ -2,16 +2,18 @@
 
 from __future__ import annotations
 
+import hashlib
 import re
 import sqlite3
 from pathlib import Path
 from typing import Any, cast
 
 import pytest
-from sqlalchemy import event
+from sqlalchemy import event, select, update
 from sqlalchemy.ext.asyncio import AsyncConnection
 
 from github_activity_db.db.engine import build_engine
+from github_activity_db.db.models import PullRequest
 from github_activity_db.sync.snapshot import (
     Snapshot,
     StoredPullRequest,
@@ -28,6 +30,25 @@ from tests.sync.support import (
     snapshot_of,
     stored_pr,
 )
+
+
+def _digest(database: Path) -> str:
+    return hashlib.sha256(database.read_bytes()).hexdigest()
+
+
+async def _commit_after(database: Path, statement: Any | None) -> None:
+    """Run ``read_snapshot`` or ``statement`` on an application connection, then commit, so a
+    write either made lands in the file."""
+    engine = build_engine(f"sqlite+aiosqlite:///{database}")
+    try:
+        async with engine.connect() as connection:
+            if statement is None:
+                await read_snapshot(connection)
+            else:
+                await connection.execute(statement)
+            await connection.commit()
+    finally:
+        await engine.dispose()
 
 
 def _seed(database: Path) -> dict[str, int]:
@@ -236,3 +257,27 @@ async def test_the_lock_probe_refuses_while_another_connection_reads(
     finally:
         reader.close()
     commit_does_not_wait(migrated_database)
+
+
+async def test_the_digest_sees_a_committed_write(migrated_database: Path) -> None:
+    """Positive control: an UPDATE committed on the same kind of connection changes the file."""
+    _seed(migrated_database)
+    before = _digest(migrated_database)
+    await _commit_after(migrated_database, update(PullRequest).values(is_draft=False))
+    assert _digest(migrated_database) != before
+
+
+async def test_the_lock_probe_sees_a_half_consumed_read(migrated_database: Path) -> None:
+    """Positive control: a server-side cursor left half-read blocks the probe's commit."""
+    _seed(migrated_database)
+    engine = build_engine(f"sqlite+aiosqlite:///{migrated_database}")
+    try:
+        async with engine.connect() as connection:
+            stream = await connection.stream(select(PullRequest.id))
+            assert await stream.fetchone() is not None
+            with pytest.raises(sqlite3.OperationalError, match="database is locked"):
+                commit_does_not_wait(migrated_database)
+            await stream.close()
+            commit_does_not_wait(migrated_database)
+    finally:
+        await engine.dispose()

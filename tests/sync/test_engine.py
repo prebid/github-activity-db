@@ -25,6 +25,7 @@ from sqlalchemy.engine import Engine
 from github_activity_db.db import engine as db_engine
 from github_activity_db.db.schema import HEAD_REVISION, MIGRATION_REVISIONS
 from github_activity_db.source import PULL_REQUEST_HYDRATION_VERSION
+from github_activity_db.sync import writer
 from github_activity_db.sync.deletions import DeletionApproval, parse_allow_deletions
 from github_activity_db.sync.plan import Reason
 from github_activity_db.sync.runs import ClaimRefused, HeadCheckError
@@ -42,7 +43,8 @@ def world(scenario: Scenario, migrated_database: Path) -> Iterator[World]:
     commit links (plan 5.2)."""
     world = World(scenario, migrated_database)
     yield world
-    assert world.rows("SELECT number FROM sync_failures WHERE last_error LIKE 'Account%'") == []
+    if not world.expects_account_missing:
+        assert world.rows("SELECT number FROM sync_failures WHERE last_error LIKE 'Account%'") == []
 
 
 @pytest.fixture
@@ -2904,3 +2906,40 @@ async def test_a_deadline_inside_a_batchs_requests_leaves_the_whole_batch_pendin
     assert world.numbers(repository) == [1, 2, 3]
     assert world.pending(repository) == []
     assert ended(world, finished) == ("complete", 0, {"prebid/Prebid.js": "complete"})
+
+
+async def test_any_other_exception_after_the_claim_closes_the_run_failed(
+    world: World, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    project(world)
+
+    async def broken(*args: Any, **kwargs: Any) -> None:
+        raise RuntimeError("broken in-place update")
+
+    monkeypatch.setattr(writer, "apply_in_place_updates", broken)
+
+    report = await world.sync()
+
+    assert report.error == "RuntimeError: broken in-place update"
+    assert ended(world, report) == ("failed", 1, {"prebid/Prebid.js": "failed"})
+
+
+async def test_an_account_missing_refusal_is_an_item_failure(
+    world: World, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    world.expects_account_missing = True
+    repository, _ = project(world, pulls=2)
+    write = writer.write_pull_request
+
+    async def refusing(connection: Any, run_id: int, record: Any, **kwargs: Any) -> Any:
+        if record.number == 1:
+            raise writer.AccountMissing(record.number, [7])
+        return await write(connection, run_id, record, **kwargs)
+
+    monkeypatch.setattr(writer, "write_pull_request", refusing)
+
+    report = await world.sync()
+
+    assert world.failures() == [("prebid/Prebid.js", 1, "AccountMissing")]
+    assert world.numbers(repository) == [2]
+    assert ended(world, report) == ("complete", 2, {"prebid/Prebid.js": "complete"})

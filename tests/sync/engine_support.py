@@ -28,6 +28,8 @@ class World:
         self.sync_settings: dict[str, Any] = {}
         self.automation: dict[str, Any] = {}
         self.floor = FLOOR
+        # Only the test that fakes the writer's refusal may leave an AccountMissing failure.
+        self.expects_account_missing = False
         # Options a parametrized case gives both a dry run and the run.
         self.options: dict[str, Any] = {}
 

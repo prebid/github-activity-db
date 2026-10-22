@@ -7,7 +7,7 @@ import sqlite3
 from pathlib import Path
 
 import pytest
-from sqlalchemy import select, text, update
+from sqlalchemy import insert, select, text, update
 from sqlalchemy.exc import DBAPIError
 
 from github_activity_db.db.models import SyncRun
@@ -200,3 +200,15 @@ async def test_a_reader_takes_no_lock(migrated_database: Path) -> None:
         async with transaction(reader):
             await reader.execute(select(SyncRun.id))
         assert not _write_is_refused(migrated_database)
+
+
+async def test_a_constraint_failure_is_a_local_database_error(migrated_database: Path) -> None:
+    run_id = _run(migrated_database)
+    async with open_writer(_url(migrated_database)) as writer:
+        with pytest.raises(LocalDatabaseError, match="IntegrityError"):
+            async with transaction(writer, run_id):
+                await writer.execute(update(SyncRun).values(rest_calls=5))
+                await writer.execute(insert(SyncRun).values(status="bogus"))
+        async with transaction(writer, run_id):
+            rest_calls = (await writer.execute(select(SyncRun.rest_calls))).scalar_one()
+    assert rest_calls == 0

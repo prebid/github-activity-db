@@ -10,7 +10,7 @@ import time
 from collections.abc import Callable, Iterator
 from datetime import UTC, datetime, timedelta
 from email.utils import format_datetime
-from typing import Any
+from typing import Any, cast
 
 import httpx
 import pytest
@@ -717,6 +717,20 @@ class TestCredentials:
         assert clock.sleeps == []
         assert [seen.path for seen in replay.seen] == [endpoint]
 
+    @pytest.mark.parametrize(
+        "error",
+        [TypeError("not from githubkit's rate-limit readers"), ValueError("bad key data")],
+        ids=["type-error", "value-error"],
+    )
+    async def test_a_defect_inside_the_client_is_fatal(
+        self, open_source, replay: Replay, clock: FakeClock, error: Exception
+    ) -> None:
+        replay.fault(self.raising(error), when=resolves)
+        async with open_source() as source:
+            with pytest.raises(ClientFailure):
+                await source.resolve(**RESOLVE)
+        assert clock.sleeps == []
+
 
 class TestFatal:
     async def test_401_is_unauthorized(self, open_source, replay: Replay) -> None:
@@ -785,6 +799,18 @@ class TestFatal:
             with pytest.raises(UnexpectedResponse) as raised:
                 await source.resolve(**RESOLVE)
         assert raised.value.status == 409
+
+    async def test_a_defect_in_the_request_path_is_not_a_rate_limit(self, clock: FakeClock) -> None:
+        # A client whose arequest no longer accepts the transport's arguments: the TypeError is
+        # not raised by githubkit's rate-limit readers, so it propagates instead of waiting.
+        class Incompatible:
+            async def arequest(self, *args: object, **kwargs: object) -> object:
+                raise TypeError("arequest() got an unexpected keyword argument 'content'")
+
+        transport = Transport(cast("Any", Incompatible()), clock=clock)
+        with pytest.raises(TypeError, match="unexpected keyword"):
+            await transport.graphql("query Resolve { x }", {}, splittable=False)
+        assert clock.sleeps == []
 
 
 class TestServerErrors:

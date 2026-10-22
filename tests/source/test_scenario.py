@@ -1157,3 +1157,64 @@ def test_recorded_lists_are_in_the_order_cursors_name(unit: Unit) -> None:
     for connection, order in ORDERS.items():
         keys = [order(node) for node in unit.data[connection]["nodes"]]
         assert keys == sorted(keys), connection
+
+
+def test_a_document_the_model_was_not_checked_against_is_refused() -> None:
+    world = Scenario(FakeClock())
+    world.add_repository("example", "project")
+    variables = {"owner": "example", "name": "project"}
+    changed = documents.RESOLVE.replace("isPrivate", "isPrivate isFork")
+    assert changed != documents.RESOLVE
+    assert post(world, documents.RESOLVE, variables).status_code == 200
+    assert post(world, changed, variables).status_code == 418
+    assert world.replay.problems == [
+        f"resolve unit {variables} was recorded for another query document: re-record with "
+        "scripts/record_fixtures.py"
+    ]
+
+
+def test_a_missing_repository_is_answered_only_for_a_checked_document() -> None:
+    world = Scenario(FakeClock())
+    variables = {"owner": "example", "name": "absent", "after": None}
+    changed = documents.PULL_REQUEST_INDEX.replace("isDraft", "isDraft title")
+    answered = post(world, documents.PULL_REQUEST_INDEX, variables)
+    assert (answered.status_code, answered.json()["data"]["repository"]) == (200, None)
+    assert post(world, changed, variables).status_code == 418
+    batch = documents.pull_request_batch(1)
+    changed_batch = batch.replace("additions deletions", "additions")
+    assert changed_batch != batch
+    numbered = {"owner": "example", "name": "absent", "n0": 1}
+    assert post(world, batch, numbered).json()["data"]["repository"] is None
+    assert post(world, changed_batch, numbered).status_code == 418
+    assert world.replay.problems == [
+        f"{kind} unit {{'owner': 'example', 'name': 'absent', 'for': '{kind}'}} was recorded for "
+        "another query document: re-record with scripts/record_fixtures.py"
+        for kind in ("index", "pull_request")
+    ]
+
+
+@pytest.mark.parametrize(
+    ("connection", "cursor"),
+    [("comments", "unserved"), ("comments", "scenario:[1]"), ("commits", "NTA")],
+)
+async def test_a_cursor_the_model_never_served_is_reported(connection: str, cursor: str) -> None:
+    """A cursor in the model's own form, or GitHub's offset form (``NTA``, base64 of 50), that the
+    model did not serve names no page; the failure is the replay's problem, not an error inside
+    the transport."""
+    world = Scenario(FakeClock())
+    repository, author = project(world)
+    repository.pulls[1].add(connection, *(world.node(connection, by=author) for _ in range(101)))
+
+    def forged(body: dict[str, Any]) -> None:
+        body["data"]["repository"]["p0"][connection]["pageInfo"]["endCursor"] = cursor
+
+    world.replay.modify(forged, when=lambda seen: seen.operation == "PullRequestBatch")
+    async with world.source() as source:
+        resolved = await source.resolve("example", "project")
+        with pytest.raises(FatalSourceError):
+            await all_outcomes(source, resolved, [1])
+    key = {"id": repository.pulls[1].node["id"], "connection": connection, "after": cursor}
+    message = f"cursor {cursor!r} names no page the model served"
+    assert world.replay.problems == [
+        f"the provider failed on overflow {key}: ScenarioError({message!r})"
+    ]

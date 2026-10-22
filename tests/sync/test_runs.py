@@ -979,3 +979,11 @@ def test_code_version_outside_a_checkout_is_the_package_version(
     ignored = checkout / "venv" / "github_activity_db"
     shutil.copytree(alone, ignored)
     assert code_version(ignored, {}) == metadata.version("github-activity-db")
+
+
+async def test_another_user_version_is_refused(migrated_database: Path) -> None:
+    connection = sqlite3.connect(migrated_database)
+    connection.execute("PRAGMA user_version = 1")
+    connection.close()
+    with pytest.raises(HeadCheckError, match="user_version is 1, not schema_version 2"):
+        await check_head(_url(migrated_database))
