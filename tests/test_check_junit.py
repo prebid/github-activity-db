@@ -9,11 +9,13 @@ reports pytest wrote, in runs over test files written for them.
 
 import ast
 import copy
+import importlib.util
 import os
 import subprocess
 import sys
 import xml.etree.ElementTree as ET
 from pathlib import Path
+from types import ModuleType
 
 import pytest
 
@@ -125,17 +127,34 @@ def test_sums_every_testsuite(tmp_path: Path, written: bytes) -> None:
     assert len(result.stderr.splitlines()) == 1
 
 
+def _load() -> ModuleType:
+    """The script as a module, so its ``main`` can be called in process."""
+    spec = importlib.util.spec_from_file_location("check_junit", SCRIPT)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 @pytest.mark.parametrize("shape", ["missing", "cut short", "no testsuite"])
-def test_unreadable_report_fails(tmp_path: Path, written: bytes, shape: str) -> None:
+def test_unreadable_report_fails(
+    tmp_path: Path, written: bytes, shape: str, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The gate returns 1 rather than raising, and names why: the parser's error for a report
+    cut short."""
     path = tmp_path / "junit.xml"
+    problem = f"[Errno 2] No such file or directory: '{path}'"
     if shape == "cut short":
         path.write_bytes(written[: len(written) // 2])
+        with pytest.raises(ET.ParseError) as parse_error:
+            ET.parse(path)  # noqa: S314 - the report pytest wrote in this session, cut short
+        problem = str(parse_error.value)
     elif shape == "no testsuite":
         path = _report(tmp_path, written)
-    result = _gate(path)
-    assert result.returncode == 1
+        problem = f"no <testsuite> element in {path}"
+    assert _load().main([str(path)]) == 1
     # The counters are printed only after the report is read.
-    assert result.stdout == ""
+    assert capsys.readouterr() == ("", f"cannot read JUnit report: {problem}\n")
 
 
 def test_negative_allowance_is_refused(tmp_path: Path, written: bytes) -> None:

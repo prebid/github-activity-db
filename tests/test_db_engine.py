@@ -1,6 +1,7 @@
 """Tests for database engine and session management."""
 
 import sqlite3
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -16,6 +17,9 @@ from github_activity_db.db.engine import (
 from github_activity_db.db.models import UserTag
 from tests.db.seed import Seed
 
+# Written to each tag's created_at, so no write reads the wall clock behind the column default.
+CREATED_AT = datetime(2026, 1, 2, 3, 4, 5, tzinfo=UTC)
+
 
 class TestDatabaseEngine:
     """Sessions over the application engine, on a database migrated to head."""
@@ -25,7 +29,7 @@ class TestDatabaseEngine:
             test_engine, class_=AsyncSession, expire_on_commit=False
         )
         async with session_factory() as session:
-            tag = UserTag(name="committed")
+            tag = UserTag(name="committed", created_at=CREATED_AT)
             session.add(tag)
             await session.commit()
             tag_id = tag.id
@@ -33,7 +37,7 @@ class TestDatabaseEngine:
         async with session_factory() as session:
             stored = await session.get(UserTag, tag_id)
             assert stored is not None
-            assert stored.name == "committed"
+            assert (stored.name, stored.created_at) == ("committed", CREATED_AT)
 
     async def test_session_rollbacks_on_error(self, test_engine):
         session_factory = async_sessionmaker(
@@ -41,7 +45,7 @@ class TestDatabaseEngine:
         )
         with pytest.raises(ValueError, match="Simulated error"):
             async with session_factory() as session:
-                session.add(UserTag(name="rolled back"))
+                session.add(UserTag(name="rolled back", created_at=CREATED_AT))
                 await session.flush()  # written to the database, not committed
                 raise ValueError("Simulated error")
 

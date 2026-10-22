@@ -37,13 +37,30 @@ _GUARD = pytest.MonkeyPatch()
 
 
 def pytest_configure(config: pytest.Config) -> None:
-    """The network, the real clock, and its random source are refused from collection to the end
-    of the session (``tests/determinism.py``, redesign plan D40)."""
+    """What ``tests/determinism.py`` refuses (connections, host-name lookups, the package's real
+    clocks, and its random source) is refused from collection to the end of the session
+    (redesign plan D40)."""
     determinism.install(_GUARD)
 
 
 def pytest_unconfigure(config: pytest.Config) -> None:
     _GUARD.undo()
+
+
+def pytest_addoption(parser: pytest.Parser) -> None:
+    parser.addoption(
+        "--reverse-order",
+        action="store_true",
+        help="run the collected tests last to first (CI compares such a run with one in order)",
+    )
+
+
+@pytest.hookimpl(trylast=True)
+def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
+    """With ``--reverse-order``, the tests run last to first, after every other plugin has
+    ordered them: each pair of tests runs in the other order."""
+    if config.getoption("--reverse-order"):
+        items.reverse()
 
 
 @pytest.fixture(autouse=True, scope="session")

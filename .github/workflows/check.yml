@@ -76,9 +76,21 @@ jobs:
       - name: Python and SQLite versions
         run: uv run --no-sync python -c "import sqlite3, sys; print(sys.version, sqlite3.sqlite_version)"
       - name: pytest
+        env:
+          PYTHONHASHSEED: "1"
         run: uv run --no-sync pytest --junitxml="$RUNNER_TEMP/junit.xml"
       - name: Require an executed, passing test run with no skips
         run: uv run --no-sync python scripts/check_junit.py "$RUNNER_TEMP/junit.xml" --max-skipped 0
+      # D40: the same outcome in another run order and under another hash seed. Each pair of tests
+      # runs in the other order; a dependence shows only where it changes an outcome.
+      - name: pytest again, last to first, under another hash seed
+        env:
+          PYTHONHASHSEED: "2"
+        run: uv run --no-sync pytest --reverse-order --junitxml="$RUNNER_TEMP/junit-reversed.xml"
+      - name: Require the two runs to agree test by test
+        run: |
+          uv run --no-sync python scripts/check_junit.py "$RUNNER_TEMP/junit.xml" --max-skipped 0 \
+            --same-as "$RUNNER_TEMP/junit-reversed.xml"
       - name: Migrations upgrade a fresh database and match the models
         env:
           DATABASE_URL: sqlite+aiosqlite:///${{ runner.temp }}/migrations.db

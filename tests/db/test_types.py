@@ -41,11 +41,6 @@ def _stored_refreshed_at(database: Path) -> str:
     return str(text)
 
 
-def _stored_created_at(database: Path) -> str:
-    ((text,),) = query(database, "SELECT created_at FROM user_tags")
-    return str(text)
-
-
 def test_no_column_uses_a_bare_datetime() -> None:
     types = {
         f"{table.name}.{column.name}": column.type
@@ -118,23 +113,32 @@ def test_null_passes_through(migrated_database: Path) -> None:
 NOW = datetime(2026, 1, 2, 3, 4, 5, 678901, tzinfo=UTC)
 
 
-class FixedClock(datetime):
-    """datetime as types.py sees it while a test runs: ``now`` is NOW in the zone asked for."""
-
-    @classmethod
-    def now(cls, tz: tzinfo | None = None) -> FixedClock:
-        assert tz is UTC
-        return cls.combine(NOW.date(), NOW.timetz())
-
-
 def test_the_default_is_now_in_utc(
     migrated_database: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(types, "datetime", FixedClock)
+    """The column default over a fixed wall clock, which answers NOW in the zone asked for; the
+    clock alone is replaced, so an explicit timestamp written beside the default is still a
+    datetime to UtcDateTime."""
+    asked: list[tzinfo] = []
+
+    def wall_clock(tz: tzinfo) -> datetime:
+        asked.append(tz)
+        return NOW.astimezone(tz)
+
+    monkeypatch.setattr(types, "_wall_clock", wall_clock)
     assert utc_now() == NOW
+    assert asked == [UTC]
+    explicit = datetime(2026, 1, 1, 5, 30, tzinfo=KOLKATA)
     with connect(migrated_database) as connection:
         connection.execute(insert(UserTag).values(name="kept"))
-        created_at = connection.execute(select(UserTag.created_at)).scalar_one()
-    assert created_at == NOW
-    assert created_at.tzinfo is UTC
-    assert _stored_created_at(migrated_database) == "2026-01-02 03:04:05.678901"
+        connection.execute(insert(UserTag).values(name="given", created_at=explicit))
+        created = connection.execute(
+            select(UserTag.name, UserTag.created_at).order_by(UserTag.id)
+        ).all()
+    assert [tuple(row) for row in created] == [("kept", NOW), ("given", explicit)]
+    assert [when.tzinfo for _, when in created] == [UTC, UTC]
+    assert asked == [UTC, UTC]
+    assert query(migrated_database, "SELECT created_at FROM user_tags ORDER BY id") == [
+        ("2026-01-02 03:04:05.678901",),
+        ("2026-01-01 00:00:00.000000",),
+    ]
