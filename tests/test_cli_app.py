@@ -230,30 +230,6 @@ class TestInstalledEntryPoint:
         assert "invalid settings" in _words(result.stderr)
         assert "Traceback" not in result.stderr
 
-
-def test_an_env_file_the_os_refuses_to_read_exits_1(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """A .env the OS refuses to read: the read answers PermissionError, as it does for a file
-    the user may not read, whatever uid runs the tests (D40), and the command exits 1."""
-    (tmp_path / ".env").write_text("LOG_LEVEL=INFO\n")
-    read: list[Path] = []
-
-    def refused(path: Path, **_: object) -> dict[str, str | None]:
-        read.append(Path(path))
-        raise PermissionError(13, "Permission denied", str(path))
-
-    monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr(dotenv_source, "dotenv_values", refused)
-    get_settings.cache_clear()
-    try:
-        result = runner.invoke(app, ["github", "rate-limit"])
-    finally:
-        get_settings.cache_clear()
-    assert read == [Path(".env")]
-    assert result.exit_code == 1, result.output
-    assert isinstance(result.exception, SystemExit), result.exception
-
     @pytest.mark.parametrize(
         "env",
         [
@@ -299,3 +275,27 @@ def test_an_env_file_the_os_refuses_to_read_exits_1(
         (script,) = metadata.entry_points(group="console_scripts", name="ghactivity")
         assert script.load() is app
         assert app.pretty_exceptions_show_locals is False
+
+
+def test_an_env_file_the_os_refuses_to_read_exits_1(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A .env the OS refuses to read: the read answers PermissionError, as it does for a file
+    the user may not read, whatever uid runs the tests (D40), and the command exits 1."""
+    (tmp_path / ".env").write_text("LOG_LEVEL=INFO\n")
+    read: list[Path] = []
+
+    def refused(path: Path, **_: object) -> dict[str, str | None]:
+        read.append(Path(path))
+        raise PermissionError(13, "Permission denied", str(path))
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(dotenv_source, "dotenv_values", refused)
+    get_settings.cache_clear()
+    try:
+        result = runner.invoke(app, ["github", "rate-limit"])
+    finally:
+        get_settings.cache_clear()
+    assert read == [Path(".env")]
+    assert result.exit_code == 1, result.output
+    assert isinstance(result.exception, SystemExit), result.exception
