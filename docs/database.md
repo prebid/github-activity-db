@@ -67,6 +67,11 @@ converted to UTC, and returns aware UTC values. Defaults are `utc_now()`, never 
   `user_version` and the pragmas reflection reads with an argument (`table_info`, `table_xinfo`, `index_list`, `index_info`, `foreign_key_list`),
   so `journal_mode`, `legacy_alter_table`, and
   `ignore_check_constraints` keep the values the connection opened with.
+- An upgrade runs on one driver connection. Once it is open, env.py refuses and closes any
+  other the engine would open: a second connection a revision asks for, or the one SQLAlchemy
+  would open after it invalidated the first for an interrupt or an error it reads as a
+  disconnect. The upgrade then fails, even when a revision catches the refusal and goes on, and
+  nothing is committed. An interrupt, a `SystemExit`, or that error ends the upgrade as itself.
 - Refused: offline `--sql` mode, databases other than SQLite, SQLite URI filenames
   (`?uri=true`), a caller-supplied connection or `sqlalchemy.url`, and the tracked
   `github_activity.db`. The connect listener asks SQLite which file it opened, so the tracked

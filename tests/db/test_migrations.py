@@ -28,6 +28,8 @@ from sqlalchemy import create_engine
 from sqlalchemy.exc import (
     DatabaseError,
     OperationalError,
+    ProgrammingError,
+    StatementError,
 )
 from sqlalchemy.pool import Pool
 
@@ -101,6 +103,17 @@ BOUND_INSERT = (
 )
 
 # A revision's first lines: the driver connection under SQLAlchemy closed, so the next statement
+# fails with an error the pysqlite dialect reads as a disconnect.
+CLOSED_CONNECTION = "bind = op.get_bind()\nbind.connection.dbapi_connection.close()\n"
+
+
+def is_closed(connection: sqlite3.Connection) -> bool:
+    """Whether the driver connection is closed: a closed one runs nothing."""
+    try:
+        connection.execute("SELECT 1")
+    except sqlite3.ProgrammingError:
+        return True
+    return False
 
 
 def snapshot(database: Path) -> tuple[Any, ...]:
@@ -625,6 +638,183 @@ def table_definitions(database: Path) -> dict[str, str]:
 
 
 class TestOneTransaction:
+    @pytest.mark.parametrize(
+        "raised",
+        [
+            pytest.param(KeyboardInterrupt(), id="KeyboardInterrupt"),
+            pytest.param(SystemExit(3), id="SystemExit"),
+        ],
+    )
+    def test_an_interrupt_after_the_second_revision_applies_none(
+        self, first_schema: Path, raised: BaseException
+    ) -> None:
+        """An interrupt, or a SystemExit, at a set point inside a statement, once the second of
+        the revisions after the first schema has run: that exception itself ends the upgrade,
+        and the file stays at the revision the upgrade started from."""
+        second = AFTER_THE_FIRST_SCHEMA[1]
+        invalidated: list[BaseException | None] = []
+
+        def interrupt(_connection: Any, _cursor: Any, statement: str, *_rest: Any) -> None:
+            if statement.startswith(f"UPDATE alembic_version SET version_num='{second}'"):
+                raise raised
+
+        def record(_dbapi_connection: Any, _record: Any, exception: BaseException | None) -> None:
+            invalidated.append(exception)
+
+        before = snapshot(first_schema)
+        # Caught here, so a test that fails another way still does not end the run.
+        with (
+            listening("after_cursor_execute", interrupt),
+            listening("invalidate", record, Pool),
+            pytest.raises(type(raised)) as error,
+        ):
+            upgrade(first_schema)
+        assert error.value is raised
+        # Inside a statement, so SQLAlchemy invalidated the connection for it, once.
+        assert invalidated == [raised]
+        assert snapshot(first_schema) == before
+        assert revision_of(first_schema) == FIRST_SCHEMA_HEAD
+
+    def test_an_error_read_as_a_disconnect_applies_none(
+        self, migrated_database: Path, tmp_path: Path
+    ) -> None:
+        """A test-only revision closes its driver connection and runs a statement: SQLAlchemy
+        reads the driver's error as a disconnect and invalidates the connection, once, and that
+        error ends the upgrade."""
+        versions = tmp_path / "versions"
+        write_revision(
+            versions, TEST_REVISION, HEAD_REVISION, f"{CLOSED_CONNECTION}op.execute('SELECT 1')"
+        )
+        invalidated: list[BaseException | None] = []
+
+        def record(_dbapi_connection: Any, _record: Any, exception: BaseException | None) -> None:
+            invalidated.append(exception)
+
+        before = snapshot(migrated_database)
+        with listening("invalidate", record, Pool), pytest.raises(ProgrammingError) as error:
+            upgrade(migrated_database, test_versions=versions)
+        assert type(error.value) is ProgrammingError
+        assert type(error.value.orig) is sqlite3.ProgrammingError
+        assert error.value.statement == "SELECT 1"
+        assert error.value.connection_invalidated is True
+        assert invalidated == [error.value.orig]
+        assert snapshot(migrated_database) == before
+        assert revision_of(migrated_database) == HEAD_REVISION
+
+    @pytest.mark.parametrize(
+        "after",
+        [
+            pytest.param("", id="the revision goes on"),
+            pytest.param("raise RuntimeError('after the reconnect')", id="the revision raises"),
+        ],
+    )
+    def test_no_statement_reconnects_after_the_connection_is_invalidated(
+        self, migrated_database: Path, tmp_path: Path, after: str
+    ) -> None:
+        """After SQLAlchemy invalidated the upgrade's connection, a rollback() would let the next
+        statement reconnect on a second connection, outside the upgrade's transaction and the
+        state its authorizer reads. env.py refuses that connection and closes it: the statement
+        fails with the refusal, which SQLAlchemy wraps as it wraps any error raised while it
+        reconnects, and nothing is applied."""
+        versions = tmp_path / "versions"
+        write_revision(
+            versions,
+            TEST_REVISION,
+            HEAD_REVISION,
+            f"{CLOSED_CONNECTION}"
+            "try:\n    op.execute('SELECT 1')\nexcept Exception:\n    pass\n"
+            "bind.rollback()\n"
+            f"op.execute('CREATE TABLE late (x INTEGER)')\n{after}",
+        )
+        connections: list[sqlite3.Connection] = []
+        invalidated: list[BaseException | None] = []
+
+        def connected(dbapi_connection: sqlite3.Connection, _record: Any) -> None:
+            connections.append(dbapi_connection)
+
+        def record(_dbapi_connection: Any, _record: Any, exception: BaseException | None) -> None:
+            invalidated.append(exception)
+
+        before = snapshot(migrated_database)
+        with (
+            listening("connect", connected, Pool),
+            listening("invalidate", record, Pool),
+            pytest.raises(StatementError) as error,
+        ):
+            upgrade(migrated_database, test_versions=versions)
+        assert type(error.value) is StatementError
+        assert error.value.statement == "CREATE TABLE late (x INTEGER)"
+        assert error.value.orig is error.value.__cause__
+        assert type(error.value.orig).__name__ == "MigrationRefused"
+        assert "runs on one driver connection" in str(error.value.orig)
+        assert [type(exception) for exception in invalidated] == [sqlite3.ProgrammingError]
+        # The upgrade's connection, closed by the revision, and the refused one, closed by env.py.
+        assert [is_closed(connection) for connection in connections] == [True, True]
+        assert snapshot(migrated_database) == before
+        assert revision_of(migrated_database) == HEAD_REVISION
+
+    def test_an_upgrade_runs_on_one_driver_connection(self, first_schema: Path) -> None:
+        """The chain from the first schema to head opens one driver connection, and closes it."""
+        connections: list[sqlite3.Connection] = []
+
+        def connected(dbapi_connection: sqlite3.Connection, _record: Any) -> None:
+            connections.append(dbapi_connection)
+
+        with listening("connect", connected, Pool):
+            upgrade(first_schema)
+        assert [is_closed(connection) for connection in connections] == [True]
+        assert revision_of(first_schema) == HEAD_REVISION
+
+    def test_a_revision_gets_no_second_connection(
+        self, migrated_database: Path, tmp_path: Path
+    ) -> None:
+        """A second connection a revision asks the engine for would hold no part of the
+        upgrade's transaction: env.py refuses it before anything runs on it, and closes it."""
+        versions = tmp_path / "versions"
+        write_revision(versions, TEST_REVISION, HEAD_REVISION, "op.get_bind().engine.connect()")
+        connections: list[sqlite3.Connection] = []
+
+        def connected(dbapi_connection: sqlite3.Connection, _record: Any) -> None:
+            connections.append(dbapi_connection)
+
+        before = snapshot(migrated_database)
+        with listening("connect", connected, Pool), pytest.raises(RuntimeError) as error:
+            upgrade(migrated_database, test_versions=versions)
+        assert "runs on one driver connection" in refusal(error)
+        assert [is_closed(connection) for connection in connections] == [True, True]
+        assert snapshot(migrated_database) == before
+        assert revision_of(migrated_database) == HEAD_REVISION
+
+    def test_a_revision_that_catches_the_refusal_still_fails_the_upgrade(
+        self, migrated_database: Path, tmp_path: Path
+    ) -> None:
+        """A revision that catches the refusal of a second connection and goes on: the upgrade
+        fails before the commit, and the file keeps its revision and contents."""
+        versions = tmp_path / "versions"
+        write_revision(
+            versions,
+            TEST_REVISION,
+            HEAD_REVISION,
+            """
+            try:
+                op.get_bind().engine.connect()
+            except RuntimeError:
+                pass
+            op.execute("CREATE TABLE after_the_refusal (x INTEGER)")
+            """,
+        )
+        before = snapshot(migrated_database)
+        with pytest.raises(RuntimeError) as error:
+            upgrade(migrated_database, test_versions=versions)
+        assert type(error.value).__name__ == "MigrationRefused"
+        assert str(error.value) == (
+            "the upgrade runs on one driver connection: no other is opened, after SQLAlchemy "
+            "invalidated it or for a second connection to the same engine; a revision went on "
+            "after the refusal, so nothing was committed"
+        )
+        assert snapshot(migrated_database) == before
+        assert revision_of(migrated_database) == HEAD_REVISION
+
     def test_the_chain_commits_a_file_of_seeded_rows(self, step3b1_database: Path) -> None:
         """The foreign-key check before the upgrade's commit passes a file of valid rows, and
         each table it reads holds the rows the seed wrote."""
