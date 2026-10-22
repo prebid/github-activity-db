@@ -959,8 +959,9 @@ the first class that matches, in this order:
   hydrated PR an error, not retried: an index that omits a live PR is the read the sync's step 7
   deletes by, so verify reports it);
 - unchecked: a differing item whose timeline lookup (5.8) or lookup by number still fails after the
-  retries on a request GitHub did not answer (a transport, server, or timeout failure; a rate limit only
-  waits, and a wait the deadline refuses ends verify as a timeout),
+  retries on a request GitHub did not answer (a transport, server, or timeout failure; a rate limit waits:
+  a wait the deadline refuses ends verify as a timeout, and without `--max-minutes` a wait longer
+  than the named constant is fatal, 5.3 step 4),
   or that a lookup had not answered when a repository error stopped it, those of the batch the error
   ended included, listed by number;
 - error: anything else, a lookup whose answer verify cannot accept included (a timeline lookup
@@ -1948,10 +1949,12 @@ is replaced under D39: a check that GitHub, the environment, or a caller can fai
 side built from D39's inputs, and a check that only a defect of this code could fail is tested on
 its passing side, with the exact count of what it compared. Among them, by file:
 `tests/db/test_schema.py` (changed copies of a migrated database); `tests/db/test_migrations.py` (revisions holding a failure, a foreign-key violation, a `COMMIT` or
-`END`, or a batch alter that leaves a view in place; the connection put inside a transaction; the
+`END`, a statement the authorizer refuses, an `ATTACH`, or a batch alter that leaves a view in
+place; the revision-rule checker's planted files; the connection put inside a transaction; the
 copies changed for the definition reading); `tests/db/test_tracked_database.py` (the frozen file's
-changed copy); `tests/db/test_views.py` (indexes dropped on a copy); `tests/sync/test_engine.py` (a
-writer patched to raise `AccountMissing` or a `RuntimeError`, a prune patched to raise, and
+changed copy); `tests/db/test_views.py` (indexes dropped on a copy, and a row id projected under a consumer name);
+`tests/sync/test_snapshot.py` (a server-side cursor left half-read); `tests/sync/test_engine.py` (a
+writer patched to raise `AccountMissing` or a `RuntimeError`, a prune patched to raise a `RuntimeError`, and
 `alembic_version` set to a revision that does not exist); `tests/sync/test_runs.py` (`user_version`
 set on a migrated copy); `tests/sync/test_writer.py` (a wrong `targets_default_branch` written into
 a row); `tests/test_cli_sync.py` (`alembic_version` set to `'older'`); `tests/test_cli_app.py` (the
@@ -1970,7 +1973,9 @@ their tests, renamed where a name says planted: a recorded unit `replay.modify` 
 GitHub can send (`FAIL_ONE_ITEM`), a kill or an interrupt at a set point, an exception a caller
 raises in a transaction body (`tests/sync/test_connection.py`), the CLI's exit-code test commands,
 valid tables in a scratch database (`tests/test_data_dictionary.py`'s `planted.db`), the tracked-file
-check's WAL, non-database, symlink, and sidecar inputs, and a size limit patched to a small value.
+check's WAL, non-database, symlink, and sidecar inputs. `tests/source/test_recorder.py`'s file-size
+limit patched to a small value is replaced by a recorded unit given, in memory, a body over
+`MAX_FILE_BYTES`.
 `docs/testing.md` drops its descriptions of the replaced tests.
 
 Tests: each rule a replaced test held has a test D39 allows, on both sides where GitHub, the
@@ -1979,11 +1984,12 @@ pull request lists each test it replaces or removes, with the rule it held and t
 holds it.
 
 Acceptance: the pull request lists every test under `tests/**/*.py` that writes a source file,
-a revision, a row, a database, or a package copy, changes a recorded unit, or patches a call or a
-constant, with the D39 input it uses or the test that replaced it; a search of `tests/**/*.py`
+a revision, a row, a database, or a package copy, changes a recorded unit, patches a call or a
+constant, or runs a call or a query holding a flaw, with the D39 input it uses or the test that
+replaced it; a search of `tests/**/*.py`
 (recorded GitHub text under `tests/fixtures/` is outside it) for `plant`, `tamper`, `decoy`,
 `corrupt`, and `mutat` finds none; an adversarial review of the change, by reviewers who did not
-write it, finds no rule that lost its test and no test outside that list that holds a flaw; CI
+write it, finds no rule that lost its test and no test that holds a flaw; CI
 passes on the exact PR head.
 
 #### Step 3b-2a-3: D37 in the sync
@@ -2030,7 +2036,8 @@ schema-version lock entry's consumer pairs:
 - the run-record and setup checks of gap 105: `code_version` as 5.1 defines it, with `_git`
   returning the exit status; a close given an outcome it cannot write raises before writing;
   `[automation]` is required; the connect listener reads `foreign_keys` back and refuses a
-  connection where it is off; `alembic/env.py` refuses a `stamp` that would change the revision;
+  connection where it is off or where the read-back returns no row (SQLite built without
+  foreign-key support); `alembic/env.py` refuses a `stamp` that would change the revision;
   the wheel check compares the packaged `tracking.toml` bytes with the source file's; the log-file
   handler receives every record at its level; `sync_runs.repo_filter` records `--repo`; and
   `trigger` records `unknown` for a `GITHUB_EVENT_NAME` other than `schedule` and
@@ -2088,9 +2095,9 @@ with `git status`, `ls-files`, and `rev-parse` failing or timing out inside a ch
 (`-unknown`); `trigger` for `schedule`, `workflow_dispatch`, another event name, and none; a close
 given an outcome with no stored row leaving the row `running`; a `stamp` to another revision and a
 `stamp --purge` at head refused with nothing committed, and a `stamp` at head accepted; the
-migration refusing a populated file; a connection whose `foreign_keys` reads back 0 refused, through a fake DBAPI connection answering
-`PRAGMA foreign_keys` with 0, as SQLite built without foreign-key support does (an environment
-stub); the
+migration refusing a populated file; a connection whose `foreign_keys` read-back returns no row refused, through a fake DBAPI connection
+that answers `PRAGMA foreign_keys` with no row, as SQLite built without foreign-key support does
+(an environment stub), and one that reads back 1 accepted; the
 wheel check reporting the SHA-256 of the packaged `tracking.toml` it compared, equal to the source
 file's; a record at the log file's level reaching it and one below not; `repo_filter` written for
 a `--repo` run, sorted, with each value as given, and null without one; a file without
@@ -2195,9 +2202,9 @@ timeline lookup through the replay: a connected event naming the differing issue
 another issue, a link difference made by a closing keyword with no event, a difference in the
 link totals alone with enough connected events, with only a disconnected event, and with too few, a
 synthetic
-disconnected event, an event at the boundary counted and one a second before it not, an entry
-the model holds half a second before the boundary, which it compares with `since` before writing
-its time in whole seconds, not counted, a stored link no longer indexed on a PR whose index lists every link matched only by an
+disconnected event, an event at the boundary counted and one a second before it not (under the measured `since`
+and whole-second times, verify's own `createdAt` filter drops no entry the lookup returns, so it
+is tested on its passing side, every returned entry counted), a stored link no longer indexed on a PR whose index lists every link matched only by an
 event naming it, a filtered page whose `totalCount` differs from its entries, counted by its
 entries, a lookup whose entries differ from its `filteredCount` after its retry and one whose
 response the typed models reject, each an error, one that differs once and matches on its retry, classed by its events, and a
