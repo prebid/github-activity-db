@@ -893,6 +893,36 @@ async def test_each_assignee_github_id_is_distinct(
     assert len(set(github_ids)) == len(nodes)
 
 
+COPILOT = {"__typename": "Bot", "databaseId": 175728472, "id": "BOT_kgDOCnlnWA", "login": "Copilot"}
+# The same databaseId under its second node id, in the legacy format (gap 103).
+COPILOT_SECOND_NODE = {**COPILOT, "id": "MDM6Qm90MTc1NzI4NDcy"}
+
+
+@pytest.mark.parametrize("overflow", [False, True], ids=["first-page", "overflow"])
+async def test_an_assignee_github_id_under_two_node_ids(
+    open_source, replay: Replay, overflow: bool
+) -> None:
+    # Synthetic: recorded #15771 with its second assignee replaced by Copilot and Copilot's
+    # second node id added after it, on the same page or a second one. pr_assignees keys an
+    # assignee by its account, which plan 5.2 resolves by databaseId, so both cannot be stored.
+    # The node ids differ, so the node-id comparison passes them.
+    unit = pr_unit(replay, 15771)
+    page = unit.data["assignedActors"]
+    page["nodes"][1] = dict(COPILOT)
+    if overflow:
+        second_page(replay, unit, "assignedActors", dict(COPILOT_SECOND_NODE))
+    else:
+        page["nodes"].append(dict(COPILOT_SECOND_NODE))
+        page["totalCount"] += 1
+    replay.add(unit)
+    error = await failure(open_source, PREBID_JS, 15771)
+    assert type(error) is DuplicateEntry
+    assert (error.number, error.connection, error.key) == (15771, "assignedActors", 175728472)
+    # The item fails, then once more when retried alone.
+    attempt = ["PullRequestBatch", "Overflow"] if overflow else ["PullRequestBatch"]
+    assert [seen.operation for seen in replay.seen] == ["Resolve", *attempt, *attempt]
+
+
 async def test_a_duplicate_review_request(open_source, replay: Replay) -> None:
     # A request listed again in place of a missing one would pass the count check.
     unit = pr_unit(replay, 15771)

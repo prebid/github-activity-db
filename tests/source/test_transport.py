@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import inspect
+import json
 import random
 import time
 from collections.abc import Callable, Iterator
@@ -13,6 +14,7 @@ from typing import Any
 
 import httpx
 import pytest
+from githubkit import OAuthTokenAuthStrategy
 from githubkit.core import GitHubCore
 from githubkit.exception import (
     AuthCredentialError,
@@ -684,6 +686,38 @@ class TestCredentials:
         assert cause.exc is error
         assert clock.sleeps == []
         assert len(replay.seen) == 1
+
+    async def test_a_token_refresh_githubkit_cannot_parse_is_fatal(
+        self, replay: Replay, clock: FakeClock
+    ) -> None:
+        """A ValueError raised inside the client outside githubkit's rate-limit readers.
+
+        githubkit's OAuth token auth refreshes a missing token inside the client and parses the
+        token endpoint's answer with response.json(). Here the endpoint answers 200 with a body in
+        its documented default format, form-encoded, rather than JSON.
+        """
+        endpoint = "https://github.com/login/oauth/access_token"
+        body = "access_token=test-token&scope=repo&token_type=bearer"
+        replay.fault(
+            lambda request: httpx.Response(
+                200,
+                content=body.encode(),
+                headers={"content-type": "application/x-www-form-urlencoded; charset=utf-8"},
+            ),
+            when=lambda seen: seen.path == endpoint,
+        )
+        auth = OAuthTokenAuthStrategy("test-client", "test-secret", refresh_token="test-refresh")
+        async with GitHubSource(auth, http_transport=replay.transport(), clock=clock) as source:
+            with pytest.raises(ClientFailure) as raised:
+                await source.resolve(**RESOLVE)
+        assert type(raised.value) is ClientFailure
+        cause = raised.value.__cause__
+        assert type(cause) is RequestError
+        error = cause.exc
+        assert type(error) is json.JSONDecodeError
+        assert (error.msg, error.doc, error.pos) == ("Expecting value", body, 0)
+        assert clock.sleeps == []
+        assert [seen.path for seen in replay.seen] == [endpoint]
 
 
 class TestFatal:
