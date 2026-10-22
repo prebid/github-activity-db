@@ -1942,10 +1942,7 @@ Scope: tests; `docs/testing.md`, `docs/database.md`, `docs/development.md`, `CLA
 `.github/workflows/check.yml`, which runs the suite a second time in reverse order under another
 `PYTHONHASHSEED` and compares the two runs; `pyproject.toml`, where ruff skips
 `tests/fixtures/history/`; two changes under `src/`: `ghactivity sync` times its report on the run's clock, not `time.monotonic` (a wall-clock step during a run shows in the printed seconds), and `db.types.utc_now` reads the time through `_wall_clock`, which a
-test replaces or refuses (D40); and one under `alembic/`: `env.py` runs an upgrade on one driver
-connection and records a failed upgrade's state on that connection's mapping without asking
-SQLAlchemy for the connection again, so an interrupt, a `SystemExit`, or an error SQLAlchemy reads
-as a disconnect propagates itself instead of a `PendingRollbackError`. No rule loses its test. Every
+test replaces or refuses (D40). Nothing under `alembic/` changes. No rule loses its test. Every
 test meets D40.
 
 `tests/determinism.py` refuses, in the pytest process from collection on, a connection other than to
