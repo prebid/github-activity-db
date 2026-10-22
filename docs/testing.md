@@ -10,17 +10,23 @@ How the test suite is built and what it counts as evidence. The plan of record i
 - **Real components, faked boundaries.** GitHub is the only fake: the real `GitHubSource` runs
   over `httpx.MockTransport`, answering from responses recorded from public repositories.
   Databases are real SQLite files built by `alembic upgrade head`.
-- **Direct evidence, nothing planted** (redesign plan D39). A test's inputs are GitHub's recorded
-  responses; stubs of what GitHub or the environment can send, which a test may build in memory
-  from a recorded unit; calls and configuration the code must refuse; valid rows (`tests/db/seed.py`);
-  and databases and files the project's own code wrote. Each test asserts the exact result. No
-  test changes a file or a copy of one, or writes a file, a row, a revision, a call site, or a decoy
-  holding a flaw, to see whether a check catches it, and none measures how many such flaws are
-  caught: there is no mutation testing, under any name. A check that only a defect of this code
-  could fail is tested on its passing side, with the exact count of what it compared; one GitHub,
-  the environment, or a caller can fail is tested on both sides. A fix comes with a regression test
-  that fails against the parent commit's code. Tests merged before D39 that plant are replaced in
-  Step 7.
+- **Direct evidence, nothing planted** (redesign plan D39). Nothing is planted or tampered, no flaw
+  is seeded, and there is no mutation testing, under any name. No test, review, or acceptance
+  changes a file or a copy of one (other than a stub the inputs below allow), or writes a file, a
+  row, a revision, a call site, or a decoy holding a flaw, to see whether something catches it, and
+  none measures how many such flaws are found. A test's or an acceptance's inputs are GitHub's
+  recorded responses; stubs of a response GitHub or the environment can send (a status, a body, a
+  timeout, an interrupt, a failing `git`, a clock), which a test may build in memory from a recorded
+  unit changed into that shape; calls the code under test must refuse, and configuration it must
+  refuse or that names a state GitHub can produce (a repository that does not resolve, one no longer
+  listed); valid rows a test writes (through the models with `tests/db/seed.py`, or in SQL); and
+  databases and files this project's own code wrote, at any revision. Each test asserts the exact
+  result. A check over stored data, files, or source that only a defect of this code could fail is
+  tested on its passing side, with the exact count of the rows, files, or values it compared, so it
+  cannot pass on nothing; a check that GitHub, the environment, or a caller can fail is tested on
+  both sides. A fix comes with a regression test that fails against the parent commit's code. Tests
+  merged before D39 that change a file or a copy of one, or write a file, a revision, a call, a
+  connection, or a decoy holding a flaw, to see whether a check catches it are replaced in Step 7.
 - **No skipped tests** (D22). CI runs `scripts/check_junit.py --max-skipped 0`, which fails a run
   where any test was skipped (pytest reports `xfail` as skipped) or none ran.
 - **Time.** Source tests pass a `FakeClock`, so waits and retries are asserted, never slept.
