@@ -15,12 +15,17 @@ modules imported under their own names: ``time`` is used only for ``tzset``, ``r
 ``Random`` called with a seed, and ``secrets`` not at all; ``datetime.now``, ``utcnow``, and
 ``today`` and ``date.today`` are not read, through the module or the classes ``from datetime
 import ...`` binds; ``asyncio.sleep`` is called only with ``0``; and ``os.urandom``,
-``os.getrandom``, ``uuid.uuid1``, and ``uuid.uuid4`` are not used. An alias, a star import, or one
-of these modules or names passed as a value is refused rather than read. Out of scope: the modules
-reached without an import statement, the event loop's ``time()``, file times, and the order of a
-set of strings, which ``PYTHONHASHSEED`` changes from one process to the next (two runs compared by
-``scripts/check_junit.py --same-as`` show that). The code a test runs is held to the same rules at
-run time by ``tests/determinism.py``.
+``os.getrandom``, ``uuid.uuid1``, and ``uuid.uuid4`` are not used. ``Random(None)`` draws its seed
+from the OS and counts as unseeded. An alias or a star import of these modules or names is refused
+rather than read, and so are ``time``, ``random``, ``secrets``, and the names listed passed as
+values; ``asyncio``, ``os``, ``uuid``, and ``datetime`` are read only through the names listed, so
+one of them passed as a value (to ``getattr``, say) is out of scope. A name in an annotation is a
+type and is not read, unless the annotation holds a call or ``Annotated`` metadata, which code reads
+at run time. Out of scope as well: the modules reached without an import statement, the event loop's
+``time()``, file times, and the order of a set of strings, which ``PYTHONHASHSEED`` changes from one
+process to the next (two runs compared by ``scripts/check_junit.py --same-as`` show that). The same
+scan over the package finds its reads only in its two real clocks; at run time
+``tests/determinism.py`` refuses one of them, ``SystemClock``, and the network, in every test.
 
 Every test function is one pytest collects: none is defined inside another function, where it
 would never run.
@@ -154,6 +159,9 @@ def determinism_problems(*paths: Path) -> list[str]:
                                 f"{where}:{node.lineno}: {alias.name} imported as {alias.asname}"
                             )
                         modules.add(alias.name)
+                    elif alias.asname is None and alias.name.split(".")[0] in {*ONLY, *NEVER}:
+                        # ``import os.path`` binds ``os``.
+                        modules.add(alias.name.split(".")[0])
             elif isinstance(node, ast.ImportFrom) and node.module in {*ONLY, *NEVER, "datetime"}:
                 for alias in node.names:
                     name = f"{node.module}.{alias.name}"
@@ -171,8 +179,7 @@ def determinism_problems(*paths: Path) -> list[str]:
                         classes.add(alias.name)
         called = {id(node.func): node for node in nodes if isinstance(node, ast.Call)}
         bases = {id(node.value) for node in nodes if isinstance(node, ast.Attribute)}
-        # A name in an annotation is a type, never called.
-        typed = {id(part) for annotation in _annotations(nodes) for part in ast.walk(annotation)}
+        typed = _types(nodes)
         for node in nodes:
             if id(node) in typed:
                 continue
@@ -207,18 +214,37 @@ def determinism_problems(*paths: Path) -> list[str]:
     return found
 
 
-def _annotations(nodes: list[ast.AST]) -> list[ast.expr]:
-    found: list[ast.expr | None] = []
+def _types(nodes: list[ast.AST]) -> set[int]:
+    """The ids of the nodes in annotations that only name types. An annotation holding a call or
+    ``Annotated`` metadata is left out: code reads those at run time."""
+    annotations: list[ast.expr | None] = []
     for node in nodes:
         if isinstance(node, ast.arg | ast.AnnAssign):
-            found.append(node.annotation)
+            annotations.append(node.annotation)
         elif isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
-            found.append(node.returns)
-    return [annotation for annotation in found if annotation is not None]
+            annotations.append(node.returns)
+    typed: set[int] = set()
+    for annotation in annotations:
+        parts = list(ast.walk(annotation)) if annotation is not None else []
+        if not any(
+            isinstance(part, ast.Call)
+            or (isinstance(part, ast.Name) and part.id == "Annotated")
+            or (isinstance(part, ast.Attribute) and part.attr == "Annotated")
+            for part in parts
+        ):
+            typed.update(id(part) for part in parts)
+    return typed
 
 
 def _seeded(call: ast.Call | None) -> bool:
-    return call is not None and bool(call.args or call.keywords)
+    """``Random`` called with a seed: its first argument, or ``x``, given and not ``None``."""
+    if call is None:
+        return False
+    seed = call.args[0] if call.args else None
+    for keyword in call.keywords:
+        if keyword.arg in ("x", None):  # None: ``**kwargs``, which the scan cannot read
+            seed = keyword.value if keyword.arg == "x" else None
+    return seed is not None and not (isinstance(seed, ast.Constant) and seed.value is None)
 
 
 def uncollected_tests(*paths: Path) -> list[str]:
@@ -285,25 +311,68 @@ def _refused(refusal: pytest.ExceptionInfo[NotDeterministic]) -> tuple[str, str]
     return refusal.value.what, refusal.value.detail
 
 
-def test_a_connection_to_a_host_is_refused() -> None:
+@pytest.mark.parametrize("method", ["connect", "connect_ex"])
+def test_a_connection_to_a_host_is_refused(method: str) -> None:
     with pytest.raises(NotDeterministic) as refusal, socket.socket() as connection:
-        connection.connect(("192.0.2.1", 443))
-    assert _refused(refusal) == ("network", "connect ('192.0.2.1', 443)")
+        getattr(connection, method)(("192.0.2.1", 443))
+    assert _refused(refusal) == ("network", f"{method} ('192.0.2.1', 443)")
 
 
-def test_a_host_name_lookup_is_refused() -> None:
+@pytest.mark.parametrize("method", ["connect", "connect_ex"])
+def test_a_connection_to_a_unix_socket_goes_through(
+    method: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A relative path, since macOS limits a Unix socket's path to 104 bytes.
+    monkeypatch.chdir(tmp_path)
+    with socket.socket(socket.AF_UNIX) as listening, socket.socket(socket.AF_UNIX) as connection:
+        listening.bind("s")
+        listening.listen(1)
+        assert getattr(connection, method)("s") in (None, 0)
+        assert connection.getpeername() == "s"
+    assert determinism.REFUSED == []
+
+
+@pytest.mark.parametrize(
+    ("lookup", "argument", "detail"),
+    [
+        ("getaddrinfo", ("api.github.com", 443), "getaddrinfo 'api.github.com'"),
+        ("gethostbyname", ("api.github.com",), "gethostbyname 'api.github.com'"),
+        ("gethostbyname_ex", ("api.github.com",), "gethostbyname_ex 'api.github.com'"),
+        ("gethostbyaddr", ("192.0.2.1",), "gethostbyaddr '192.0.2.1'"),
+        ("getnameinfo", (("192.0.2.1", 443), 0), "getnameinfo ('192.0.2.1', 443)"),
+        ("getfqdn", ("api.github.com",), "gethostbyaddr 'api.github.com'"),
+    ],
+    ids=[*determinism.LOOKUPS, "getfqdn"],
+)
+def test_every_host_name_lookup_is_refused(
+    lookup: str, argument: tuple[object, ...], detail: str
+) -> None:
     with pytest.raises(NotDeterministic) as refusal:
-        socket.getaddrinfo("api.github.com", 443)
-    assert _refused(refusal) == ("network", "getaddrinfo 'api.github.com' 443")
+        getattr(socket, lookup)(*argument)
+    assert _refused(refusal) == ("network", detail)
 
 
-async def test_the_source_without_a_recorded_transport_is_refused_the_network() -> None:
+@pytest.mark.parametrize(
+    "proxy",
+    [
+        {},
+        {"HTTPS_PROXY": "http://192.0.2.10:3128"},
+        {"https_proxy": "http://192.0.2.10:3128"},
+        {"ALL_PROXY": "http://192.0.2.10:3128"},
+    ],
+    ids=["none", "HTTPS_PROXY", "https_proxy", "ALL_PROXY"],
+)
+async def test_the_source_without_a_recorded_transport_is_refused_the_network(
+    proxy: dict[str, str], monkeypatch: pytest.MonkeyPatch
+) -> None:
     """The source as a command builds it, with githubkit's own transport: its first request is
-    refused at the host-name lookup."""
+    refused at the lookup of GitHub's host, whatever proxy the environment names."""
+    for name, value in proxy.items():
+        monkeypatch.setenv(name, value)
     async with GitHubSource("test-token", clock=FakeClock()) as source:
         with pytest.raises(NotDeterministic) as refusal:
             await source.resolve("prebid", "Prebid.js")
-    assert _refused(refusal) == ("network", "getaddrinfo b'api.github.com' 443")
+    assert _refused(refusal) == ("network", "getaddrinfo b'api.github.com'")
 
 
 def test_the_real_clock_is_refused() -> None:

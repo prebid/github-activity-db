@@ -1946,10 +1946,11 @@ Prerequisite: Step 3b-2a-2c has merged, and D39 is on `main`.
 Scope: tests, `docs/testing.md`, `scripts/check_junit.py`'s `--same-as`, and one change under
 `src/`: `ghactivity sync` times its report on the run's clock, not `time.monotonic` (D40). Nothing
 under `alembic/` changes, and no rule loses its test. Every test meets D40.
-`tests/determinism.py` refuses, for every test in the pytest process, a network connection, a
-host-name lookup, and this project's real clock and unseeded random source (`SystemClock`), and
-records each refusal, so a test fails even where the code under test caught it; each refusal has a
-test. `tests/test_suite_rules.py` gains the rules it can model in source: no test file reads the
+`tests/determinism.py` refuses, in the pytest process from collection on, a network connection
+other than a Unix socket, every host-name lookup the `socket` module offers, and this project's
+real clock and unseeded random source (`SystemClock`), with `no_proxy` set so the machine's proxy
+settings change nothing, and records each refusal, so a test fails even where the code under test
+caught it; each refusal, and the Unix socket it lets through, has a test. `tests/test_suite_rules.py` gains the rules it can model in source: no test file reads the
 wall clock, sleeps on it, or draws unseeded random numbers; the package reads them only in its two
 real clocks (`SystemClock` and `db.types.utc_now`); and no test function is defined inside another
 function, where pytest never collects it. Each is tested on its passing side over every file under

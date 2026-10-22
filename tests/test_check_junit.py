@@ -1,8 +1,9 @@
 """The CI gate over pytest's JUnit report.
 
 Every report is one pytest wrote, in a run over a test file written for it, or is built in memory
-from one with its counters changed into a shape a run can leave: failures, errors, skips, no test
-executed, several suites merged, a file cut short, or no suite at all. ``--same-as`` compares two
+from one with its counters changed (the gate's verdict reads only the counters; the test cases are
+left as pytest wrote them): failures, errors, skips, no test executed, several suites merged, a
+file cut short, or no suite at all. ``--same-as`` compares two
 reports pytest wrote, in runs over test files written for them.
 """
 
@@ -173,6 +174,16 @@ def _written_report(root: Path, test_body: str) -> Path:
 PASSES = "def test_a():\n    pass\n"
 
 
+def test_a_test_in_two_suites_has_one_outcome(tmp_path: Path, written: bytes) -> None:
+    """Two suites merged from the same run hold test_a twice, with one outcome."""
+    first = tmp_path / "first.xml"
+    first.write_bytes(written)
+    second = _report(tmp_path, written, (1, 0, 0, 0), (1, 0, 0, 0))
+    result = _gate(first, "--same-as", str(second))
+    assert result.returncode == 0, result.stderr
+    assert result.stderr == ""
+
+
 def test_two_runs_with_the_same_outcomes_agree(tmp_path: Path) -> None:
     body = PASSES + "\n\ndef test_b():\n    pass\n"
     first = _written_report(tmp_path / "first", body)
@@ -193,9 +204,14 @@ def test_two_runs_with_the_same_outcomes_agree(tmp_path: Path) -> None:
             "def test_a(broken):\n    pass\n",
             "passed vs error",
         ),
+        (
+            "@pytest.fixture\ndef breaks_after():\n    yield\n    raise RuntimeError\n\n\n"
+            "def test_a(breaks_after):\n    assert False\n",
+            "passed vs error+failed",
+        ),
         ("def test_c():\n    pass\n", "passed vs absent"),
     ],
-    ids=["skipped", "failed", "error", "absent"],
+    ids=["skipped", "failed", "error", "failed then error", "absent"],
 )
 def test_a_test_whose_outcome_differs_between_runs_fails(
     tmp_path: Path, second_body: str, difference: str
@@ -212,17 +228,16 @@ def test_a_test_whose_outcome_differs_between_runs_fails(
     assert result.stderr.splitlines() == expected
 
 
-@pytest.mark.parametrize("shape", ["missing", "a test twice"])
+@pytest.mark.parametrize("shape", ["missing", "no testsuite"])
 def test_an_unreadable_second_report_fails(tmp_path: Path, written: bytes, shape: str) -> None:
-    """A second report that is missing, or that holds a test twice (two suites merged from the
-    same run), cannot be compared."""
+    """A second report that is missing, or holds no suite, cannot be compared."""
     first = tmp_path / "first.xml"
     first.write_bytes(written)
     second = tmp_path / "missing.xml"
     problem = f"[Errno 2] No such file or directory: '{second}'"
-    if shape == "a test twice":
-        second = _report(tmp_path, written, (1, 0, 0, 0), (1, 0, 0, 0))
-        problem = f"test_sample::test_a appears twice in {second}"
+    if shape == "no testsuite":
+        second = _report(tmp_path, written)
+        problem = f"no <testsuite> element in {second}"
     result = _gate(first, "--same-as", str(second))
     assert result.returncode == 1
     # The counters are printed only after both reports are read.

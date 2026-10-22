@@ -3,7 +3,9 @@
 pytest exits 0 when every collected test is skipped. This gate reads the report instead:
 at least one test executed, none failed or errored, and no more skips than allowed.
 With ``--same-as``, it also fails unless a second report holds the same tests, each with the
-same outcome, so two runs of the suite can be shown to agree (redesign plan D40).
+same outcome, so two runs of the suite can be shown to agree (redesign plan D40). A test pytest
+reports in more than one <testcase> (it writes a second one for a teardown error after a failure)
+has the outcomes of all of them, sorted and joined: ``error+failed``.
 
 Usage: python scripts/check_junit.py REPORT.xml [--max-skipped N] [--same-as OTHER.xml]
 """
@@ -28,24 +30,23 @@ def read_counts(report: Path) -> dict[str, int]:
 
 
 def read_outcomes(report: Path) -> dict[str, str]:
-    """Each test's id (classname::name) and its outcome: passed, failed, error, or skipped."""
+    """Each test's id (classname::name) and its outcome: passed, failed, error, or skipped, or
+    the outcomes of each <testcase> that holds the test, joined: ``error+failed``."""
     root = ET.parse(report).getroot()
     suites = [root] if root.tag == "testsuite" else root.findall("testsuite")
     if not suites:
         raise ValueError(f"no <testsuite> element in {report}")
-    outcomes: dict[str, str] = {}
+    outcomes: dict[str, set[str]] = {}
     for suite in suites:
         for case in suite.iter("testcase"):
             test = f"{case.get('classname', '')}::{case.get('name', '')}"
-            if test in outcomes:
-                raise ValueError(f"{test} appears twice in {report}")
             outcome = "passed"
             for kind in ("failure", "error", "skipped"):
                 if case.find(kind) is not None:
                     outcome = "failed" if kind == "failure" else kind
                     break
-            outcomes[test] = outcome
-    return outcomes
+            outcomes.setdefault(test, set()).add(outcome)
+    return {test: "+".join(sorted(found)) for test, found in outcomes.items()}
 
 
 def differences(first: dict[str, str], second: dict[str, str]) -> list[str]:

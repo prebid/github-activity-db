@@ -51,18 +51,20 @@ How the test suite is built and what it counts as evidence. The plan of record i
   The module reached without an import statement (`importlib.import_module`, `__import__`,
   `sys.modules`) and process APIs outside `subprocess` (`os.system`, `asyncio` subprocesses)
   are outside its scan.
-- **What enforces D40.** In the pytest process, `tests/determinism.py` (installed for the session
-  by `tests/conftest.py`) refuses a network connection other than a Unix socket, every host-name
-  lookup, and `SystemClock`'s `now`, `sleep`, and unseeded random source, by raising
-  `NotDeterministic`; the refusal is also recorded, and a test that reached one fails after it
-  runs even where the code under test caught the exception. `tests/test_suite_rules.py` reads
-  source: no test file reads the wall clock, sleeps on it, or draws unseeded random numbers
-  (`random.Random` takes a seed, `asyncio.sleep` takes `0`); the package reads them only in its
-  two real clocks, `SystemClock` and `db.types.utc_now`; and no test function is defined inside
-  another function, where pytest never collects it. Processes a test starts run without the
-  run-time refusals, and the order of a set of strings changes with `PYTHONHASHSEED` from one
-  process to the next: two runs compared by `scripts/check_junit.py --same-as` show whether an
-  outcome depends on either.
+- **What enforces D40.** In the pytest process, from collection on, `tests/determinism.py`
+  (installed by `tests/conftest.py`) refuses a network connection other than a Unix socket, every
+  host-name lookup the `socket` module offers, and `SystemClock`'s `now`, `sleep`, and unseeded
+  random source, by raising `NotDeterministic`. It sets `no_proxy` to `*`, so a client that reads
+  proxies from the environment or the system settings is refused at GitHub's own host on every
+  machine. Each refusal is also recorded and checked after every test and at the end of the
+  session, so a test fails even where the code under test caught the exception (a refusal in a
+  wider fixture's teardown fails the next check). `tests/test_suite_rules.py` reads source: no test
+  file reads the wall clock, sleeps on it, or draws unseeded random numbers (`random.Random` takes
+  a seed, `asyncio.sleep` takes `0`); the package reads them only in its two real clocks,
+  `SystemClock` and `db.types.utc_now`; and no test function is defined inside another function,
+  where pytest never collects it. Processes a test starts run without the run-time refusals, and
+  the order of a set of strings changes with `PYTHONHASHSEED` from one process to the next: two
+  runs compared by `scripts/check_junit.py --same-as` show whether an outcome depends on either.
 
 ---
 
@@ -116,16 +118,17 @@ tests/
   as the other side of the model comparison.
 - **The real environment.** Migration tests run the repository's `alembic.ini`, `env.py`, and
   revisions. `write_revision` adds a test-only revision after the head through
-  `version_locations`, which is how a planted failure, a foreign-key violation, and a batch alter
-  under the views are run through `env.py` (tests from before D39, which Step 3b-2a-2d replaces). `env.py` is loaded fresh by every command, so its
+  `version_locations`: one records the settings of the connection `env.py` gives a revision, and
+  one runs a batch alter under the views. Earlier schemas come from the real revisions
+  (`upgrade(path, "<revision>")`). `env.py` is loaded fresh by every command, so its
   `MigrationRefused` is matched by class name.
 - **Seeding.** `tests/db/seed.py` writes rows through the models' tables with every column a
   test does not care about filled with a valid default; GitHub ids come from one process-wide
   counter, so separate transactions never collide.
 - **Schema comparison.** `schema_of` reads columns (`PRAGMA table_xinfo`), indexes, foreign keys,
   and every item of each table's definition, which is where constraint names and CHECK text
-  live; each reading is tested against planted differences (tests from before D39, which Step 3b-2a-2d
-  replaces).
+  live; the readings are tested on a scratch database of valid SQL holding what no pragma
+  reports, at head against the models' declarations, and between real revisions.
 - **Dictionary and schema version.** `tests/test_data_dictionary.py` compares
   `docs/data-dictionary.md` with a migrated database in both directions.
   `tests/schema_versions.json` maps each schema version (`PRAGMA user_version`) to its consumer
@@ -271,8 +274,7 @@ run must see GitHub as the test left it.
   template, and the `tracking.toml` entries a test adds; `World.sync()` runs the engine over them,
   first moving the clock past the unsettled window (`settle=False` keeps it). Each case checks the
   stored rows, the `sync_runs` row, the `repo_sync_state` rows the run wrote (`ended`), and the
-  exit code. The `world` fixture fails a test that leaves an `AccountMissing` failure, except the
-  one that fakes the writer's refusal.
+  exit code. The `world` fixture fails a test that leaves an `AccountMissing` failure.
 - **Seeded runs**: `tests/sync/test_seeded_runs.py` gives each of a few fixed seeds a small world
   and five runs, with random changes through the model's methods and random clock gaps between
   them. After each run `tests/sync/expected_state.py` computes the database the plan requires from

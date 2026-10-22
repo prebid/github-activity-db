@@ -33,22 +33,33 @@ for _size in ("COLUMNS", "LINES"):
 SETTINGS_VARIABLES = frozenset(name.upper() for name in Settings.model_fields)
 
 
+_GUARD = pytest.MonkeyPatch()
+
+
+def pytest_configure(config: pytest.Config) -> None:
+    """The network, the real clock, and its random source are refused from collection to the end
+    of the session (``tests/determinism.py``, redesign plan D40)."""
+    determinism.install(_GUARD)
+
+
+def pytest_unconfigure(config: pytest.Config) -> None:
+    _GUARD.undo()
+
+
 @pytest.fixture(autouse=True, scope="session")
-def no_network_or_wall_clock() -> Iterator[None]:
-    """Every test runs with the network, the real clock, and its random source refused
-    (``tests/determinism.py``, redesign plan D40)."""
-    with pytest.MonkeyPatch.context() as patch:
-        determinism.install(patch)
-        yield
+def nothing_refused_after_the_last_test() -> Iterator[None]:
+    """The refusals recorded after the last test's check, in fixtures torn down after it."""
+    yield
+    assert determinism.drain() == []
 
 
 @pytest.fixture(autouse=True)
-def nothing_refused(no_network_or_wall_clock: None) -> Iterator[None]:
-    """A test fails when it reached something ``tests/determinism.py`` refuses, even where the code
-    under test caught the refusal."""
-    determinism.REFUSED.clear()
+def nothing_refused(nothing_refused_after_the_last_test: None) -> Iterator[None]:
+    """A test fails when anything since the previous test's check (collection, a wider fixture's
+    setup or teardown, or the test itself) reached something ``tests/determinism.py`` refuses, even
+    where the code under test caught the refusal."""
     yield
-    assert [(refused.what, refused.detail) for refused in determinism.REFUSED] == []
+    assert determinism.drain() == []
 
 
 @pytest.fixture(autouse=True)
