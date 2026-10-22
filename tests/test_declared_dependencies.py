@@ -156,7 +156,7 @@ def test_reports_what_an_earlier_pyproject_did_not_declare() -> None:
         pytest.param(None, (), id="no installed distribution"),
     ],
 )
-def test_a_name_several_distributions_install_needs_all_of_them_declared(
+def test_src_s_imports_of_a_name_several_distributions_install_need_all_of_them_declared(
     installers: list[str] | None, reported: tuple[str, ...] | None
 ) -> None:
     # The installed environment's answer, with sqlalchemy installed by the distributions given,
@@ -209,3 +209,68 @@ def test_reports_undeclared_imports_in_a_planted_package(tmp_path: Path) -> None
         Undeclared("planted/b.py", "httpx", ("httpx",)),
         Undeclared("planted/b.py", "not_an_installed_module_xyz", ()),
     ]
+
+
+def _install(site: Path, name: str, files: dict[str, str], *, record: bool = True) -> None:
+    """A distribution as an installer leaves it: its files, METADATA, and RECORD (or, without
+    RECORD, top_level.txt)."""
+    for relative, text in files.items():
+        (site / relative).parent.mkdir(parents=True, exist_ok=True)
+        (site / relative).write_text(text)
+    info = site / f"{name.replace('-', '_')}-1.0.dist-info"
+    info.mkdir(parents=True)
+    (info / "METADATA").write_text(f"Metadata-Version: 2.1\nName: {name}\nVersion: 1.0\n")
+    if record:
+        rows = [*files, f"{info.name}/METADATA", f"{info.name}/RECORD"]
+        (info / "RECORD").write_text("".join(f"{row},,\n" for row in rows))
+    else:
+        (info / "top_level.txt").write_text(f"{name.replace('-', '_')}\n")
+
+
+@pytest.mark.parametrize(
+    ("source", "declared", "expected"),
+    [
+        pytest.param(
+            "from review_namespace.beta import PROVIDER\n",
+            '["review-alpha"]',
+            [Undeclared("app/m.py", "review_namespace", ("review-alpha", "review-beta"))],
+            id="a declared sibling does not stand in for the provider",
+        ),
+        pytest.param(
+            "from review_namespace.beta import PROVIDER\n",
+            '["review-beta"]',
+            [Undeclared("app/m.py", "review_namespace", ("review-alpha", "review-beta"))],
+            id="a namespace shared with an undeclared distribution is ambiguous",
+        ),
+        pytest.param(
+            "from review_namespace import beta\nimport review_namespace.alpha\n",
+            '["review-alpha", "review-beta"]',
+            [],
+            id="every installing distribution declared",
+        ),
+        pytest.param(
+            "import legacy_thing.sub\n",
+            '["review-alpha"]',
+            [Undeclared("app/m.py", "legacy_thing", ("legacy-thing",))],
+            id="no RECORD, top_level.txt",
+        ),
+        pytest.param("import legacy_thing\n", '["legacy-thing"]', [], id="no RECORD, declared"),
+    ],
+)
+def test_a_name_several_distributions_install_needs_all_of_them_declared(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    source: str,
+    declared: str,
+    expected: list[Undeclared],
+) -> None:
+    site = tmp_path / "site"
+    _install(site, "review-alpha", {"review_namespace/alpha/__init__.py": 'PROVIDER = "a"\n'})
+    _install(site, "review-beta", {"review_namespace/beta/__init__.py": 'PROVIDER = "b"\n'})
+    _install(site, "legacy-thing", {"legacy_thing/__init__.py": ""}, record=False)
+    monkeypatch.syspath_prepend(str(site))
+    (tmp_path / "pyproject.toml").write_text(f'[project]\nname = "x"\ndependencies = {declared}\n')
+    package = tmp_path / "src" / "app"
+    package.mkdir(parents=True)
+    (package / "m.py").write_text(source)
+    assert undeclared_imports(tmp_path / "src", tmp_path / "pyproject.toml") == (1, expected)

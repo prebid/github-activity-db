@@ -125,8 +125,9 @@ class TestSettings:
         assert fields.isdisjoint({"rate_limit", "pacing", "sync"})
 
 
-class TestDefaultDatabaseUrl:
-    """The default DATABASE_URL names the local file, never the tracked one (D26)."""
+class TestDocumentedDatabaseUrl:
+    """The field's default DATABASE_URL, and the one a .env copied from .env.example gives, name
+    the local file, never the tracked one (D26)."""
 
     def test_the_field_default_is_the_local_database(self) -> None:
         assert Settings.model_fields["database_url"].default == LOCAL_DATABASE_URL
@@ -167,10 +168,3 @@ class TestGetSettings:
 
         # Should be the same object (cached)
         assert settings1 is settings2
-
-
-class TestDocumentedDatabaseUrl:
-    """The documented DATABASE_URL lines show the default, which names the local file (D26)."""
-
-    def test_the_field_default_is_the_local_database(self) -> None:
-        assert Settings.model_fields["database_url"].default == LOCAL_DATABASE_URL

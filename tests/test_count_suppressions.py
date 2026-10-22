@@ -76,6 +76,16 @@ TYPE_IGNORE_SPELLINGS = [
     # A re-export of typing's no_type_check, as mypy follows it.
     "from pkg.compat import no_type_check as skip\n\n\n@skip\ndef f() -> int:\n    return 'x'\n",
 ]
+NOT_SUPPRESSIONS = [
+    'TEXT = "# noqa: F401, # type: ignore[misc], # ruff: noqa, # mypy: ignore-errors"\n',
+    '"""Docstring.\n\n# noqa\n# type: ignore\n"""\n',
+    "# this module needs no noqa and no type checking exceptions\nimport os\n",
+    "import os\n# isort: on\n",
+    'RANGE = "# ruff: disable[F401]"\nimport os\n',
+    "# ruff: enable[F401]\nimport os\n",
+    "# ruff: disabled checks are listed in pyproject.toml\nimport os\n",
+    "def no_type_check() -> None:\n    pass\n\n\nno_type_check()\n",
+]
 
 REFUSED = [
     pytest.param(
@@ -210,23 +220,24 @@ def test_src_is_within_the_hook_caps() -> None:
     assert _counts(result) == (len(sites["type: ignore"]), len(sites["noqa"]))
 
 
-@pytest.mark.parametrize(
-    ("kind", "cap"), [("type: ignore", "max_type_ignore"), ("noqa", "max_noqa")]
-)
-def test_at_the_cap_passes_and_one_below_fails(kind: str, cap: str) -> None:
+def test_src_at_its_noqa_count_passes_and_one_below_lists_each_site() -> None:
+    """src's noqa sites, read a second way, are the ones the script lists when the cap is one
+    below their count. src holds no type: ignore site, so that cap is run on written sites
+    (test_at_the_cap_passes_and_one_more_fails)."""
     sites = _second_reading(SRC)
+    assert sites["noqa"], "src holds no noqa site to list"
     at_cap = {"max_type_ignore": len(sites["type: ignore"]), "max_noqa": len(sites["noqa"])}
     passing = _run(SRC, **at_cap)
     assert passing.returncode == 0, passing.stdout
+    assert _counts(passing) == (len(sites["type: ignore"]), len(sites["noqa"]))
 
-    # One below the count; -1 where src holds no site of the kind.
-    over_cap = _run(SRC, **{**at_cap, cap: at_cap[cap] - 1})
+    over_cap = _run(SRC, **{**at_cap, "max_noqa": len(sites["noqa"]) - 1})
     assert over_cap.returncode == 1
     listed = [line.strip() for line in over_cap.stdout.splitlines() if line.startswith("  ")]
-    assert sorted(listed) == sorted(sites[kind])
+    assert sorted(listed) == sorted(sites["noqa"])
 
 
-def test_directive_text_outside_a_directive_comment_is_not_counted() -> None:
+def test_the_scripts_own_docstring_is_not_counted() -> None:
     # The script's docstring spells the directives it counts; text in a string is not a comment.
     strings = [
         token.string
@@ -275,8 +286,10 @@ def test_no_python_files_is_an_error(tmp_path: Path) -> None:
     (tmp_path / "empty").mkdir()
     result = _run(tmp_path / "empty")
     assert result.returncode == 1
-    # A run over files reports what it scanned before any cap fails it.
+    # A run over files reports what it scanned before any cap fails it; an uncaught exception
+    # would print a traceback instead of the one refusal line.
     assert result.stdout == ""
+    assert result.stderr.splitlines() == [f"no Python files under {tmp_path / 'empty'}"]
 
 
 @pytest.mark.parametrize("source", NOQA_SPELLINGS)
@@ -287,6 +300,15 @@ def test_counts_every_noqa_spelling(tmp_path: Path, source: str) -> None:
 @pytest.mark.parametrize("source", TYPE_IGNORE_SPELLINGS)
 def test_counts_every_type_ignore_spelling(tmp_path: Path, source: str) -> None:
     assert _counts(_run(_package(tmp_path, source))) == (1, 0)
+
+
+@pytest.mark.parametrize("source", NOT_SUPPRESSIONS)
+def test_directive_text_outside_a_directive_comment_is_not_counted(
+    tmp_path: Path, source: str
+) -> None:
+    result = _run(_package(tmp_path, source))
+    assert _scanned(result) == 1
+    assert _counts(result) == (0, 0)
 
 
 def test_counts_stub_files(tmp_path: Path) -> None:

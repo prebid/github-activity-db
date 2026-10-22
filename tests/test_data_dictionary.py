@@ -206,7 +206,23 @@ class TestDictionary:
         assert differences(dictionary_at(AT_STEP3B1), revisions[STEP3B1]) == []
         assert differences(dictionary_at(AT_LAST_RUN_ID), revisions[LAST_RUN_ID]) == []
 
+    @pytest.mark.parametrize(
+        ("database", "expected"),
+        [
+            ({"t": ["id", "name"], "v_t": ["name"]}, []),
+            ({"t": ["id", "name", "added"], "v_t": ["name"]}, ["no entry for t.added"]),
+            ({"t": ["id"], "v_t": ["name"]}, ["t.name is not at head"]),
+            ({"t": ["id", "name"], "v_t": ["name"], "v_new": ["x"]}, ["no entry for v_new"]),
+            ({"t": ["id", "name"]}, ["v_t is not at head"]),
+        ],
+        ids=["equal", "column at head only", "entry only", "view at head only", "view entry only"],
+    )
     def test_differences_are_reported_both_ways(
+        self, database: dict[str, list[str]], expected: list[str]
+    ) -> None:
+        assert differences(read_dictionary(ENTRY), database) == expected
+
+    def test_a_commit_s_dictionary_against_another_revision_s_database_differs(
         self, revisions: dict[str, dict[str, list[str]]], head_template: Path
     ) -> None:
         """Each commit's dictionary against another revision's database: a column only one of

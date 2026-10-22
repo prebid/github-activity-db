@@ -1,7 +1,8 @@
 """The append-only check on tests/query_versions.json and tests/schema_versions.json.
 
-A lock a pull request changes or removes entries of is a real earlier version of the lock file
-(tests/fixtures/history), placed over a base that holds a later one.
+A lock a pull request changes or removes entries of is either written by the test (lock entries
+it edits, removes, or adds, over a base lock it also writes) or a real earlier version of the lock
+file (tests/fixtures/history), placed over a base that holds a later one.
 """
 
 from __future__ import annotations
@@ -118,6 +119,24 @@ def kept(lock: str, before: str, now: str) -> str:
     )
 
 
+def removed_entry(key: str) -> str:
+    """The line the checker prints for a query lock entry the pull request removed."""
+    return f"{LOCK}: {key} was removed; lock entries are append-only"
+
+
+def removed_version(version: str) -> str:
+    """The line the checker prints for a schema version the pull request removed."""
+    return f"{SCHEMA_LOCK}: schema version {version} was removed; lock entries are append-only"
+
+
+def lock_lines(stderr: str) -> list[str]:
+    """The lines of ``stderr`` that name a lock, one per problem the checker found; the CI step's
+    stderr also holds git's own output."""
+    return [
+        line for line in stderr.splitlines() if line.startswith((f"{LOCK}: ", f"{SCHEMA_LOCK}: "))
+    ]
+
+
 def test_a_new_entry_passes(repo: Path) -> None:
     write_lock(repo, {"pull_request:1": "a" * 64})
     commit(repo)
@@ -146,13 +165,22 @@ def test_each_change_the_history_made_passes(repo: Path, lock: str, before: str,
 
 
 def test_a_removed_entry_fails(repo: Path) -> None:
+    write_lock(repo, {"pull_request:1": "a" * 64, "pull_request:2": "b" * 64})
+    commit(repo)
+    write_lock(repo, {"pull_request:2": "b" * 64})
+    result = check(repo)
+    assert result.returncode == 1
+    assert "pull_request:1 was removed" in result.stderr
+
+
+def test_an_earlier_query_lock_over_a_later_base_fails(repo: Path) -> None:
     place(repo, LOCK, QUERY_LOCKS[1])
     commit(repo)
     place(repo, LOCK, QUERY_LOCKS[0])
     result = check(repo)
     assert result.returncode == 1
     (removed,) = entries_at(QUERY_LOCKS[1], LOCK).keys() - entries_at(QUERY_LOCKS[0], LOCK).keys()
-    assert f"{removed} was removed" in result.stderr
+    assert result.stderr.splitlines() == [removed_entry(removed)]
 
 
 def test_a_lock_absent_at_the_base_passes(repo: Path) -> None:
@@ -174,8 +202,9 @@ def test_a_deleted_lock_removes_every_entry(repo: Path) -> None:
     (repo / LOCK).unlink()
     result = check(repo)
     assert result.returncode == 1
-    for key in entries_at(QUERY_LOCKS[0], LOCK):
-        assert f"{key} was removed" in result.stderr
+    entries = sorted(entries_at(QUERY_LOCKS[0], LOCK))
+    assert entries
+    assert result.stderr.splitlines() == [removed_entry(key) for key in entries]
 
 
 @pytest.mark.parametrize("text", ["{not json", "[1, 2]", '{"pull_request:1": 1}'])
@@ -212,7 +241,7 @@ def test_the_verdict_does_not_depend_on_how_the_checker_runs(
     result = run_checker(repo, "--base", "main", cwd=repo / directory, isolated=isolated)
     assert result.returncode == 1, result.stdout + result.stderr
     (removed,) = entries_at(QUERY_LOCKS[1], LOCK).keys() - entries_at(QUERY_LOCKS[0], LOCK).keys()
-    assert f"{removed} was removed" in result.stderr
+    assert result.stderr.splitlines() == [removed_entry(removed)]
 
 
 @pytest.mark.parametrize(
@@ -321,6 +350,14 @@ class TestSchemaLock:
         assert "tests/schema_versions.json: 1 entries at main kept; 2 entries now" in result.stdout
 
     def test_a_removed_entry_fails(self, repo: Path) -> None:
+        write_schema_lock(repo, {**V1, "2": V1["1"]})
+        commit(repo)
+        write_schema_lock(repo, {"2": V1["1"]})
+        result = check(repo)
+        assert result.returncode == 1
+        assert "schema version 1 was removed" in result.stderr
+
+    def test_an_earlier_schema_lock_without_the_newest_version_fails(self, repo: Path) -> None:
         place(repo, SCHEMA_LOCK, SCHEMA_LOCKS[1])
         commit(repo)
         place(repo, SCHEMA_LOCK, SCHEMA_LOCKS[0])
@@ -330,7 +367,7 @@ class TestSchemaLock:
             entries_at(SCHEMA_LOCKS[1], SCHEMA_LOCK).keys()
             - entries_at(SCHEMA_LOCKS[0], SCHEMA_LOCK).keys()
         )
-        assert f"schema version {removed} was removed" in result.stderr
+        assert result.stderr.splitlines() == [removed_version(removed)]
 
     def test_a_deleted_lock_removes_every_entry(self, repo: Path) -> None:
         place(repo, SCHEMA_LOCK, SCHEMA_LOCKS[0])
@@ -338,10 +375,19 @@ class TestSchemaLock:
         (repo / SCHEMA_LOCK).unlink()
         result = check(repo)
         assert result.returncode == 1
-        for version in entries_at(SCHEMA_LOCKS[0], SCHEMA_LOCK):
-            assert f"schema version {version} was removed" in result.stderr
+        versions = sorted(entries_at(SCHEMA_LOCKS[0], SCHEMA_LOCK), key=int)
+        assert versions
+        assert result.stderr.splitlines() == [removed_version(version) for version in versions]
 
     def test_a_pair_removed_from_an_object_entry_fails(self, repo: Path) -> None:
+        write_schema_lock(repo, V2)
+        commit(repo)
+        write_schema_lock(repo, {**V2, "2": {**V2["2"], "columns": [["pull_requests", "number"]]}})
+        result = check(repo)
+        assert result.returncode == 1
+        assert "schema version 2 lost v_pr_reviews.state" in result.stderr
+
+    def test_an_earlier_schema_lock_without_a_newer_pair_fails(self, repo: Path) -> None:
         place(repo, SCHEMA_LOCK, SCHEMA_LOCKS[2])
         commit(repo)
         place(repo, SCHEMA_LOCK, SCHEMA_LOCKS[1])
@@ -350,7 +396,10 @@ class TestSchemaLock:
         before = entries_at(SCHEMA_LOCKS[2], SCHEMA_LOCK)["2"]["columns"]
         now = entries_at(SCHEMA_LOCKS[1], SCHEMA_LOCK)["2"]["columns"]
         ((table, column),) = {tuple(pair) for pair in before} - {tuple(pair) for pair in now}
-        assert f"schema version 2 lost {table}.{column}" in result.stderr
+        assert result.stderr.splitlines() == [
+            f"{SCHEMA_LOCK}: schema version 2 lost {table}.{column}; removing or renaming a "
+            "consumer column needs a new schema version"
+        ]
 
     def test_a_pair_added_to_the_newest_object_entry_passes(self, repo: Path) -> None:
         write_schema_lock(repo, V2)
@@ -476,6 +525,17 @@ class TestSchemaLock:
         assert "is not JSON" not in result.stderr
 
     def test_both_locks_are_checked_by_default(self, repo: Path) -> None:
+        write_lock(repo, {"pull_request:1": "a" * 64})
+        write_schema_lock(repo, V1)
+        commit(repo)
+        write_lock(repo, {"pull_request:1": "c" * 64})
+        write_schema_lock(repo, {"1": []})
+        result = check(repo)
+        assert result.returncode == 1
+        assert "pull_request:1 changed" in result.stderr
+        assert "schema version 1 lost pull_requests.number" in result.stderr
+
+    def test_both_earlier_locks_are_checked_by_default(self, repo: Path) -> None:
         place(repo, LOCK, QUERY_LOCKS[1])
         place(repo, SCHEMA_LOCK, SCHEMA_LOCKS[2])
         commit(repo)
@@ -487,6 +547,15 @@ class TestSchemaLock:
         assert [line.split(":")[0] for line in stderr] == [LOCK, SCHEMA_LOCK]
 
     def test_lock_selects_one(self, repo: Path) -> None:
+        write_lock(repo, {"pull_request:1": "a" * 64})
+        write_schema_lock(repo, V1)
+        commit(repo)
+        write_lock(repo, {"pull_request:1": "c" * 64})
+        result = run_checker(repo, "--base", "main", "--lock", SCHEMA_LOCK)
+        assert result.returncode == 0, result.stderr
+        assert "query_versions" not in result.stdout + result.stderr
+
+    def test_lock_selects_one_of_two_earlier_locks(self, repo: Path) -> None:
         place(repo, LOCK, QUERY_LOCKS[1])
         place(repo, SCHEMA_LOCK, SCHEMA_LOCKS[2])
         commit(repo)
@@ -752,16 +821,32 @@ def put_back_the_earlier_query_lock(work: Path) -> None:
     place(work, LOCK, QUERY_LOCKS[0])
 
 
+def edit_entry_and_relax_checker(work: Path) -> None:
+    edit_entry(work)
+    checker = work / "scripts" / "check_query_lock.py"
+    checker.write_text("raise SystemExit(0)\n")
+
+
 def test_the_step_fails_a_removed_entry(tmp_path: Path, origin: Path) -> None:
     work = work_clone(tmp_path, origin, "work")
     push_main(work, checker=True, history=LATER_LOCKS)
     result = run_step_on_merge(tmp_path, origin, work, put_back_the_earlier_query_lock)
     assert result.returncode == 1, result.stdout + result.stderr
     (removed,) = entries_at(QUERY_LOCKS[1], LOCK).keys() - entries_at(QUERY_LOCKS[0], LOCK).keys()
-    assert f"{removed} was removed" in result.stderr
+    assert lock_lines(result.stderr) == [removed_entry(removed)]
 
 
 def test_the_step_runs_the_base_checker_not_the_pull_requests(tmp_path: Path, origin: Path) -> None:
+    work = work_clone(tmp_path, origin, "work")
+    push_main(work, checker=True, entries={"pull_request:1": "a" * 64})
+    result = run_step_on_merge(tmp_path, origin, work, edit_entry_and_relax_checker)
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert "runner-temp/check_query_lock.py" in result.stdout
+
+
+def test_the_step_runs_the_base_checker_where_the_pull_request_deletes_its_copy(
+    tmp_path: Path, origin: Path
+) -> None:
     """The pull request also deletes its copy of the checker, which the step would then fail to
     open, with another exit code than the base copy's verdict."""
     work = work_clone(tmp_path, origin, "work")
@@ -807,6 +892,19 @@ def test_the_step_uses_the_pull_requests_checker_where_the_base_has_none(
 
 def test_the_step_fails_a_pair_removed_from_a_schema_entry(tmp_path: Path, origin: Path) -> None:
     work = work_clone(tmp_path, origin, "work")
+    write_schema_lock(work, V1)
+    push_main(work, checker=True, entries={"pull_request:1": "a" * 64})
+
+    def remove_pair(target: Path) -> None:
+        write_schema_lock(target, {"1": V1["1"][:1]})
+
+    result = run_step_on_merge(tmp_path, origin, work, remove_pair)
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert "schema version 1 lost v_pr_reviewers.final_verdict" in result.stderr
+
+
+def test_the_step_fails_an_earlier_schema_lock(tmp_path: Path, origin: Path) -> None:
+    work = work_clone(tmp_path, origin, "work")
     push_main(work, checker=True, history=LATER_LOCKS)
 
     def put_back_the_earlier_schema_lock(target: Path) -> None:
@@ -814,7 +912,10 @@ def test_the_step_fails_a_pair_removed_from_a_schema_entry(tmp_path: Path, origi
 
     result = run_step_on_merge(tmp_path, origin, work, put_back_the_earlier_schema_lock)
     assert result.returncode == 1, result.stdout + result.stderr
-    assert "schema version 2 lost sync_failures.last_run_id" in result.stderr
+    assert lock_lines(result.stderr) == [
+        f"{SCHEMA_LOCK}: schema version 2 lost sync_failures.last_run_id; removing or renaming "
+        "a consumer column needs a new schema version"
+    ]
 
 
 def test_the_step_fails_without_a_merge_commit(tmp_path: Path, origin: Path) -> None:

@@ -183,8 +183,10 @@ def test_no_python_files_is_an_error(tmp_path: Path) -> None:
     (tmp_path / "empty").mkdir()
     result = _run(tmp_path / "empty")
     assert result.returncode == 1
-    # A run that finds an alias also exits 1, but only after reporting what it scanned.
+    # A run that finds an alias also exits 1, but only after reporting what it scanned; an
+    # uncaught exception would print a traceback instead of the one refusal line.
     assert result.stdout == ""
+    assert result.stderr.splitlines() == [f"no Python files under {tmp_path / 'empty'}"]
 
 
 @pytest.mark.parametrize("source", ALIASES)

@@ -199,16 +199,21 @@ def test_source_does_not_import_the_database() -> None:
 
 
 def test_the_scan_finds_each_githubkit_import_in_source() -> None:
-    """source/ is allowed githubkit: the matcher finds each statement that imports it."""
+    """source/ is allowed githubkit: the matcher finds each statement that imports it, and
+    source/ holds 5, so the comparison cannot pass on none."""
     files = _python_files(PACKAGE / "source")
-    assert _sites(githubkit_imports(files)) == _statement_sites(files, GITHUBKIT_STATEMENT)
+    sites = _sites(githubkit_imports(files))
+    assert sites == _statement_sites(files, GITHUBKIT_STATEMENT)
+    assert len(sites) == 5
 
 
 def test_the_scan_finds_each_database_import_in_sync() -> None:
-    """sync/ is allowed SQLAlchemy and db/: the matcher finds each statement that imports them."""
+    """sync/ is allowed SQLAlchemy and db/: the matcher finds each statement that imports them,
+    and sync/ holds 20, so the comparison cannot pass on none."""
     files = _python_files(PACKAGE / "sync")
-    found = database_imports(files, ROOT / "src")
-    assert _sites(found) == _statement_sites(files, DATABASE_STATEMENT)
+    sites = _sites(database_imports(files, ROOT / "src"))
+    assert sites == _statement_sites(files, DATABASE_STATEMENT)
+    assert len(sites) == 20
 
 
 def test_the_scan_sees_source_importing_githubkit() -> None:
