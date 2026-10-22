@@ -62,11 +62,11 @@ uv run pytest                      # CI also runs Python 3.12, `alembic check`, 
 - `ghactivity sync` (Step 3b-2a-2c, `cli/sync.py`): the engine's run with the options of plan
   5.7; a run that never starts exits 1, and a run that starts exits with the engine's 0, 2, or 1
 
-**Not implemented yet:** `verify` (Step 3b-2b). The tracked `github_activity.db` stays
-frozen at the first schema (D26).
+**Not implemented yet:** the REST sampler (Step 3b-2b-1) and `verify` (Step 3b-2b-2). The
+tracked `github_activity.db` stays frozen at the first schema (D26).
 
-**Planned in the redesign plan:** verify (Step 3b-2b); GitHub Issues and
-closing-issue links (Step 4); scheduled sync and release publication (Step 6).
+**Planned in the redesign plan:** the REST sampler (Step 3b-2b-1) and verify (Step 3b-2b-2);
+GitHub Issues and closing-issue links (Step 4); scheduled sync and release publication (Step 6).
 
 **Out of Scope (Future):**
 - Webhooks / real-time sync
