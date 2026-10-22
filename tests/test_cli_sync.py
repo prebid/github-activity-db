@@ -216,7 +216,21 @@ def test_a_missing_database_file_exits_1_and_creates_none(
     assert replay.seen == []
 
 
-def test_a_database_not_at_head_exits_1(
+def test_a_database_not_at_head_exits_1(replay: Replay, migrated_database: Path) -> None:
+    _execute(migrated_database, "UPDATE alembic_version SET version_num = 'older'")
+
+    result = _sync()
+
+    assert result.exit_code == 1
+    assert (
+        "Sync did not start: the database is at revision older, not the code's head "
+        f"{HEAD_REVISION}" in _plain(result.output)
+    )
+    assert _runs(migrated_database) == []
+    assert replay.seen == []
+
+
+def test_a_database_at_the_revision_before_head_exits_1(
     replay: Replay, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     """A file the migrations built to the revision before head, as the code before it did."""

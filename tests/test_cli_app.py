@@ -6,13 +6,14 @@ import os
 import re
 import subprocess
 import sys
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from importlib import metadata
 from pathlib import Path
 
 import pydantic_settings.sources.providers.dotenv as dotenv_source
 import pytest
 import typer
+from click.testing import Result
 from typer.testing import CliRunner
 
 from github_activity_db.cli import common
@@ -267,7 +268,44 @@ class TestInstalledEntryPoint:
         assert "not valid TOML" in _plain(result.stderr)
         assert "Traceback" not in result.stderr
 
-    def test_a_traceback_shows_no_local_variables(self) -> None:
+    def test_a_traceback_shows_no_local_variables(self, tmp_path: Path) -> None:
+        """The real app's pretty traceback, for a test-only command that fails (gap 75)."""
+        script = (
+            "from github_activity_db.cli.app import app\n"
+            "@app.command()\n"
+            "def boom() -> None:\n"
+            "    credential = 'sentinel-credential-7f3a'\n"
+            "    raise RuntimeError('boom ' + str(len(credential)))\n"
+            "app(['boom'], prog_name='ghactivity')\n"
+        )
+        result = _installed(env={}, cwd=tmp_path, script=script)
+        assert result.returncode == 1
+        assert "RuntimeError" in result.stderr
+        assert "boom 24" in result.stderr
+        assert "sentinel-credential-7f3a" not in result.stderr + result.stdout
+
+    def test_a_github_group_commands_traceback_shows_no_local_variables(
+        self, tmp_path: Path
+    ) -> None:
+        """A test-only command in the ``github`` group, called through the root app: the group's
+        own Typer keeps typer's default of showing local variables, and the root app's setting
+        is the one that applies (gap 75)."""
+        script = (
+            "from github_activity_db.cli import github\n"
+            "from github_activity_db.cli.app import app\n"
+            "@github.app.command()\n"
+            "def boom() -> None:\n"
+            "    credential = 'sentinel-credential-7f3a'\n"
+            "    raise RuntimeError('boom ' + str(len(credential)))\n"
+            "app(['github', 'boom'], prog_name='ghactivity')\n"
+        )
+        result = _installed(env={}, cwd=tmp_path, script=script)
+        assert result.returncode == 1
+        assert "RuntimeError" in result.stderr
+        assert "boom 24" in result.stderr
+        assert "sentinel-credential-7f3a" not in result.stderr + result.stdout
+
+    def test_the_console_script_calls_the_root_app_which_hides_local_variables(self) -> None:
         """An uncaught exception's traceback is typer's, set up by the app it was called
         through: the console script calls the root app, whose setting keeps local variables out
         whatever group the command is in (gap 75). The 2 values compared: the script's target
@@ -277,25 +315,65 @@ class TestInstalledEntryPoint:
         assert app.pretty_exceptions_show_locals is False
 
 
+def _env_file_command(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, read_env: Callable[..., dict[str, str | None]]
+) -> tuple[Result, list[Path], list[str], int]:
+    """``github rate-limit`` with a token set and a .env whose read ``read_env`` answers: the
+    result, the paths read, the tokens a source was opened with, and the settings cached when
+    the command returned. The source opens nothing: it records the token and raises."""
+    (tmp_path / ".env").write_text("LOG_LEVEL=INFO\n")
+    read: list[Path] = []
+    opened: list[str] = []
+
+    def reading(path: Path, **kwargs: object) -> dict[str, str | None]:
+        read.append(Path(path))
+        return read_env(path, **kwargs)
+
+    def open_source(token: str, **_: object) -> object:
+        opened.append(token)
+        raise RuntimeError("the test's source opens nothing")
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("GITHUB_TOKEN", "test-token")
+    monkeypatch.setattr(common, "open_source", open_source)
+    monkeypatch.setattr(dotenv_source, "dotenv_values", reading)
+    get_settings.cache_clear()
+    try:
+        result = runner.invoke(app, ["github", "rate-limit"])
+        cached = get_settings.cache_info().currsize
+    finally:
+        get_settings.cache_clear()
+    return result, read, opened, cached
+
+
 def test_an_env_file_the_os_refuses_to_read_exits_1(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """A .env the OS refuses to read: the read answers PermissionError, as it does for a file
-    the user may not read, whatever uid runs the tests (D40), and the command exits 1."""
-    (tmp_path / ".env").write_text("LOG_LEVEL=INFO\n")
-    read: list[Path] = []
+    the user may not read, whatever uid runs the tests (D40), and the command exits 1 at the
+    settings, with a token set: no settings are cached and no source is opened."""
 
     def refused(path: Path, **_: object) -> dict[str, str | None]:
-        read.append(Path(path))
         raise PermissionError(13, "Permission denied", str(path))
 
-    monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr(dotenv_source, "dotenv_values", refused)
-    get_settings.cache_clear()
-    try:
-        result = runner.invoke(app, ["github", "rate-limit"])
-    finally:
-        get_settings.cache_clear()
+    result, read, opened, cached = _env_file_command(monkeypatch, tmp_path, refused)
     assert read == [Path(".env")]
+    assert (opened, cached) == ([], 0)
+    assert result.exit_code == 1, result.output
+    assert isinstance(result.exception, SystemExit), result.exception
+
+
+def test_an_env_file_the_os_reads_reaches_the_source(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The same command line with the .env read: the settings are cached and the command opens
+    its source once, with the token (which here raises, so the command exits 1)."""
+
+    def readable(path: Path, **_: object) -> dict[str, str | None]:
+        return {"LOG_LEVEL": "INFO"}
+
+    result, read, opened, cached = _env_file_command(monkeypatch, tmp_path, readable)
+    assert read == [Path(".env")]
+    assert (opened, cached) == (["test-token"], 1)
     assert result.exit_code == 1, result.output
     assert isinstance(result.exception, SystemExit), result.exception
