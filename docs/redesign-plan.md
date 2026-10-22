@@ -1848,7 +1848,8 @@ order, a stale item, verify's repository set with and without `--repo` (a stored
 repository, a stored row no configured entry names, a renamed repository, and a renamed repository
 whose configured entry fails to resolve, reported unverified and not untracked, and an entry that
 resolves to a `github_id` other than its stored row's, with no stored `is_tracked` row reported
-untracked), its child-count checks (each by a planted row deletion), an unverified repository for
+untracked), its child-count checks, each reporting the rows it compared, equal to the counts the
+scenario model gives, an unverified repository for
 each failure 5.4 lists, one made unverified by a lookup by number and one by a timeline lookup, each
 keeping the classes it already had and leaving unchecked the items no lookup had answered, those of
 the batch the error ended included, an unchecked item and an unverified repository each making a
@@ -1874,8 +1875,7 @@ another issue, a link difference made by a closing keyword with no event, a diff
 link totals alone with enough connected events, with only a disconnected event, and with too few, a
 synthetic
 disconnected event, an event at the boundary counted and one a second before it not, entries
-planted in the lookup's response at a second and at half a second before the boundary and not
-counted, a stored link no longer indexed on a PR whose index lists every link matched only by an
+the model renders at a second and at half a second before the boundary, not counted, a stored link no longer indexed on a PR whose index lists every link matched only by an
 event naming it, a filtered page whose `totalCount` differs from its entries, a lookup whose entries
 differ from its `filteredCount` after its retry and one whose response the typed models reject,
 each an error, one that differs once and matches on its retry, classed by its events, and a
@@ -1928,8 +1928,8 @@ Tests: issue first sync, update, close, and reopen; unsettled re-hydration and v
 issues; an issue's stored author kept when GitHub returns it as null (D28); issue comments and
 assignees written and replaced; a transfer arriving with a new id; an old number returning
 `NOT_FOUND`, treated as gone; a snapshot one migration behind head upgrades and syncs; verify's
-child-count checks for `issue_labels`, `issue_comments`, and `issue_assignees`, each by a planted
-row deletion.
+child-count checks for `issue_labels`, `issue_comments`, and `issue_assignees`, each reporting the
+rows it compared, equal to the stored totals.
 
 Acceptance: `verify --exact` for issues on the same repositories; a REST sample of issues matches
 field by field.
