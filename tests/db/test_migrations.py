@@ -775,6 +775,18 @@ class TestOneTransaction:
         assert snapshot(migrated_database) == before
         assert revision_of(migrated_database) == HEAD_REVISION
 
+    def test_an_upgrade_runs_on_one_driver_connection(self, first_schema: Path) -> None:
+        """The chain from the first schema to head opens one driver connection, and closes it."""
+        connections: list[sqlite3.Connection] = []
+
+        def connected(dbapi_connection: sqlite3.Connection, _record: Any) -> None:
+            connections.append(dbapi_connection)
+
+        with listening("connect", connected, Pool):
+            upgrade(first_schema)
+        assert [is_closed(connection) for connection in connections] == [True]
+        assert revision_of(first_schema) == HEAD_REVISION
+
     def test_a_revision_gets_no_second_connection(
         self, migrated_database: Path, tmp_path: Path
     ) -> None:

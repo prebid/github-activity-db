@@ -1684,8 +1684,11 @@ async def test_the_head_check_comes_before_the_claim_and_any_request(
     world.url = f"sqlite+aiosqlite:///{missing}"
 
     for dry_run in (False, True):
-        with pytest.raises(HeadCheckError, match="database file not found"):
+        with pytest.raises(HeadCheckError) as refused:
             await world.sync(dry_run=dry_run)
+        assert str(refused.value) == (
+            f"database file not found: {missing}; build it with `alembic upgrade head`"
+        )
 
     assert not missing.exists()
     assert world.scenario.replay.seen == []
@@ -1695,10 +1698,13 @@ async def test_a_database_not_at_head_starts_no_run(world: World) -> None:
     project(world)
     world.execute("UPDATE alembic_version SET version_num = 'older'")
 
-    with pytest.raises(
-        HeadCheckError, match=f"at revision older, not the code's head {HEAD_REVISION}"
-    ):
+    with pytest.raises(HeadCheckError) as refused:
         await world.sync()
+
+    assert str(refused.value) == (
+        f"the database is at revision older, not the code's head {HEAD_REVISION}; "
+        "run `alembic upgrade head`"
+    )
 
     assert world.rows("SELECT id FROM sync_runs") == []
     assert world.scenario.replay.seen == []
@@ -1713,11 +1719,13 @@ async def test_a_database_at_the_previous_revision_starts_no_run(
     upgrade(older, MIGRATION_REVISIONS[-2])
     world.url = f"sqlite+aiosqlite:///{older}"
 
-    with pytest.raises(
-        HeadCheckError,
-        match=f"revision {MIGRATION_REVISIONS[-2]}, not the code's head {HEAD_REVISION}",
-    ):
+    with pytest.raises(HeadCheckError) as refused:
         await world.sync()
+
+    assert str(refused.value) == (
+        f"the database is at revision {MIGRATION_REVISIONS[-2]}, not the code's head "
+        f"{HEAD_REVISION}; run `alembic upgrade head`"
+    )
 
     assert fetch(older, "SELECT count(*) AS n FROM sync_runs") == [{"n": 0}]
     assert world.scenario.replay.seen == []
@@ -2863,13 +2871,15 @@ async def test_an_interrupted_close_that_does_not_land_leaves_the_row_running(
 
     event.listen(Engine, "before_cursor_execute", interrupt)
     try:
-        with pytest.raises(KeyboardInterrupt) as raised:
+        with database_errors() as errors, pytest.raises(KeyboardInterrupt) as raised:
             await world.sync()
     finally:
         event.remove(Engine, "before_cursor_execute", interrupt)
 
     expected = ["complete", "aborted"] if cleanup == "second interrupt" else ["complete"]
     assert interrupted == expected
+    # The second interrupt meets no SQLite error; the trigger refuses the aborted close.
+    assert errors == ([] if cleanup == "second interrupt" else ["SQLITE_CONSTRAINT_TRIGGER"])
     # The interrupt re-raised is the latest one delivered.
     assert raised.value.args == (expected[-1],)
     assert world.rows("SELECT status, exit_code FROM sync_runs") == [

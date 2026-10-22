@@ -473,29 +473,31 @@ def _class(text: str | None) -> str | None:
 
 
 @pytest.mark.parametrize(
-    ("change", "error", "reason"),
+    ("change", "error", "reason", "points"),
     [
         pytest.param(
             lambda replay: replay.fault(
                 lambda request: httpx.Response(401, json={"message": "Bad credentials"}),
                 times=None,
             ),
-            "Unauthorized",
+            "Unauthorized: GitHub answered 401: Bad credentials",
             None,
+            0,
             id="401",
         ),
         pytest.param(
             lambda replay: replay.modify(
                 _label_count_mismatch, when=lambda seen: seen.operation == "Resolve"
             ),
-            "NoRepositoryResolved",
-            "LabelCountMismatch",
+            "NoRepositoryResolved: no configured repository resolved",
+            "LabelCountMismatch: prebid/go-gdpr: fetched 10 labels, totalCount 11",
+            1,
             id="label count mismatch",
         ),
     ],
 )
 async def test_a_first_sync_that_fails_names_why(
-    change: Callable[[Replay], None], error: str, reason: str | None
+    change: Callable[[Replay], None], error: str, reason: str | None, points: int
 ) -> None:
     """A run that fails at its resolve raises with the run's report, which names the cause: the
     run's error, and the repository's when its resolve failed."""
@@ -514,12 +516,12 @@ async def test_a_first_sync_that_fails_names_why(
         0,
         (),
     )
-    assert _class(report.error) == error
+    assert (report.error, report.graphql_points, report.rest_calls) == (error, points, 0)
     assert [
         (repository.configured.full_name, repository.record, repository.outcome)
         for repository in report.repositories
     ] == [(f"{owner}/{name}", None, None)]
-    assert [_class(repository.reason) for repository in report.repositories] == [reason]
+    assert [repository.reason for repository in report.repositories] == [reason]
     assert [seen.operation for seen in replay.seen] == ["Resolve"]
 
 

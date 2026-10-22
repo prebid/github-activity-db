@@ -129,6 +129,19 @@ def removed_version(version: str) -> str:
     return f"{SCHEMA_LOCK}: schema version {version} was removed; lock entries are append-only"
 
 
+def changed_entry(key: str, before: str, now: str) -> str:
+    """The line the checker prints for a query lock entry whose digest the pull request changed."""
+    return f"{LOCK}: {key} changed from {before} to {now}; add a version instead"
+
+
+def lost_pair(version: str, table: str, column: str) -> str:
+    """The line the checker prints for a consumer pair a schema version lost."""
+    return (
+        f"{SCHEMA_LOCK}: schema version {version} lost {table}.{column}; removing or renaming a "
+        "consumer column needs a new schema version"
+    )
+
+
 def lock_lines(stderr: str) -> list[str]:
     """The lines of ``stderr`` that name a lock, one per problem the checker found; the CI step's
     stderr also holds git's own output."""
@@ -170,7 +183,7 @@ def test_a_removed_entry_fails(repo: Path) -> None:
     write_lock(repo, {"pull_request:2": "b" * 64})
     result = check(repo)
     assert result.returncode == 1
-    assert "pull_request:1 was removed" in result.stderr
+    assert result.stderr.splitlines() == [removed_entry("pull_request:1")]
 
 
 def test_an_earlier_query_lock_over_a_later_base_fails(repo: Path) -> None:
@@ -355,7 +368,7 @@ class TestSchemaLock:
         write_schema_lock(repo, {"2": V1["1"]})
         result = check(repo)
         assert result.returncode == 1
-        assert "schema version 1 was removed" in result.stderr
+        assert result.stderr.splitlines() == [removed_version("1")]
 
     def test_an_earlier_schema_lock_without_the_newest_version_fails(self, repo: Path) -> None:
         place(repo, SCHEMA_LOCK, SCHEMA_LOCKS[1])
@@ -385,7 +398,7 @@ class TestSchemaLock:
         write_schema_lock(repo, {**V2, "2": {**V2["2"], "columns": [["pull_requests", "number"]]}})
         result = check(repo)
         assert result.returncode == 1
-        assert "schema version 2 lost v_pr_reviews.state" in result.stderr
+        assert result.stderr.splitlines() == [lost_pair("2", "v_pr_reviews", "state")]
 
     def test_an_earlier_schema_lock_without_a_newer_pair_fails(self, repo: Path) -> None:
         place(repo, SCHEMA_LOCK, SCHEMA_LOCKS[2])
@@ -532,8 +545,11 @@ class TestSchemaLock:
         write_schema_lock(repo, {"1": []})
         result = check(repo)
         assert result.returncode == 1
-        assert "pull_request:1 changed" in result.stderr
-        assert "schema version 1 lost pull_requests.number" in result.stderr
+        assert result.stderr.splitlines() == [
+            changed_entry("pull_request:1", "a" * 64, "c" * 64),
+            lost_pair("1", "pull_requests", "number"),
+            lost_pair("1", "v_pr_reviewers", "final_verdict"),
+        ]
 
     def test_both_earlier_locks_are_checked_by_default(self, repo: Path) -> None:
         place(repo, LOCK, QUERY_LOCKS[1])
@@ -553,7 +569,10 @@ class TestSchemaLock:
         write_lock(repo, {"pull_request:1": "c" * 64})
         result = run_checker(repo, "--base", "main", "--lock", SCHEMA_LOCK)
         assert result.returncode == 0, result.stderr
-        assert "query_versions" not in result.stdout + result.stderr
+        assert result.stdout.splitlines() == [
+            f"{SCHEMA_LOCK}: 1 entries at main kept; 1 entries now"
+        ]
+        assert result.stderr == ""
 
     def test_lock_selects_one_of_two_earlier_locks(self, repo: Path) -> None:
         place(repo, LOCK, QUERY_LOCKS[1])
@@ -842,6 +861,7 @@ def test_the_step_runs_the_base_checker_not_the_pull_requests(tmp_path: Path, or
     result = run_step_on_merge(tmp_path, origin, work, edit_entry_and_relax_checker)
     assert result.returncode == 1, result.stdout + result.stderr
     assert "runner-temp/check_query_lock.py" in result.stdout
+    assert lock_lines(result.stderr) == [changed_entry("pull_request:1", "a" * 64, "c" * 64)]
 
 
 def test_the_step_runs_the_base_checker_where_the_pull_request_deletes_its_copy(
@@ -900,7 +920,7 @@ def test_the_step_fails_a_pair_removed_from_a_schema_entry(tmp_path: Path, origi
 
     result = run_step_on_merge(tmp_path, origin, work, remove_pair)
     assert result.returncode == 1, result.stdout + result.stderr
-    assert "schema version 1 lost v_pr_reviewers.final_verdict" in result.stderr
+    assert lock_lines(result.stderr) == [lost_pair("1", "v_pr_reviewers", "final_verdict")]
 
 
 def test_the_step_fails_an_earlier_schema_lock(tmp_path: Path, origin: Path) -> None:

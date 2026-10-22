@@ -200,3 +200,31 @@ def test_a_table_line_it_does_not_model_is_refused(text: str, line: int | None) 
     with pytest.raises(TableError) as raised:
         read_rows(text)
     assert raised.value.line == line
+
+
+def test_only_the_files_git_tracks_are_compared(tmp_path: Path) -> None:
+    """A repository the test builds: the README and one copy committed, one file never added, and
+    one git ignores. Only the committed copy is compared."""
+    assert GIT is not None
+    repo, home = tmp_path / "repo", tmp_path / "home"
+    copies = repo / "history"
+    (copies / "abc1234").mkdir(parents=True)
+    home.mkdir()
+    (copies / README).write_text("rows\n")
+    (copies / "abc1234" / "kept.toml").write_text("kept = 1\n")
+    (copies / ".gitignore").write_text("ignored.txt\n")
+    environment = {
+        "PATH": os.environ["PATH"],
+        "HOME": str(home),
+        "GIT_CONFIG_GLOBAL": os.devnull,
+        "GIT_CONFIG_NOSYSTEM": "1",
+    }
+    for args in (
+        ["init", "-q"],
+        ["add", "history/README.md", "history/abc1234/kept.toml"],
+        ["-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "copies"],
+    ):
+        subprocess.run([GIT, *args], cwd=repo, env=environment, check=True, timeout=60)
+    (copies / "untracked.toml").write_text("untracked = 1\n")
+    (copies / "ignored.txt").write_text("ignored\n")
+    assert tracked_files(copies, home) == ["abc1234/kept.toml"]

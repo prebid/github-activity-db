@@ -40,14 +40,11 @@ configuration.
 from __future__ import annotations
 
 import ast
-import importlib.util
+import asyncio
 import os
 import socket
-import subprocess
-import sys
 from datetime import UTC, datetime, tzinfo
 from pathlib import Path
-from types import ModuleType
 
 import pytest
 
@@ -57,12 +54,13 @@ from github_activity_db.source import GitHubSource, clock
 from github_activity_db.source.clock import SystemClock
 from tests import determinism
 from tests.determinism import NotDeterministic
+from tests.pytest_runs import load_check_junit, run_pytest
 from tests.source.conftest import FakeClock
 
 TESTS = Path(__file__).resolve().parent
 SRC = TESTS.parent / "src" / "github_activity_db"
 ALEMBIC = TESTS.parent / "alembic"
-CHECK_JUNIT = TESTS.parent / "scripts" / "check_junit.py"
+SCRIPTS = TESTS.parent / "scripts"
 WAITING = frozenset({"run", "call", "check_call", "check_output"})
 # subprocess names that start no process.
 INERT = frozenset(
@@ -335,6 +333,13 @@ def test_the_migrations_read_no_wall_clock_or_randomness() -> None:
     assert determinism_problems(*files) == []
 
 
+def test_the_scripts_read_no_wall_clock_or_randomness() -> None:
+    """Over ``scripts/``, whose checks the suite also runs in process, the scan finds nothing."""
+    files = _python_files(SCRIPTS)
+    assert [path.name for path in files if path.name in ("check_junit.py", "count_suppressions.py")]
+    assert determinism_problems(*files) == []
+
+
 def test_no_test_is_defined_inside_a_function_or_a_non_test_class() -> None:
     assert uncollected_tests(*_test_files()) == []
 
@@ -423,6 +428,22 @@ def test_the_real_clock_is_refused() -> None:
     assert _refused(refusal) == ("wall clock", "source.clock: datetime.now(UTC)")
 
 
+@pytest.mark.parametrize("reading", ["utcnow", "today"])
+def test_the_real_clocks_other_readings_are_refused(reading: str) -> None:
+    """The datetime source/clock.py sees refuses each way to read the time, not only ``now``."""
+    with pytest.raises(NotDeterministic) as refusal:
+        getattr(vars(clock)["datetime"], reading)()
+    assert _refused(refusal) == ("wall clock", f"source.clock: datetime.{reading}()")
+
+
+def test_the_real_clocks_asyncio_answers_everything_but_sleep() -> None:
+    """The asyncio source/clock.py sees is asyncio for every name but ``sleep``."""
+    seen = vars(clock)["asyncio"]
+    assert seen.get_running_loop is asyncio.get_running_loop
+    assert seen.sleep.__qualname__ == "_NoSleep.sleep"
+    assert determinism.REFUSED == []
+
+
 async def test_the_real_clocks_sleep_is_refused() -> None:
     with pytest.raises(NotDeterministic) as refusal:
         await SystemClock().sleep(2.0)
@@ -500,48 +521,16 @@ async def test_the_real_clock_sleeps_the_seconds_it_is_given(
     assert slept == [2.5]
 
 
-def _check_junit() -> ModuleType:
-    """scripts/check_junit.py, loaded from its file: CI runs it standalone."""
-    spec = importlib.util.spec_from_file_location("check_junit", CHECK_JUNIT)
-    assert spec is not None and spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
-
-
 def _pytest_over(
     root: Path, files: dict[str, str], *options: str
 ) -> tuple[int, list[tuple[str, str]]]:
     """pytest run over ``files``, written to ``root`` beside a configuration of their own, with this
     repository importable: its exit code, and each test's outcome in the order its JUnit report
     lists the tests, which is the order they ran in."""
-    root.mkdir()
-    for name, text in {"pytest.ini": "[pytest]\n", **files}.items():
-        (root / name).write_text(text)
+    run = run_pytest(root, files, *options, importable=True)
     report = root / "junit.xml"
-    run = subprocess.run(
-        [
-            sys.executable,
-            "-m",
-            "pytest",
-            "-q",
-            "-p",
-            "no:cacheprovider",
-            f"--junitxml={report}",
-            *options,
-        ],
-        cwd=root,
-        capture_output=True,
-        text=True,
-        env={
-            "PATH": os.environ.get("PATH", ""),
-            "PYTHONPATH": os.pathsep.join([str(TESTS.parent / "src"), str(TESTS.parent)]),
-            "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1",
-        },
-        timeout=120,
-    )
     assert report.is_file(), run.stdout + run.stderr
-    return run.returncode, list(_check_junit().read_outcomes(report).items())
+    return run.returncode, list(load_check_junit().read_outcomes(report).items())
 
 
 # Catches the refusal of the real clock, as code under test may.
@@ -628,7 +617,7 @@ def test_reverse_order_runs_the_tests_last_to_first(
         ],
     )
     forward, backward = (str(tmp_path / run / "junit.xml") for run in ("forward", "backward"))
-    assert _check_junit().main([forward, "--max-skipped", "0", "--same-as", backward]) == 1
+    assert load_check_junit().main([forward, "--max-skipped", "0", "--same-as", backward]) == 1
     assert capsys.readouterr() == (
         "{'tests': 3, 'failures': 0, 'errors': 0, 'skipped': 0}\n",
         "FAIL: differs: test_one::test_b: passed vs failed\n",

@@ -66,6 +66,9 @@ build-constraint-dependencies = [
 target-version = "py312"
 line-length = 100
 src = ["src", "tests"]
+# Earlier versions of repository files, copied unchanged; their pyproject.toml is not this
+# project's configuration.
+extend-exclude = ["tests/fixtures/history"]
 
 [tool.ruff.lint]
 select = [

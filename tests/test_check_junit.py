@@ -9,41 +9,23 @@ reports pytest wrote, in runs over test files written for them.
 
 import ast
 import copy
-import importlib.util
 import os
 import subprocess
 import sys
 import xml.etree.ElementTree as ET
 from pathlib import Path
-from types import ModuleType
 
 import pytest
+
+from tests.pytest_runs import load_check_junit, run_pytest
 
 SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "check_junit.py"
 COUNTED = ("tests", "failures", "errors", "skipped")
 
 
 def _pytest(root: Path, test_body: str) -> subprocess.CompletedProcess[str]:
-    """Run pytest over one test file in ``root``, with its own configuration and only the
-    environment variables it needs; the report is ``root/junit.xml``."""
-    (root / "pytest.ini").write_text("[pytest]\n")
-    (root / "test_sample.py").write_text(f"import pytest\n\n\n{test_body}")
-    return subprocess.run(
-        [
-            sys.executable,
-            "-m",
-            "pytest",
-            "-q",
-            "-p",
-            "no:cacheprovider",
-            f"--junitxml={root / 'junit.xml'}",
-        ],
-        cwd=root,
-        capture_output=True,
-        text=True,
-        env={"PATH": os.environ.get("PATH", ""), "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1"},
-        timeout=60,
-    )
+    """Run pytest over one test file in ``root``; the report is ``root/junit.xml``."""
+    return run_pytest(root, {"test_sample.py": f"import pytest\n\n\n{test_body}"})
 
 
 @pytest.fixture(scope="module")
@@ -127,15 +109,6 @@ def test_sums_every_testsuite(tmp_path: Path, written: bytes) -> None:
     assert len(result.stderr.splitlines()) == 1
 
 
-def _load() -> ModuleType:
-    """The script as a module, so its ``main`` can be called in process."""
-    spec = importlib.util.spec_from_file_location("check_junit", SCRIPT)
-    assert spec is not None and spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
-
-
 @pytest.mark.parametrize("shape", ["missing", "cut short", "no testsuite"])
 def test_unreadable_report_fails(
     tmp_path: Path, written: bytes, shape: str, capsys: pytest.CaptureFixture[str]
@@ -152,7 +125,7 @@ def test_unreadable_report_fails(
     elif shape == "no testsuite":
         path = _report(tmp_path, written)
         problem = f"no <testsuite> element in {path}"
-    assert _load().main([str(path)]) == 1
+    assert load_check_junit().main([str(path)]) == 1
     # The counters are printed only after the report is read.
     assert capsys.readouterr() == ("", f"cannot read JUnit report: {problem}\n")
 

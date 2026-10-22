@@ -90,26 +90,34 @@ async def test_the_head_check_passes_at_head(migrated_database: Path) -> None:
 
 async def test_a_missing_path_is_refused_without_creating_it(tmp_path: Path) -> None:
     missing = tmp_path / "absent.db"
-    with pytest.raises(HeadCheckError, match="database file not found"):
+    with pytest.raises(HeadCheckError) as refused:
         await check_head(_url(missing))
+    assert str(refused.value) == (
+        f"database file not found: {missing}; build it with `alembic upgrade head`"
+    )
     assert not missing.exists()
 
 
 async def test_an_empty_file_is_refused(tmp_path: Path) -> None:
     empty = tmp_path / "empty.db"
     empty.touch()
-    with pytest.raises(HeadCheckError, match="no migration revision"):
+    with pytest.raises(HeadCheckError) as refused:
         await check_head(_url(empty))
+    assert str(refused.value) == (
+        "the database has no migration revision; build it with `alembic upgrade head`"
+    )
     assert empty.stat().st_size == 0
 
 
 async def test_an_older_revision_is_refused(tmp_path: Path) -> None:
     older = tmp_path / "older.db"
     upgrade(older, "33f8570f6540")
-    with pytest.raises(
-        HeadCheckError, match=f"revision 33f8570f6540, not the code's head {HEAD_REVISION}"
-    ):
+    with pytest.raises(HeadCheckError) as refused:
         await check_head(_url(older))
+    assert str(refused.value) == (
+        f"the database is at revision 33f8570f6540, not the code's head {HEAD_REVISION}; "
+        "run `alembic upgrade head`"
+    )
 
 
 @pytest.mark.parametrize(
@@ -124,8 +132,9 @@ async def test_the_claim_refuses_a_database_not_at_head(migrated_database: Path)
     connection = sqlite3.connect(migrated_database)
     connection.execute("PRAGMA user_version = 1")
     connection.close()
-    with pytest.raises(HeadCheckError, match="user_version is 1, not schema_version 2"):
+    with pytest.raises(HeadCheckError) as refused:
         await _claim(migrated_database)
+    assert str(refused.value) == "PRAGMA user_version is 1, not schema_version 2"
     assert fetch(migrated_database, "SELECT count(*) AS n FROM sync_runs") == [{"n": 0}]
 
 
@@ -133,11 +142,12 @@ async def test_the_claim_refuses_a_database_at_the_previous_revision(tmp_path: P
     """A file the migrations built to the revision before head, as the code before it did."""
     older = tmp_path / "older.db"
     upgrade(older, MIGRATION_REVISIONS[-2])
-    with pytest.raises(
-        HeadCheckError,
-        match=f"revision {MIGRATION_REVISIONS[-2]}, not the code's head {HEAD_REVISION}",
-    ):
+    with pytest.raises(HeadCheckError) as refused:
         await _claim(older)
+    assert str(refused.value) == (
+        f"the database is at revision {MIGRATION_REVISIONS[-2]}, not the code's head "
+        f"{HEAD_REVISION}; run `alembic upgrade head`"
+    )
     assert fetch(older, "SELECT count(*) AS n FROM sync_runs") == [{"n": 0}]
 
 
