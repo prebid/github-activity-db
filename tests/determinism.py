@@ -11,10 +11,11 @@ proxies from the environment, or on macOS from the system settings, connects str
 it was given and is refused there, whatever the machine's proxy settings. A refusal raises
 ``NotDeterministic``, a ``BaseException`` so that no ``except Exception`` in the code under test can
 turn it into a handled failure, and is recorded in ``REFUSED``, which the conftest checks after
-every test and at the end of the session. Out of scope: processes a test starts (they run without
-these patches), the socket's other ways to reach a host (``sendto``, ``sendmsg``, ``bind``,
-``listen``, and sockets made in C), and the standard library's clocks and random modules called
-directly (``tests/test_suite_rules.py`` reads test files, the package, and ``alembic/`` for those).
+every test and once more when it undoes these patches. Out of scope: processes a test starts
+(they run without these patches), the socket's other ways to reach a host (``sendto``,
+``sendmsg``, ``bind``, ``listen``, and sockets made in C), and the standard library's clocks and
+random modules called directly (``tests/test_suite_rules.py`` reads test files, the package, and
+``alembic/`` for those).
 """
 
 from __future__ import annotations

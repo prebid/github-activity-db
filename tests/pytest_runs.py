@@ -29,12 +29,17 @@ def load_check_junit() -> ModuleType:
 def run_pytest(
     root: Path, files: dict[str, str], *options: str, importable: bool = False
 ) -> subprocess.CompletedProcess[str]:
-    """pytest over ``files``, written to ``root`` beside a ``pytest.ini`` of their own; the report
-    is ``root/junit.xml``. With ``importable``, this repository's package and tests import."""
-    root.mkdir(exist_ok=True)
+    """pytest over ``files``, written to ``root`` beside a ``pytest.ini`` of their own, each name a
+    path under ``root`` whose directories are made; the report is ``root/junit.xml``. With
+    ``importable``, this repository's package and tests import."""
     for name, text in {"pytest.ini": "[pytest]\n", **files}.items():
+        (root / name).parent.mkdir(parents=True, exist_ok=True)
         (root / name).write_text(text)
-    environment = {"PATH": os.environ.get("PATH", ""), "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1"}
+    environment = {
+        "PATH": os.environ.get("PATH", ""),
+        "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1",
+        "PYTHONHASHSEED": "0",
+    }
     if importable:
         environment["PYTHONPATH"] = os.pathsep.join([str(ROOT / "src"), str(ROOT)])
     return subprocess.run(

@@ -42,6 +42,7 @@ from __future__ import annotations
 
 import ast
 import asyncio
+import json
 import socket
 from datetime import UTC, datetime, tzinfo
 from pathlib import Path
@@ -524,16 +525,25 @@ async def test_the_real_clock_sleeps_the_seconds_it_is_given(
     assert slept == [2.5]
 
 
+# What the conftest's final check writes to stderr before each refusal it finds; spelled out here,
+# not imported, so that this module imports beside a conftest that has no final check.
+REFUSED_AFTER_THE_LAST_CHECK = "refused after the last check: "
+
+
 def _pytest_over(
     root: Path, files: dict[str, str], *options: str
-) -> tuple[int, list[tuple[str, str]]]:
+) -> tuple[int, list[tuple[str, str]], list[tuple[str, str]]]:
     """pytest run over ``files``, written to ``root`` beside a configuration of their own, with this
-    repository importable: its exit code, and each test's outcome in the order its JUnit report
-    lists the tests, which is the order they ran in."""
+    repository importable: its exit code, each test's outcome in the order its JUnit report lists
+    the tests, which is the order they ran in, and each refusal the conftest's final check wrote to
+    stderr, as (what, detail). Every line on stderr must be such a refusal."""
     run = run_pytest(root, files, *options, importable=True)
     report = root / "junit.xml"
     assert report.is_file(), run.stdout + run.stderr
-    return run.returncode, list(load_check_junit().read_outcomes(report).items())
+    lines = run.stderr.splitlines()
+    assert [line for line in lines if not line.startswith(REFUSED_AFTER_THE_LAST_CHECK)] == []
+    refused = [ast.literal_eval(line.removeprefix(REFUSED_AFTER_THE_LAST_CHECK)) for line in lines]
+    return run.returncode, list(load_check_junit().read_outcomes(report).items()), refused
 
 
 # Catches the refusal of the real clock, as code under test may.
@@ -548,18 +558,11 @@ SWALLOW = (
 
 
 def test_a_refusal_the_code_caught_fails_the_next_check(tmp_path: Path) -> None:
-    """Sample tests under this conftest's guard and checks: each refusal caught where it was
-    raised fails the first check after it, the one after each test or the one at the end of the
-    session, and the next check passes again."""
+    """Sample tests under this conftest, loaded as a plugin: each refusal caught where it was
+    raised fails the first check after it, the one after each test, and the next check passes
+    again; one a session fixture's teardown catches after the last test's check is left to the
+    final check, which writes it to stderr."""
     files = {
-        "conftest.py": (
-            "from tests.conftest import (\n"
-            "    nothing_refused,\n"
-            "    nothing_refused_after_the_last_test,\n"
-            "    pytest_configure,\n"
-            "    pytest_unconfigure,\n"
-            ")\n"
-        ),
         "swallow.py": SWALLOW,
         "test_a_collection.py": "from swallow import swallow\n\nswallow()\n\n\n"
         "def test_first():\n    pass\n",
@@ -576,7 +579,7 @@ def test_a_refusal_the_code_caught_fails_the_next_check(tmp_path: Path) -> None:
         "@pytest.fixture(scope='session')\ndef at_the_end():\n    yield\n    swallow()\n\n\n"
         "def test_last(at_the_end):\n    pass\n",
     }
-    assert _pytest_over(tmp_path / "run", files) == (
+    assert _pytest_over(tmp_path / "run", files, "-p", "tests.conftest") == (
         1,
         [
             ("test_a_collection::test_first", "error"),
@@ -585,9 +588,186 @@ def test_a_refusal_the_code_caught_fails_the_next_check(tmp_path: Path) -> None:
             ("test_c_module::test_with_a_setup_that_swallows", "error"),
             ("test_c_module::test_with_a_teardown_that_swallows", "passed"),
             ("test_d_next::test_after_the_module_teardown", "error"),
-            ("test_e_last::test_last", "error"),
+            ("test_e_last::test_last", "passed"),
         ],
+        [("wall clock", "source.clock: datetime.now(UTC)")],
     )
+
+
+# A session-scoped autouse fixture whose cleanup reads CLOCK's time and, as code under test may,
+# catches the refusal.
+CLEANUP_FIXTURE = """import pytest
+
+from github_activity_db.source.clock import SystemClock
+from tests.determinism import NotDeterministic
+from tests.source.conftest import FakeClock
+
+
+@pytest.fixture(autouse=True, scope="session")
+def cleanup():
+    yield
+    try:
+        CLOCK().now()
+    except NotDeterministic:
+        pass
+"""
+# The same cleanup in a plugin's pytest_unconfigure: registered after the guard, it runs before the
+# guard's, so after every test's teardown and every session-finish hook, with the guard still on.
+CLEANUP_HOOK = """from github_activity_db.source.clock import SystemClock
+from tests.determinism import NotDeterministic
+from tests.source.conftest import FakeClock
+
+
+def pytest_unconfigure(config):
+    try:
+        CLOCK().now()
+    except NotDeterministic:
+        pass
+"""
+# A plugin loaded before the guard is installed: each name tests/determinism.py patches, as it was
+# then, and the session, kept from its start. After every other pytest_unconfigure, it writes the
+# session's exit status, how many of the names are still patched (and how many were as the session
+# finished), and how many refusals are left recorded.
+RECORDER = """import json
+import socket
+from pathlib import Path
+
+import pytest
+
+from github_activity_db.db import types
+from github_activity_db.source import clock
+from github_activity_db.source.clock import SystemClock
+from tests import determinism
+
+GUARDED = [
+    (socket.socket, "connect"),
+    (socket.socket, "connect_ex"),
+    *((socket, name) for name in determinism.LOOKUPS),
+    (clock, "datetime"),
+    (clock, "asyncio"),
+    (SystemClock, "_random"),
+    (types, "_wall_clock"),
+]
+ORIGINALS = [getattr(owner, name) for owner, name in GUARDED]
+SEEN = {}
+
+
+def patched():
+    return sum(
+        getattr(owner, name) is not original
+        for (owner, name), original in zip(GUARDED, ORIGINALS, strict=True)
+    )
+
+
+def pytest_sessionstart(session):
+    SEEN["session"] = session
+
+
+@pytest.hookimpl(trylast=True)
+def pytest_sessionfinish(session):
+    SEEN["patched at sessionfinish"] = patched()
+
+
+@pytest.hookimpl(trylast=True)
+def pytest_unconfigure(config):
+    state = {
+        "exitstatus": int(SEEN["session"].exitstatus),
+        "patched at sessionfinish": SEEN["patched at sessionfinish"],
+        "patched at unconfigure": patched(),
+        "recorded": len(determinism.REFUSED),
+    }
+    Path("state.json").write_text(json.dumps(state))
+"""
+TWO_TESTS = "def test_first():\n    pass\n\n\ndef test_second():\n    pass\n"
+BEFORE_THE_GUARD = ("-p", "cleanup", "-p", "tests.conftest")
+AFTER_THE_GUARD = ("-p", "tests.conftest", "-p", "cleanup")
+
+
+@pytest.mark.parametrize(
+    ("files", "options", "module"),
+    [
+        (
+            {"cleanup.py": CLEANUP_FIXTURE, "test_sample.py": TWO_TESTS},
+            BEFORE_THE_GUARD,
+            "test_sample",
+        ),
+        (
+            {"cleanup.py": CLEANUP_FIXTURE, "test_sample.py": TWO_TESTS},
+            (*BEFORE_THE_GUARD, "--reverse-order"),
+            "test_sample",
+        ),
+        (
+            {"cleanup.py": CLEANUP_FIXTURE, "test_sample.py": TWO_TESTS},
+            AFTER_THE_GUARD,
+            "test_sample",
+        ),
+        (
+            {"cleanup.py": CLEANUP_FIXTURE, "test_sample.py": TWO_TESTS},
+            (*AFTER_THE_GUARD, "--reverse-order"),
+            "test_sample",
+        ),
+        (
+            {"cleanup.py": CLEANUP_HOOK, "test_sample.py": TWO_TESTS},
+            AFTER_THE_GUARD,
+            "test_sample",
+        ),
+        (
+            {
+                "conftest.py": CLEANUP_FIXTURE,
+                "guarded/conftest.py": "from tests.conftest import *\n",
+                "guarded/test_sample.py": TWO_TESTS,
+            },
+            ("guarded",),
+            "guarded.test_sample",
+        ),
+    ],
+    ids=[
+        "a session fixture in a plugin registered before the guard",
+        "a session fixture in a plugin registered before the guard, last to first",
+        "a session fixture in a plugin registered after the guard",
+        "a session fixture in a plugin registered after the guard, last to first",
+        "a plugin's pytest_unconfigure, run before the guard's",
+        "a session fixture in the root conftest, the guard in a directory's conftest",
+    ],
+)
+def test_a_refusal_caught_after_the_last_tests_check_fails_the_run(
+    files: dict[str, str], options: tuple[str, ...], module: str, tmp_path: Path
+) -> None:
+    """A cleanup that runs after the last test's check and catches the real clock's refusal fails
+    the run wherever it sits relative to the guard: pytest exits 1, every test passed, and the
+    refusal is on stderr. Its twin, reading a fake clock in the same place, exits 0 with nothing on
+    stderr. After either, the eleven names the guard patched, every one still patched as the
+    session finished, are restored, and no refusal is left recorded."""
+    tests = [f"{module}::test_first", f"{module}::test_second"]
+    if "--reverse-order" in options:
+        tests.reverse()
+    for twin, clock_class, exit_code, refused in [
+        ("refusing", "SystemClock", 1, [("wall clock", "source.clock: datetime.now(UTC)")]),
+        ("clean", "FakeClock", 0, []),
+    ]:
+        sample = {"recorder.py": RECORDER}
+        sample.update({name: text.replace("CLOCK", clock_class) for name, text in files.items()})
+        root = tmp_path / twin
+        assert _pytest_over(root, sample, "-p", "recorder", *options) == (
+            exit_code,
+            [(test, "passed") for test in tests],
+            refused,
+        ), twin
+        assert json.loads((root / "state.json").read_text()) == {
+            "exitstatus": exit_code,
+            "patched at sessionfinish": 11,
+            "patched at unconfigure": 0,
+            "recorded": 0,
+        }, twin
+
+
+def test_a_sample_run_hashes_with_a_fixed_seed(tmp_path: Path) -> None:
+    """The pytest runs these tests start draw no random hash seed (redesign plan D40)."""
+    files = {
+        "test_seed.py": "import sys\n\n\n"
+        "def test_seed():\n    assert sys.flags.hash_randomization == 0\n",
+    }
+    assert _pytest_over(tmp_path / "run", files) == (0, [("test_seed::test_seed", "passed")], [])
 
 
 def test_reverse_order_runs_the_tests_last_to_first(
@@ -610,6 +790,7 @@ def test_reverse_order_runs_the_tests_last_to_first(
             ("test_one::test_b", "passed"),
             ("test_two::test_c", "passed"),
         ],
+        [],
     )
     assert _pytest_over(tmp_path / "backward", files, "--reverse-order") == (
         1,
@@ -618,6 +799,7 @@ def test_reverse_order_runs_the_tests_last_to_first(
             ("test_one::test_b", "failed"),
             ("test_one::test_a", "passed"),
         ],
+        [],
     )
     forward, backward = (str(tmp_path / run / "junit.xml") for run in ("forward", "backward"))
     assert load_check_junit().main([forward, "--max-skipped", "0", "--same-as", backward]) == 1

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import os
 import shutil
+import sys
 from collections.abc import AsyncIterator, Callable, Iterator
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -35,6 +36,8 @@ SETTINGS_VARIABLES = frozenset(name.upper() for name in Settings.model_fields)
 
 
 _GUARD = pytest.MonkeyPatch()
+# Starts each line the final check writes to stderr, one for each refusal it finds.
+REFUSED_AFTER_THE_LAST_CHECK = "refused after the last check: "
 
 
 def pytest_configure(config: pytest.Config) -> None:
@@ -45,7 +48,20 @@ def pytest_configure(config: pytest.Config) -> None:
 
 
 def pytest_unconfigure(config: pytest.Config) -> None:
+    """The final check, once the guard is off: a refusal recorded after the last test's check (a
+    session fixture's teardown, a later hook) fails the run. pytest has written its JUnit report by
+    now, so each one is written to stderr and the exit status goes from 0 to 1."""
     _GUARD.undo()
+    refused = determinism.drain()
+    if not refused:
+        return
+    sys.stdout.flush()
+    for refusal in refused:
+        sys.stderr.write(f"{REFUSED_AFTER_THE_LAST_CHECK}{refusal!r}\n")
+    plugins = config.pluginmanager.get_plugins()
+    session = next((plugin for plugin in plugins if isinstance(plugin, pytest.Session)), None)
+    if session is not None and session.exitstatus == pytest.ExitCode.OK:
+        session.exitstatus = pytest.ExitCode.TESTS_FAILED
 
 
 def pytest_addoption(parser: pytest.Parser) -> None:
@@ -64,15 +80,8 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
         items.reverse()
 
 
-@pytest.fixture(autouse=True, scope="session")
-def nothing_refused_after_the_last_test() -> Iterator[None]:
-    """The refusals recorded after the last test's check, in fixtures torn down after it."""
-    yield
-    assert determinism.drain() == []
-
-
 @pytest.fixture(autouse=True)
-def nothing_refused(nothing_refused_after_the_last_test: None) -> Iterator[None]:
+def nothing_refused() -> Iterator[None]:
     """A test fails when anything since the previous test's check (collection, a wider fixture's
     setup or teardown, or the test itself) reached something ``tests/determinism.py`` refuses, even
     where the code under test caught the refusal."""

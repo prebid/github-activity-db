@@ -54,12 +54,16 @@ How the test suite is built and what it counts as evidence. The plan of record i
   wall clock), and every draw from `SystemClock`'s unseeded random source, by raising
   `NotDeterministic`. It sets `no_proxy` to `*`, so a client that reads proxies from the environment
   or the system settings is refused at GitHub's own host on every machine. Each refusal is also
-  recorded and checked after every test and at the end of the session, so a test fails even where
-  the code under test caught the exception (a refusal in a wider fixture's teardown fails the next
-  check); each refusal and that check's failing side have tests. Not refused, and so not enforced at
-  run time: a socket's other ways to reach a host (`sendto`, `bind`); processes a test starts, which
-  run without these patches; the event loop's and the standard library's own clocks behind a
-  timeout; and the time loguru gives a log record, which no test asserts.
+  recorded and checked after every test, so a test fails even where the code under test caught the
+  exception (a refusal in a wider fixture's teardown fails the next check). One recorded after the
+  last test's check (a session fixture's teardown, a later hook) is checked when `tests/conftest.py`
+  undoes the guard in `pytest_unconfigure`: it fails the run, written to stderr with pytest's exit
+  status turned from 0 to 1, though neither the JUnit report nor `--same-as` shows it, so pytest's
+  exit status is part of the verdict. Each refusal and each check's failing side have tests. Not
+  refused, and so not enforced at run time: a socket's other ways to reach a host (`sendto`,
+  `bind`); processes a test starts, which run without these patches; the event loop's and the
+  standard library's own clocks behind a timeout; and the time loguru gives a log record, which no
+  test asserts.
   `tests/test_suite_rules.py` reads source: no test file reads the wall clock, sleeps on it, or
   draws unseeded random numbers (`random.Random` takes a seed, `asyncio.sleep` takes `0`); the
   package reads them only in its two real clocks, and `alembic/` and `scripts/` read none; and no
