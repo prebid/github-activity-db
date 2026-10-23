@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import copy
 import json
+import math
 from collections.abc import Callable
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta, timezone
@@ -30,9 +31,17 @@ from github_activity_db.source.errors import (
     RepositoryNotFound,
     RepositoryShapeError,
 )
+from github_activity_db.source.limits import PAGE_SIZE
 from github_activity_db.source.models import ComparePage
 from tests.source.conftest import START, FakeClock, all_lookups, all_outcomes
-from tests.source.recordings import Unit
+from tests.source.recordings import (
+    COMPARE_STAMP,
+    RECORDED,
+    Unit,
+    expected_overflow_stamp,
+    expected_pull_request_stamp,
+    whole_stamp,
+)
 from tests.source.replay import Replay, loaded_units, synthetic, unanswered
 from tests.source.scenario import (
     ORDERS,
@@ -41,6 +50,7 @@ from tests.source.scenario import (
     Repository,
     Scenario,
     ScenarioError,
+    _templates,
     iso,
     recorded_units,
 )
@@ -485,6 +495,14 @@ async def test_a_repository_gone(scenario: Scenario) -> None:
             await source.index_pull_requests(resolved)
         with pytest.raises(RepositoryNotFound):
             await all_outcomes(source, resolved, [1])
+    # Each index and batch request after the removal was answered with a null repository.
+    assert [seen.operation for seen in scenario.replay.seen] == [
+        "Resolve",
+        "Resolve",
+        "PullRequestIndex",
+        "PullRequestBatch",
+    ]
+    assert scenario.replay.problems == []
 
 
 async def test_a_repository_gone_between_its_label_pages(scenario: Scenario) -> None:
@@ -583,38 +601,61 @@ def post(world: Scenario, query: str, variables: dict[str, Any]) -> httpx.Respon
         return client.post("/graphql", json={"query": query, "variables": variables})
 
 
-def test_a_document_the_model_was_not_checked_against_is_refused() -> None:
+WHOLE_DOCUMENTS = {
+    "resolve": documents.RESOLVE,
+    "repository_labels": documents.REPOSITORY_LABELS,
+    "index": documents.PULL_REQUEST_INDEX,
+    "user": documents.USER_LOOKUP,
+}
+
+
+def current_stamp(kind: str, connection: str | None) -> str:
+    """The stamp of the document the source sends now for ``kind`` (and continued
+    ``connection``)."""
+    if kind == "pull_request":
+        return expected_pull_request_stamp()
+    if kind == "overflow" and connection is not None:
+        return expected_overflow_stamp(connection)
+    if kind == "compare":
+        return whole_stamp(COMPARE_STAMP)
+    return whole_stamp(WHOLE_DOCUMENTS[kind])
+
+
+def test_the_model_stamps_each_kind_as_the_current_documents_do() -> None:
+    """Rendered units carry the recordings' stamps, one per kind and continued connection, each
+    the current document's, so the replay accepts what the model renders. A unit recorded for an
+    earlier document is refused (test_recordings.py)."""
+    layout = {
+        (parts[0], parts[2] if parts[0] == "overflow" else None)
+        for parts in (path.relative_to(RECORDED).parts for path in RECORDED.rglob("*.json"))
+        if parts[0] in RENDERED
+    }
+    assert {kind for kind, _ in layout} == set(RENDERED)
+    assert _templates().stamps == {key: current_stamp(*key) for key in layout}
     world = Scenario(FakeClock())
     world.add_repository("example", "project")
     variables = {"owner": "example", "name": "project"}
-    changed = documents.RESOLVE.replace("isPrivate", "isPrivate isFork")
-    assert changed != documents.RESOLVE
     assert post(world, documents.RESOLVE, variables).status_code == 200
-    assert post(world, changed, variables).status_code == 418
-    assert world.replay.problems == [
-        f"resolve unit {variables} was recorded for another query document: re-record with "
-        "scripts/record_fixtures.py"
-    ]
+    assert world.replay.problems == []
 
 
-def test_a_missing_repository_is_answered_only_for_a_checked_document() -> None:
+def test_a_missing_repository_is_answered_null_for_the_current_documents() -> None:
+    """The model answers an index or batch request for a repository it does not hold with a null
+    repository, stamped as the recordings of that request are."""
     world = Scenario(FakeClock())
-    variables = {"owner": "example", "name": "absent", "after": None}
-    changed = documents.PULL_REQUEST_INDEX.replace("isDraft", "isDraft title")
-    answered = post(world, documents.PULL_REQUEST_INDEX, variables)
-    assert (answered.status_code, answered.json()["data"]["repository"]) == (200, None)
-    assert post(world, changed, variables).status_code == 418
-    batch = documents.pull_request_batch(1)
-    changed_batch = batch.replace("additions deletions", "additions")
-    assert changed_batch != batch
-    numbered = {"owner": "example", "name": "absent", "n0": 1}
-    assert post(world, batch, numbered).json()["data"]["repository"] is None
-    assert post(world, changed_batch, numbered).status_code == 418
-    assert world.replay.problems == [
-        f"{kind} unit {{'owner': 'example', 'name': 'absent', 'for': '{kind}'}} was recorded for "
-        "another query document: re-record with scripts/record_fixtures.py"
-        for kind in ("index", "pull_request")
+    index = post(
+        world, documents.PULL_REQUEST_INDEX, {"owner": "example", "name": "absent", "after": None}
+    )
+    batch = post(
+        world, documents.pull_request_batch(1), {"owner": "example", "name": "absent", "n0": 1}
+    )
+    assert [
+        (answer.status_code, answer.json()["data"]["repository"]) for answer in (index, batch)
+    ] == [
+        (200, None),
+        (200, None),
     ]
+    assert world.replay.problems == []
 
 
 async def test_a_continuation_no_recording_covers_is_left_unanswered() -> None:
@@ -636,37 +677,43 @@ async def test_a_continuation_no_recording_covers_is_left_unanswered() -> None:
 
 
 @pytest.mark.parametrize(
-    ("connection", "cursor"),
-    [("comments", "unserved"), ("comments", "scenario:[1]"), ("commits", "NTA")],
+    ("connection", "nodes"),
+    [("comments", 101), ("comments", 250), ("commits", 250)],
 )
-async def test_a_cursor_the_model_never_served_is_reported(connection: str, cursor: str) -> None:
-    """A cursor in the model's own form, or GitHub's offset form (``NTA``, base64 of 50), that the
-    model did not serve names no page; the failure is the replay's problem, not an error inside
-    the transport."""
+async def test_each_cursor_the_source_sends_is_one_the_model_served(
+    connection: str, nodes: int
+) -> None:
+    """A page's ``endCursor`` is one the model serves: in its own form for a connection whose
+    cursors name a node, or GitHub's offset form for one whose cursors name a position. The source
+    sends each back, one continuation per further page."""
     world = Scenario(FakeClock())
     repository, author = project(world)
-    repository.pulls[1].add(connection, *(world.node(connection, by=author) for _ in range(101)))
-
-    def forged(body: dict[str, Any]) -> None:
-        body["data"]["repository"]["p0"][connection]["pageInfo"]["endCursor"] = cursor
-
-    world.replay.modify(forged, when=lambda seen: seen.operation == "PullRequestBatch")
+    pull = repository.pulls[1]
+    pull.add(connection, *(world.node(connection, by=author) for _ in range(nodes)))
     async with world.source() as source:
         resolved = await source.resolve("example", "project")
-        with pytest.raises(FatalSourceError):
-            await all_outcomes(source, resolved, [1])
-    key = {"id": repository.pulls[1].node["id"], "connection": connection, "after": cursor}
-    message = f"cursor {cursor!r} names no page the model served"
-    assert world.replay.problems == [
-        f"the provider failed on overflow {key}: ScenarioError({message!r})"
-    ]
+        (outcome,) = await all_outcomes(source, resolved, [1])
+    assert len(getattr(hydrated(outcome), connection)) == nodes
+    sent = [seen.variables["after0"] for seen in world.replay.seen if seen.operation == "Overflow"]
+    assert len(sent) == math.ceil(nodes / PAGE_SIZE) - 1
+    assert set(sent) <= set(pull.cursors[connection].known)
+    assert unanswered(world.replay) == []
 
 
 def test_unanswered_lists_problems_then_unused_faults() -> None:
-    replay = Replay()
-    replay.fault(lambda request: synthetic("server_error"))
-    replay.problems.append("no unit")
-    assert unanswered(replay) == ["no unit", "fault 0: served 0, 1 left"]
+    replay = Replay.from_fixtures()
+    replay.fault(
+        lambda request: synthetic("server_error"), when=lambda seen: seen.operation == "Resolve"
+    )
+    # Prebid.js #1 is not recorded: the replay cannot answer it.
+    payload = {
+        "query": documents.pull_request_batch(1),
+        "variables": {"owner": "prebid", "name": "Prebid.js", "n0": 1},
+    }
+    with httpx.Client(transport=replay.transport(), base_url="https://api.github.com") as client:
+        assert client.post("/graphql", json=payload).status_code == 418
+    assert len(replay.problems) == 1
+    assert unanswered(replay) == [replay.problems[0], "fault 0: served 0, 1 left"]
 
 
 async def test_a_bot_commit_links_its_bot_login(scenario: Scenario) -> None:
@@ -786,7 +833,15 @@ async def test_a_repository_gone_between_a_batch_and_its_overflow(scenario: Scen
         resolved = await source.resolve("example", "project")
         with pytest.raises(RepositoryNotFound):
             await all_outcomes(source, resolved, [1])
-    assert "Overflow" in [seen.operation for seen in scenario.replay.seen]
+    # The continuation finds no node, and the item's solo retry is answered with a null
+    # repository.
+    assert [seen.operation for seen in scenario.replay.seen] == [
+        "Resolve",
+        "PullRequestBatch",
+        "Overflow",
+        "PullRequestBatch",
+    ]
+    assert scenario.replay.problems == []
 
 
 async def test_what_the_model_leaves_unanswered() -> None:
@@ -1102,3 +1157,64 @@ def test_recorded_lists_are_in_the_order_cursors_name(unit: Unit) -> None:
     for connection, order in ORDERS.items():
         keys = [order(node) for node in unit.data[connection]["nodes"]]
         assert keys == sorted(keys), connection
+
+
+def test_a_document_the_model_was_not_checked_against_is_refused() -> None:
+    world = Scenario(FakeClock())
+    world.add_repository("example", "project")
+    variables = {"owner": "example", "name": "project"}
+    changed = documents.RESOLVE.replace("isPrivate", "isPrivate isFork")
+    assert changed != documents.RESOLVE
+    assert post(world, documents.RESOLVE, variables).status_code == 200
+    assert post(world, changed, variables).status_code == 418
+    assert world.replay.problems == [
+        f"resolve unit {variables} was recorded for another query document: re-record with "
+        "scripts/record_fixtures.py"
+    ]
+
+
+def test_a_missing_repository_is_answered_only_for_a_checked_document() -> None:
+    world = Scenario(FakeClock())
+    variables = {"owner": "example", "name": "absent", "after": None}
+    changed = documents.PULL_REQUEST_INDEX.replace("isDraft", "isDraft title")
+    answered = post(world, documents.PULL_REQUEST_INDEX, variables)
+    assert (answered.status_code, answered.json()["data"]["repository"]) == (200, None)
+    assert post(world, changed, variables).status_code == 418
+    batch = documents.pull_request_batch(1)
+    changed_batch = batch.replace("additions deletions", "additions")
+    assert changed_batch != batch
+    numbered = {"owner": "example", "name": "absent", "n0": 1}
+    assert post(world, batch, numbered).json()["data"]["repository"] is None
+    assert post(world, changed_batch, numbered).status_code == 418
+    assert world.replay.problems == [
+        f"{kind} unit {{'owner': 'example', 'name': 'absent', 'for': '{kind}'}} was recorded for "
+        "another query document: re-record with scripts/record_fixtures.py"
+        for kind in ("index", "pull_request")
+    ]
+
+
+@pytest.mark.parametrize(
+    ("connection", "cursor"),
+    [("comments", "unserved"), ("comments", "scenario:[1]"), ("commits", "NTA")],
+)
+async def test_a_cursor_the_model_never_served_is_reported(connection: str, cursor: str) -> None:
+    """A cursor in the model's own form, or GitHub's offset form (``NTA``, base64 of 50), that the
+    model did not serve names no page; the failure is the replay's problem, not an error inside
+    the transport."""
+    world = Scenario(FakeClock())
+    repository, author = project(world)
+    repository.pulls[1].add(connection, *(world.node(connection, by=author) for _ in range(101)))
+
+    def forged(body: dict[str, Any]) -> None:
+        body["data"]["repository"]["p0"][connection]["pageInfo"]["endCursor"] = cursor
+
+    world.replay.modify(forged, when=lambda seen: seen.operation == "PullRequestBatch")
+    async with world.source() as source:
+        resolved = await source.resolve("example", "project")
+        with pytest.raises(FatalSourceError):
+            await all_outcomes(source, resolved, [1])
+    key = {"id": repository.pulls[1].node["id"], "connection": connection, "after": cursor}
+    message = f"cursor {cursor!r} names no page the model served"
+    assert world.replay.problems == [
+        f"the provider failed on overflow {key}: ScenarioError({message!r})"
+    ]

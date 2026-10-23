@@ -1,15 +1,17 @@
 """Shared test fixtures.
 
 Databases come from one template per test session, built by ``alembic upgrade head`` and copied
-for each test (redesign plan Step 3); ``metadata.create_all`` is used only by the schema
-comparison in ``tests/db/test_schema.py``.
+for each test (redesign plan Step 3), and from read-only templates at earlier revisions, each
+built once; ``metadata.create_all`` is used only by the schema comparison in
+``tests/db/test_schema.py``.
 """
 
 from __future__ import annotations
 
 import os
 import shutil
-from collections.abc import AsyncIterator, Iterator
+import sys
+from collections.abc import AsyncIterator, Callable, Iterator
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -18,6 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 
 from github_activity_db.config import Settings
 from github_activity_db.db.engine import build_engine
+from tests import determinism
 from tests.db.alembic_support import upgrade
 
 if TYPE_CHECKING:
@@ -30,6 +33,60 @@ for _size in ("COLUMNS", "LINES"):
 
 # Settings reads each field's name, in any letter case, and a nested field as NAME__FIELD.
 SETTINGS_VARIABLES = frozenset(name.upper() for name in Settings.model_fields)
+
+
+_GUARD = pytest.MonkeyPatch()
+# Starts each line the final check writes to stderr, one for each refusal it finds.
+REFUSED_AFTER_THE_LAST_CHECK = "refused after the last check: "
+
+
+def pytest_configure(config: pytest.Config) -> None:
+    """What ``tests/determinism.py`` refuses (connections, host-name lookups, the package's real
+    clocks, and its random source) is refused from collection to the end of the session
+    (redesign plan D40)."""
+    determinism.install(_GUARD)
+
+
+def pytest_unconfigure(config: pytest.Config) -> None:
+    """The final check, once the guard is off: a refusal recorded after the last test's check (a
+    session fixture's teardown, a later hook) fails the run. pytest has written its JUnit report by
+    now, so each one is written to stderr and the exit status goes from 0 to 1."""
+    _GUARD.undo()
+    refused = determinism.drain()
+    if not refused:
+        return
+    sys.stdout.flush()
+    for refusal in refused:
+        sys.stderr.write(f"{REFUSED_AFTER_THE_LAST_CHECK}{refusal!r}\n")
+    plugins = config.pluginmanager.get_plugins()
+    session = next((plugin for plugin in plugins if isinstance(plugin, pytest.Session)), None)
+    if session is not None and session.exitstatus == pytest.ExitCode.OK:
+        session.exitstatus = pytest.ExitCode.TESTS_FAILED
+
+
+def pytest_addoption(parser: pytest.Parser) -> None:
+    parser.addoption(
+        "--reverse-order",
+        action="store_true",
+        help="run the collected tests last to first (CI compares such a run with one in order)",
+    )
+
+
+@pytest.hookimpl(trylast=True)
+def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
+    """With ``--reverse-order``, the tests run last to first, after every other plugin has
+    ordered them: each pair of tests runs in the other order."""
+    if config.getoption("--reverse-order"):
+        items.reverse()
+
+
+@pytest.fixture(autouse=True)
+def nothing_refused() -> Iterator[None]:
+    """A test fails when anything since the previous test's check (collection, a wider fixture's
+    setup or teardown, or the test itself) reached something ``tests/determinism.py`` refuses, even
+    where the code under test caught the refusal."""
+    yield
+    assert determinism.drain() == []
 
 
 @pytest.fixture(autouse=True)
@@ -48,6 +105,24 @@ def head_template(tmp_path_factory: pytest.TempPathFactory) -> Path:
     upgrade(path)
     path.chmod(0o444)
     return path
+
+
+@pytest.fixture(scope="session")
+def revision_template(tmp_path_factory: pytest.TempPathFactory) -> Callable[[str], Path]:
+    """The database migrated to a revision, built the first time a test asks for that revision
+    and read-only, like ``head_template``."""
+    folder = tmp_path_factory.mktemp("revisions")
+    built: dict[str, Path] = {}
+
+    def template(revision: str) -> Path:
+        if revision not in built:
+            path = folder / f"{revision}.db"
+            upgrade(path, revision)
+            path.chmod(0o444)
+            built[revision] = path
+        return built[revision]
+
+    return template
 
 
 @pytest.fixture

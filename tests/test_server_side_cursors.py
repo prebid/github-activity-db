@@ -18,6 +18,8 @@ from pathlib import Path
 
 import pytest
 
+from tests.support import files_under
+
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src"
 CALLS = {"stream", "stream_scalars", "yield_per"}
@@ -48,7 +50,7 @@ def server_side_cursors(files: list[Path]) -> list[str]:
 
 def test_no_server_side_cursor_in_src() -> None:
     files = sorted(SRC.rglob("*.py"))
-    assert len(files) > 30, f"scanned {len(files)} files"
+    assert len(files) == len(files_under(SRC, {".py"}))
     assert SRC / "github_activity_db" / "sync" / "snapshot.py" in files
     assert server_side_cursors(files) == []
 

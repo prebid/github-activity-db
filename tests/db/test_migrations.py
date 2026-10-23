@@ -14,17 +14,23 @@ import shutil
 import sqlite3
 import subprocess
 import sys
+import tokenize
 from collections.abc import Callable, Iterator
-from contextlib import closing, contextmanager
+from contextlib import closing
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 import pytest
 from alembic import command
 from alembic.script import ScriptDirectory
-from sqlalchemy import create_engine, event
-from sqlalchemy.engine import Engine
-from sqlalchemy.exc import ProgrammingError, StatementError
+from sqlalchemy import create_engine
+from sqlalchemy.exc import (
+    DatabaseError,
+    OperationalError,
+    ProgrammingError,
+    StatementError,
+)
 from sqlalchemy.pool import Pool
 
 from github_activity_db.config import get_settings
@@ -32,7 +38,10 @@ from github_activity_db.db.models import Base
 from github_activity_db.db.schema import HEAD_REVISION, MIGRATION_REVISIONS, SCHEMA_VERSION
 from tests.db.alembic_support import (
     FIRST_SCHEMA_HEAD,
+    LAST_RUN_ID,
     REPO_ROOT,
+    STEP3A,
+    STEP3B1,
     alembic_config,
     query,
     revision_of,
@@ -40,18 +49,21 @@ from tests.db.alembic_support import (
     upgrade,
     write_revision,
 )
-from tests.db.schema_support import frozen_views, named_constraints, schema_of
+from tests.db.schema_support import (
+    frozen_views,
+    named_constraints,
+    schema_of,
+    schema_tables,
+    views,
+)
 from tests.db.seed import T0, Seed, connect
+from tests.support import listening, sqlite_error_name
 from tests.test_import_boundaries import imported_modules
 
 TRACKED = REPO_ROOT / "github_activity.db"
 TEST_REVISION = "f1e57000a001"
+# The revisions an upgrade from the first schema's head applies.
 AFTER_THE_FIRST_SCHEMA = MIGRATION_REVISIONS[MIGRATION_REVISIONS.index(FIRST_SCHEMA_HEAD) + 1 :]
-# A test-only revision's first lines: close its driver connection, as a dropped file would.
-CLOSED_CONNECTION = "bind = op.get_bind()\nbind.connection.dbapi_connection.close()\n"
-# A pr_labels row whose pull request does not exist.
-PLANTED_LABEL = "INSERT INTO pr_labels (pr_id, name, label_node_id) VALUES (999, {!r}, 'x')"
-ORPHAN = f"op.execute({PLANTED_LABEL.format('orphan')!r})"
 VIEWS_READING_PULL_REQUESTS = (
     "v_pr_reviews",
     "v_pr_comments",
@@ -64,16 +76,35 @@ PULL_REQUEST_INDEXES = (
 )
 
 
-@contextmanager
-def listening(
-    name: str, listener: Callable[..., None], target: type[Engine | Pool] = Engine
-) -> Iterator[None]:
-    """``listener`` on the ``name`` event of every engine, or every pool, env.py's own included."""
-    event.listen(target, name, listener)
-    try:
-        yield
-    finally:
-        event.remove(target, name, listener)
+PLANTED_LABEL = "INSERT INTO pr_labels (pr_id, name, label_node_id) VALUES (999, {!r}, 'x')"
+
+ORPHAN = f"op.execute({PLANTED_LABEL.format('orphan')!r})"
+
+SWALLOWED_ROLLBACK = (
+    "try:\n"
+    '    op.execute("INSERT OR ROLLBACK INTO alembic_version "\n'
+    f"               \"VALUES ('{HEAD_REVISION}')\")\n"
+    "except Exception:\n"
+    "    pass\n"
+)
+
+STOP_TRIGGER = (
+    "CREATE TRIGGER stop BEFORE INSERT ON pr_labels WHEN NEW.name = 'stop' "
+    "BEGIN SELECT RAISE(ROLLBACK, 'stop'); END"
+)
+
+STOPPED_INSERT = (
+    f"try:\n    op.execute({PLANTED_LABEL.format('stop')!r})\nexcept Exception:\n    pass\n"
+)
+
+BOUND_INSERT = (
+    'op.get_bind().exec_driver_sql("INSERT INTO pr_labels (pr_id, name, label_node_id) '
+    "VALUES (?, ?, 'LA_bound')\", (999, {!r}))"
+)
+
+# A revision's first lines: the driver connection under SQLAlchemy closed, so the next statement
+# fails with an error the pysqlite dialect reads as a disconnect.
+CLOSED_CONNECTION = "bind = op.get_bind()\nbind.connection.dbapi_connection.close()\n"
 
 
 def is_closed(connection: sqlite3.Connection) -> bool:
@@ -108,6 +139,16 @@ def refusal(error: pytest.ExceptionInfo[BaseException]) -> str:
     """env.py is loaded fresh by every command, so its error class is matched by name."""
     assert type(error.value).__name__ == "MigrationRefused", repr(error.value)
     return str(error.value)
+
+
+def foreign_key_rows(database: Path) -> dict[str, int]:
+    """The rows of each table that has a foreign key: what ``PRAGMA foreign_key_check`` reads."""
+    counted = {}
+    for table in sorted(table_names(database)):
+        if query(database, f'PRAGMA foreign_key_list("{table}")'):
+            ((rows,),) = query(database, f'SELECT COUNT(*) FROM "{table}"')
+            counted[table] = int(str(rows))
+    return counted
 
 
 @pytest.fixture(scope="module")
@@ -158,13 +199,13 @@ class TestChain:
     ) -> None:
         target = tmp_path / "migrations.db"
         # If env.py ignored the database_url attribute it would migrate DATABASE_URL instead;
-        # point that at a decoy to make it visible.
-        decoy = tmp_path / "decoy.db"
-        monkeypatch.setenv("DATABASE_URL", f"sqlite+aiosqlite:///{decoy}")
+        # point that at a file of its own to make it visible.
+        settings_target = tmp_path / "settings-target.db"
+        monkeypatch.setenv("DATABASE_URL", f"sqlite+aiosqlite:///{settings_target}")
         config = alembic_config(target)
         command.upgrade(config, "head")
         command.check(config)  # raises AutogenerateDiffsDetected when models and chain disagree
-        assert not decoy.exists()
+        assert not settings_target.exists()
         assert revision_of(target) == HEAD_REVISION
 
     def test_the_packaged_revision_tuple_equals_the_chain(self, tmp_path: Path) -> None:
@@ -183,6 +224,39 @@ class TestChain:
         with pytest.raises(RuntimeError, match="migrations are never downgraded"):
             command.downgrade(alembic_config(migrated_database), FIRST_SCHEMA_HEAD)
         assert snapshot(migrated_database) == before
+
+    @pytest.mark.parametrize(
+        "run",
+        [
+            pytest.param(command.current, id="current"),
+            pytest.param(command.check, id="check"),
+            pytest.param(lambda config: command.stamp(config, "head"), id="stamp head"),
+            pytest.param(lambda config: command.upgrade(config, "head"), id="upgrade at head"),
+        ],
+    )
+    def test_every_command_commits_a_file_of_seeded_rows(
+        self, migrated_database: Path, run: Any
+    ) -> None:
+        """Each command runs the foreign-key check before it commits, whether it ran a revision
+        or not; a file of valid rows passes it, and each table the check reads holds the rows
+        the seed wrote."""
+        written = _seed_a_pull_request_with_children(migrated_database)
+        before = snapshot(migrated_database)
+        run(alembic_config(migrated_database))
+        assert snapshot(migrated_database) == before
+        read = foreign_key_rows(migrated_database)
+        assert {table: rows for table, rows in read.items() if rows} == {
+            table: rows for table, rows in written.items() if table in read
+        }
+
+    def test_an_in_memory_database_is_migrated(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.chdir(tmp_path)
+        config = alembic_config(tmp_path / "unused.db")
+        config.attributes["database_url"] = "sqlite+aiosqlite://"
+        command.upgrade(config, "head")
+        assert list(tmp_path.iterdir()) == []
 
     @pytest.mark.parametrize(
         "run",
@@ -256,15 +330,6 @@ class TestChain:
         assert "1 foreign-key violations" in refusal(error)
         assert snapshot(migrated_database) == before
 
-    def test_an_in_memory_database_is_migrated(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        monkeypatch.chdir(tmp_path)
-        config = alembic_config(tmp_path / "unused.db")
-        config.attributes["database_url"] = "sqlite+aiosqlite://"
-        command.upgrade(config, "head")
-        assert list(tmp_path.iterdir()) == []
-
 
 class TestStep3Migration:
     def test_upgrades_a_seeded_first_schema_database(self, first_schema: Path) -> None:
@@ -330,8 +395,30 @@ class TestStep3Migration:
             upgrade(first_schema)
         assert snapshot(first_schema) == before
 
+    def test_aborts_while_a_pull_request_is_tagged_in_a_valid_file(
+        self, first_schema: Path
+    ) -> None:
+        """Two tags and a link from the template's pull request to one, every reference intact:
+        the file passes the foreign-key check, and the upgrade refuses it for its tag rows."""
+        with closing(sqlite3.connect(first_schema)) as connection, connection:
+            connection.execute("PRAGMA foreign_keys=ON")
+            for insert in (
+                "INSERT INTO user_tags (id, name, created_at) "
+                "VALUES (1, 'keep', '2026-01-01 00:00:00')",
+                "INSERT INTO user_tags (id, name, created_at) "
+                "VALUES (2, 'other', '2026-01-01 00:00:00')",
+                "INSERT INTO pr_user_tags (pr_id, user_tag_id) VALUES (1, 1)",
+            ):
+                connection.execute(insert)
+        assert query(first_schema, "PRAGMA foreign_key_check") == []
+        before = snapshot(first_schema)
+        with pytest.raises(
+            RuntimeError, match=r"tag rows would be lost \(user_tags 2, pr_user_tags 1\)"
+        ):
+            upgrade(first_schema)
+        assert snapshot(first_schema) == before
 
-STEP3A = "33f8570f6540"
+
 STEP3A_ROWS = {
     "repositories": (
         "INSERT INTO repositories (id, github_id, owner, name, full_name, repo_group, is_private, "
@@ -370,10 +457,6 @@ def step3a_database(tmp_path: Path) -> Path:
     return database
 
 
-STEP3B1 = "94a52e4f1d57"
-LAST_RUN_ID = "2d2ba76b177c"
-
-
 @pytest.fixture
 def step3b1_database(tmp_path: Path) -> Path:
     """A database at the Step 3b-1 revision, which no sync has written."""
@@ -408,10 +491,15 @@ class TestStep3b1Migration:
     def test_upgrades_a_database_without_rows(
         self, step3a_database: Path, head_template: Path
     ) -> None:
+        """Its table rebuilds run with Step 3a's views in place, which it drops and recreates
+        from its own frozen SQL: every view at head is there, as frozen."""
+        assert views(step3a_database)
         upgrade(step3a_database)
         assert revision_of(step3a_database) == HEAD_REVISION
         assert query(step3a_database, "PRAGMA user_version") == [(SCHEMA_VERSION,)]
         assert schema_of(step3a_database) == schema_of(head_template)
+        frozen = frozen_views(alembic_config(head_template))
+        assert views(step3a_database) == {name: sql.strip() for name, sql in frozen.items()}
 
     def test_a_row_in_a_table_it_keeps_is_not_refused(self, step3a_database: Path) -> None:
         """A user tag is kept as it was; only the tables the revision recreates must be empty."""
@@ -433,6 +521,9 @@ class TestStep3b1Migration:
         step3b1 = tmp_path / "at-step3b1.db"
         upgrade(step3b1, STEP3B1)
         before, after = table_definitions(step3a_database), table_definitions(step3b1)
+        # Every table of each file is compared.
+        assert len(before) == len(schema_tables(step3a_database))
+        assert len(after) == len(schema_tables(step3b1))
         changed = {table for table in before if before[table] != after.get(table)}
         assert set(module.CHANGED_TABLES) == changed
         assert after.keys() - before.keys() == {
@@ -526,6 +617,9 @@ class TestSyncFailuresLastRunIdMigration:
         migrated = tmp_path / "at-last-run-id.db"
         upgrade(migrated, LAST_RUN_ID)
         before, after = table_definitions(step3b1_database), table_definitions(migrated)
+        # Every table of each file is compared.
+        assert len(before) == len(schema_tables(step3b1_database))
+        assert len(after) == len(schema_tables(migrated))
         changed = {table for table in before if before[table] != after.get(table)}
         assert set(module.CHANGED_TABLES) == changed == {"sync_failures"}
         assert after.keys() == before.keys()
@@ -721,6 +815,49 @@ class TestOneTransaction:
         assert snapshot(migrated_database) == before
         assert revision_of(migrated_database) == HEAD_REVISION
 
+    def test_the_chain_commits_a_file_of_seeded_rows(self, step3b1_database: Path) -> None:
+        """The foreign-key check before the upgrade's commit passes a file of valid rows, and
+        each table it reads holds the rows the seed wrote."""
+        written = _seed_a_pull_request_with_children(step3b1_database)
+        upgrade(step3b1_database)
+        assert revision_of(step3b1_database) == HEAD_REVISION
+        read = foreign_key_rows(step3b1_database)
+        assert {table: rows for table, rows in read.items() if rows} == {
+            table: rows for table, rows in written.items() if table in read
+        }
+
+    def test_the_migration_connection_has_foreign_keys_off_inside_one_transaction(
+        self, migrated_database: Path, tmp_path: Path
+    ) -> None:
+        # One row: one connection, configured once, with legacy_alter_table still off.
+        versions = tmp_path / "versions"
+        write_revision(
+            versions,
+            TEST_REVISION,
+            HEAD_REVISION,
+            """
+            bind = op.get_bind()
+            dbapi = bind.connection.dbapi_connection
+            foreign_keys = bind.exec_driver_sql("PRAGMA foreign_keys").scalar_one()
+            legacy_alter_table = bind.exec_driver_sql("PRAGMA legacy_alter_table").scalar_one()
+            op.execute(
+                "CREATE TABLE probe (foreign_keys INTEGER, legacy_alter_table INTEGER, "
+                "in_transaction INTEGER, autocommit INTEGER)"
+            )
+            bind.exec_driver_sql(
+                "INSERT INTO probe VALUES (?, ?, ?, ?)",
+                (
+                    foreign_keys,
+                    legacy_alter_table,
+                    dbapi.in_transaction,
+                    dbapi.isolation_level is None,
+                ),
+            )
+            """,
+        )
+        upgrade(migrated_database, test_versions=versions)
+        assert query(migrated_database, "SELECT * FROM probe") == [(0, 0, 1, 1)]
+
     def test_a_failure_in_the_second_revision_applies_neither(
         self, first_schema: Path, tmp_path: Path
     ) -> None:
@@ -750,31 +887,6 @@ class TestOneTransaction:
         assert "1 foreign-key violations in the file before the commit" in refusal(error)
         assert "('pr_labels', 1, 'pull_requests', 0)" in refusal(error)
         assert snapshot(migrated_database) == before
-
-    def test_the_migration_connection_has_foreign_keys_off_inside_one_transaction(
-        self, migrated_database: Path, tmp_path: Path
-    ) -> None:
-        versions = tmp_path / "versions"
-        write_revision(
-            versions,
-            TEST_REVISION,
-            HEAD_REVISION,
-            """
-            bind = op.get_bind()
-            dbapi = bind.connection.dbapi_connection
-            foreign_keys = bind.exec_driver_sql("PRAGMA foreign_keys").scalar_one()
-            op.execute(
-                "CREATE TABLE probe (foreign_keys INTEGER, in_transaction INTEGER, "
-                "autocommit INTEGER)"
-            )
-            bind.exec_driver_sql(
-                "INSERT INTO probe VALUES (?, ?, ?)",
-                (foreign_keys, dbapi.in_transaction, dbapi.isolation_level is None),
-            )
-            """,
-        )
-        upgrade(migrated_database, test_versions=versions)
-        assert query(migrated_database, "SELECT * FROM probe") == [(0, 1, 1)]
 
     @pytest.mark.parametrize(
         ("foreign_keys", "message"),
@@ -813,29 +925,230 @@ class TestOneTransaction:
         assert snapshot(first_schema) == before
 
 
-# SQLite rolls back by itself; the revision swallows the error and goes on.
-SWALLOWED_ROLLBACK = (
-    "try:\n"
-    '    op.execute("INSERT OR ROLLBACK INTO alembic_version "\n'
-    f"               \"VALUES ('{HEAD_REVISION}')\")\n"
-    "except Exception:\n"
-    "    pass\n"
-)
-STOP_TRIGGER = (
-    "CREATE TRIGGER stop BEFORE INSERT ON pr_labels WHEN NEW.name = 'stop' "
-    "BEGIN SELECT RAISE(ROLLBACK, 'stop'); END"
-)
-STOPPED_INSERT = (
-    f"try:\n    op.execute({PLANTED_LABEL.format('stop')!r})\nexcept Exception:\n    pass\n"
-)
-BOUND_INSERT = (
-    'op.get_bind().exec_driver_sql("INSERT INTO pr_labels (pr_id, name, label_node_id) '
-    "VALUES (?, ?, 'LA_bound')\", (999, {!r}))"
-)
+Authorizer = Callable[[int, str | None, str | None, str | None, str | None], int]
+
+
+class RecordingConnection(sqlite3.Connection):
+    """A driver connection that keeps the authorizer env.py installs on it, so a test can call
+    that authorizer itself."""
+
+    authorizer: Authorizer
+
+    def set_authorizer(self, authorizer_callback: Authorizer | None) -> None:
+        if authorizer_callback is not None:
+            self.authorizer = authorizer_callback
+        super().set_authorizer(authorizer_callback)
+
+
+# Calls env.py's authorizer must answer, as SQLite makes them: (action, its two arguments, the
+# database, the trigger or view).
+REFUSED_WHILE_OPEN = {
+    "ATTACH": (sqlite3.SQLITE_ATTACH, "other.db", None, None, None),
+    "DETACH": (sqlite3.SQLITE_DETACH, "other", None, None, None),
+    "SAVEPOINT": (sqlite3.SQLITE_SAVEPOINT, "BEGIN", "early", None, None),
+    "ANALYZE": (sqlite3.SQLITE_ANALYZE, "pr_labels", None, "main", None),
+    "CREATE TEMP TABLE": (sqlite3.SQLITE_CREATE_TEMP_TABLE, "scratch", None, "temp", None),
+    "CREATE TEMP VIEW": (sqlite3.SQLITE_CREATE_TEMP_VIEW, "scratch", None, "temp", None),
+    "CREATE TEMP TRIGGER": (sqlite3.SQLITE_CREATE_TEMP_TRIGGER, "t", "pr_labels", "temp", None),
+    # Creating a temp. object writes its row to the temp schema.
+    "a temp schema row": (sqlite3.SQLITE_INSERT, "sqlite_temp_master", None, "temp", None),
+    "CREATE VIRTUAL TABLE": (sqlite3.SQLITE_CREATE_VTABLE, "scratch", "fts5", "main", None),
+    "BEGIN": (sqlite3.SQLITE_TRANSACTION, "BEGIN", None, None, None),
+    "COMMIT": (sqlite3.SQLITE_TRANSACTION, "COMMIT", None, None, None),
+    "ROLLBACK": (sqlite3.SQLITE_TRANSACTION, "ROLLBACK", None, None, None),
+    "PRAGMA journal_mode=OFF": (sqlite3.SQLITE_PRAGMA, "journal_mode", "OFF", "main", None),
+    "PRAGMA legacy_alter_table=ON": (sqlite3.SQLITE_PRAGMA, "legacy_alter_table", "ON", None, None),
+    "PRAGMA ignore_check_constraints=ON": (
+        sqlite3.SQLITE_PRAGMA,
+        "ignore_check_constraints",
+        "ON",
+        None,
+        None,
+    ),
+    "PRAGMA writable_schema=ON": (sqlite3.SQLITE_PRAGMA, "writable_schema", "ON", None, None),
+}
+ALLOWED_WHILE_OPEN = {
+    "PRAGMA user_version=2": (sqlite3.SQLITE_PRAGMA, "user_version", "2", None, None),
+    "PRAGMA table_info(pr_labels)": (sqlite3.SQLITE_PRAGMA, "table_info", "pr_labels", None, None),
+    "PRAGMA foreign_keys": (sqlite3.SQLITE_PRAGMA, "foreign_keys", None, None, None),
+    "INSERT": (sqlite3.SQLITE_INSERT, "pr_labels", None, "main", None),
+    "SELECT": (sqlite3.SQLITE_SELECT, None, None, None, None),
+}
 
 
 class TestTransactionControl:
     """Only env.py opens, commits, and rolls back the upgrade's transaction (plan 5.1)."""
+
+    def test_the_authorizer_answers_each_call_as_the_upgrade_allows(
+        self, first_schema: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """env.py's own authorizer, called at a set point in each revision of the real chain,
+        while the upgrade's transaction is open, and again once it has committed."""
+        connections: list[RecordingConnection] = []
+        real_connect = sqlite3.dbapi2.connect
+
+        def connect(*args: Any, **kwargs: Any) -> sqlite3.Connection:
+            connection = real_connect(*args, factory=RecordingConnection, **kwargs)
+            connections.append(connection)
+            return connection
+
+        calls = {**REFUSED_WHILE_OPEN, **ALLOWED_WHILE_OPEN}
+        answers: list[tuple[bool, dict[str, int]]] = []
+
+        def ask(_connection: Any, _cursor: Any, statement: str, *_rest: Any) -> None:
+            if statement.startswith("UPDATE alembic_version"):
+                (connection,) = connections
+                answers.append(
+                    (
+                        connection.in_transaction,
+                        {name: connection.authorizer(*call) for name, call in calls.items()},
+                    )
+                )
+
+        monkeypatch.setattr(sqlite3.dbapi2, "connect", connect)
+        with listening("after_cursor_execute", ask):
+            upgrade(first_schema)
+        monkeypatch.undo()
+        assert revision_of(first_schema) == HEAD_REVISION
+        while_open = dict.fromkeys(REFUSED_WHILE_OPEN, sqlite3.SQLITE_DENY) | dict.fromkeys(
+            ALLOWED_WHILE_OPEN, sqlite3.SQLITE_OK
+        )
+        assert answers == [(True, while_open)] * len(AFTER_THE_FIRST_SCHEMA)
+        # Once the check has passed: env.py's COMMIT, and its ROLLBACK should the commit fail.
+        (connection,) = connections
+        assert {
+            name: connection.authorizer(*REFUSED_WHILE_OPEN[name])
+            for name in ("BEGIN", "COMMIT", "ROLLBACK")
+        } == {
+            "BEGIN": sqlite3.SQLITE_DENY,
+            "COMMIT": sqlite3.SQLITE_OK,
+            "ROLLBACK": sqlite3.SQLITE_OK,
+        }
+
+    def test_a_revision_that_refuses_leaves_env_py_only_its_rollback(
+        self, step3a_database: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The real chain's refusal of a repositories row, raised between statements on a
+        connection still usable: that error ends the upgrade, and the authorizer allows
+        env.py's ROLLBACK and no other transaction statement."""
+        connections: list[RecordingConnection] = []
+        invalidated: list[BaseException | None] = []
+        real_connect = sqlite3.dbapi2.connect
+
+        def connect(*args: Any, **kwargs: Any) -> sqlite3.Connection:
+            connection = real_connect(*args, factory=RecordingConnection, **kwargs)
+            connections.append(connection)
+            return connection
+
+        def record(_dbapi_connection: Any, _record: Any, exception: BaseException | None) -> None:
+            invalidated.append(exception)
+
+        with closing(sqlite3.connect(step3a_database)) as connection, connection:
+            connection.execute(STEP3A_ROWS["repositories"])
+        before = snapshot(step3a_database)
+        monkeypatch.setattr(sqlite3.dbapi2, "connect", connect)
+        with (
+            listening("invalidate", record, Pool),
+            pytest.raises(RuntimeError, match=r"rows would be lost \(repositories 1\)") as error,
+        ):
+            upgrade(step3a_database)
+        monkeypatch.undo()
+        assert type(error.value) is RuntimeError
+        # Between statements, so SQLAlchemy never invalidated the connection.
+        assert invalidated == []
+        (recorded,) = connections
+        assert {
+            name: recorded.authorizer(*REFUSED_WHILE_OPEN[name])
+            for name in ("BEGIN", "COMMIT", "ROLLBACK")
+        } == {
+            "BEGIN": sqlite3.SQLITE_DENY,
+            "COMMIT": sqlite3.SQLITE_DENY,
+            "ROLLBACK": sqlite3.SQLITE_OK,
+        }
+        assert snapshot(step3a_database) == before
+        assert revision_of(step3a_database) == STEP3A
+
+    def test_a_failed_commit_rolls_back_cleanly(self, step3b1_database: Path) -> None:
+        """A reader's lock makes the COMMIT fail once the check has run; the rollback that
+        follows is env.py's own, so the error is the commit's, not the authorizer's."""
+        statements: list[str] = []
+
+        def record(_connection: Any, _cursor: Any, statement: str, *_rest: Any) -> None:
+            statements.append(statement)
+
+        before = snapshot(step3b1_database)
+        config = alembic_config(step3b1_database)
+        config.attributes["database_url"] += "?timeout=0.1"
+        reader = sqlite3.connect(step3b1_database, isolation_level=None)
+        try:
+            reader.execute("BEGIN")
+            reader.execute("SELECT COUNT(*) FROM pr_labels").fetchall()  # holds a shared lock
+            with (
+                listening("before_cursor_execute", record),
+                pytest.raises(OperationalError) as error,
+            ):
+                command.upgrade(config, "head")
+        finally:
+            reader.close()
+        assert sqlite_error_name(error.value) == "SQLITE_BUSY"
+        assert statements[-1] == "PRAGMA foreign_key_check"
+        assert snapshot(step3b1_database) == before
+        assert revision_of(step3b1_database) == STEP3B1
+
+    def test_the_upgrade_takes_the_write_lock_before_any_revision_runs(
+        self, step3b1_database: Path
+    ) -> None:
+        """BEGIN IMMEDIATE: while another connection holds the write lock, the upgrade's first
+        statement fails, so no revision runs."""
+        statements: list[str] = []
+
+        def record(_connection: Any, _cursor: Any, statement: str, *_rest: Any) -> None:
+            statements.append(statement)
+
+        before = snapshot(step3b1_database)
+        config = alembic_config(step3b1_database)
+        config.attributes["database_url"] += "?timeout=0.1"
+        holder = sqlite3.connect(step3b1_database, isolation_level=None)
+        try:
+            holder.execute("BEGIN IMMEDIATE")
+            with (
+                listening("before_cursor_execute", record),
+                pytest.raises(OperationalError) as error,
+            ):
+                command.upgrade(config, "head")
+        finally:
+            holder.close()
+        assert sqlite_error_name(error.value) == "SQLITE_BUSY"
+        assert statements == ["BEGIN IMMEDIATE"]
+        assert snapshot(step3b1_database) == before
+        assert revision_of(step3b1_database) == STEP3B1
+
+    @pytest.mark.parametrize(
+        "url_query",
+        [
+            pytest.param("", id="no statement cache asked for"),
+            pytest.param("?cached_statements=128", id="statement cache asked for by the URL"),
+        ],
+    )
+    def test_the_driver_keeps_no_prepared_statements(
+        self, first_schema: Path, monkeypatch: pytest.MonkeyPatch, url_query: str
+    ) -> None:
+        """SQLite authorizes a statement when it prepares it, so the driver is asked for no
+        statement cache, whatever the caller's URL asks for, and the real chain runs on it."""
+        received: list[object] = []
+        real_connect = sqlite3.dbapi2.connect
+
+        def connect(*args: Any, **kwargs: Any) -> sqlite3.Connection:
+            received.append(kwargs.get("cached_statements"))
+            return real_connect(*args, **kwargs)
+
+        config = alembic_config(first_schema)
+        config.attributes["database_url"] += url_query
+        monkeypatch.setattr(sqlite3.dbapi2, "connect", connect)
+        command.upgrade(config, "head")
+        monkeypatch.undo()
+        assert received == [0]
+        assert revision_of(first_schema) == HEAD_REVISION
 
     @pytest.mark.parametrize(
         "body",
@@ -871,8 +1184,10 @@ class TestTransactionControl:
         versions = tmp_path / "versions"
         write_revision(versions, TEST_REVISION, HEAD_REVISION, body)
         before = snapshot(first_schema)
-        with pytest.raises(Exception, match="not authorized"):
+        with pytest.raises(DatabaseError) as error:
             upgrade(first_schema, test_versions=versions)
+        assert type(error.value) is DatabaseError
+        assert sqlite_error_name(error.value) == "SQLITE_AUTH"
         assert snapshot(first_schema) == before
 
     @pytest.mark.parametrize(
@@ -908,8 +1223,10 @@ class TestTransactionControl:
         config = alembic_config(migrated_database, test_versions=versions)
         config.attributes["database_url"] += url_query
         before = snapshot(migrated_database)
-        with pytest.raises(Exception, match="not authorized"):
+        with pytest.raises(DatabaseError) as error:
             command.upgrade(config, "head")
+        assert type(error.value) is DatabaseError
+        assert sqlite_error_name(error.value) == "SQLITE_AUTH"
         assert snapshot(migrated_database) == before
 
     @pytest.mark.parametrize(
@@ -939,8 +1256,10 @@ class TestTransactionControl:
         versions = tmp_path / "versions"
         write_revision(versions, TEST_REVISION, HEAD_REVISION, f"op.execute({statement!r})")
         before = snapshot(migrated_database)
-        with pytest.raises(Exception, match="not authorized"):
+        with pytest.raises(DatabaseError) as error:
             upgrade(migrated_database, test_versions=versions)
+        assert type(error.value) is DatabaseError
+        assert sqlite_error_name(error.value) == "SQLITE_AUTH"
         assert snapshot(migrated_database) == before
 
     def test_a_revision_cannot_attach_another_database(
@@ -959,71 +1278,12 @@ class TestTransactionControl:
             "op.execute('CREATE TABLE other.probe (x INTEGER)')",
         )
         before = snapshot(migrated_database)
-        with pytest.raises(Exception, match="not authorized"):
+        with pytest.raises(DatabaseError) as error:
             upgrade(migrated_database, test_versions=versions)
+        assert type(error.value) is DatabaseError
+        assert sqlite_error_name(error.value) == "SQLITE_AUTH"
         assert snapshot(migrated_database) == before
         assert not other.exists()
-
-    def test_a_failed_commit_rolls_back_cleanly(
-        self,
-        migrated_database: Path,
-        tmp_path: Path,
-        monkeypatch: pytest.MonkeyPatch,
-        caplog: pytest.LogCaptureFixture,
-    ) -> None:
-        """A reader's lock makes the COMMIT fail; the rollback that follows is env.py's own."""
-        versions = tmp_path / "versions"
-        write_revision(
-            versions, TEST_REVISION, HEAD_REVISION, "op.execute('CREATE TABLE probe (x INTEGER)')"
-        )
-        before = snapshot(migrated_database)
-        real_connect = sqlite3.dbapi2.connect
-
-        def connect_with_a_short_timeout(*args: Any, **kwargs: Any) -> sqlite3.Connection:
-            return real_connect(*args, **{**kwargs, "timeout": 0.1})
-
-        reader = sqlite3.connect(migrated_database, isolation_level=None)
-        try:
-            reader.execute("BEGIN")
-            reader.execute("SELECT COUNT(*) FROM pr_labels").fetchall()  # holds a shared lock
-            monkeypatch.setattr(sqlite3.dbapi2, "connect", connect_with_a_short_timeout)
-            with pytest.raises(Exception, match="database is locked"):
-                upgrade(migrated_database, test_versions=versions)
-            monkeypatch.undo()
-        finally:
-            reader.close()
-        assert snapshot(migrated_database) == before
-        assert not [record for record in caplog.records if "not authorized" in str(record.exc_info)]
-
-    def test_the_upgrade_takes_the_write_lock_before_any_revision_runs(
-        self, migrated_database: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """BEGIN IMMEDIATE: while another connection holds the write lock, no revision runs."""
-        marker = tmp_path / "revision-ran"
-        versions = tmp_path / "versions"
-        write_revision(
-            versions,
-            TEST_REVISION,
-            HEAD_REVISION,
-            f"import pathlib\npathlib.Path({str(marker)!r}).write_text('ran')\n{ORPHAN}",
-        )
-        before = snapshot(migrated_database)
-        real_connect = sqlite3.dbapi2.connect
-
-        def connect_with_a_short_timeout(*args: Any, **kwargs: Any) -> sqlite3.Connection:
-            return real_connect(*args, **{**kwargs, "timeout": 0.1})
-
-        holder = sqlite3.connect(migrated_database, isolation_level=None)
-        try:
-            holder.execute("BEGIN IMMEDIATE")
-            monkeypatch.setattr(sqlite3.dbapi2, "connect", connect_with_a_short_timeout)
-            with pytest.raises(Exception, match="database is locked"):
-                upgrade(migrated_database, test_versions=versions)
-            monkeypatch.undo()
-        finally:
-            holder.close()
-        assert not marker.exists()
-        assert snapshot(migrated_database) == before
 
 
 def _batch_alter_revision(views_sql: tuple[tuple[str, str], ...] | None) -> str:
@@ -1043,7 +1303,9 @@ def _batch_alter_revision(views_sql: tuple[tuple[str, str], ...] | None) -> str:
     )
 
 
-def _seed_a_pull_request_with_children(database: Path) -> None:
+def _seed_a_pull_request_with_children(database: Path) -> dict[str, int]:
+    """Valid rows: a merged pull request with a row in each of its child tables; returns the
+    rows written to each table."""
     with connect(database) as connection:
         seed = Seed(connection)
         repository = seed.repository()
@@ -1074,6 +1336,21 @@ def _seed_a_pull_request_with_children(database: Path) -> None:
         connection.exec_driver_sql(
             f"INSERT INTO pr_user_tags (pr_id, user_tag_id) VALUES ({pr}, 1)"
         )
+    return {
+        "repositories": 1,
+        "github_users": 3,
+        "pull_requests": 1,
+        "pr_reviews": 1,
+        "pr_comments": 2,
+        "pr_commits": 1,
+        "pr_labels": 1,
+        "pr_files": 1,
+        "pr_closing_issues": 1,
+        "pr_review_requests": 1,
+        "pr_assignees": 1,
+        "user_tags": 1,
+        "pr_user_tags": 1,
+    }
 
 
 CHILD_TABLES = (
@@ -1152,9 +1429,10 @@ class TestRefusals:
         assert (digest(TRACKED), TRACKED.stat().st_mtime_ns) == before
 
     def test_refuses_the_tracked_file_named_by_database_url(
-        self, monkeypatch: pytest.MonkeyPatch, isolated_settings: None
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, isolated_settings: None
     ) -> None:
         """The spelling gap 73 found: DATABASE_URL, as the documented .env line sets it."""
+        monkeypatch.chdir(tmp_path)  # the settings read no .env but this test's
         monkeypatch.setenv("DATABASE_URL", f"sqlite+aiosqlite:///{TRACKED}")
         config = alembic_config(TRACKED)
         del config.attributes["database_url"]
@@ -1230,18 +1508,19 @@ class TestRefusals:
             command.upgrade(config, "head")
         assert "refusing to migrate" in refusal(error)
         assert snapshot(target) == before
-        # Positive control: the copied environment migrates a file that is not the tracked one.
+        # The copied environment migrates a file that is not the tracked one.
         other = tmp_path / "other.db"
         shutil.copyfile(first_schema, other)
         upgrade(other, script_location=checkout / "alembic")
         assert revision_of(other) == HEAD_REVISION
 
     def test_the_file_sqlite_opened_is_refused_by_its_name(
-        self, tmp_path: Path, first_schema: Path
+        self, tmp_path: Path, first_schema: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """The opened-file name check alone: the URL names alias.db, Python's realpath (symlinks
         first, then ..) names a missing file, and the driver, which drops .. as text, opens
-        alias.db, a symlink to another checkout's github_activity.db."""
+        alias.db, a symlink to another checkout's github_activity.db. The connect listener
+        refuses it there, and closes the connection, which SQLAlchemy would not."""
         target = tmp_path / "other-checkout" / "github_activity.db"
         target.parent.mkdir()
         shutil.copyfile(first_schema, target)
@@ -1253,9 +1532,22 @@ class TestRefusals:
         before = snapshot(target)
         config = alembic_config(tmp_path / "unused.db")
         config.attributes["database_url"] = f"sqlite+aiosqlite:///{checkout}/link/../alias.db"
+        connections: list[sqlite3.Connection] = []
+        real_connect = sqlite3.dbapi2.connect
+
+        def connect(*args: Any, **kwargs: Any) -> sqlite3.Connection:
+            connection = real_connect(*args, **kwargs)
+            connections.append(connection)
+            return connection
+
+        monkeypatch.setattr(sqlite3.dbapi2, "connect", connect)
         with pytest.raises(RuntimeError) as error:
             command.upgrade(config, "head")
+        monkeypatch.undo()
         assert "(the file SQLite opened)" in refusal(error)
+        (connection,) = connections
+        with pytest.raises(sqlite3.ProgrammingError):  # a closed connection runs nothing
+            connection.execute("SELECT 1")
         assert snapshot(target) == before
 
     @pytest.mark.parametrize(
@@ -1316,8 +1608,8 @@ class TestRefusals:
     ) -> None:
         """alembic's documented attributes["connection"] would otherwise be ignored, and the
         settings' database migrated instead."""
-        decoy = tmp_path / "decoy.db"
-        monkeypatch.setenv("DATABASE_URL", f"sqlite+aiosqlite:///{decoy}")
+        settings_target = tmp_path / "settings-target.db"
+        monkeypatch.setenv("DATABASE_URL", f"sqlite+aiosqlite:///{settings_target}")
         callers = tmp_path / "callers.db"
         config = alembic_config(callers)
         del config.attributes["database_url"]
@@ -1330,14 +1622,14 @@ class TestRefusals:
         finally:
             engine.dispose()
         assert "a caller-supplied connection is not used" in refusal(error)
-        assert not decoy.exists()
+        assert not settings_target.exists()
         assert table_names(callers) == set()
 
     def test_sqlalchemy_url_is_refused(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, isolated_settings: None
     ) -> None:
-        decoy = tmp_path / "decoy.db"
-        monkeypatch.setenv("DATABASE_URL", f"sqlite+aiosqlite:///{decoy}")
+        settings_target = tmp_path / "settings-target.db"
+        monkeypatch.setenv("DATABASE_URL", f"sqlite+aiosqlite:///{settings_target}")
         named = tmp_path / "named.db"
         config = alembic_config(named)
         del config.attributes["database_url"]
@@ -1345,14 +1637,16 @@ class TestRefusals:
         with pytest.raises(RuntimeError) as error:
             command.upgrade(config, "head")
         assert "sqlalchemy.url is not used" in refusal(error)
-        assert not decoy.exists()
+        assert not settings_target.exists()
         assert not named.exists()
 
-    def test_the_alembic_command_refuses_the_tracked_file(self) -> None:
+    def test_the_alembic_command_refuses_the_tracked_file(self, tmp_path: Path) -> None:
+        # Run outside the checkout, so the settings read no .env a developer keeps there.
+        config = str(REPO_ROOT / "alembic.ini")
         result = subprocess.run(
-            [sys.executable, "-m", "alembic", "upgrade", "head"],
-            cwd=REPO_ROOT,
-            env={"PATH": "", "DATABASE_URL": "sqlite+aiosqlite:///./github_activity.db"},
+            [sys.executable, "-m", "alembic", "-c", config, "upgrade", "head"],
+            cwd=tmp_path,
+            env={"PATH": "", "DATABASE_URL": f"sqlite+aiosqlite:///{TRACKED}"},
             capture_output=True,
             text=True,
             timeout=60,
@@ -1381,7 +1675,17 @@ def test_head_tables_are_the_models_tables(head_template: Path) -> None:
     assert table_names(head_template) == set(Base.metadata.tables) | {"alembic_version"}
 
 
-def revision_source_problems(path: Path) -> list[str]:
+@dataclass(frozen=True)
+class RevisionSource:
+    """What ``revision_source`` read of a revision file: the problems it found, and how many
+    import statements and ``VIEWS`` assignments it checked."""
+
+    problems: list[str]
+    imports: int
+    views: int
+
+
+def revision_source(path: Path) -> RevisionSource:
     """Plan 5.1's rules for a revision file: it imports only the standard library, alembic, and
     SQLAlchemy (no application code, no relative import), and its ``VIEWS`` is a literal."""
     tree = ast.parse(path.read_bytes())
@@ -1390,11 +1694,13 @@ def revision_source_problems(path: Path) -> list[str]:
         for line, module in imported_modules(path)
         if module.split(".")[0] not in REVISION_IMPORTS | sys.stdlib_module_names
     ]
+    imports = [node for node in ast.walk(tree) if isinstance(node, ast.Import | ast.ImportFrom)]
     problems += [
         f"{path.name}:{node.lineno}: relative import"
-        for node in ast.walk(tree)
+        for node in imports
         if isinstance(node, ast.ImportFrom) and node.level > 0
     ]
+    views = 0
     for node in tree.body:
         if isinstance(node, ast.Assign):
             targets, value = node.targets, node.value
@@ -1403,25 +1709,44 @@ def revision_source_problems(path: Path) -> list[str]:
         else:
             continue
         if any(isinstance(t, ast.Name) and t.id == "VIEWS" for t in targets):
+            views += 1
             try:
                 ast.literal_eval(value)
             except ValueError:
                 problems.append(f"{path.name}:{node.lineno}: VIEWS is not a literal")
-    return problems
+    return RevisionSource(problems, len(imports), views)
 
 
 REVISION_IMPORTS = frozenset({"alembic", "sqlalchemy"})
 
 
+def import_keywords(path: Path) -> int:
+    """The ``import`` keywords the tokenizer reads in the file: one per import statement."""
+    with path.open("rb") as source:
+        return sum(
+            token.type == tokenize.NAME and token.string == "import"
+            for token in tokenize.tokenize(source.readline)
+        )
+
+
 class TestRevisionSources:
-    def test_every_revision_follows_the_rules(self) -> None:
+    def test_every_revision_follows_the_rules(self, tmp_path: Path) -> None:
         revisions = sorted((REPO_ROOT / "alembic" / "versions").glob("*.py"))
         assert len(revisions) == len(MIGRATION_REVISIONS)
-        assert [problem for path in revisions for problem in revision_source_problems(path)] == []
+        read = [revision_source(path) for path in revisions]
+        assert [problem for source in read for problem in source.problems] == []
+        # What the rules checked, counted another way: the tokenizer's import keywords, and the
+        # VIEWS of the modules alembic loads.
+        assert sum(source.imports for source in read) == sum(map(import_keywords, revisions))
+        script = ScriptDirectory.from_config(alembic_config(tmp_path / "unused.db"))
+        assert sum(source.views for source in read) == sum(
+            hasattr(script.get_revision(revision).module, "VIEWS")
+            for revision in MIGRATION_REVISIONS
+        )
 
     def test_the_newest_view_revision_has_a_literal_views_constant(self) -> None:
-        """Positive control: the rule reads the VIEWS the chain actually has, in the newest
-        revision that defines any."""
+        """The rule reads the VIEWS the chain actually has, in the newest revision that defines
+        any."""
 
         def defines_views(path: Path) -> bool:
             return any(
@@ -1441,26 +1766,45 @@ class TestRevisionSources:
         assert newest.name.startswith(STEP3B1)
 
     @pytest.mark.parametrize(
-        ("source", "flagged"),
+        ("source", "problems", "imports", "views"),
         [
-            ("import json\nimport sqlalchemy as sa\nfrom alembic import op\n", False),
-            ("VIEWS = (('v', 'CREATE VIEW v AS SELECT 1'),)\n", False),
-            ("from typing import Final\nVIEWS: Final = (('v', 'SELECT 1'),)\n", False),
-            ("from github_activity_db.db import models\n", True),
-            ("import githubkit\n", True),
-            ("from . import shared\n", True),
-            ("import importlib\nimportlib.import_module('github_activity_db')\n", True),
-            ("VIEWS = SHARED_VIEWS\n", True),
-            ("VIEWS: tuple = tuple(view for view in ())\n", True),
-            ("VIEWS = (('v', 'CREATE VIEW v AS SELECT ' + '1'),)\n", True),
+            ("import json\nimport sqlalchemy as sa\nfrom alembic import op\n", [], 3, 0),
+            ("VIEWS = (('v', 'CREATE VIEW v AS SELECT 1'),)\n", [], 0, 1),
+            ("from typing import Final\nVIEWS: Final = (('v', 'SELECT 1'),)\n", [], 1, 1),
+            (
+                "from github_activity_db.db import models\n",
+                ["1: imports github_activity_db.db", "1: imports github_activity_db.db.models"],
+                1,
+                0,
+            ),
+            ("import githubkit\n", ["1: imports githubkit"], 1, 0),
+            ("from . import shared\n", ["1: relative import"], 1, 0),
+            (
+                "import importlib\nimportlib.import_module('github_activity_db')\n",
+                ["2: imports github_activity_db"],
+                1,
+                0,
+            ),
+            ("VIEWS = SHARED_VIEWS\n", ["1: VIEWS is not a literal"], 0, 1),
+            ("VIEWS: tuple = tuple(view for view in ())\n", ["1: VIEWS is not a literal"], 0, 1),
+            (
+                "VIEWS = (('v', 'CREATE VIEW v AS SELECT ' + '1'),)\n",
+                ["1: VIEWS is not a literal"],
+                0,
+                1,
+            ),
         ],
     )
     def test_flags_each_rule_on_planted_files(
-        self, tmp_path: Path, source: str, flagged: bool
+        self, tmp_path: Path, source: str, problems: list[str], imports: int, views: int
     ) -> None:
+        """The checker the real revisions run through, on a file the test writes: the exact
+        problems, and the import statements and ``VIEWS`` assignments it read."""
         path = tmp_path / "f00000000001_planted.py"
         path.write_text(source)
-        assert bool(revision_source_problems(path)) is flagged
+        assert revision_source(path) == RevisionSource(
+            [f"{path.name}:{problem}" for problem in problems], imports, views
+        )
 
 
 def test_a_generated_revision_raises_in_downgrade_and_follows_the_rules(tmp_path: Path) -> None:
@@ -1470,7 +1814,7 @@ def test_a_generated_revision_raises_in_downgrade_and_follows_the_rules(tmp_path
     config = alembic_config(tmp_path / "unused.db", test_versions=versions)
     command.revision(config, message="probe", rev_id=TEST_REVISION, version_path=str(versions))
     (path,) = versions.glob(f"{TEST_REVISION}_*.py")
-    assert revision_source_problems(path) == []
+    assert revision_source(path) == RevisionSource([], import_keywords(path), 0)
     spec = importlib.util.spec_from_file_location("generated_revision", path)
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)

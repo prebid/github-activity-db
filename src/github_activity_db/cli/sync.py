@@ -12,7 +12,6 @@ import contextlib
 import errno
 import os
 import sys
-import time
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Annotated, TextIO
@@ -105,7 +104,7 @@ def sync(
         prune_untracked=prune_untracked,
         dry_run=dry_run,
     )
-    started = time.monotonic()
+    started = clock.now()
     report = run_async_command(
         engine.sync(
             options,
@@ -115,7 +114,8 @@ def sync(
         error_prefix="Sync did not start",
     )
     try:
-        print_report(console, report, seconds=time.monotonic() - started, break_lock=break_lock)
+        seconds = (clock.now() - started).total_seconds()
+        print_report(console, report, seconds=seconds, break_lock=break_lock)
     except (UnicodeEncodeError, OSError) as e:
         # The run is recorded; an output that cannot take the report (an encoding without one of
         # its characters, a closed pipe, a full disk) never changes the exit code.

@@ -245,9 +245,10 @@ ruff and mypy run through `uv run --no-sync`, so hooks never change the environm
   one, was removed or the digest changed, or pairs or views were added to an entry that is not
   the newest; a lock it cannot read as its rule expects (a malformed entry or digest, or a key
   listed twice) also fails the step;
-- pytest on Python 3.12 and 3.13, then `scripts/check_junit.py --max-skipped 0`, which fails
-  unless at least one test ran and none failed, errored, or was skipped (pytest reports `xfail`
-  as skipped);
+- pytest on Python 3.12 and 3.13, then `scripts/check_junit.py --max-skipped 0`, which fails unless
+  at least one test ran and none failed, errored, or was skipped (pytest reports `xfail` as
+  skipped); then pytest again with the tests in reverse order under another `PYTHONHASHSEED`, and
+  `check_junit.py --same-as`, which fails on each test whose outcome differs between the two runs;
 - `alembic upgrade head` plus `alembic check` against a fresh database;
 - a built wheel (build dependencies hash-checked against `build-constraints.txt`), installed
   into a new environment after the `uv.lock` dependencies (with hash checking, then
@@ -316,6 +317,7 @@ tests/
 ├── db/                  # Migrations, schema comparison, views, timestamp type, tracked file
 ├── source/              # Source layer against recorded GitHub responses
 ├── sync/                # Planner, deletions, and writer over seeded databases; the engine over the scenario model
+├── fixtures/history/    # Repository files as earlier commits hold them
 ├── fixtures/source/     # Recorded and synthetic GitHub responses
 ├── data_dictionary.py   # Reader for docs/data-dictionary.md
 ├── query_versions.json  # Hydration-version lock

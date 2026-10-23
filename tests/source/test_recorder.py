@@ -5,33 +5,52 @@ from __future__ import annotations
 import asyncio
 import dataclasses
 import json
+import shutil
 from collections.abc import Callable
+from datetime import timedelta
 from pathlib import Path
 from typing import Any
 
 import httpx
 import pytest
 
+from github_activity_db.source.errors import CompareRefused, ServerError
 from github_activity_db.source.limits import RATE_LIMIT_FALLBACK_WAIT, SERVER_RETRY_DELAYS
 from tests.source import recorder
-from tests.source.conftest import FakeClock
+from tests.source.conftest import START, FakeClock
 from tests.source.recorder import (
     FIRST_SYNC_REPOSITORY,
+    SCENARIOS,
     PrivateRepository,
     RecordingFailed,
     Scenario,
     record,
     record_first_sync,
+    write_units,
 )
 from tests.source.recordings import FIRST_SYNC, RECORDED, Unit
 from tests.source.replay import Replay, synthetic
+
+# An earlier recording's clock; the later one runs on FakeClock's default, START.
+EARLIER = START - timedelta(hours=1)
+# The scenario a later recording no longer lists: its units are its resolve and its one PR.
+DROPPED = next(scenario for scenario in SCENARIOS if scenario.name == "prebid-cache")
+# Prebid.js #8858 (254 commits) is the recorded compare fallback, the only one (SCENARIOS).
+COMPARED = 8858
+
+
+def stamp(clock: FakeClock) -> str:
+    """``recorded_at`` of a unit recorded on ``clock``."""
+    return clock.now().strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 async def test_recording_the_replay_gives_back_every_unit() -> None:
     """Split (recorder) after assemble (replay) is the identity on the fixtures, per operation."""
     replay = Replay.from_fixtures()
-    units = await record("test-token", inner=replay.transport())
+    clock = FakeClock()
+    units = await record("test-token", inner=replay.transport(), clock=clock)
     assert replay.problems == []
+    assert clock.sleeps == []
     requests = {(s.operation, json.dumps(s.variables, sort_keys=True), s.path) for s in replay.seen}
     assert len(requests) == len(replay.seen), "a request was sent twice"
     produced = {(unit.kind, json.dumps(unit.key, sort_keys=True)): unit for unit in units}
@@ -45,6 +64,7 @@ async def test_recording_the_replay_gives_back_every_unit() -> None:
             original.extra,
             original.headers,
         ), key
+    assert {unit.recorded_at for unit in units} == {stamp(clock)}
 
 
 async def test_a_private_repository_stops_the_run_after_its_resolve() -> None:
@@ -56,8 +76,9 @@ async def test_a_private_repository_stops_the_run_after_its_resolve() -> None:
         Scenario("prebid", "prebid-cache-java", index=True),
         Scenario("prebid", "go-gdpr", index=True),
     )
-    with pytest.raises(PrivateRepository, match="prebid/go-gdpr"):
-        await record("test-token", inner=replay.transport(), scenarios=scenarios)
+    with pytest.raises(PrivateRepository) as raised:
+        await record("test-token", inner=replay.transport(), scenarios=scenarios, clock=FakeClock())
+    assert raised.value.full_name == "prebid/go-gdpr"
     operations = [seen.operation for seen in replay.seen]
     # prebid-cache-java: resolve and two index pages; go-gdpr: its resolve only; no users.
     assert operations == ["Resolve", "PullRequestIndex", "PullRequestIndex", "Resolve"]
@@ -70,9 +91,17 @@ async def test_a_failed_item_stops_the_recording() -> None:
         when=lambda seen: seen.operation == "rest",
         times=None,
     )
-    scenarios = (Scenario("prebid", "Prebid.js", numbers=(8858,)),)
-    with pytest.raises(RecordingFailed, match="compare answered 404"):
-        await record("test-token", inner=replay.transport(), scenarios=scenarios, users=())
+    scenarios = (Scenario("prebid", "Prebid.js", numbers=(COMPARED,)),)
+    with pytest.raises(RecordingFailed) as raised:
+        await record(
+            "test-token", inner=replay.transport(), scenarios=scenarios, users=(), clock=FakeClock()
+        )
+    failed = [
+        (outcome.number, type(outcome.error), getattr(outcome.error, "status", None))
+        for outcome in raised.value.failed
+    ]
+    assert failed == [(COMPARED, CompareRefused, 404)]
+    assert (raised.value.lookup_failed, raised.value.report) == ({}, None)
 
 
 async def test_a_failed_user_lookup_stops_the_recording() -> None:
@@ -83,8 +112,11 @@ async def test_a_failed_user_lookup_stops_the_recording() -> None:
         times=None,
     )
     clock = FakeClock()
-    with pytest.raises(RecordingFailed, match="user lookup"):
+    with pytest.raises(RecordingFailed) as raised:
         await record("test-token", inner=replay.transport(), scenarios=(), clock=clock)
+    causes = {node_id: type(error.cause) for node_id, error in raised.value.lookup_failed.items()}
+    assert causes == dict.fromkeys(recorder.USERS, ServerError)
+    assert raised.value.failed == ()
     assert clock.sleeps == list(SERVER_RETRY_DELAYS)
 
 
@@ -111,8 +143,11 @@ async def test_a_private_answer_comes_after_the_resolves_label_pages() -> None:
     unit.data["isPrivate"] = True
     replay.add(unit)
     scenarios = (Scenario("golang", "go", index=True),)
-    with pytest.raises(PrivateRepository, match="golang/go"):
-        await record("test-token", inner=replay.transport(), scenarios=scenarios, users=())
+    with pytest.raises(PrivateRepository) as raised:
+        await record(
+            "test-token", inner=replay.transport(), scenarios=scenarios, users=(), clock=FakeClock()
+        )
+    assert raised.value.full_name == "golang/go"
     assert [seen.operation for seen in replay.seen] == ["Resolve", "RepositoryLabels"]
 
 
@@ -122,148 +157,232 @@ async def test_a_private_answer_comes_after_the_resolves_label_pages() -> None:
 async def test_a_listed_private_repository_is_never_requested(owner: str, name: str) -> None:
     replay = Replay.from_fixtures()
     scenarios = (Scenario(owner, name, index=True),)
-    with pytest.raises(PrivateRepository):
-        await record("test-token", inner=replay.transport(), scenarios=scenarios)
-    with pytest.raises(PrivateRepository):
+    with pytest.raises(PrivateRepository) as recording:
+        await record("test-token", inner=replay.transport(), scenarios=scenarios, clock=FakeClock())
+    with pytest.raises(PrivateRepository) as first_sync:
         await record_first_sync(
             "test-token", owner, name, inner=replay.transport(), clock=FakeClock()
         )
+    assert recording.value.full_name == first_sync.value.full_name == f"{owner}/{name}"
     assert replay.seen == []
 
 
-def test_a_failed_recording_writes_nothing(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    recorded = tmp_path / "recorded"
-    recorded.mkdir()
-    (recorded / "kept.json").write_text("{}")
+# --------------------------------------------------------------------------------------------
+# Writing: main() over the replay
+# --------------------------------------------------------------------------------------------
+@dataclasses.dataclass
+class Replayed:
+    """``record`` as ``main`` calls it, over ``replay`` on ``clock``: ``scenarios`` unless ``main``
+    names its own. ``calls`` holds the arguments ``main`` passed, ``units`` what was recorded."""
 
-    async def refuse(token: str, **kwargs: Any) -> list[Any]:
-        raise PrivateRepository("prebid/private")
+    replay: Replay
+    clock: FakeClock
+    scenarios: tuple[Scenario, ...] = SCENARIOS
+    calls: list[dict[str, Any]] = dataclasses.field(default_factory=list)
+    units: list[Unit] = dataclasses.field(default_factory=list)
 
-    monkeypatch.setattr(recorder, "RECORDED", recorded)
-    monkeypatch.setattr(recorder, "record", refuse)
+    async def __call__(self, token: str, **kwargs: Any) -> list[Unit]:
+        self.calls.append(kwargs)
+        arguments = {"scenarios": self.scenarios, **kwargs}
+        self.units = await record(
+            token, inner=self.replay.transport(), clock=self.clock, **arguments
+        )
+        return self.units
+
+
+def written(units: list[Unit]) -> dict[str, bytes]:
+    """The files ``units`` are written to, by path, with their text."""
+    return {str(unit.path()): unit.dumps().encode() for unit in units}
+
+
+def snapshot(directory: Path) -> dict[str, bytes]:
+    """Every file under ``directory``, by relative path, with its bytes."""
+    return {
+        str(path.relative_to(directory)): path.read_bytes()
+        for path in sorted(directory.rglob("*"))
+        if path.is_file()
+    }
+
+
+def of_repository(units: list[Unit], scenario: Scenario) -> set[str]:
+    """The files of ``units`` keyed by ``scenario``'s repository."""
+    return {
+        str(unit.path())
+        for unit in units
+        if (unit.key.get("owner"), unit.key.get("name")) == (scenario.owner, scenario.name)
+    }
+
+
+def oversized(replay: Replay) -> Unit:
+    """The largest recorded compare page, with its first commit's message repeated until the page
+    is over ``MAX_FILE_BYTES``: compare returns each commit's message, which git does not bound."""
+    unit = max(
+        (unit for unit in replay.units.values() if unit.kind == "compare"),
+        key=lambda unit: len(unit.dumps().encode()),
+    )
+    unit = replay.unit("compare", **unit.key)
+    commit = unit.data["commits"][0]["commit"]
+    short = recorder.MAX_FILE_BYTES - len(unit.dumps().encode())
+    commit["message"] = "\n".join([commit["message"]] * (short // len(commit["message"]) + 2))
+    assert len(unit.dumps().encode()) > recorder.MAX_FILE_BYTES
+    return unit
+
+
+@pytest.fixture
+def target(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
+    """Where ``main`` writes the recordings: ``recorded`` in the test's directory."""
+    directory = tmp_path / "recorded"
+    monkeypatch.setattr(recorder, "RECORDED", directory)
     monkeypatch.setenv("GITHUB_TOKEN", "test-token")
-    with pytest.raises(PrivateRepository):
-        recorder.main([])
-    assert [path.name for path in tmp_path.iterdir()] == ["recorded"]
-    assert [path.name for path in recorded.iterdir()] == ["kept.json"]
+    return directory
 
 
-def recorded_units() -> list[Any]:
-    """The units the recorder produces from the replay, as a live recording would."""
-    return asyncio.run(record("test-token", inner=Replay.from_fixtures().transport()))
+def run(monkeypatch: pytest.MonkeyPatch, replayed: Replayed, argv: list[str]) -> int:
+    monkeypatch.setattr(recorder, "record", replayed)
+    return recorder.main(argv)
 
 
 def test_a_recording_writes_one_file_per_unit(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, target: Path
 ) -> None:
-    units = recorded_units()
-
-    async def replayed(token: str, **kwargs: Any) -> list[Any]:
-        return units
-
-    target = tmp_path / "recorded"
-    target.mkdir()
-    (target / "stale.json").write_text("{}")
-    monkeypatch.setattr(recorder, "RECORDED", target)
-    monkeypatch.setattr(recorder, "record", replayed)
-    monkeypatch.setenv("GITHUB_TOKEN", "test-token")
-    assert recorder.main([]) == 0
-    written = sorted(str(path.relative_to(target)) for path in target.rglob("*.json"))
+    """Every unit to its own file, the directory replaced whole: a scenario no longer recorded
+    leaves no file."""
+    earlier = Replayed(Replay.from_fixtures(), FakeClock(EARLIER))
+    assert run(monkeypatch, earlier, []) == 0
     committed = sorted(str(path.relative_to(RECORDED)) for path in RECORDED.rglob("*.json"))
-    assert written == committed  # every unit to its own file; the stale file is gone
-    for unit in units:
-        assert (target / unit.path()).read_text() == unit.dumps()
+    assert sorted(snapshot(target)) == committed
+    assert snapshot(target) == written(earlier.units)
+
+    later = Replayed(
+        Replay.from_fixtures(),
+        FakeClock(),
+        scenarios=tuple(scenario for scenario in SCENARIOS if scenario != DROPPED),
+    )
+    assert run(monkeypatch, later, []) == 0
+    gone = set(written(earlier.units)) - set(written(later.units))
+    assert gone == of_repository(earlier.units, DROPPED) != set()
+    assert snapshot(target) == written(later.units)
+    assert {unit.recorded_at for unit in later.units} == {stamp(later.clock)}
+    assert [path.name for path in tmp_path.iterdir()] == ["recorded"]
+
+
+def test_a_failed_recording_writes_nothing(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, target: Path
+) -> None:
+    earlier = Replayed(Replay.from_fixtures(), FakeClock(EARLIER))
+    assert run(monkeypatch, earlier, []) == 0
+    before = snapshot(target)
+    assert len(before) == len(earlier.units)
+
+    replay = Replay.from_fixtures()
+    unit = replay.unit("resolve", owner="prebid", name="go-gdpr")
+    unit.data["isPrivate"] = True
+    replay.add(unit)
+    with pytest.raises(PrivateRepository) as raised:
+        run(monkeypatch, Replayed(replay, FakeClock()), [])
+    assert raised.value.full_name == "prebid/go-gdpr"
+    assert snapshot(target) == before
     assert [path.name for path in tmp_path.iterdir()] == ["recorded"]
 
 
 def test_only_rate_limits_adds_them_and_keeps_every_other_unit(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, target: Path
 ) -> None:
-    units = [unit for unit in recorded_units() if unit.kind in ("rate_limit", "rest_rate_limit")]
-    assert sorted(unit.kind for unit in units) == ["rate_limit", "rest_rate_limit"]
-    calls: list[dict[str, Any]] = []
+    earlier = Replayed(Replay.from_fixtures(), FakeClock(EARLIER))
+    assert run(monkeypatch, earlier, []) == 0
+    before = snapshot(target)
 
-    async def replayed(token: str, **kwargs: Any) -> list[Any]:
-        calls.append(kwargs)
-        return units
-
-    target = tmp_path / "recorded"
-    (target / "rate_limit").mkdir(parents=True)
-    (target / "kept.json").write_text("{}")
-    (target / "rate_limit" / "rest.json").write_text("stale")
-    monkeypatch.setattr(recorder, "RECORDED", target)
-    monkeypatch.setattr(recorder, "record", replayed)
-    monkeypatch.setenv("GITHUB_TOKEN", "test-token")
-    assert recorder.main(["--only", "rate-limits"]) == 0
-    assert calls == [{"scenarios": (), "users": ()}]
-    assert (target / "kept.json").read_text() == "{}"
-    for unit in units:
-        assert (target / unit.path()).read_text() == unit.dumps()
+    readings = Replayed(Replay.from_fixtures(), FakeClock())
+    assert run(monkeypatch, readings, ["--only", "rate-limits"]) == 0
+    assert readings.calls == [{"scenarios": (), "users": ()}]
+    assert sorted(unit.kind for unit in readings.units) == ["rate_limit", "rest_rate_limit"]
+    replaced = written(readings.units)
+    # The readings are dated by the later clock, so each file changed.
+    assert [path for path in replaced if before[path] == replaced[path]] == []
+    after = snapshot(target)
+    assert after == {**before, **replaced}
+    assert len(after) == len(earlier.units)
     assert [path.name for path in tmp_path.iterdir()] == ["recorded"]
 
 
 def test_only_documents_replaces_graphql_units_and_keeps_compare_and_rate_limits(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, target: Path
 ) -> None:
-    units = recorded_units()
+    """The GraphQL units are recorded again, so a scenario no longer listed leaves no file; the
+    compare pages and readings stay as the earlier recording wrote them."""
+    earlier = Replayed(Replay.from_fixtures(), FakeClock(EARLIER))
+    assert run(monkeypatch, earlier, []) == 0
+    before = snapshot(target)
+
+    documents = Replayed(
+        Replay.from_fixtures(),
+        FakeClock(),
+        scenarios=tuple(scenario for scenario in SCENARIOS if scenario != DROPPED),
+    )
+    assert run(monkeypatch, documents, ["--only", "documents"]) == 0
+    assert documents.calls == [{"rate_limits": False}]
     kept_kinds = recorder.KEPT_BY_DOCUMENTS
-    compare = [unit for unit in units if unit.kind == "compare"]
-    assert len(compare) > 1 and any(unit.kind == "rate_limit" for unit in units)
-    missing = compare[0]
-    target = tmp_path / "recorded"
-
-    def place(unit: Unit) -> Path:
-        path = target / unit.path()
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(unit.dumps())
-        return path
-
-    # The existing recordings: every compare page but one and both readings, marked so a
-    # replacement shows, and a GraphQL unit no scenario records any more.
-    for unit in units:
-        if unit.kind in kept_kinds and unit is not missing:
-            place(dataclasses.replace(unit, recorded_at="kept"))
-    stale = next(unit for unit in units if unit.kind == "resolve")
-    stale_path = place(dataclasses.replace(stale, key={"owner": "prebid", "name": "retired"}))
-    calls: list[dict[str, Any]] = []
-
-    async def replayed(token: str, **kwargs: Any) -> list[Any]:
-        calls.append(kwargs)
-        return [unit for unit in units if unit.kind not in ("rate_limit", "rest_rate_limit")]
-
-    monkeypatch.setattr(recorder, "RECORDED", target)
-    monkeypatch.setattr(recorder, "record", replayed)
-    monkeypatch.setenv("GITHUB_TOKEN", "test-token")
-    assert recorder.main(["--only", "documents"]) == 0
-    assert calls == [{"rate_limits": False}]
-    assert not stale_path.exists()
-    written = sorted(str(path.relative_to(target)) for path in target.rglob("*.json"))
-    assert written == sorted(str(unit.path()) for unit in units)
-    for unit in units:
-        text = (target / unit.path()).read_text()
-        if unit.kind in kept_kinds and unit is not missing:
-            assert json.loads(text)["recorded_at"] == "kept", unit.path()
-        else:
-            assert text == unit.dumps(), unit.path()
+    kept = {
+        path: before[path]
+        for path in written([unit for unit in earlier.units if unit.kind in kept_kinds])
+    }
+    assert len(kept) == sum(
+        1 for unit in documents.replay.units.values() if unit.kind in kept_kinds
+    )
+    graphql = written([unit for unit in documents.units if unit.kind not in kept_kinds])
+    assert snapshot(target) == {**kept, **graphql}
+    assert of_repository(earlier.units, DROPPED) & set(snapshot(target)) == set()
+    assert of_repository(earlier.units, DROPPED) != set()
     assert [path.name for path in tmp_path.iterdir()] == ["recorded"]
 
 
-def test_an_oversized_unit_writes_nothing(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    units = recorded_units()
+def test_only_documents_adds_a_compare_page_the_recordings_lack(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, target: Path
+) -> None:
+    without_compare = tuple(
+        dataclasses.replace(
+            scenario, numbers=tuple(number for number in scenario.numbers if number != COMPARED)
+        )
+        for scenario in SCENARIOS
+    )
+    earlier = Replayed(Replay.from_fixtures(), FakeClock(EARLIER), scenarios=without_compare)
+    assert run(monkeypatch, earlier, []) == 0
+    assert [unit for unit in earlier.units if unit.kind == "compare"] == []
+    before = snapshot(target)
 
-    async def replayed(token: str, **kwargs: Any) -> list[Any]:
-        return units
-
-    target = tmp_path / "recorded"
-    target.mkdir()
-    (target / "kept.json").write_text("{}")
-    monkeypatch.setattr(recorder, "RECORDED", target)
-    monkeypatch.setattr(recorder, "record", replayed)
-    monkeypatch.setattr(recorder, "MAX_FILE_BYTES", 10)
-    monkeypatch.setenv("GITHUB_TOKEN", "test-token")
-    assert recorder.main([]) == 1
+    documents = Replayed(Replay.from_fixtures(), FakeClock())
+    assert run(monkeypatch, documents, ["--only", "documents"]) == 0
+    compare = written([unit for unit in documents.units if unit.kind == "compare"])
+    assert len(compare) == sum(
+        1 for unit in documents.replay.units.values() if unit.kind == "compare"
+    )
+    readings = {
+        path: before[path]
+        for path in written(
+            [unit for unit in earlier.units if unit.kind in ("rate_limit", "rest_rate_limit")]
+        )
+    }
+    assert snapshot(target) == {**readings, **written(documents.units)}
+    assert set(compare) <= set(snapshot(target))
     assert [path.name for path in tmp_path.iterdir()] == ["recorded"]
-    assert [path.name for path in target.iterdir()] == ["kept.json"]
+
+
+def test_an_oversized_unit_writes_nothing(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, target: Path
+) -> None:
+    earlier = Replayed(Replay.from_fixtures(), FakeClock(EARLIER))
+    assert run(monkeypatch, earlier, []) == 0
+    before = snapshot(target)
+    assert len(before) == len(earlier.units)
+
+    replay = Replay.from_fixtures()
+    replay.add(oversized(replay))
+    later = Replayed(replay, FakeClock())
+    assert run(monkeypatch, later, []) == 1
+    sizes = [len(unit.dumps().encode()) for unit in later.units]
+    assert [size > recorder.MAX_FILE_BYTES for size in sizes].count(True) == 1
+    assert snapshot(target) == before
+    assert [path.name for path in tmp_path.iterdir()] == ["recorded"]
 
 
 # --------------------------------------------------------------------------------------------
@@ -280,8 +399,9 @@ async def test_recording_a_first_sync_of_its_recordings_gives_them_back() -> Non
     """The first sync asks for exactly the recorded units, and records each as it was."""
     replay = Replay.from_directory(FIRST_SYNC)
     owner, name = FIRST_SYNC_REPOSITORY
+    clock = FakeClock()
     units = await record_first_sync(
-        "test-token", owner, name, inner=replay.transport(), clock=FakeClock()
+        "test-token", owner, name, inner=replay.transport(), clock=clock
     )
     assert replay.problems == []
     # One resolve, the sync's own: the resolution the privacy check reads is the one it uses.
@@ -301,6 +421,7 @@ async def test_recording_a_first_sync_of_its_recordings_gives_them_back() -> Non
             original.errors,
             original.headers,
         ), key
+    assert {unit.recorded_at for unit in units} == {stamp(clock)}
 
 
 async def test_a_private_repository_stops_a_first_sync_after_its_resolve() -> None:
@@ -309,10 +430,11 @@ async def test_a_private_repository_stops_a_first_sync_after_its_resolve() -> No
     unit = replay.unit("resolve", owner=owner, name=name)
     unit.data["isPrivate"] = True
     replay.add(unit)
-    with pytest.raises(PrivateRepository, match=f"{owner}/{name}"):
+    with pytest.raises(PrivateRepository) as raised:
         await record_first_sync(
             "test-token", owner, name, inner=replay.transport(), clock=FakeClock()
         )
+    assert raised.value.full_name == f"{owner}/{name}"
     assert [seen.operation for seen in replay.seen] == ["Resolve"]
 
 
@@ -328,7 +450,7 @@ async def test_a_retried_item_records_one_unit_per_file(first_sync: bool) -> Non
             "test-token", owner, name, inner=replay.transport(), clock=FakeClock()
         )
     else:
-        units = await record("test-token", inner=replay.transport())
+        units = await record("test-token", inner=replay.transport(), clock=FakeClock())
     batches = [seen.numbers for seen in replay.seen if seen.operation == "PullRequestBatch"]
     assert batches[1] == batches[0][:1]  # the solo retry
     assert len(units) == len(replay.units)
@@ -345,36 +467,40 @@ def _label_count_mismatch(body: dict[str, Any]) -> None:
     body["data"]["repository"]["labels"]["totalCount"] += 1
 
 
+def _class(text: str | None) -> str | None:
+    """The class an error's text names: ``error_text`` writes "<class>: <message>"."""
+    return None if text is None else text.partition(": ")[0]
+
+
 @pytest.mark.parametrize(
-    ("change", "message"),
+    ("change", "error", "reason", "points"),
     [
         pytest.param(
             lambda replay: replay.fault(
                 lambda request: httpx.Response(401, json={"message": "Bad credentials"}),
                 times=None,
             ),
-            "first sync exited 1: Run 1: failed, exit 1; prebid/go-gdpr: no outcome: not "
-            "resolved; Hydrated 0 items; GraphQL points 0, REST calls 0, 0 s; Error: Unauthorized: "
-            "GitHub answered 401: Bad credentials",
+            "Unauthorized: GitHub answered 401: Bad credentials",
+            None,
+            0,
             id="401",
         ),
         pytest.param(
             lambda replay: replay.modify(
                 _label_count_mismatch, when=lambda seen: seen.operation == "Resolve"
             ),
-            "first sync exited 1: Run 1: failed, exit 1; prebid/go-gdpr: no outcome: "
-            "LabelCountMismatch: prebid/go-gdpr: fetched 10 labels, totalCount 11; Hydrated 0 "
-            "items; GraphQL points 1, REST calls 0, 0 s; Error: NoRepositoryResolved: no "
-            "configured repository resolved",
+            "NoRepositoryResolved: no configured repository resolved",
+            "LabelCountMismatch: prebid/go-gdpr: fetched 10 labels, totalCount 11",
+            1,
             id="label count mismatch",
         ),
     ],
 )
 async def test_a_first_sync_that_fails_names_why(
-    change: Callable[[Replay], None], message: str
+    change: Callable[[Replay], None], error: str, reason: str | None, points: int
 ) -> None:
     """A run that fails at its resolve raises with the run's report, which names the cause: the
-    run's error, or the repository's when only the report has it."""
+    run's error, and the repository's when its resolve failed."""
     replay = Replay.from_directory(FIRST_SYNC)
     change(replay)
     owner, name = FIRST_SYNC_REPOSITORY
@@ -382,7 +508,20 @@ async def test_a_first_sync_that_fails_names_why(
         await record_first_sync(
             "test-token", owner, name, inner=replay.transport(), clock=FakeClock()
         )
-    assert str(raised.value) == message
+    report = raised.value.report
+    assert report is not None
+    assert (report.exit_code, report.status, report.items_hydrated, report.failures) == (
+        1,
+        "failed",
+        0,
+        (),
+    )
+    assert (report.error, report.graphql_points, report.rest_calls) == (error, points, 0)
+    assert [
+        (repository.configured.full_name, repository.record, repository.outcome)
+        for repository in report.repositories
+    ] == [(f"{owner}/{name}", None, None)]
+    assert [repository.reason for repository in report.repositories] == [reason]
     assert [seen.operation for seen in replay.seen] == ["Resolve"]
 
 
@@ -392,55 +531,75 @@ async def test_a_first_sync_that_does_not_exit_0_stops_the_recording() -> None:
         _batch_alias_error, when=lambda seen: seen.operation == "PullRequestBatch", times=2
     )
     owner, name = FIRST_SYNC_REPOSITORY
-    with pytest.raises(RecordingFailed, match="first sync exited 2"):
+    with pytest.raises(RecordingFailed) as raised:
         await record_first_sync(
             "test-token", owner, name, inner=replay.transport(), clock=FakeClock()
         )
+    report = raised.value.report
+    assert report is not None
+    first = next(seen for seen in replay.seen if seen.operation == "PullRequestBatch").numbers[0]
+    assert report.exit_code == 2
+    assert [(failure.number, _class(failure.error)) for failure in report.failures] == [
+        (first, "AliasError")
+    ]
 
 
-def _first_sync_units() -> list[Any]:
-    owner, name = FIRST_SYNC_REPOSITORY
-    replay = Replay.from_directory(FIRST_SYNC)
-    return asyncio.run(
-        record_first_sync("test-token", owner, name, inner=replay.transport(), clock=FakeClock())
-    )
-
-
-@pytest.mark.parametrize("oversized", [False, True])
+@pytest.mark.parametrize("too_large", [False, True], ids=["written", "oversized"])
 def test_only_first_sync_writes_its_directory_alone(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, oversized: bool
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, too_large: bool
 ) -> None:
     """``--only first-sync`` replaces the first-sync directory with every unit, or with an
     oversized unit writes nothing; the other recordings are never touched."""
-    units = _first_sync_units()
+    owner, name = FIRST_SYNC_REPOSITORY
+    target = tmp_path / "first_sync"
+    # What the directory held before: an earlier recording of go-gdpr, which also has a pull
+    # request the first sync does not ask for.
+    earlier = asyncio.run(
+        record(
+            "test-token",
+            inner=Replay.from_fixtures().transport(),
+            scenarios=(Scenario(owner, name, index=True, numbers=(21,)),),
+            users=(),
+            rate_limits=False,
+            clock=FakeClock(EARLIER),
+        )
+    )
+    assert write_units(earlier, target) == 0
+    before = snapshot(target)
+    others = tmp_path / "recorded"
+    shutil.copytree(RECORDED, others)
+    recordings = snapshot(others)
+    assert len(recordings) == len(list(RECORDED.rglob("*.json")))
+    extra = [oversized(Replay.from_fixtures())] if too_large else []
+    units: list[Unit] = []
 
-    async def replayed(token: str, owner: str, name: str, **kwargs: Any) -> list[Any]:
+    async def replayed(token: str, owner: str, name: str, **kwargs: Any) -> list[Unit]:
+        assert kwargs == {}
+        replay = Replay.from_directory(FIRST_SYNC)
+        recorded = await record_first_sync(
+            token, owner, name, inner=replay.transport(), clock=FakeClock()
+        )
+        # A first sync that reads a pull request's compare pages records them too.
+        units.extend([*recorded, *extra])
         return units
 
-    target = tmp_path / "first_sync"
-    target.mkdir()
-    (target / "stale.json").write_text("{}")
-    others = tmp_path / "recorded"
-    others.mkdir()
-    (others / "kept.json").write_text("{}")
     monkeypatch.setattr(recorder, "FIRST_SYNC", target)
     monkeypatch.setattr(recorder, "RECORDED", others)
     monkeypatch.setattr(recorder, "record_first_sync", replayed)
-    if oversized:
-        monkeypatch.setattr(recorder, "MAX_FILE_BYTES", 10)
     monkeypatch.setenv("GITHUB_TOKEN", "test-token")
 
     code = recorder.main(["--only", "first-sync"])
 
     assert sorted(path.name for path in tmp_path.iterdir()) == ["first_sync", "recorded"]
-    assert [path.name for path in others.iterdir()] == ["kept.json"]
-    if oversized:
+    assert snapshot(others) == recordings
+    if too_large:
         assert code == 1
-        assert [path.name for path in target.iterdir()] == ["stale.json"]
+        assert snapshot(target) == before
         return
     assert code == 0
-    written = sorted(str(path.relative_to(target)) for path in target.rglob("*.json"))
+    assert snapshot(target) == written(units)
     committed = sorted(str(path.relative_to(FIRST_SYNC)) for path in FIRST_SYNC.rglob("*.json"))
-    assert written == committed
-    for unit in units:
-        assert (target / unit.path()).read_text() == unit.dumps()
+    assert sorted(snapshot(target)) == committed
+    # The earlier recording's pull request is gone with the directory it was in.
+    pull_requests = set(written([unit for unit in earlier if unit.kind == "pull_request"]))
+    assert set(written(earlier)) - set(written(units)) == pull_requests != set()

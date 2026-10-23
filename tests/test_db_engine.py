@@ -1,6 +1,7 @@
 """Tests for database engine and session management."""
 
 import sqlite3
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -16,6 +17,9 @@ from github_activity_db.db.engine import (
 from github_activity_db.db.models import UserTag
 from tests.db.seed import Seed
 
+# Written to each tag's created_at, so no write reads the wall clock behind the column default.
+CREATED_AT = datetime(2026, 1, 2, 3, 4, 5, tzinfo=UTC)
+
 
 class TestDatabaseEngine:
     """Sessions over the application engine, on a database migrated to head."""
@@ -25,7 +29,7 @@ class TestDatabaseEngine:
             test_engine, class_=AsyncSession, expire_on_commit=False
         )
         async with session_factory() as session:
-            tag = UserTag(name="committed")
+            tag = UserTag(name="committed", created_at=CREATED_AT)
             session.add(tag)
             await session.commit()
             tag_id = tag.id
@@ -33,7 +37,7 @@ class TestDatabaseEngine:
         async with session_factory() as session:
             stored = await session.get(UserTag, tag_id)
             assert stored is not None
-            assert stored.name == "committed"
+            assert (stored.name, stored.created_at) == ("committed", CREATED_AT)
 
     async def test_session_rollbacks_on_error(self, test_engine):
         session_factory = async_sessionmaker(
@@ -41,7 +45,7 @@ class TestDatabaseEngine:
         )
         with pytest.raises(ValueError, match="Simulated error"):
             async with session_factory() as session:
-                session.add(UserTag(name="rolled back"))
+                session.add(UserTag(name="rolled back", created_at=CREATED_AT))
                 await session.flush()  # written to the database, not committed
                 raise ValueError("Simulated error")
 
@@ -98,34 +102,50 @@ class TestSqliteConnectionSettings:
 
         assert foreign_keys == 1
 
-    def test_listener_failure_closes_the_connection(self) -> None:
-        class FailingCursor:
+    def test_an_interrupt_in_the_listener_closes_the_connection(self) -> None:
+        """An interrupt at a set point, the listener's first statement: the connection is
+        closed before the interrupt goes on, since SQLAlchemy would not close it."""
+        executed: list[str] = []
+
+        class InterruptedCursor:
+            closed = False
+
             def execute(self, statement: str) -> None:
-                raise sqlite3.OperationalError("database is locked")
+                executed.append(statement)
+                raise KeyboardInterrupt
 
             def close(self) -> None:
-                pass
+                self.closed = True
 
         class Connection:
             closed = False
 
-            def cursor(self) -> FailingCursor:
-                return FailingCursor()
+            def __init__(self) -> None:
+                self.cursors: list[InterruptedCursor] = []
+
+            def cursor(self) -> InterruptedCursor:
+                self.cursors.append(InterruptedCursor())
+                return self.cursors[-1]
 
             def close(self) -> None:
                 self.closed = True
 
         connection = Connection()
-        with pytest.raises(sqlite3.OperationalError, match="database is locked"):
+        with pytest.raises(KeyboardInterrupt):
             _apply_sqlite_pragmas(connection, None)
+        assert executed == ["PRAGMA foreign_keys=ON"]
+        assert [cursor.closed for cursor in connection.cursors] == [True]
         assert connection.closed
 
     async def test_foreign_key_violation_is_rejected(self, test_engine) -> None:
-        with pytest.raises(IntegrityError, match="FOREIGN KEY constraint failed"):
+        with pytest.raises(IntegrityError) as error:
             async with test_engine.begin() as conn:
                 await conn.execute(
                     text("INSERT INTO pr_user_tags (pr_id, user_tag_id) VALUES (999, 999)")
                 )
+        driver_error = error.value.orig
+        assert isinstance(driver_error, sqlite3.IntegrityError), repr(driver_error)
+        assert driver_error.sqlite_errorname == "SQLITE_CONSTRAINT_FOREIGNKEY"
 
     async def test_on_delete_cascade_removes_children(self, test_engine) -> None:
         async with test_engine.begin() as conn:
@@ -152,3 +172,25 @@ class TestSqliteConnectionSettings:
             ).all()
 
         assert [tuple(row) for row in pull_requests] == [(5, None)]
+
+    def test_listener_failure_closes_the_connection(self) -> None:
+        class FailingCursor:
+            def execute(self, statement: str) -> None:
+                raise sqlite3.OperationalError("database is locked")
+
+            def close(self) -> None:
+                pass
+
+        class Connection:
+            closed = False
+
+            def cursor(self) -> FailingCursor:
+                return FailingCursor()
+
+            def close(self) -> None:
+                self.closed = True
+
+        connection = Connection()
+        with pytest.raises(sqlite3.OperationalError, match="database is locked"):
+            _apply_sqlite_pragmas(connection, None)
+        assert connection.closed

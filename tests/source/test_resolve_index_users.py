@@ -599,10 +599,18 @@ class TestIndex:
             nodes[1] = dict(nodes[0])
 
         replay.modify(duplicate, when=operation("PullRequestIndex"))
+        first = replay.unit("index", owner="prebid", name="go-gdpr", after=None).data["nodes"][0]
         async with open_source() as source:
             repository = await source.resolve("prebid", "go-gdpr")
-            with pytest.raises(IndexOrderViolation, match="listed twice"):
+            with pytest.raises(IndexOrderViolation) as raised:
                 await source.index_pull_requests(repository)
+        violation = raised.value
+        assert (violation.full_name, violation.connection, violation.number, violation.problem) == (
+            "prebid/go-gdpr",
+            "pullRequests",
+            first["number"],
+            "listed twice",
+        )
 
     async def test_creation_order_is_checked(self, open_source, replay: Replay) -> None:
         def reorder(body: dict) -> None:
@@ -610,10 +618,19 @@ class TestIndex:
             nodes[0], nodes[1] = nodes[1], nodes[0]
 
         replay.modify(reorder, when=operation("PullRequestIndex"))
+        # The first recorded entry, moved second, was created before the one now ahead of it.
+        first = replay.unit("index", owner="prebid", name="go-gdpr", after=None).data["nodes"][0]
         async with open_source() as source:
             repository = await source.resolve("prebid", "go-gdpr")
-            with pytest.raises(IndexOrderViolation, match="created before"):
+            with pytest.raises(IndexOrderViolation) as raised:
                 await source.index_pull_requests(repository)
+        violation = raised.value
+        assert (violation.full_name, violation.connection, violation.number, violation.problem) == (
+            "prebid/go-gdpr",
+            "pullRequests",
+            first["number"],
+            "created before the previous entry",
+        )
 
     @pytest.mark.parametrize(
         "change",

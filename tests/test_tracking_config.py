@@ -1,5 +1,6 @@
 """Tests for the tracked-repository configuration."""
 
+import tomllib
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -114,23 +115,27 @@ class TestPackagedConfig:
 class TestValidation:
     def test_missing_file(self, tmp_path: Path) -> None:
         missing = tmp_path / "absent.toml"
-        with pytest.raises(TrackingConfigError, match="not found"):
+        with pytest.raises(TrackingConfigError) as raised:
             load_tracking_config(missing)
+        assert type(raised.value.__cause__) is FileNotFoundError
 
     def test_unreadable_path(self, tmp_path: Path) -> None:
         # A directory raises IsADirectoryError, an OSError other than FileNotFoundError.
-        with pytest.raises(TrackingConfigError, match="cannot read tracking config"):
+        with pytest.raises(TrackingConfigError) as raised:
             load_tracking_config(tmp_path)
+        assert type(raised.value.__cause__) is IsADirectoryError
 
     def test_invalid_toml(self, tmp_path: Path) -> None:
-        with pytest.raises(TrackingConfigError, match="not valid TOML"):
+        with pytest.raises(TrackingConfigError) as raised:
             load_tracking_config(_write(tmp_path, "[[repositories]\n"))
+        assert type(raised.value.__cause__) is tomllib.TOMLDecodeError
 
     def test_non_utf8_file(self, tmp_path: Path) -> None:
         path = tmp_path / "tracking.toml"
         path.write_bytes(b"\xff\xfe")
-        with pytest.raises(TrackingConfigError, match="not valid TOML"):
+        with pytest.raises(TrackingConfigError) as raised:
             load_tracking_config(path)
+        assert type(raised.value.__cause__) is UnicodeDecodeError
 
     def test_empty_repository_list(self, tmp_path: Path) -> None:
         assert _errors(tmp_path, "repositories = []\n" + COVERAGE) == [NO_REPOSITORY]

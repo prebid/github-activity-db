@@ -10,23 +10,35 @@ How the test suite is built and what it counts as evidence. The plan of record i
 - **Real components, faked boundaries.** GitHub is the only fake: the real `GitHubSource` runs
   over `httpx.MockTransport`, answering from responses recorded from public repositories.
   Databases are real SQLite files built by `alembic upgrade head`.
-- **Direct evidence, nothing planted** (redesign plan D39). Nothing is planted or tampered, no flaw
-  is seeded, and there is no mutation testing, under any name. No test, review, or acceptance
-  changes a file or a copy of one (other than a stub or configuration the inputs below allow), or writes a file, a
-  row, a revision, a call site, or a decoy holding a flaw, to see whether something catches it, and
-  none measures how many such flaws are found. A test's or an acceptance's inputs are GitHub's
-  recorded responses; stubs of a response GitHub or the environment can send (a status, a body, a
-  timeout, an interrupt, a failing `git`, a clock), which a test may build in memory from a recorded
-  unit changed into that shape; calls the code under test must refuse, and configuration it must
-  refuse or that names a state GitHub can produce (a repository that does not resolve, one no longer
-  listed); valid rows a test writes (through the models with `tests/db/seed.py`, or in SQL); and
-  databases and files this project's own code wrote, at any revision. Each test asserts the exact
-  result. A check over stored data, files, or source that only a defect of this code could fail is
-  tested on its passing side, with the exact count of the rows, files, or values it compared, so it
-  cannot pass on nothing; a check that GitHub, the environment, or a caller can fail is tested on
-  both sides. A fix comes with a regression test that fails against the parent commit's code. Tests
-  merged before D39 that change a file or a copy of one, or write a file, a revision, a call, a
-  connection, or a decoy holding a flaw, to see whether a check catches it are replaced in Step 3b-2a-2d.
+- **Negative tests, never mutation** (redesign plan D39). No mutation testing, under any name: the
+  code under test and the checks are never changed, on disk or in memory, to see whether a test
+  notices. No false content is planted in the project's real files or documents (the plan, a
+  document, review material, a tracked lock or database) to see whether a check or a reviewer
+  catches it, and no reviewer or agent is scored on how many seeded flaws it finds. Negative tests
+  are expected: a test builds its own invalid or failing input on purpose (a sample test that fails,
+  an invalid configuration, a malformed or edited copy of a file or database in its temporary
+  directory, a test-only revision that raises, a stub or fake that raises, a recorded GitHub
+  response changed in memory) and feeds it to the unchanged code. Each test asserts the exact
+  result. Every check is tested on both sides, and its passing side states the exact count of the
+  rows, files, or values it compared, so it cannot pass on nothing. A fix comes with a regression
+  test that fails against the parent commit's code.
+- **The same result every time** (redesign plan D40). The same code gives every test the same
+  outcome on any machine, on any date, and in any run order: a test, and every code path it runs,
+  reads no wall clock (a fixed clock such as `FakeClock` stands in), reaches no network (GitHub
+  answers from recordings and stubs), uses no unseeded randomness, depends on no state outside its
+  own temporary directory, the repository, and the session's database template, and bounds every
+  wait with a timeout. A test exercises code and asserts on what the code returns, writes, or exits
+  with: where the code gives a structured value (an exit code, rows, parsed fields, an exception's
+  class and fields), the test asserts on it rather than on printed wording, and no test checks the
+  wording of a document. Where a test needs an input the code cannot easily be given, the project
+  builds software that produces it (a fake clock, the scenario model, the replay, a recorder mode)
+  or the test builds the input itself (D39); no test changes the project's real files. Evidence is
+  what software reproduces: an acceptance criterion names a test, a check, or a command whose output
+  shows it, and a search of text, a reading, or a review finds work to do but is never acceptance.
+  `tests/determinism.py` refuses network connections, host-name lookups, the real clocks, and the
+  unseeded random source in every test, `tests/test_suite_rules.py` enforces the rules it can model
+  in source, and `scripts/check_junit.py --same-as` compares two runs of the suite test by test
+  (Step 3b-2a-2d).
 - **No skipped tests** (D22). CI runs `scripts/check_junit.py --max-skipped 0`, which fails a run
   where any test was skipped (pytest reports `xfail` as skipped) or none ran.
 - **Time.** Source tests pass a `FakeClock`, so waits and retries are asserted, never slept.
@@ -35,6 +47,31 @@ How the test suite is built and what it counts as evidence. The plan of record i
   The module reached without an import statement (`importlib.import_module`, `__import__`,
   `sys.modules`) and process APIs outside `subprocess` (`os.system`, `asyncio` subprocesses)
   are outside its scan.
+- **What enforces D40.** In the pytest process, from collection on, `tests/determinism.py`
+  (installed by `tests/conftest.py`) refuses a connection other than to a Unix socket, each
+  host-name lookup function the `socket` module offers, the package's two real clocks
+  (`source/clock.py`'s readings and `asyncio.sleep`, behind `SystemClock`, and `db.types.utc_now`'s
+  wall clock), and every draw from `SystemClock`'s unseeded random source, by raising
+  `NotDeterministic`. It sets `no_proxy` to `*`, so a client that reads proxies from the environment
+  or the system settings is refused at GitHub's own host on every machine. Each refusal is also
+  recorded and checked after every test, so a test fails even where the code under test caught the
+  exception (a refusal in a wider fixture's teardown fails the next check). One recorded after the
+  last test's check (a session fixture's teardown, a later hook) is checked when `tests/conftest.py`
+  undoes the guard in `pytest_unconfigure`: it fails the run, written to stderr with pytest's exit
+  status turned from 0 to 1, though neither the JUnit report nor `--same-as` shows it, so pytest's
+  exit status is part of the verdict. Each refusal and each check's failing side have tests. Not
+  refused, and so not enforced at run time: a socket's other ways to reach a host (`sendto`,
+  `bind`); processes a test starts, which run without these patches; the event loop's and the
+  standard library's own clocks behind a timeout; and the time loguru gives a log record, which no
+  test asserts.
+  `tests/test_suite_rules.py` reads source: no test file reads the wall clock, sleeps on it, or
+  draws unseeded random numbers (`random.Random` takes a seed, `asyncio.sleep` takes `0`); the
+  package reads them only in its two real clocks, and `alembic/` and `scripts/` read none; and no
+  test function is defined inside a function or in a class whose name does not start with `Test`,
+  where pytest never collects it. CI runs the suite a second time with the tests in reverse order
+  under another `PYTHONHASHSEED` and compares the two runs with `scripts/check_junit.py --same-as`:
+  a dependence on run order or on the order of a set of strings shows where it changes an outcome
+  between those two runs, and two runs that agree do not show that no such dependence exists.
 
 ---
 
@@ -42,7 +79,10 @@ How the test suite is built and what it counts as evidence. The plan of record i
 
 ```
 tests/
-├── conftest.py              # The session template database and its copies; the scenario fixture
+├── conftest.py              # The session template databases and copies; the scenario fixture
+├── determinism.py           # Connections, lookups, real clocks, unseeded randomness refused
+├── pytest_runs.py           # pytest over files a test writes; check_junit loaded to read it
+├── support.py               # Files by os.walk, SQLite error names, git environments, listeners
 ├── db/
 │   ├── alembic_support.py   # Running the real migrations; test-only revisions after head
 │   ├── schema_support.py    # Structural schema readings for the model comparison
@@ -64,6 +104,7 @@ tests/
 │   ├── test_first_sync.py   # go-gdpr's first sync from its recordings, without the model
 │   ├── test_seeded_runs.py  # Seeded random changes over several runs, each checked against...
 │   └── expected_state.py    # ...the database the model and its history give, never the writer
+├── fixtures/history/       # Repository files as earlier commits hold them; README records blobs
 ├── fixtures/source/
 │   ├── recorded/            # Units recorded from public repositories (scripts/record_fixtures.py)
 │   ├── first_sync/          # Every unit go-gdpr's first sync asked for (--only first-sync)
@@ -83,20 +124,24 @@ tests/
 - **One template per session.** `head_template` (`tests/conftest.py`) is built once by
   `alembic upgrade head` and made read-only; `migrated_database` is a writable copy per test,
   and `test_engine` the application engine (`build_engine`) over it, so foreign keys and the
-  busy timeout match production. `metadata.create_all` appears only in `tests/db/test_schema.py`,
-  as the other side of the model comparison.
+  busy timeout match production. `revision_template(revision)` gives a read-only database at an
+  earlier revision, built once per session the first time a test asks for it. `metadata.create_all`
+  appears only in `tests/db/test_schema.py`, as the other side of the model comparison.
 - **The real environment.** Migration tests run the repository's `alembic.ini`, `env.py`, and
   revisions. `write_revision` adds a test-only revision after the head through
-  `version_locations`, which is how a planted failure, a foreign-key violation, and a batch alter
-  under the views are run through `env.py` (tests from before D39, which Step 3b-2a-2d replaces). `env.py` is loaded fresh by every command, so its
+  `version_locations`: revisions that fail, leave a foreign-key violation, try to end the
+  transaction, or batch-alter a table under the views show what `env.py` refuses and rolls back,
+  and one records the settings of the connection `env.py` gives a revision. Earlier schemas come from the real revisions
+  (`upgrade(path, "<revision>")`). `env.py` is loaded fresh by every command, so its
   `MigrationRefused` is matched by class name.
 - **Seeding.** `tests/db/seed.py` writes rows through the models' tables with every column a
   test does not care about filled with a valid default; GitHub ids come from one process-wide
   counter, so separate transactions never collide.
 - **Schema comparison.** `schema_of` reads columns (`PRAGMA table_xinfo`), indexes, foreign keys,
   and every item of each table's definition, which is where constraint names and CHECK text
-  live; each reading is tested against planted differences (tests from before D39, which Step 3b-2a-2d
-  replaces).
+  live; the readings are tested on a scratch database of valid SQL holding what no pragma
+  reports, at head against the models' declarations, between real revisions, and on changed
+  copies of a migrated database, where each difference is reported.
 - **Dictionary and schema version.** `tests/test_data_dictionary.py` compares
   `docs/data-dictionary.md` with a migrated database in both directions.
   `tests/schema_versions.json` maps each schema version (`PRAGMA user_version`) to its consumer
@@ -105,7 +150,10 @@ tests/
   from the views at head, and on pull requests the CI step that checks the hydration-version
   lock rejects a removed entry, a pair removed from one, and a view digest removed or changed in
   one, so removing or renaming a consumer column, or changing a view, needs a new schema
-  version. Pairs and views may be added to the newest entry only.
+  version. Pairs and views may be added to the newest entry only. CI checks out one commit
+  with no history, so the lock, dictionary, recordings, and dependency tests read earlier
+  versions of repository files from `tests/fixtures/history/`, each the git blob its README
+  row records (`tests/test_history_fixtures.py`).
 
 ## GitHub Source Layer: Recorded Responses
 
@@ -288,6 +336,19 @@ uv run pytest --junitxml="${TMPDIR:-/tmp}/junit.xml" \
   && uv run python scripts/check_junit.py "${TMPDIR:-/tmp}/junit.xml" --max-skipped 0
 ```
 
+Two runs of the suite give the same outcome for every test (D40). CI compares a run in order
+with one in reverse order under another hash seed:
+
+```bash
+PYTHONHASHSEED=1 uv run pytest --junitxml="${TMPDIR:-/tmp}/first.xml"
+PYTHONHASHSEED=2 uv run pytest --reverse-order --junitxml="${TMPDIR:-/tmp}/second.xml"
+uv run python scripts/check_junit.py "${TMPDIR:-/tmp}/first.xml" --max-skipped 0 \
+  --same-as "${TMPDIR:-/tmp}/second.xml"
+```
+
+The comparison fails on each test whose outcome differs, or that only one run holds. A test
+pytest reports twice (a failure, then a teardown error) has the outcome `error+failed`.
+
 ---
 
 ## CI/CD Integration
@@ -312,10 +373,11 @@ uv run pre-commit install
   all files; on pull requests, the base commit's `scripts/check_query_lock.py` (the pull
   request's own copy where the base has none) against the hydration-version and schema-version
   locks.
-- `tests (Python 3.12 / 3.13)`: pytest with JUnit output; `scripts/check_junit.py --max-skipped 0`,
-  which fails unless at least one test ran and none failed, errored, or was skipped (pytest
-  reports `xfail` as skipped, so an `xfail` also fails the job); and `alembic upgrade head` plus
-  `alembic check` on a fresh database.
+- `tests (Python 3.12 / 3.13)`: pytest with JUnit output under `PYTHONHASHSEED=1`;
+  `scripts/check_junit.py --max-skipped 0`, which fails unless at least one test ran and none
+  failed, errored, or was skipped (pytest reports `xfail` as skipped, so an `xfail` also fails the
+  job); pytest again with `--reverse-order` under `PYTHONHASHSEED=2`, and `check_junit.py --same-as`
+  over the two reports; and `alembic upgrade head` plus `alembic check` on a fresh database.
 - `built wheel`: builds the wheel with build dependencies hash-checked against
   `build-constraints.txt`, installs the `uv.lock` dependencies with hash checking and
   then the wheel into a new environment, runs `uv pip check`, and runs `scripts/wheel_smoke.py`

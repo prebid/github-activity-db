@@ -16,13 +16,22 @@ so fetchers cannot touch the database.
 from __future__ import annotations
 
 import ast
+import io
+import re
+import tokenize
 from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
 
+from tests.support import files_under
+
 ROOT = Path(__file__).resolve().parents[1]
 PACKAGE = ROOT / "src" / "github_activity_db"
+GITHUBKIT_STATEMENT = re.compile(r"^[ \t]*(?:from|import)[ \t]+githubkit\b", re.MULTILINE)
+DATABASE_STATEMENT = re.compile(
+    r"^[ \t]*(?:from|import)[ \t]+(?:sqlalchemy|github_activity_db\.db)\b", re.MULTILINE
+)
 
 
 def _python_files(*roots: Path, excluding: Path | None = None) -> list[Path]:
@@ -111,16 +120,98 @@ def database_imports(files: list[Path], src: Path) -> list[str]:
     ]
 
 
+def _file_count(root: Path) -> int:
+    return len(files_under(root, {".py", ".pyi"}))
+
+
+def _import_lines(path: Path, *, relative: bool) -> set[int]:
+    """The first line of each import in ``path``, read with tokenize rather than ast: a statement
+    holds one ``import`` keyword, ``from`` followed by ``.`` starts a relative one, and
+    ``import_module`` or ``__import__`` is called with a string literal first or as ``name=``."""
+    tokens = [
+        token
+        for token in tokenize.tokenize(io.BytesIO(path.read_bytes()).readline)
+        if token.type not in (tokenize.NL, tokenize.COMMENT)
+    ]
+    separators = (tokenize.ENCODING, tokenize.NEWLINE, tokenize.INDENT, tokenize.DEDENT)
+    lines: set[int] = set()
+    start = 0
+    for index, token in enumerate(tokens):
+        if token.type in separators or token.string in (";", ":"):
+            start = index + 1
+        elif token.type == tokenize.NAME and token.string == "import":
+            words = [word.string for word in tokens[start:index]]
+            if relative or not (words[:1] == ["from"] and words[1].startswith(".")):
+                lines.add(tokens[start].start[0])
+        elif token.type == tokenize.NAME and token.string in ("import_module", "__import__"):
+            call = [
+                "literal" if word.type == tokenize.STRING else word.string
+                for word in tokens[index + 1 : index + 5]
+            ]
+            if call[:2] == ["(", "literal"] or call == ["(", "name", "=", "literal"]:
+                lines.add(token.start[0])
+    return lines
+
+
+def _scanned_lines(files: list[Path], src: Path | None = None) -> set[tuple[Path, int]]:
+    return {(path, line) for path in files for line, _ in imported_modules(path, src)}
+
+
+def _second_reading(files: list[Path], *, relative: bool) -> set[tuple[Path, int]]:
+    return {(path, line) for path in files for line in _import_lines(path, relative=relative)}
+
+
+def _sites(found: list[str]) -> set[tuple[Path, int]]:
+    """The file and line of each finding, ``path:line: module``."""
+    sites = set()
+    for finding in found:
+        path, _, line = finding.rpartition(": ")[0].rpartition(":")
+        sites.add((Path(path), int(line)))
+    return sites
+
+
+def _statement_sites(files: list[Path], statement: re.Pattern[str]) -> set[tuple[Path, int]]:
+    """The file and line of each statement the pattern matches in the text of ``files``."""
+    sites = set()
+    for path in files:
+        text = path.read_text()
+        sites |= {
+            (path, text.count("\n", 0, match.start()) + 1) for match in statement.finditer(text)
+        }
+    return sites
+
+
 def test_only_source_imports_githubkit() -> None:
-    files = _python_files(PACKAGE, ROOT / "scripts", ROOT / "alembic", excluding=PACKAGE / "source")
-    assert len(files) > 10, f"scanned {len(files)} files"
+    roots = (PACKAGE, ROOT / "scripts", ROOT / "alembic")
+    files = _python_files(*roots, excluding=PACKAGE / "source")
+    assert len(files) == sum(map(_file_count, roots)) - _file_count(PACKAGE / "source")
+    assert _scanned_lines(files) == _second_reading(files, relative=False)
     assert githubkit_imports(files) == []
 
 
 def test_source_does_not_import_the_database() -> None:
     files = _python_files(PACKAGE / "source")
-    assert len(files) > 10, f"scanned {len(files)} files"
+    assert len(files) == _file_count(PACKAGE / "source")
+    assert _scanned_lines(files, ROOT / "src") == _second_reading(files, relative=True)
     assert database_imports(files, ROOT / "src") == []
+
+
+def test_the_scan_finds_each_githubkit_import_in_source() -> None:
+    """source/ is allowed githubkit: the matcher finds each statement that imports it, and
+    source/ holds 5, so the comparison cannot pass on none."""
+    files = _python_files(PACKAGE / "source")
+    sites = _sites(githubkit_imports(files))
+    assert sites == _statement_sites(files, GITHUBKIT_STATEMENT)
+    assert len(sites) == 5
+
+
+def test_the_scan_finds_each_database_import_in_sync() -> None:
+    """sync/ is allowed SQLAlchemy and db/: the matcher finds each statement that imports them,
+    and sync/ holds 20, so the comparison cannot pass on none."""
+    files = _python_files(PACKAGE / "sync")
+    sites = _sites(database_imports(files, ROOT / "src"))
+    assert sites == _statement_sites(files, DATABASE_STATEMENT)
+    assert len(sites) == 20
 
 
 def test_the_scan_sees_source_importing_githubkit() -> None:

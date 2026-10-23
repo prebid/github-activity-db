@@ -27,14 +27,21 @@ import shutil
 import sys
 import tempfile
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import datetime
 from pathlib import Path
 
 import httpx
 
 from github_activity_db.cli.sync import report_lines
-from github_activity_db.source import Clock, Failed, GitHubSource, RepositoryRecord, SystemClock
-from github_activity_db.sync.engine import SyncOptions, sync
+from github_activity_db.source import (
+    Clock,
+    Failed,
+    GitHubSource,
+    RepositoryRecord,
+    SystemClock,
+    UserLookupFailed,
+)
+from github_activity_db.sync.engine import SyncOptions, SyncReport, sync
 from github_activity_db.tracking import TrackingConfig, TrackingConfigFile, load_tracking_config
 from tests.db.alembic_support import upgrade
 from tests.source.recordings import FIRST_SYNC, RECORDED, Unit, split_graphql, split_rest
@@ -108,7 +115,11 @@ KEPT_BY_DOCUMENTS = frozenset({"compare", "rate_limit", "rest_rate_limit"})
 
 
 class PrivateRepository(Exception):
-    pass
+    """``full_name`` is private: listed in ``PRIVATE``, or answered private by its resolve."""
+
+    def __init__(self, full_name: str) -> None:
+        super().__init__(full_name)
+        self.full_name = full_name
 
 
 def _refuse_listed(owner: str, name: str) -> None:
@@ -134,7 +145,22 @@ class PublicOnlySource(GitHubSource):
 
 
 class RecordingFailed(Exception):
-    """An item or a user lookup failed, so the recording would be incomplete."""
+    """An item or a user lookup failed, or a first sync did not exit 0, so the recording would be
+    incomplete. ``failed`` holds the failed items, ``lookup_failed`` the failed lookups by node
+    id, and ``report`` the first sync's report."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        failed: tuple[Failed, ...] = (),
+        lookup_failed: dict[str, UserLookupFailed] | None = None,
+        report: SyncReport | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.failed = failed
+        self.lookup_failed = dict(lookup_failed or {})
+        self.report = report
 
 
 class RecordingTransport(httpx.AsyncBaseTransport):
@@ -195,11 +221,13 @@ async def record(
 
     The resolve's requests (its first response, then any further label pages) are the first
     ones for a repository, so a private one raises after them and before ``main`` writes
-    anything.
+    anything. ``clock`` is the run's clock, which also dates the units: the system clock by
+    default.
     """
-    recorded_at = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+    run_clock = clock or SystemClock()
+    recorded_at = run_clock.now().strftime("%Y-%m-%dT%H:%M:%SZ")
     recording = RecordingTransport(inner or httpx.AsyncHTTPTransport(), recorded_at)
-    async with PublicOnlySource(token, http_transport=recording, clock=clock) as source:
+    async with PublicOnlySource(token, http_transport=recording, clock=run_clock) as source:
         for scenario in scenarios:
             full_name = f"{scenario.owner}/{scenario.name}"
             _refuse_listed(scenario.owner, scenario.name)
@@ -208,13 +236,15 @@ async def record(
                 await source.index_pull_requests(repository)
             if scenario.numbers:
                 async for outcomes in source.hydrate_pull_requests(repository, scenario.numbers):
-                    failed = [outcome for outcome in outcomes if isinstance(outcome, Failed)]
+                    failed = tuple(outcome for outcome in outcomes if isinstance(outcome, Failed))
                     if failed:
-                        raise RecordingFailed(f"{full_name}: {failed}")
+                        raise RecordingFailed(f"{full_name}: {list(failed)}", failed=failed)
         if users:
             async for lookup in source.lookup_users(users):
                 if lookup.failed:
-                    raise RecordingFailed(f"user lookup: {lookup.failed}")
+                    raise RecordingFailed(
+                        f"user lookup: {lookup.failed}", lookup_failed=dict(lookup.failed)
+                    )
         if rate_limits:
             await source.rate_limits()
         print(f"usage: {source.usage}", file=sys.stderr)
@@ -241,13 +271,13 @@ async def record_first_sync(
     (its label pages included) and before any other request; a failed item or a run that does not
     exit 0 stops it too.
 
-    ``clock`` is the run's clock, the system clock by default. A replay of recorded units passes a
-    fixed one: the sync's 24-hour refresh measures each account from its recorded ``Date``, so on
-    the system clock a replay asks for lookups the recording does not hold once a day has
-    passed."""
+    ``clock`` is the run's clock, which also dates the units: the system clock by default. A
+    replay of recorded units passes a fixed one: the sync's 24-hour refresh measures each account
+    from its recorded ``Date``, so on the system clock a replay asks for lookups the recording
+    does not hold once a day has passed."""
     _refuse_listed(owner, name)
     run_clock = clock or SystemClock()
-    recorded_at = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+    recorded_at = run_clock.now().strftime("%Y-%m-%dT%H:%M:%SZ")
     recording = RecordingTransport(inner or httpx.AsyncHTTPTransport(), recorded_at)
     opened: list[PublicOnlySource] = []
 
@@ -277,7 +307,7 @@ async def record_first_sync(
         raise PrivateRepository(refused[0])
     if report.exit_code != 0 or report.failures:
         lines = "; ".join(report_lines(report, seconds=0))
-        raise RecordingFailed(f"first sync exited {report.exit_code}: {lines}")
+        raise RecordingFailed(f"first sync exited {report.exit_code}: {lines}", report=report)
     print(
         f"first sync: {report.items_hydrated} items, {report.graphql_points} GraphQL points",
         file=sys.stderr,

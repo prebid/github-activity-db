@@ -42,21 +42,37 @@ uv run pytest                      # CI also runs Python 3.12, `alembic check`, 
 
 ## Test Evidence
 
-Nothing is planted or tampered, no flaw is seeded, and there is no mutation testing, under any name
-(redesign plan D39). No test, review, or acceptance changes a file or a copy of one (other than a stub or configuration the inputs below allow), or writes a file, a row, a revision, a call site, or a decoy holding a
-flaw, to see whether something catches it, and none measures how many such flaws are found. A test's
-or an acceptance's inputs are GitHub's recorded responses; stubs of a response GitHub or the
-environment can send (a status, a body, a timeout, an interrupt, a failing `git`, a clock), which a
-test may build in memory from a recorded unit changed into that shape; calls the code under test
-must refuse, and configuration it must refuse or that names a state GitHub can produce (a repository
-that does not resolve, one no longer listed); valid rows a test writes (through the models with
-`tests/db/seed.py`, or in SQL); and databases and files this project's own code wrote, at any
-revision. Each test asserts the exact result. A check over stored data, files, or source that only a
-defect of this code could fail is tested on its passing side, with the exact count of the rows,
-files, or values it compared, so it cannot pass on nothing; a check that GitHub, the environment, or
-a caller can fail is tested on both sides. A fix comes with a regression test that fails against the
-parent commit's code. Tests merged before D39 that change a file or a copy of one, or write a file,
-a revision, a call, a connection, or a decoy holding a flaw, to see whether a check catches it are replaced in Step 3b-2a-2d. See [Testing](docs/testing.md).
+No mutation testing, under any name: the code under test and the checks are never changed, on disk
+or in memory, to see whether a test notices. No false content is planted in the project's real files
+or documents (the plan, a document, review material, a tracked lock or database) to see whether a
+check or a reviewer catches it, and no reviewer or agent is scored on how many seeded flaws it
+finds. Negative tests are expected: a test builds its own invalid or failing input on purpose (a
+sample test that fails, an invalid configuration, a malformed or edited copy of a file or database
+in its temporary directory, a test-only revision that raises, a stub or fake that raises, a recorded
+GitHub response changed in memory) and feeds it to the unchanged code. Each test asserts the exact
+result. Every check is tested on both sides, and its passing side states the exact count of the
+rows, files, or values it compared, so it cannot pass on nothing. A fix comes with a regression test
+that fails against the parent commit's code (redesign plan D39). See [Testing](docs/testing.md).
+
+## Deterministic Tests
+
+Tests are software that gives the same result every time (redesign plan D40). The same code gives
+every test the same outcome on any machine, on any date, and in any run order: a test, and every
+code path it runs, reads no wall clock (a fixed clock such as `FakeClock` stands in), reaches no
+network (GitHub answers from recordings and stubs), uses no unseeded randomness, depends on no state
+outside its own temporary directory, the repository, and the session's database template, and bounds
+every wait with a timeout. A test exercises code and asserts on what the code returns, writes, or
+exits with: where the code gives a structured value (an exit code, rows, parsed fields, an
+exception's class and fields), the test asserts on it rather than on printed wording, and no test
+checks the wording of a document. Where a test needs an input the code cannot easily be given, the
+project builds software that produces it (a fake clock, the scenario model, the replay, a recorder
+mode) or the test builds the input itself (D39); no test changes the project's real files. Evidence
+is what software reproduces: an acceptance criterion names a test, a check, or a command whose
+output shows it, and a search of text, a reading, or a review finds work to do but is never
+acceptance. `tests/determinism.py` refuses network connections, host-name lookups, the real clocks,
+and the unseeded random source in every test, `tests/test_suite_rules.py` enforces the rules it can
+model in source, and `scripts/check_junit.py --same-as` compares two runs of the suite test by test
+(Step 3b-2a-2d).
 
 ## Current Scope
 
@@ -79,14 +95,16 @@ a revision, a call, a connection, or a decoy holding a flaw, to see whether a ch
   planner, and the writer, and `--dry-run`
 - `ghactivity sync` (Step 3b-2a-2c, `cli/sync.py`): the engine's run with the options of plan
   5.7; a run that never starts exits 1, and a run that starts exits with the engine's 0, 2, or 1
+- Deterministic tests, with D39's negative tests (Step 3b-2a-2d, D39, D40): `tests/determinism.py`
+  refuses network connections, host-name lookups, the real clocks, and the unseeded random source
+  in every test; `tests/test_suite_rules.py`'s source rules; `scripts/check_junit.py --same-as`
+  over a run in order and one reversed under another hash seed, in CI
 
-**Not implemented yet:** tests without planted inputs (Step 3b-2a-2d, D39), D37 in the sync
-(Step 3b-2a-3, D38), the REST
-sampler (Step 3b-2b-1), and `verify` (Step 3b-2b-2). The tracked `github_activity.db` stays
+**Not implemented yet:** D37 in the sync (Step 3b-2a-3, D38), the REST sampler (Step 3b-2b-1),
+and `verify` (Step 3b-2b-2). The tracked `github_activity.db` stays
 frozen at the first schema (D26).
 
-**Planned in the redesign plan:** tests without planted inputs (Step 3b-2a-2d), D37 in the sync
-(Step 3b-2a-3), the REST sampler (Step
+**Planned in the redesign plan:** D37 in the sync (Step 3b-2a-3), the REST sampler (Step
 3b-2b-1), and verify (Step 3b-2b-2); GitHub Issues, closing-issue links, and default-branch
 activity (Step 4); the full bootstrap (Step 5); scheduled sync and release publication (Step 6).
 

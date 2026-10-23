@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import ast
 import logging
+import re
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -20,7 +22,9 @@ from github_activity_db.logging import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Generator
+    from collections.abc import Generator, Iterator
+
+    from loguru import Record
 
 
 @pytest.fixture(autouse=True)
@@ -31,6 +35,35 @@ def _reset_logging_state() -> Generator[None, None, None]:
     reset_logging()
 
 
+_ANSI_ESCAPE = re.compile(r"\x1b\[[0-9;]*m")
+
+
+def emitted(capsys: pytest.CaptureFixture[str]) -> list[tuple[str, str, str]]:
+    """Log a DEBUG, an INFO, and a WARNING message from a named logger: the level, name, and
+    message of each line the console handler wrote."""
+    named = logger.bind(name="test")
+    named.debug("debug message")
+    named.info("info message")
+    named.warning("warning message")
+    logger.complete()
+    parsed: list[tuple[str, str, str]] = []
+    # time | level | name - message
+    for line in _ANSI_ESCAPE.sub("", capsys.readouterr().err).splitlines():
+        _, level, rest = line.split(" | ", 2)
+        name, message = rest.split(" - ", 1)
+        parsed.append((level.strip(), name, message))
+    return parsed
+
+
+@pytest.fixture
+def records() -> Iterator[list[Record]]:
+    """Every record logged during the test, as loguru hands it to a sink."""
+    collected: list[Record] = []
+    handler_id = logger.add(lambda message: collected.append(message.record), level="DEBUG")
+    yield collected
+    logger.remove(handler_id)
+
+
 class TestSetupLogging:
     """Tests for setup_logging function."""
 
@@ -39,46 +72,28 @@ class TestSetupLogging:
         setup_logging(level="INFO")
         assert is_configured()
 
-    def test_setup_logging_verbose_overrides_level(self) -> None:
+    def test_setup_logging_verbose_overrides_level(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
         """Test that verbose flag sets DEBUG level."""
-        messages: list[str] = []
         setup_logging(level="WARNING", verbose=True)
+        assert emitted(capsys) == [
+            ("DEBUG", "test", "debug message"),
+            ("INFO", "test", "info message"),
+            ("WARNING", "test", "warning message"),
+        ]
 
-        handler_id = logger.add(lambda msg: messages.append(str(msg)))
-        try:
-            logger.bind(name="test").debug("debug message")
-            assert any("debug message" in msg for msg in messages)
-        finally:
-            logger.remove(handler_id)
-
-    def test_setup_logging_quiet_overrides_level(self) -> None:
+    def test_setup_logging_quiet_overrides_level(self, capsys: pytest.CaptureFixture[str]) -> None:
         """Test that quiet flag sets WARNING level."""
-        messages: list[str] = []
         setup_logging(level="DEBUG", quiet=True)
+        assert emitted(capsys) == [("WARNING", "test", "warning message")]
 
-        handler_id = logger.add(lambda msg: messages.append(str(msg)), level="DEBUG")
-        try:
-            # INFO should be filtered by the setup handlers
-            # but our test handler captures everything
-            logger.bind(name="test").info("info message")
-            # The main handlers filter INFO when quiet=True
-            # We're just verifying setup_logging doesn't crash
-            assert is_configured()
-        finally:
-            logger.remove(handler_id)
-
-    def test_setup_logging_verbose_takes_precedence(self) -> None:
+    def test_setup_logging_verbose_takes_precedence(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
         """Test verbose takes precedence over quiet when both set."""
-        messages: list[str] = []
         setup_logging(level="INFO", verbose=True, quiet=True)
-
-        handler_id = logger.add(lambda msg: messages.append(str(msg)))
-        try:
-            logger.bind(name="test").debug("debug message")
-            # Verbose wins, so DEBUG should be captured
-            assert any("debug message" in msg for msg in messages)
-        finally:
-            logger.remove(handler_id)
+        assert [level for level, _, _ in emitted(capsys)] == ["DEBUG", "INFO", "WARNING"]
 
     def test_setup_logging_with_file(self, tmp_path: Path) -> None:
         """Test file logging setup."""
@@ -86,15 +101,21 @@ class TestSetupLogging:
         setup_logging(level="INFO", log_file=log_file)
 
         logger.bind(name="test").info("Test file message")
+        logger.complete()
 
-        # Give loguru a moment to flush
-        import time
-
-        time.sleep(0.1)
-
-        assert log_file.exists()
-        content = log_file.read_text()
-        assert "Test file message" in content
+        # time | level | name:function:line | extra | message
+        fields = [line.split(" | ") for line in log_file.read_text().splitlines()]
+        assert [
+            (level.strip(), where.split(":")[:2], ast.literal_eval(extra), message)
+            for _, level, where, extra, message in fields
+        ] == [
+            (
+                "INFO",
+                ["test", "test_setup_logging_with_file"],
+                {"name": "test"},
+                "Test file message",
+            )
+        ]
 
     @pytest.mark.parametrize("bound", [True, False], ids=["named logger", "stdlib or unnamed"])
     def test_a_logged_traceback_shows_no_local_values(
@@ -129,20 +150,18 @@ class TestInterceptHandler:
     """Tests for stdlib logging interception."""
 
     def test_intercept_stdlib_logging(self) -> None:
-        """Test that stdlib logging is routed to loguru."""
-        messages: list[str] = []
+        """Test that stdlib logging is routed to loguru at its level."""
         setup_logging(level="DEBUG")
-
-        handler_id = logger.add(lambda msg: messages.append(str(msg)))
+        records: list[Record] = []
+        handler_id = logger.add(lambda message: records.append(message.record))
         try:
-            # Create a stdlib logger
             stdlib_logger = logging.getLogger("test_stdlib_intercept")
             stdlib_logger.warning("Hello from stdlib")
-
-            # Should be captured by loguru
-            assert any("Hello from stdlib" in msg for msg in messages)
         finally:
             logger.remove(handler_id)
+        assert [(record["level"].name, record["message"]) for record in records] == [
+            ("WARNING", "Hello from stdlib")
+        ]
 
     def test_sqlalchemy_logging_controlled(self) -> None:
         """Test SQLAlchemy logger level is controlled."""
@@ -164,77 +183,43 @@ class TestGetLogger:
         assert hasattr(test_logger, "debug")
         assert hasattr(test_logger, "error")
 
-    def test_get_logger_binds_name(self) -> None:
+    def test_get_logger_binds_name(self, records: list[Record]) -> None:
         """Test that get_logger binds the module name."""
-        messages: list[str] = []
-        setup_logging(level="DEBUG")
-
-        handler_id = logger.add(
-            lambda msg: messages.append(str(msg)),
-            format="{extra} | {message}",
-        )
-        try:
-            test_logger = get_logger("my_test_module")
-            test_logger.info("Test message")
-            assert any("my_test_module" in msg for msg in messages)
-        finally:
-            logger.remove(handler_id)
+        test_logger = get_logger("my_test_module")
+        test_logger.info("Test message")
+        assert [(record["extra"], record["message"]) for record in records] == [
+            ({"name": "my_test_module"}, "Test message")
+        ]
 
 
 class TestContextBinding:
     """Tests for context binding helpers."""
 
-    def test_bind_repo(self) -> None:
+    def test_bind_repo(self, records: list[Record]) -> None:
         """Test bind_repo adds repo context."""
-        messages: list[str] = []
-        setup_logging(level="DEBUG")
+        repo_logger = bind_repo("prebid", "prebid-server")
+        repo_logger.info("Test repo message")
+        assert [record["extra"] for record in records] == [
+            {"name": "sync", "repo": "prebid/prebid-server"}
+        ]
 
-        handler_id = logger.add(
-            lambda msg: messages.append(str(msg)),
-            format="{extra} | {message}",
-        )
-        try:
-            repo_logger = bind_repo("prebid", "prebid-server")
-            repo_logger.info("Test repo message")
-            assert any("prebid/prebid-server" in msg for msg in messages)
-        finally:
-            logger.remove(handler_id)
-
-    def test_bind_pr(self) -> None:
+    def test_bind_pr(self, records: list[Record]) -> None:
         """Test bind_pr adds repo and PR context."""
-        messages: list[str] = []
-        setup_logging(level="DEBUG")
+        pr_logger = bind_pr("prebid", "prebid-server", 123)
+        pr_logger.info("Test PR message")
+        assert [record["extra"] for record in records] == [
+            {"name": "sync", "repo": "prebid/prebid-server", "pr": 123}
+        ]
 
-        handler_id = logger.add(
-            lambda msg: messages.append(str(msg)),
-            format="{extra} | {message}",
-        )
-        try:
-            pr_logger = bind_pr("prebid", "prebid-server", 123)
-            pr_logger.info("Test PR message")
-            output = "".join(messages)
-            assert "prebid/prebid-server" in output
-            assert "123" in output
-        finally:
-            logger.remove(handler_id)
-
-    def test_log_context_manager(self) -> None:
-        """Test LogContext context manager."""
-        messages: list[str] = []
-        setup_logging(level="DEBUG")
-
-        handler_id = logger.add(
-            lambda msg: messages.append(str(msg)),
-            format="{extra} | {message}",
-        )
-        try:
-            with LogContext(custom_key="custom_value"):
-                logger.info("Inside context")
-
-            # Inside should have context
-            assert any("custom_value" in msg for msg in messages)
-        finally:
-            logger.remove(handler_id)
+    def test_log_context_manager(self, records: list[Record]) -> None:
+        """Test LogContext context manager: the context is bound inside it and gone after."""
+        with LogContext(custom_key="custom_value"):
+            logger.info("Inside context")
+        logger.info("After context")
+        assert [(record["message"], record["extra"]) for record in records] == [
+            ("Inside context", {"custom_key": "custom_value"}),
+            ("After context", {}),
+        ]
 
 
 class TestLogLevels:

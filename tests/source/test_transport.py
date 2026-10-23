@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
+import json
+import random
 import time
 from collections.abc import Callable, Iterator
 from datetime import UTC, datetime, timedelta
@@ -11,9 +14,12 @@ from typing import Any, cast
 
 import httpx
 import pytest
+from githubkit import OAuthTokenAuthStrategy
+from githubkit.core import GitHubCore
 from githubkit.exception import (
     AuthCredentialError,
     AuthExpiredError,
+    RequestError,
     RequestFailed,
     SecondaryRateLimitExceeded,
 )
@@ -45,7 +51,12 @@ from github_activity_db.source.limits import (
     RESET_MARGIN,
     SERVER_RETRY_DELAYS,
 )
-from github_activity_db.source.transport import RestRefused, Transport, _Failure
+from github_activity_db.source.transport import (
+    _GITHUBKIT_RATE_LIMIT_READERS,
+    RestRefused,
+    Transport,
+    _Failure,
+)
 from tests.source.conftest import START, FakeClock
 from tests.source.replay import RATE_LIMIT, Replay, Seen, synthetic
 
@@ -648,6 +659,64 @@ class TestCredentials:
             await source.resolve(**RESOLVE)
         assert clock.sleeps == [300 + RESET_MARGIN]
 
+    def test_the_rate_limit_readers_are_githubkits(self) -> None:
+        """An error raised inside the client is a rate limit githubkit could not read only when
+        one of these frames raised it (TestOutOfRangeValues, TestMalformedHeaders); anything
+        else is a ClientFailure or propagates. Each name is a method of the installed githubkit's
+        client."""
+        found = sorted(
+            name
+            for name in _GITHUBKIT_RATE_LIMIT_READERS
+            if inspect.isfunction(getattr(GitHubCore, name, None))
+        )
+        assert found == sorted(_GITHUBKIT_RATE_LIMIT_READERS)
+        assert len(found) == len(_GITHUBKIT_RATE_LIMIT_READERS) > 0
+
+    async def test_a_client_failure_outside_the_network_is_fatal(
+        self, open_source, replay: Replay, clock: FakeClock
+    ) -> None:
+        # githubkit's App auth raises this when PyJWT is not installed.
+        error = RuntimeError("JWT support for GitHub APP should be installed")
+        replay.fault(self.raising(error), when=resolves)
+        async with open_source() as source:
+            with pytest.raises(ClientFailure) as raised:
+                await source.resolve(**RESOLVE)
+        cause = raised.value.__cause__
+        assert isinstance(cause, RequestError)
+        assert cause.exc is error
+        assert clock.sleeps == []
+        assert len(replay.seen) == 1
+
+    async def test_a_token_refresh_githubkit_cannot_parse_is_fatal(
+        self, replay: Replay, clock: FakeClock
+    ) -> None:
+        """A ValueError raised inside the client outside githubkit's rate-limit readers.
+
+        githubkit's OAuth token auth refreshes a missing token inside the client and parses the
+        token endpoint's answer with response.json(). Here something between the client and
+        GitHub, a captive portal or a proxy's block page, answers the refresh 200 with HTML.
+        """
+        endpoint = "https://github.com/login/oauth/access_token"
+        body = "<html><body>Sign in to this network to continue.</body></html>"
+        replay.fault(
+            lambda request: httpx.Response(
+                200, content=body.encode(), headers={"content-type": "text/html; charset=utf-8"}
+            ),
+            when=lambda seen: seen.path == endpoint,
+        )
+        auth = OAuthTokenAuthStrategy("test-client", "test-secret", refresh_token="test-refresh")
+        async with GitHubSource(auth, http_transport=replay.transport(), clock=clock) as source:
+            with pytest.raises(ClientFailure) as raised:
+                await source.resolve(**RESOLVE)
+        assert type(raised.value) is ClientFailure
+        cause = raised.value.__cause__
+        assert type(cause) is RequestError
+        error = cause.exc
+        assert type(error) is json.JSONDecodeError
+        assert (error.msg, error.doc, error.pos) == ("Expecting value", body, 0)
+        assert clock.sleeps == []
+        assert [seen.path for seen in replay.seen] == [endpoint]
+
     @pytest.mark.parametrize(
         "error",
         [TypeError("not from githubkit's rate-limit readers"), ValueError("bad key data")],
@@ -661,19 +730,6 @@ class TestCredentials:
             with pytest.raises(ClientFailure):
                 await source.resolve(**RESOLVE)
         assert clock.sleeps == []
-
-    async def test_a_client_failure_outside_the_network_is_fatal(
-        self, open_source, replay: Replay, clock: FakeClock
-    ) -> None:
-        replay.fault(
-            self.raising(RuntimeError("JWT support for GitHub APP should be installed")),
-            when=resolves,
-        )
-        async with open_source() as source:
-            with pytest.raises(ClientFailure, match="JWT support"):
-                await source.resolve(**RESOLVE)
-        assert clock.sleeps == []
-        assert len(replay.seen) == 1
 
 
 class TestFatal:
@@ -727,18 +783,6 @@ class TestFatal:
             with pytest.raises(Forbidden, match="Resource not accessible"):
                 await source.resolve(**RESOLVE)
 
-    async def test_a_defect_in_the_request_path_is_not_a_rate_limit(self, clock: FakeClock) -> None:
-        # A client whose arequest no longer accepts the transport's arguments: the TypeError is
-        # not raised by githubkit's rate-limit readers, so it propagates instead of waiting.
-        class Incompatible:
-            async def arequest(self, *args: object, **kwargs: object) -> object:
-                raise TypeError("arequest() got an unexpected keyword argument 'content'")
-
-        transport = Transport(cast("Any", Incompatible()), clock=clock)
-        with pytest.raises(TypeError, match="unexpected keyword"):
-            await transport.graphql("query Resolve { x }", {}, splittable=False)
-        assert clock.sleeps == []
-
     async def test_a_403_with_an_html_body_is_forbidden(self, open_source, replay: Replay) -> None:
         replay.fault(
             lambda request: httpx.Response(403, text="<html>blocked</html>"), when=resolves
@@ -755,6 +799,18 @@ class TestFatal:
             with pytest.raises(UnexpectedResponse) as raised:
                 await source.resolve(**RESOLVE)
         assert raised.value.status == 409
+
+    async def test_a_defect_in_the_request_path_is_not_a_rate_limit(self, clock: FakeClock) -> None:
+        # A client whose arequest no longer accepts the transport's arguments: the TypeError is
+        # not raised by githubkit's rate-limit readers, so it propagates instead of waiting.
+        class Incompatible:
+            async def arequest(self, *args: object, **kwargs: object) -> object:
+                raise TypeError("arequest() got an unexpected keyword argument 'content'")
+
+        transport = Transport(cast("Any", Incompatible()), clock=clock)
+        with pytest.raises(TypeError, match="unexpected keyword"):
+            await transport.graphql("query Resolve { x }", {}, splittable=False)
+        assert clock.sleeps == []
 
 
 class TestServerErrors:
@@ -1144,11 +1200,15 @@ async def test_one_request_in_flight(open_source, replay: Replay) -> None:
     assert len(replay.seen) == 4
 
 
-def test_the_system_clock_jitters_within_its_fraction() -> None:
+def test_the_system_clock_jitters_within_its_fraction(monkeypatch: pytest.MonkeyPatch) -> None:
+    # The clock's source of randomness, seeded: the same draws on every run.
     clock = SystemClock()
+    monkeypatch.setattr(clock, "_random", random.Random(0))  # noqa: S311 - repeatable, not a secret
     samples = [clock.jitter(8.0) for _ in range(200)]
+    draws = random.Random(0)  # noqa: S311 - repeatable, not a secret
+    assert samples == [8.0 + draws.uniform(0.0, 8.0 * JITTER_FRACTION) for _ in range(200)]
     assert all(8.0 <= sample <= 8.0 * (1 + JITTER_FRACTION) for sample in samples)
-    assert len(set(samples)) > 1
+    assert len(set(samples)) == len(samples)
 
 
 async def test_retry_delays_go_through_the_clock_jitter(replay: Replay) -> None:

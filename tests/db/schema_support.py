@@ -214,10 +214,27 @@ def objects_outside_the_comparison(database: Path, frozen: Iterable[str]) -> lis
     ]
 
 
-def unindexed_foreign_keys(database: Path) -> set[tuple[str, tuple[str, ...]]]:
-    """Foreign keys whose columns lead no index; a table's INTEGER PRIMARY KEY is its rowid."""
-    missing: set[tuple[str, tuple[str, ...]]] = set()
+def foreign_key_columns(database: Path) -> list[tuple[str, tuple[str, ...]]]:
+    """Each foreign key of each schema table, as its table and its columns in key order."""
+    found: list[tuple[str, tuple[str, ...]]] = []
     for table in schema_tables(database):
+        foreign_keys: dict[int, list[tuple[int, str]]] = {}
+        for fk_id, seq, _parent, column, *_rest in _rows(
+            database, f'PRAGMA foreign_key_list("{table}")'
+        ):
+            foreign_keys.setdefault(fk_id, []).append((seq, column))
+        found += [
+            (table, tuple(column for _seq, column in sorted(parts)))
+            for parts in foreign_keys.values()
+        ]
+    return found
+
+
+def unindexed_foreign_keys(database: Path) -> set[tuple[str, tuple[str, ...]]]:
+    """The foreign keys ``foreign_key_columns`` reads whose columns lead no index; a table's
+    INTEGER PRIMARY KEY is its rowid."""
+    missing: set[tuple[str, tuple[str, ...]]] = set()
+    for table, columns in foreign_key_columns(database):
         leading = [
             tuple(row[2] for row in _rows(database, f'PRAGMA index_xinfo("{name}")') if row[5])
             for _seq, name, *_rest in _rows(database, f'PRAGMA index_list("{table}")')
@@ -229,24 +246,18 @@ def unindexed_foreign_keys(database: Path) -> set[tuple[str, tuple[str, ...]]]:
         )
         if len(primary_key) == 1 and primary_key[0][2] == "INTEGER":
             leading.append((primary_key[0][1],))
-        foreign_keys: dict[int, list[tuple[int, str]]] = {}
-        for fk_id, seq, _parent, column, *_rest in _rows(
-            database, f'PRAGMA foreign_key_list("{table}")'
-        ):
-            foreign_keys.setdefault(fk_id, []).append((seq, column))
-        for parts in foreign_keys.values():
-            columns = tuple(column for _seq, column in sorted(parts))
-            if not any(keys[: len(columns)] == columns for keys in leading):
-                missing.add((table, columns))
+        if not any(keys[: len(columns)] == columns for keys in leading):
+            missing.add((table, columns))
     return missing
 
 
-def frozen_views(config: Config) -> dict[str, str]:
-    """Each view at head with the SQL of the newest revision that creates or replaces it (its
-    ``VIEWS``); a view a later revision lists in ``DROPPED_VIEWS`` is not at head."""
+def frozen_views(config: Config, through: str = "heads") -> dict[str, str]:
+    """Each view at head, or at the revision ``through``, with the SQL of the newest revision up
+    to it that creates or replaces it (its ``VIEWS``); a view a revision up to it lists in
+    ``DROPPED_VIEWS`` is not there."""
     script = ScriptDirectory.from_config(config)
     frozen: dict[str, str] = {}
-    for revision in reversed(list(script.walk_revisions())):
+    for revision in reversed(list(script.walk_revisions(head=through))):
         for name, sql in getattr(revision.module, "VIEWS", ()):
             frozen[name] = sql
         for name in getattr(revision.module, "DROPPED_VIEWS", ()):

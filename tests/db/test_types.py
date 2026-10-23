@@ -9,6 +9,7 @@ import pytest
 from sqlalchemy import DateTime, insert, select, update
 from sqlalchemy.exc import StatementError
 
+from github_activity_db.db import types
 from github_activity_db.db.models import Base, GitHubUser, UserTag
 from github_activity_db.db.types import UtcDateTime, utc_now
 from tests.db.alembic_support import query
@@ -60,14 +61,17 @@ def test_no_column_uses_a_bare_datetime() -> None:
     ],
 )
 def test_a_naive_value_is_rejected(migrated_database: Path, value: datetime) -> None:
-    with pytest.raises(StatementError, match="naive datetime 2026-01-01T12:00:00"):
+    with pytest.raises(StatementError) as error:
         _write_refreshed_at(migrated_database, value)
+    assert type(error.value.orig) is ValueError
     assert query(migrated_database, "SELECT COUNT(*) FROM github_users") == [(0,)]
 
 
 def test_a_value_that_is_not_a_datetime_is_rejected(migrated_database: Path) -> None:
-    with pytest.raises(StatementError, match="expected a datetime, got str"):
+    with pytest.raises(StatementError) as error:
         _write_refreshed_at(migrated_database, "2026-01-01 12:00:00")
+    assert type(error.value.orig) is TypeError
+    assert query(migrated_database, "SELECT COUNT(*) FROM github_users") == [(0,)]
 
 
 def test_an_aware_value_is_stored_as_utc_and_read_back_aware(migrated_database: Path) -> None:
@@ -105,11 +109,36 @@ def test_null_passes_through(migrated_database: Path) -> None:
         assert connection.execute(select(GitHubUser.not_found_at)).scalar_one() is None
 
 
-def test_the_default_is_now_in_utc(migrated_database: Path) -> None:
-    before = utc_now()
+# A fixed instant for the clock the column default reads.
+NOW = datetime(2026, 1, 2, 3, 4, 5, 678901, tzinfo=UTC)
+
+
+def test_the_default_is_now_in_utc(
+    migrated_database: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The column default over a fixed wall clock, which answers NOW in the zone asked for; the
+    clock alone is replaced, so an explicit timestamp written beside the default is still a
+    datetime to UtcDateTime."""
+    asked: list[tzinfo] = []
+
+    def wall_clock(tz: tzinfo) -> datetime:
+        asked.append(tz)
+        return NOW.astimezone(tz)
+
+    monkeypatch.setattr(types, "_wall_clock", wall_clock)
+    assert utc_now() == NOW
+    assert asked == [UTC]
+    explicit = datetime(2026, 1, 1, 5, 30, tzinfo=KOLKATA)
     with connect(migrated_database) as connection:
         connection.execute(insert(UserTag).values(name="kept"))
-        created_at = connection.execute(select(UserTag.created_at)).scalar_one()
-    assert before <= created_at <= utc_now()
-    assert created_at.tzinfo is UTC
-    assert utc_now().tzinfo is UTC
+        connection.execute(insert(UserTag).values(name="given", created_at=explicit))
+        created = connection.execute(
+            select(UserTag.name, UserTag.created_at).order_by(UserTag.id)
+        ).all()
+    assert [tuple(row) for row in created] == [("kept", NOW), ("given", explicit)]
+    assert [when.tzinfo for _, when in created] == [UTC, UTC]
+    assert asked == [UTC, UTC]
+    assert query(migrated_database, "SELECT created_at FROM user_tags ORDER BY id") == [
+        ("2026-01-02 03:04:05.678901",),
+        ("2026-01-01 00:00:00.000000",),
+    ]

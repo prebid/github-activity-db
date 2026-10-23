@@ -6,11 +6,14 @@ import os
 import re
 import subprocess
 import sys
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
+from importlib import metadata
 from pathlib import Path
 
+import pydantic_settings.sources.providers.dotenv as dotenv_source
 import pytest
 import typer
+from click.testing import Result
 from typer.testing import CliRunner
 
 from github_activity_db.cli import common
@@ -151,19 +154,19 @@ class TestExitCodes:
         assert "invalid settings" in _plain(result.stderr)
 
     def test_a_commands_own_exit_code_passes_through(self) -> None:
-        planted = typer.Typer(cls=ExitCodeGroup)
+        commands = typer.Typer(cls=ExitCodeGroup)
 
-        @planted.command()
+        @commands.command()
         def partial() -> None:
             raise typer.Exit(2)
 
-        @planted.command()
+        @commands.command()
         def done() -> None:
             pass
 
-        assert runner.invoke(planted, ["partial"]).exit_code == 2
-        assert runner.invoke(planted, ["done"]).exit_code == 0
-        assert runner.invoke(planted, ["--nope"]).exit_code == 1
+        assert runner.invoke(commands, ["partial"]).exit_code == 2
+        assert runner.invoke(commands, ["done"]).exit_code == 0
+        assert runner.invoke(commands, ["--nope"]).exit_code == 1
 
     @pytest.mark.parametrize(
         ("error", "code"),
@@ -175,17 +178,17 @@ class TestExitCodes:
     def test_an_aborted_command_line(self, error: type[BaseException], code: int) -> None:
         """click turns end of input into Abort, which exits 1 here; typer turns an interrupt
         into exit 130 before click sees it."""
-        planted = typer.Typer(cls=ExitCodeGroup)
+        commands = typer.Typer(cls=ExitCodeGroup)
 
-        @planted.command()
+        @commands.command()
         def ask() -> None:
             raise error
 
-        @planted.command()
+        @commands.command()
         def other() -> None:
             pass
 
-        result = runner.invoke(planted, ["ask"])
+        result = runner.invoke(commands, ["ask"])
         assert result.exit_code == code, result.output
         assert isinstance(result.exception, SystemExit), result.exception
 
@@ -193,10 +196,9 @@ class TestExitCodes:
 def _installed(
     *args: str, env: dict[str, str], cwd: Path, script: str | None = None
 ) -> subprocess.CompletedProcess[str]:
-    """Run the installed console script, or ``script`` with the same interpreter."""
-    base = {
-        key: value for key, value in os.environ.items() if key in ("PATH", "HOME", "SYSTEMROOT")
-    }
+    """Run the installed console script, or ``script`` with the same interpreter, in an
+    environment built from ``env``, ``PATH``, and ``cwd`` as ``HOME``."""
+    base = {"PATH": os.environ["PATH"], "HOME": str(cwd)}
     command = [str(GHACTIVITY), *args] if script is None else [sys.executable, "-I", "-c", script]
     return subprocess.run(
         command, capture_output=True, text=True, env={**base, **env}, cwd=cwd, timeout=60
@@ -222,23 +224,9 @@ class TestInstalledEntryPoint:
         assert "invalid settings" in _words(result.stderr)
         assert "Traceback" not in result.stderr
 
-    @pytest.mark.parametrize(
-        ("dotenv", "mode"),
-        [
-            pytest.param(b"LOG_LEVEL=\xff\n", 0o644, id="not UTF-8"),
-            pytest.param(b"", 0o000, id="unreadable"),
-        ],
-    )
-    def test_an_unreadable_env_file_exits_1_without_a_traceback(
-        self, tmp_path: Path, dotenv: bytes, mode: int
-    ) -> None:
-        env_file = tmp_path / ".env"
-        env_file.write_bytes(dotenv)
-        env_file.chmod(mode)
-        try:
-            result = _installed("github", "rate-limit", env={}, cwd=tmp_path)
-        finally:
-            env_file.chmod(0o644)
+    def test_an_env_file_that_is_not_utf8_exits_1_without_a_traceback(self, tmp_path: Path) -> None:
+        (tmp_path / ".env").write_bytes(b"LOG_LEVEL=\xff\n")
+        result = _installed("github", "rate-limit", env={}, cwd=tmp_path)
         assert result.returncode == 1
         assert "invalid settings" in _words(result.stderr)
         assert "Traceback" not in result.stderr
@@ -281,7 +269,7 @@ class TestInstalledEntryPoint:
         assert "Traceback" not in result.stderr
 
     def test_a_traceback_shows_no_local_variables(self, tmp_path: Path) -> None:
-        """The real app's pretty traceback, for a planted command that fails (gap 75)."""
+        """The real app's pretty traceback, for a test-only command that fails (gap 75)."""
         script = (
             "from github_activity_db.cli.app import app\n"
             "@app.command()\n"
@@ -295,3 +283,97 @@ class TestInstalledEntryPoint:
         assert "RuntimeError" in result.stderr
         assert "boom 24" in result.stderr
         assert "sentinel-credential-7f3a" not in result.stderr + result.stdout
+
+    def test_a_github_group_commands_traceback_shows_no_local_variables(
+        self, tmp_path: Path
+    ) -> None:
+        """A test-only command in the ``github`` group, called through the root app: the group's
+        own Typer keeps typer's default of showing local variables, and the root app's setting
+        is the one that applies (gap 75)."""
+        script = (
+            "from github_activity_db.cli import github\n"
+            "from github_activity_db.cli.app import app\n"
+            "@github.app.command()\n"
+            "def boom() -> None:\n"
+            "    credential = 'sentinel-credential-7f3a'\n"
+            "    raise RuntimeError('boom ' + str(len(credential)))\n"
+            "app(['github', 'boom'], prog_name='ghactivity')\n"
+        )
+        result = _installed(env={}, cwd=tmp_path, script=script)
+        assert result.returncode == 1
+        assert "RuntimeError" in result.stderr
+        assert "boom 24" in result.stderr
+        assert "sentinel-credential-7f3a" not in result.stderr + result.stdout
+
+    def test_the_console_script_calls_the_root_app_which_hides_local_variables(self) -> None:
+        """An uncaught exception's traceback is typer's, set up by the app it was called
+        through: the console script calls the root app, whose setting keeps local variables out
+        whatever group the command is in (gap 75). The 2 values compared: the script's target
+        and the setting."""
+        (script,) = metadata.entry_points(group="console_scripts", name="ghactivity")
+        assert script.load() is app
+        assert app.pretty_exceptions_show_locals is False
+
+
+def _env_file_command(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, read_env: Callable[..., dict[str, str | None]]
+) -> tuple[Result, list[Path], list[str], int]:
+    """``github rate-limit`` with a token set and a .env whose read ``read_env`` answers: the
+    result, the paths read, the tokens a source was opened with, and the settings cached when
+    the command returned. The source opens nothing: it records the token and raises."""
+    (tmp_path / ".env").write_text("LOG_LEVEL=INFO\n")
+    read: list[Path] = []
+    opened: list[str] = []
+
+    def reading(path: Path, **kwargs: object) -> dict[str, str | None]:
+        read.append(Path(path))
+        return read_env(path, **kwargs)
+
+    def open_source(token: str, **_: object) -> object:
+        opened.append(token)
+        raise RuntimeError("the test's source opens nothing")
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("GITHUB_TOKEN", "test-token")
+    monkeypatch.setattr(common, "open_source", open_source)
+    monkeypatch.setattr(dotenv_source, "dotenv_values", reading)
+    get_settings.cache_clear()
+    try:
+        result = runner.invoke(app, ["github", "rate-limit"])
+        cached = get_settings.cache_info().currsize
+    finally:
+        get_settings.cache_clear()
+    return result, read, opened, cached
+
+
+def test_an_env_file_the_os_refuses_to_read_exits_1(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A .env the OS refuses to read: the read answers PermissionError, as it does for a file
+    the user may not read, whatever uid runs the tests (D40), and the command exits 1 at the
+    settings, with a token set: no settings are cached and no source is opened."""
+
+    def refused(path: Path, **_: object) -> dict[str, str | None]:
+        raise PermissionError(13, "Permission denied", str(path))
+
+    result, read, opened, cached = _env_file_command(monkeypatch, tmp_path, refused)
+    assert read == [Path(".env")]
+    assert (opened, cached) == ([], 0)
+    assert result.exit_code == 1, result.output
+    assert isinstance(result.exception, SystemExit), result.exception
+
+
+def test_an_env_file_the_os_reads_reaches_the_source(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The same command line with the .env read: the settings are cached and the command opens
+    its source once, with the token (which here raises, so the command exits 1)."""
+
+    def readable(path: Path, **_: object) -> dict[str, str | None]:
+        return {"LOG_LEVEL": "INFO"}
+
+    result, read, opened, cached = _env_file_command(monkeypatch, tmp_path, readable)
+    assert read == [Path(".env")]
+    assert (opened, cached) == (["test-token"], 1)
+    assert result.exit_code == 1, result.output
+    assert isinstance(result.exception, SystemExit), result.exception

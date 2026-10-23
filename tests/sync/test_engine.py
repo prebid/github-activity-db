@@ -12,24 +12,28 @@ import copy
 import hashlib
 import json
 import sqlite3
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from datetime import timedelta
 from pathlib import Path
 from typing import Any, Final
 
 import pytest
-from sqlalchemy import event
-from sqlalchemy.engine import Engine
 
+from github_activity_db.db import engine as db_engine
+from github_activity_db.db.schema import HEAD_REVISION, MIGRATION_REVISIONS
 from github_activity_db.source import PULL_REQUEST_HYDRATION_VERSION
 from github_activity_db.sync import writer
 from github_activity_db.sync.deletions import DeletionApproval, parse_allow_deletions
 from github_activity_db.sync.plan import Reason
 from github_activity_db.sync.runs import ClaimRefused, HeadCheckError
 from github_activity_db.sync.writer import Pruned
+from tests.db.alembic_support import upgrade
 from tests.source.replay import synthetic
 from tests.source.scenario import Scenario
+from tests.support import listening
 from tests.sync.engine_support import World, ended, outcomes, planned, project
+from tests.sync.records import fetch
 
 
 @pytest.fixture
@@ -40,6 +44,50 @@ def world(scenario: Scenario, migrated_database: Path) -> Iterator[World]:
     yield world
     if not world.expects_account_missing:
         assert world.rows("SELECT number FROM sync_failures WHERE last_error LIKE 'Account%'") == []
+
+
+@pytest.fixture
+def short_busy_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Connections the engine opens wait 100 ms, not 30 s, on a lock another process holds; a
+    lock held through the wait fails the statement or commit the same way at either length."""
+    monkeypatch.setattr(db_engine, "SQLITE_BUSY_TIMEOUT_MS", 100)
+
+
+class Reader:
+    """Another process reading the database. Its open read transaction holds SQLite's SHARED
+    lock, which a writer's commit waits on until the busy timeout (rollback journal, gap 77)."""
+
+    def __init__(self, database: Path) -> None:
+        self.database = database
+        self.connection: sqlite3.Connection | None = None
+
+    def hold(self) -> None:
+        connection = sqlite3.connect(self.database, isolation_level=None)
+        connection.execute("BEGIN")
+        connection.execute("SELECT count(*) FROM sync_runs").fetchone()
+        self.connection = connection
+
+    def release(self) -> None:
+        if self.connection is not None:
+            self.connection.execute("ROLLBACK")
+            self.connection.close()
+            self.connection = None
+
+
+@contextmanager
+def database_errors(after: Callable[[], None] = lambda: None) -> Iterator[list[str]]:
+    """The ``sqlite_errorname`` of each SQLite error the engine's connections meet, in order;
+    ``after`` runs once each is recorded, before the error reaches the engine."""
+    names: list[str] = []
+
+    def record(context: Any) -> None:
+        error = context.original_exception
+        if isinstance(error, sqlite3.Error):
+            names.append(error.sqlite_errorname)
+            after()
+
+    with listening("handle_error", record):
+        yield names
 
 
 def batches(scenario: Scenario) -> list[list[int]]:
@@ -1070,8 +1118,7 @@ async def test_a_database_error_mid_batch_is_fatal_and_the_next_run_resumes(
     )
 
     failed = await world.sync()
-    assert failed.error is not None
-    assert failed.error.startswith("LocalDatabaseError: IntegrityError: refused by the test")
+    assert failed.error == "LocalDatabaseError: IntegrityError: refused by the test"
     assert ended(world, failed) == ("failed", 1, {"prebid/Prebid.js": "failed"})
     assert world.numbers(repository) == [1]
     run = world.run(failed.run_id)
@@ -1081,6 +1128,37 @@ async def test_a_database_error_mid_batch_is_fatal_and_the_next_run_resumes(
     resumed = await world.sync()
     assert planned(resumed) == [2]
     assert world.numbers(repository) == [1, 2]
+    assert ended(world, resumed) == ("complete", 0, {"prebid/Prebid.js": "complete"})
+
+
+async def test_an_item_commit_that_fails_on_a_lock_is_fatal_and_the_next_run_resumes(
+    world: World, short_busy_timeout: None
+) -> None:
+    """Another process starts reading once the second batch is answered and reads through the
+    busy timeout: #26's commit fails, which is fatal (5.3 step 4). The close, after that reader
+    has gone, writes failed; the first batch's items stay, and the next run plans the rest."""
+    scenario = world.scenario
+    repository, _ = project(world, pulls=26)
+    reader = Reader(world.database)
+    scenario.after("PullRequestBatch", reader.hold, when=lambda seen: seen.numbers == [26])
+
+    try:
+        with database_errors(reader.release) as errors:
+            failed = await world.sync()
+    finally:
+        reader.release()
+
+    assert batches(scenario) == [list(range(1, 26)), [26]]
+    assert errors == ["SQLITE_BUSY"]
+    assert failed.error == "LocalDatabaseError: OperationalError: database is locked"
+    assert ended(world, failed) == ("failed", 1, {"prebid/Prebid.js": "failed"})
+    assert world.numbers(repository) == list(range(1, 26))
+    run = world.run(failed.run_id)
+    assert (run["items_planned"], run["items_hydrated"]) == (26, 25)
+
+    resumed = await world.sync()
+    assert planned(resumed) == [26]
+    assert world.numbers(repository) == list(range(1, 27))
     assert ended(world, resumed) == ("complete", 0, {"prebid/Prebid.js": "complete"})
 
 
@@ -1094,47 +1172,51 @@ async def test_a_fatal_source_error_closes_the_run_failed(world: World) -> None:
 
     report = await world.sync()
 
-    assert report.error is not None and report.error.startswith("Unauthorized")
+    assert report.error is not None and report.error.split(":")[0] == "Unauthorized"
     assert ended(world, report) == ("failed", 1, {"prebid/Prebid.js": "failed"})
     state = world.rows("SELECT last_index_started_at, index_pr_total FROM repo_sync_state")
     assert state == [{"last_index_started_at": None, "index_pr_total": None}]
 
 
-async def test_any_other_exception_after_the_claim_closes_the_run_failed(
-    world: World, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    project(world)
-
-    async def broken(*args: Any, **kwargs: Any) -> None:
-        raise RuntimeError("broken in-place update")
-
-    monkeypatch.setattr(writer, "apply_in_place_updates", broken)
-
-    report = await world.sync()
-
-    assert report.error == "RuntimeError: broken in-place update"
-    assert ended(world, report) == ("failed", 1, {"prebid/Prebid.js": "failed"})
-
-
-async def test_an_account_missing_refusal_is_an_item_failure(
-    world: World, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    world.expects_account_missing = True
-    repository, _ = project(world, pulls=2)
-    write = writer.write_pull_request
-
-    async def refusing(connection: Any, run_id: int, record: Any, **kwargs: Any) -> Any:
-        if record.number == 1:
-            raise writer.AccountMissing(record.number, [7])
-        return await write(connection, run_id, record, **kwargs)
-
-    monkeypatch.setattr(writer, "write_pull_request", refusing)
+async def test_every_commit_link_reaches_the_writer_with_its_account(world: World) -> None:
+    """Commit links whose account the item sighted itself, an earlier run stored, another item
+    of the batch sighted, a lookup found, and a lookup answered NOT_FOUND for: the engine gives
+    the writer each account it does not store, so every linked commit is written and none fails
+    with ``AccountMissing`` (plan 5.2). The count of linked commits comes from the model."""
+    scenario = world.scenario
+    repository, author = project(world, pulls=3)
+    stored = scenario.add_account()
+    repository.pulls[1].add("reviews", scenario.node("reviews", by=stored))
+    await world.sync()
+    reviewer = scenario.add_account()
+    bot = scenario.add_account("Bot", login="helper")
+    gone = scenario.add_account()
+    scenario.delete_account(gone)
+    repository.pulls[2].add("reviews", scenario.node("reviews", by=reviewer))
+    repository.pulls[3].add(
+        "commits",
+        *(scenario.node("commits", by=account) for account in (author, stored, reviewer, bot)),
+    )
+    repository.pulls[3].add("commits", scenario.node("commits", by=gone))
 
     report = await world.sync()
 
-    assert world.failures() == [("prebid/Prebid.js", 1, "AccountMissing")]
-    assert world.numbers(repository) == [2]
-    assert ended(world, report) == ("complete", 2, {"prebid/Prebid.js": "complete"})
+    linked = [
+        node["commit"]["author"]["user"]["databaseId"]
+        for pull in repository.pulls.values()
+        for node in pull.node["commits"]["nodes"]
+        if node["commit"]["author"]["user"] is not None
+    ]
+    assert len(linked) == 5
+    assert batches(scenario)[-1] == [2, 3]
+    assert requests(scenario, "UserLookup") == 1
+    assert world.rows(
+        "SELECT linked_github_id FROM pr_commits WHERE linked_github_id IS NOT NULL "
+        "ORDER BY linked_github_id"
+    ) == [{"linked_github_id": github_id} for github_id in sorted(linked)]
+    assert report.failures == ()
+    assert world.failures() == []
+    assert ended(world, report) == ("complete", 0, {"prebid/Prebid.js": "complete"})
 
 
 # --------------------------------------------------------------------------------------------
@@ -1523,15 +1605,75 @@ async def test_a_run_ending_after_step_7_keeps_its_halt_reason(
     if ending == "fatal":
         report = await world.sync(prune_untracked=True)
         assert ended(world, report) == ("failed", 1, {"prebid/Prebid.js": "failed"})
+        assert report.error == "RuntimeError: prune failed"
     else:
         with pytest.raises(KeyboardInterrupt):
             await world.sync(prune_untracked=True)
-        assert world.value("SELECT status FROM sync_runs ORDER BY id DESC LIMIT 1") == "aborted"
+        assert world.rows("SELECT status, exit_code FROM sync_runs ORDER BY id DESC LIMIT 1") == [
+            {"status": "aborted", "exit_code": 130}
+        ]
     assert halt_reasons(world) == {
         "prebid/Prebid.js": "26 deletion candidates exceed the delete guard's 25 (26 stored "
         "rows before the run)"
     }
     assert len(world.numbers(repository)) == 26
+
+
+@pytest.mark.parametrize("ending", ["fatal", "interrupt"])
+async def test_a_run_ending_at_the_prune_s_delete_keeps_step_7_s_halt_reason(
+    world: World, short_busy_timeout: None, ending: str
+) -> None:
+    """The prune of an untracked repository comes after step 7. Another process that starts
+    reading at the prune's delete and reads through the busy timeout fails the prune's commit,
+    which closes the run failed; an interrupt at that delete closes it aborted. Either close
+    keeps step 7's halt, and the prune deletes nothing (5.3 step 8)."""
+    repository, _ = project(world, pulls=26)
+    dropped, _ = project(world, name="dropped")
+    await world.sync()
+    world.untrack("prebid/dropped")
+    await world.sync()
+    for pull in repository.pulls.values():
+        pull.gone = True
+    reader = Reader(world.database)
+    deletes: list[str] = []
+
+    def at_the_prune(
+        connection: Any, cursor: Any, statement: str, parameters: Any, *args: Any
+    ) -> None:
+        if not statement.startswith("DELETE FROM repositories"):
+            return
+        deletes.append(statement)
+        if ending == "interrupt":
+            raise KeyboardInterrupt
+        reader.hold()
+
+    try:
+        with (
+            listening("before_cursor_execute", at_the_prune),
+            database_errors(reader.release) as errors,
+        ):
+            if ending == "fatal":
+                report = await world.sync(prune_untracked=True)
+                assert ended(world, report) == ("failed", 1, {"prebid/Prebid.js": "failed"})
+            else:
+                with pytest.raises(KeyboardInterrupt):
+                    await world.sync(prune_untracked=True)
+                assert (
+                    world.value("SELECT status FROM sync_runs ORDER BY id DESC LIMIT 1")
+                    == "aborted"
+                )
+    finally:
+        reader.release()
+
+    assert len(deletes) == 1
+    assert errors == (["SQLITE_BUSY"] if ending == "fatal" else [])
+    assert halt_reasons(world) == {
+        "prebid/Prebid.js": "26 deletion candidates exceed the delete guard's 25 (26 stored "
+        "rows before the run)",
+        "prebid/dropped": None,
+    }
+    assert len(world.numbers(repository)) == 26
+    assert world.numbers(dropped) == [1]
 
 
 async def test_the_head_check_comes_before_the_claim_and_any_request(
@@ -1542,8 +1684,11 @@ async def test_the_head_check_comes_before_the_claim_and_any_request(
     world.url = f"sqlite+aiosqlite:///{missing}"
 
     for dry_run in (False, True):
-        with pytest.raises(HeadCheckError, match="database file not found"):
+        with pytest.raises(HeadCheckError) as refused:
             await world.sync(dry_run=dry_run)
+        assert str(refused.value) == (
+            f"database file not found: {missing}; build it with `alembic upgrade head`"
+        )
 
     assert not missing.exists()
     assert world.scenario.replay.seen == []
@@ -1553,10 +1698,36 @@ async def test_a_database_not_at_head_starts_no_run(world: World) -> None:
     project(world)
     world.execute("UPDATE alembic_version SET version_num = 'older'")
 
-    with pytest.raises(HeadCheckError, match="not the code's head"):
+    with pytest.raises(HeadCheckError) as refused:
         await world.sync()
 
+    assert str(refused.value) == (
+        f"the database is at revision older, not the code's head {HEAD_REVISION}; "
+        "run `alembic upgrade head`"
+    )
+
     assert world.rows("SELECT id FROM sync_runs") == []
+    assert world.scenario.replay.seen == []
+
+
+async def test_a_database_at_the_previous_revision_starts_no_run(
+    world: World, tmp_path: Path
+) -> None:
+    """A file the migrations built to the revision before head, as the code before it did."""
+    project(world)
+    older = tmp_path / "older.db"
+    upgrade(older, MIGRATION_REVISIONS[-2])
+    world.url = f"sqlite+aiosqlite:///{older}"
+
+    with pytest.raises(HeadCheckError) as refused:
+        await world.sync()
+
+    assert str(refused.value) == (
+        f"the database is at revision {MIGRATION_REVISIONS[-2]}, not the code's head "
+        f"{HEAD_REVISION}; run `alembic upgrade head`"
+    )
+
+    assert fetch(older, "SELECT count(*) AS n FROM sync_runs") == [{"n": 0}]
     assert world.scenario.replay.seen == []
 
 
@@ -2241,6 +2412,41 @@ async def test_a_close_that_fails_leaves_the_row_running_and_exits_1(world: Worl
     )
 
 
+async def test_a_close_whose_commit_fails_on_a_lock_leaves_the_row_running_and_exits_1(
+    world: World, short_busy_timeout: None
+) -> None:
+    """Another process starts reading at the close's update and reads through the busy timeout:
+    the close's commit fails, the row stays running, and the run exits 1; the row then blocks
+    the next claim (5.3)."""
+    repository, _ = project(world)
+    reader = Reader(world.database)
+
+    def at_the_close(
+        connection: Any, cursor: Any, statement: str, parameters: Any, *args: Any
+    ) -> None:
+        if statement.startswith("UPDATE sync_runs SET finished_at") and reader.connection is None:
+            reader.hold()
+
+    try:
+        with listening("before_cursor_execute", at_the_close), database_errors() as errors:
+            report = await world.sync()
+    finally:
+        reader.release()
+
+    assert errors == ["SQLITE_BUSY"]
+    run = world.run(report.run_id)
+    assert (run["status"], run["exit_code"]) == ("running", None)
+    assert (report.status, report.exit_code) == ("running", 1)
+    assert report.error == (
+        f"the close failed, so run {report.run_id} stays running: LocalDatabaseError: "
+        "OperationalError: database is locked"
+    )
+    assert world.numbers(repository) == [1]
+    with pytest.raises(ClaimRefused) as refused:
+        await world.sync()
+    assert refused.value.blocking == (report.run_id,)
+
+
 async def test_halted_comes_before_time_limited(world: World) -> None:
     scenario = world.scenario
     repository, _ = project(world, pulls=30)
@@ -2562,8 +2768,7 @@ async def test_an_interrupt_during_the_close_closes_the_row_aborted(
         assert run is not None
         run.cancel()
 
-    event.listen(Engine, "before_cursor_execute", interrupt_the_close)
-    try:
+    with listening("before_cursor_execute", interrupt_the_close):
         if interrupt == "keyboard":
             with pytest.raises(KeyboardInterrupt):
                 await world.sync()
@@ -2571,8 +2776,6 @@ async def test_an_interrupt_during_the_close_closes_the_row_aborted(
             run = asyncio.create_task(world.sync())
             with pytest.raises(asyncio.CancelledError):
                 await run
-    finally:
-        event.remove(Engine, "before_cursor_execute", interrupt_the_close)
 
     assert len(interrupted) == 1
     (row,) = world.rows("SELECT id, status, exit_code, finished_at FROM sync_runs")
@@ -2661,22 +2864,68 @@ async def test_an_interrupted_close_that_does_not_land_leaves_the_row_running(
         interrupted.append(status)
         raise KeyboardInterrupt(status)
 
-    event.listen(Engine, "before_cursor_execute", interrupt)
-    try:
-        with pytest.raises(KeyboardInterrupt) as raised:
-            await world.sync()
-    finally:
-        event.remove(Engine, "before_cursor_execute", interrupt)
+    with (
+        listening("before_cursor_execute", interrupt),
+        database_errors() as errors,
+        pytest.raises(KeyboardInterrupt) as raised,
+    ):
+        await world.sync()
 
     expected = ["complete", "aborted"] if cleanup == "second interrupt" else ["complete"]
     assert interrupted == expected
+    # The second interrupt meets no SQLite error; the trigger refuses the aborted close.
+    assert errors == ([] if cleanup == "second interrupt" else ["SQLITE_CONSTRAINT_TRIGGER"])
     # The interrupt re-raised is the latest one delivered.
     assert raised.value.args == (expected[-1],)
     assert world.rows("SELECT status, exit_code FROM sync_runs") == [
         {"status": "running", "exit_code": None}
     ]
-    with pytest.raises(ClaimRefused):
+    with pytest.raises(ClaimRefused) as refused:
         await world.sync()
+    assert refused.value.blocking == (world.value("SELECT id FROM sync_runs"),)
+
+
+async def test_an_interrupted_close_whose_commit_fails_on_a_lock_leaves_the_row_running(
+    world: World, short_busy_timeout: None
+) -> None:
+    """Another process reads from the interrupt on, through the busy timeout, so the commit of
+    the interrupted close fails with SQLITE_BUSY; that database error is not raised over the
+    interrupt, and the row stays running for the stale-row rule or --break-lock (5.3)."""
+    project(world)
+    reader = Reader(world.database)
+    interrupted: list[object] = []
+
+    def interrupt(
+        connection: Any, cursor: Any, statement: str, parameters: Any, *args: Any
+    ) -> None:
+        if (
+            not statement.startswith("UPDATE sync_runs SET finished_at")
+            or "complete" not in parameters
+            or interrupted
+        ):
+            return
+        interrupted.append("complete")
+        reader.hold()
+        raise KeyboardInterrupt("complete")
+
+    try:
+        with (
+            listening("before_cursor_execute", interrupt),
+            database_errors() as errors,
+            pytest.raises(KeyboardInterrupt) as raised,
+        ):
+            await world.sync()
+    finally:
+        reader.release()
+
+    assert interrupted == ["complete"]
+    assert errors == ["SQLITE_BUSY"]
+    assert raised.value.args == ("complete",)
+    (run,) = world.rows("SELECT id, status, exit_code FROM sync_runs")
+    assert (run["status"], run["exit_code"]) == ("running", None)
+    with pytest.raises(ClaimRefused) as refused:
+        await world.sync()
+    assert refused.value.blocking == (run["id"],)
 
 
 def alias_error(alias: str) -> Any:
@@ -2791,3 +3040,40 @@ async def test_a_deadline_inside_a_batchs_requests_leaves_the_whole_batch_pendin
     assert world.numbers(repository) == [1, 2, 3]
     assert world.pending(repository) == []
     assert ended(world, finished) == ("complete", 0, {"prebid/Prebid.js": "complete"})
+
+
+async def test_any_other_exception_after_the_claim_closes_the_run_failed(
+    world: World, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    project(world)
+
+    async def broken(*args: Any, **kwargs: Any) -> None:
+        raise RuntimeError("broken in-place update")
+
+    monkeypatch.setattr(writer, "apply_in_place_updates", broken)
+
+    report = await world.sync()
+
+    assert report.error == "RuntimeError: broken in-place update"
+    assert ended(world, report) == ("failed", 1, {"prebid/Prebid.js": "failed"})
+
+
+async def test_an_account_missing_refusal_is_an_item_failure(
+    world: World, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    world.expects_account_missing = True
+    repository, _ = project(world, pulls=2)
+    write = writer.write_pull_request
+
+    async def refusing(connection: Any, run_id: int, record: Any, **kwargs: Any) -> Any:
+        if record.number == 1:
+            raise writer.AccountMissing(record.number, [7])
+        return await write(connection, run_id, record, **kwargs)
+
+    monkeypatch.setattr(writer, "write_pull_request", refusing)
+
+    report = await world.sync()
+
+    assert world.failures() == [("prebid/Prebid.js", 1, "AccountMissing")]
+    assert world.numbers(repository) == [2]
+    assert ended(world, report) == ("complete", 2, {"prebid/Prebid.js": "complete"})

@@ -15,6 +15,11 @@ from tests.db.schema_support import user_objects
 REPO_ROOT = Path(__file__).resolve().parents[2]
 VERSIONS = REPO_ROOT / "alembic" / "versions"
 FIRST_SCHEMA_HEAD = "b3c4d5e6f7g8"
+# The revisions of Step 3a, of Step 3b-1, and the one after it, which adds
+# sync_failures.last_run_id.
+STEP3A = "33f8570f6540"
+STEP3B1 = "94a52e4f1d57"
+LAST_RUN_ID = "2d2ba76b177c"
 
 
 def alembic_config(

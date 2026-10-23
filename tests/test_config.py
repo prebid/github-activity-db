@@ -1,6 +1,7 @@
 """Tests for configuration settings."""
 
-import re
+import shutil
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
@@ -125,33 +126,43 @@ class TestSettings:
 
 
 class TestDocumentedDatabaseUrl:
-    """The documented DATABASE_URL lines show the default, which names the local file (D26)."""
-
-    @pytest.mark.parametrize("document", [".env.example", "docs/development.md"])
-    def test_names_the_local_database(self, document: str) -> None:
-        lines = re.findall(r"^#? ?DATABASE_URL=(.*)$", (REPO_ROOT / document).read_text(), re.M)
-        assert lines == [LOCAL_DATABASE_URL]
+    """The field's default DATABASE_URL, and the one a .env copied from .env.example gives, name
+    the local file, never the tracked one (D26)."""
 
     def test_the_field_default_is_the_local_database(self) -> None:
         assert Settings.model_fields["database_url"].default == LOCAL_DATABASE_URL
+
+    def test_a_env_copied_from_the_example_reads_the_local_database(
+        self, monkeypatch, tmp_path: Path
+    ) -> None:
+        """Setup copies .env.example to .env, which Settings reads from the working directory."""
+        shutil.copyfile(REPO_ROOT / ".env.example", tmp_path / ".env")
+        monkeypatch.chdir(tmp_path)
+        assert Settings().database_url == LOCAL_DATABASE_URL
+
+
+@pytest.fixture
+def no_env_file(monkeypatch, tmp_path: Path) -> Iterator[None]:
+    """get_settings() reads .env from the working directory: a test directory without one, and
+    a fresh cache."""
+    monkeypatch.chdir(tmp_path)
+    get_settings.cache_clear()
+    yield
+    get_settings.cache_clear()
 
 
 class TestGetSettings:
     """Tests for get_settings function."""
 
-    def test_get_settings_returns_settings(self):
+    def test_get_settings_returns_settings(self, no_env_file: None):
         """Test that get_settings returns a Settings instance."""
-        # Clear cache to ensure fresh settings
-        get_settings.cache_clear()
-
         settings = get_settings()
 
         assert isinstance(settings, Settings)
+        assert settings.database_url == LOCAL_DATABASE_URL
 
-    def test_get_settings_cached(self):
+    def test_get_settings_cached(self, no_env_file: None):
         """Test that get_settings returns cached instance."""
-        get_settings.cache_clear()
-
         settings1 = get_settings()
         settings2 = get_settings()
 

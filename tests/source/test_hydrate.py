@@ -859,48 +859,68 @@ async def test_a_short_page_on_an_added_connection(open_source, replay: Replay, 
 
 
 @pytest.mark.parametrize("overflow", [False, True], ids=["first-page", "overflow"])
-async def test_an_assignee_node_id_listed_twice_with_two_github_ids(
-    open_source, replay: Replay, overflow: bool
-) -> None:
-    # The github_ids differ, so only the node-id comparison can refuse this; its key is the
-    # node id, where the github_id comparison's is a number.
+async def test_an_assignee_listed_twice(open_source, replay: Replay, overflow: bool) -> None:
+    # The same assignee again, in place of another or on a later page, as when the list shifts
+    # between pages. The node-id comparison refuses it first: its key is the node id, where the
+    # github_id comparison's is a number.
     unit = pr_unit(replay, 15771)
     first = dict(unit.data["assignedActors"]["nodes"][0])
-    second = {**first, "databaseId": first["databaseId"] + 999999}
     if overflow:
-        second_page(replay, unit, "assignedActors", second)
+        second_page(replay, unit, "assignedActors", dict(first))
     else:
-        unit.data["assignedActors"]["nodes"][1] = second
+        unit.data["assignedActors"]["nodes"][1] = dict(first)
     replay.add(unit)
     error = await failure(open_source, PREBID_JS, 15771)
     assert type(error) is DuplicateEntry
     assert (error.connection, error.key) == ("assignedActors", first["id"])
 
 
-async def test_an_assignee_github_id_listed_twice_under_two_node_ids(
-    open_source, replay: Replay
+@pytest.mark.parametrize("overflow", [False, True], ids=["first-page", "overflow"])
+async def test_each_assignee_github_id_is_distinct(
+    open_source, replay: Replay, overflow: bool
 ) -> None:
-    # pr_assignees keys an assignee by its account, which plan 5.2 resolves by databaseId, so
-    # two node ids for one databaseId cannot both be stored.
+    # pr_assignees keys an assignee by its account, which plan 5.2 resolves by databaseId: the
+    # github_ids compared, on one page or two, are each assignee's own.
     unit = pr_unit(replay, 15771)
-    nodes = unit.data["assignedActors"]["nodes"]
-    nodes[1] = {**nodes[0], "id": "U_another_node_id"}
-    replay.add(unit)
-    error = await failure(open_source, PREBID_JS, 15771)
-    assert isinstance(error, DuplicateEntry)
-    assert (error.connection, error.key) == ("assignedActors", nodes[0]["databaseId"])
+    nodes = list(unit.data["assignedActors"]["nodes"])
+    if overflow:
+        second_page(replay, unit, "assignedActors", EXTRA_ASSIGNEE)
+        replay.add(unit)
+        nodes.append(EXTRA_ASSIGNEE)
+    record = await hydrate_one(open_source, PREBID_JS, 15771)
+    github_ids = [assignee.github_id for assignee in record.assignees]
+    assert github_ids == [node["databaseId"] for node in nodes]
+    assert len(set(github_ids)) == len(nodes)
 
 
-async def test_an_assignee_github_id_listed_again_on_a_later_page(
-    open_source, replay: Replay
+COPILOT = {"__typename": "Bot", "databaseId": 175728472, "id": "BOT_kgDOCnlnWA", "login": "Copilot"}
+# The same databaseId under its second node id, in the legacy format (gap 103).
+COPILOT_SECOND_NODE = {**COPILOT, "id": "MDM6Qm90MTc1NzI4NDcy"}
+
+
+@pytest.mark.parametrize("overflow", [False, True], ids=["first-page", "overflow"])
+async def test_an_assignee_github_id_under_two_node_ids(
+    open_source, replay: Replay, overflow: bool
 ) -> None:
+    # Synthetic: recorded #15771 with its second assignee replaced by Copilot and Copilot's
+    # second node id added after it, on the same page or a second one. pr_assignees keys an
+    # assignee by its account, which plan 5.2 resolves by databaseId, so both cannot be stored.
+    # The node ids differ, so the node-id comparison passes them.
     unit = pr_unit(replay, 15771)
-    first = unit.data["assignedActors"]["nodes"][0]
-    second_page(replay, unit, "assignedActors", {**first, "id": "U_another_node_id"})
+    page = unit.data["assignedActors"]
+    page["nodes"][1] = dict(COPILOT)
+    if overflow:
+        second_page(replay, unit, "assignedActors", dict(COPILOT_SECOND_NODE))
+    else:
+        page["nodes"].append(dict(COPILOT_SECOND_NODE))
+        page["totalCount"] += 1
     replay.add(unit)
     error = await failure(open_source, PREBID_JS, 15771)
-    assert isinstance(error, DuplicateEntry)
-    assert (error.connection, error.key) == ("assignedActors", first["databaseId"])
+    assert type(error) is DuplicateEntry
+    assert (error.number, error.connection, error.key) == (15771, "assignedActors", 175728472)
+    # The item fails, then once more when retried alone.
+    attempt = ["PullRequestBatch", "Overflow"] if overflow else ["PullRequestBatch"]
+    assert [seen.operation for seen in replay.seen] == ["Resolve", *attempt, *attempt]
 
 
 async def test_a_duplicate_review_request(open_source, replay: Replay) -> None:
@@ -1410,8 +1430,7 @@ class TestInvariants:
         replay.modify(empty, when=is_overflow, times=2)
         error = await failure(open_source, PREBID_JS, 11155)
         assert isinstance(error, PagingStalled)
-        assert (error.cursor, error.entries) == ("fresh", 0)
-        assert "0 entries, cursor 'fresh'" in str(error)
+        assert (error.connection, error.cursor, error.entries) == ("commits", "fresh", 0)
 
     async def test_an_error_outside_every_alias_fails_the_items(
         self, open_source, replay: Replay
@@ -2049,3 +2068,22 @@ class TestBatches:
         assert all(isinstance(outcome, Hydrated) for outcome in outcomes[:-1])
         # The first round, then the solo retry's two continuations.
         assert overflow_sizes(replay) == [OVERFLOW_ALIASES_PER_REQUEST, 2]
+
+
+@pytest.mark.parametrize("overflow", [False, True], ids=["first-page", "overflow"])
+async def test_an_assignee_node_id_listed_twice_with_two_github_ids(
+    open_source, replay: Replay, overflow: bool
+) -> None:
+    # The github_ids differ, so only the node-id comparison can refuse this; its key is the
+    # node id, where the github_id comparison's is a number.
+    unit = pr_unit(replay, 15771)
+    first = dict(unit.data["assignedActors"]["nodes"][0])
+    second = {**first, "databaseId": first["databaseId"] + 999999}
+    if overflow:
+        second_page(replay, unit, "assignedActors", second)
+    else:
+        unit.data["assignedActors"]["nodes"][1] = second
+    replay.add(unit)
+    error = await failure(open_source, PREBID_JS, 15771)
+    assert type(error) is DuplicateEntry
+    assert (error.connection, error.key) == ("assignedActors", first["id"])

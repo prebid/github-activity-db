@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, tzinfo
 from typing import Any
 
 from sqlalchemy import DateTime
@@ -10,9 +10,15 @@ from sqlalchemy.engine import Dialect
 from sqlalchemy.types import TypeDecorator
 
 
+def _wall_clock(tz: tzinfo) -> datetime:
+    """The current time in ``tz``: this module's one read of the wall clock, kept apart from
+    ``datetime`` so that replacing it leaves ``UtcDateTime``'s type check alone."""
+    return datetime.now(tz)
+
+
 def utc_now() -> datetime:
     """The Python-side default of every timestamp column."""
-    return datetime.now(UTC)
+    return _wall_clock(UTC)
 
 
 class UtcDateTime(TypeDecorator[datetime]):

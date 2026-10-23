@@ -60,6 +60,7 @@ from github_activity_db.sync.writer import (
 )
 from github_activity_db.tracking import TrackedRepository
 from tests.db.seed import Seed, connect
+from tests.support import listening
 from tests.sync.records import (
     HYDRATED,
     T0,
@@ -318,13 +319,37 @@ async def test_a_repository_update_keeps_its_row_and_replaces_its_labels(w: Writ
     ]
 
 
+async def _sent_during[T](write: Awaitable[T]) -> tuple[T, list[str]]:
+    """``write``'s result and every statement sent while it ran."""
+    sent: list[str] = []
+
+    def record(connection: Any, cursor: Any, statement: str, *args: Any) -> None:
+        sent.append(statement)
+
+    with listening("before_cursor_execute", record):
+        result = await write
+    return result, sent
+
+
+def _updates_of_pull_requests(sent: list[str]) -> list[str]:
+    return [statement for statement in sent if statement.startswith("UPDATE pull_requests")]
+
+
+def _targets(w: Writer) -> list[dict[str, Any]]:
+    return w.rows(
+        "SELECT p.number, p.targets_default_branch, p.base_ref = r.default_branch AS targets "
+        "FROM pull_requests p JOIN repositories r ON r.id = p.repository_id ORDER BY p.number"
+    )
+
+
 async def test_a_default_branch_change_recomputes_targets_default_branch(w: Writer) -> None:
     await w.repository(repository(default_branch="master"))
     await w.item(pull_request(1, 10, base_ref="master"))
     await w.item(pull_request(2, 20, base_ref="main"))
     assert [w.pr(1)["targets_default_branch"], w.pr(2)["targets_default_branch"]] == [1, 0]
-    result = await w.repository(repository(default_branch="main"))
+    result, sent = await _sent_during(w.repository(repository(default_branch="main")))
     assert result.default_branch_changed
+    assert len(_updates_of_pull_requests(sent)) == 1
     assert [w.pr(1)["targets_default_branch"], w.pr(2)["targets_default_branch"]] == [0, 1]
 
 
@@ -337,6 +362,25 @@ async def test_an_unchanged_default_branch_leaves_targets_default_branch(w: Writ
     result = await w.repository(repository(default_branch="master"))
     assert not result.default_branch_changed
     assert w.pr(1)["targets_default_branch"] == 0
+
+
+async def test_an_unchanged_default_branch_sends_no_update_of_pull_requests(w: Writer) -> None:
+    """Only a change of default branch recomputes it: a write with the same default branch
+    sends no update of the repository's pull requests, whose values stay what their base
+    branches give."""
+    await w.repository(repository(default_branch="master"))
+    await w.item(pull_request(1, 10, base_ref="master"))
+    await w.item(pull_request(2, 20, base_ref="main"))
+    before = _targets(w)
+    assert before == [
+        {"number": 1, "targets_default_branch": 1, "targets": 1},
+        {"number": 2, "targets_default_branch": 0, "targets": 0},
+    ]
+    result, sent = await _sent_during(w.repository(repository(default_branch="master")))
+    assert not result.default_branch_changed
+    assert any(statement.startswith("INSERT INTO repositories") for statement in sent)
+    assert _updates_of_pull_requests(sent) == []
+    assert _targets(w) == before
 
 
 @pytest.mark.parametrize("spelling", ["prebid/Prebid.js", "PREBID/prebid.JS"])
@@ -899,8 +943,9 @@ async def test_a_second_node_id_for_a_stored_github_id_keeps_the_stored_row(w: W
 async def test_a_node_stored_under_another_github_id_fails_the_item(w: Writer) -> None:
     await w.repository()
     await w.item(pull_request(1, 10, author=account("alice", 101, node_id="N_X")))
-    with pytest.raises(ItemConflict, match="node N_X is stored under github_id 101"):
+    with pytest.raises(ItemConflict, match="node N_X is stored under github_id 101") as raised:
         await w.item(pull_request(2, 20, author=account("mallory", 999, node_id="N_X")))
+    assert raised.value.number == 2
     assert w.rows("SELECT number FROM pull_requests") == [{"number": 1}]
 
 
@@ -987,14 +1032,15 @@ async def test_a_node_sighted_or_looked_up_under_two_ids_in_one_item_is_refused(
     if stored is not None:
         await w.item(pull_request(1, 10, author=stored))
     before = w.dump()
-    with pytest.raises(ItemConflict, match=message):
+    with pytest.raises(ItemConflict, match=message) as raised:
         await w.item(pull_request(2, 20, **record_values), links)
+    assert raised.value.number == 2
     assert w.dump() == before
 
 
 async def test_one_account_in_two_shapes_or_under_two_nodes_in_one_item(w: Writer) -> None:
-    """The controls: one github_id on one node as a Bot and as a User, and one github_id under
-    a second node id, each resolve to one row."""
+    """Accepted: one github_id on one node as a Bot and as a User, and one github_id under a
+    second node id, each resolve to one row."""
     await w.repository()
     await w.item(pull_request(1, 10, author=A_ON_N_A))
     bot = account("dependabot", 49699333, "Bot", node_id="N_D")
@@ -1032,8 +1078,9 @@ async def test_a_second_node_id_another_account_holds_fails_the_item(w: Writer) 
     before = w.rows("SELECT * FROM github_users ORDER BY id")
     with pytest.raises(
         ItemConflict, match="node N_b is stored under github_id 8, GitHub reports 7"
-    ):
+    ) as raised:
         await w.item(pull_request(2, 20, author=account("a", 7, node_id="N_b")))
+    assert raised.value.number == 2
     assert w.rows("SELECT number FROM pull_requests") == [{"number": 1}]
     assert w.rows("SELECT * FROM github_users ORDER BY id") == before
 
@@ -1045,12 +1092,13 @@ async def test_an_enterprise_sighting_of_a_node_stored_with_a_github_id_fails_th
     await w.item(pull_request(1, 10, author=account("x", 7, node_id="EUA_1")))
     with pytest.raises(
         ItemConflict, match="node EUA_1 is stored as github_id 7, not as an EnterpriseUserAccount"
-    ):
+    ) as raised:
         await w.item(
             pull_request(
                 2, 20, author=account("ent", None, "EnterpriseUserAccount", node_id="EUA_1")
             )
         )
+    assert raised.value.number == 2
     assert w.rows("SELECT number FROM pull_requests") == [{"number": 1}]
     assert w.rows("SELECT github_id, node_id, type FROM github_users") == [
         {"github_id": 7, "node_id": "EUA_1", "type": "User"}
@@ -1381,8 +1429,9 @@ async def test_an_id_stored_under_another_pull_request_is_refused(w: Writer, kin
     await w.item(pull_request(1, 10, reviews=reviews, comments=comments))
     with pytest.raises(
         ItemConflict, match=rf"{kind} ids \[900\] are stored under another pull request"
-    ):
+    ) as raised:
         await w.item(pull_request(2, 20, author=BOB, reviews=reviews, comments=comments))
+    assert raised.value.number == 2
     assert w.rows("SELECT number FROM pull_requests") == [{"number": 1}]
     assert w.rows("SELECT count(*) AS n FROM github_users WHERE login = 'bob'") == [{"n": 0}]
 
@@ -1390,15 +1439,21 @@ async def test_an_id_stored_under_another_pull_request_is_refused(w: Writer, kin
 async def test_a_number_stored_under_another_github_id_is_refused(w: Writer) -> None:
     await w.repository()
     await w.item(pull_request(1, 10))
-    with pytest.raises(ItemConflict, match="the number is stored under github_id 10"):
+    with pytest.raises(ItemConflict, match="the number is stored under github_id 10") as raised:
         await w.item(pull_request(1, 11))
+    assert raised.value.number == 1
+    assert w.rows("SELECT number, github_id FROM pull_requests") == [{"number": 1, "github_id": 10}]
 
 
 async def test_a_github_id_stored_as_another_pull_request_is_refused(w: Writer) -> None:
     await w.repository()
     await w.item(pull_request(1, 10))
-    with pytest.raises(ItemConflict, match="github_id 10 is stored as another pull request"):
+    with pytest.raises(
+        ItemConflict, match="github_id 10 is stored as another pull request"
+    ) as raised:
         await w.item(pull_request(2, 10))
+    assert raised.value.number == 2
+    assert w.rows("SELECT number, github_id FROM pull_requests") == [{"number": 1, "github_id": 10}]
 
 
 # --------------------------------------------------------------------------------------------
@@ -1493,8 +1548,9 @@ async def test_a_link_given_for_another_account_is_refused(w: Writer, given: str
     entry: LinkAccount = (
         Sighted(BOB, HYDRATED) if given == "sighted" else Found(looked_up(BOB), HYDRATED)
     )
-    with pytest.raises(ItemConflict, match="commit link 101"):
+    with pytest.raises(ItemConflict, match="commit link 101") as raised:
         await w.item(pull_request(1, 10, commits=[commit("s1", link(ALICE))]), {101: entry})
+    assert raised.value.number == 1
     assert w.rows("SELECT count(*) AS n FROM pull_requests") == [{"n": 0}]
 
 
